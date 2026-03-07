@@ -285,8 +285,267 @@ export const aiUsageLog = pgTable("ai_usage_log", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// ─── Analytics (placeholder — Phase 8+) ─────────────────
-// See docs/ARCHITECTURE.md for planned analytics events and metrics.
-// Tables will be added when analytics phase begins:
-// - analytics_events (event_name, event_data, org_id, user_id)
-// - org_metrics_snapshot (period aggregates: AI cost, matches, partnerships)
+// ─── Enrichment Audit Trail ─────────────────────────────
+
+export const enrichmentAuditLog = pgTable("enrichment_audit_log", {
+  id: text("id").primaryKey(),
+  firmId: text("firm_id").references(() => serviceFirms.id, {
+    onDelete: "set null",
+  }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  phase: text("phase").notNull(), // pdl | jina | classifier | linkedin | case_study | onboarding | memory | deep_crawl
+  source: text("source").notNull(), // URL, API name, etc.
+  rawInput: text("raw_input"), // What was sent to the enrichment source
+  rawOutput: text("raw_output"), // What came back (full response, truncated if huge)
+  extractedData: jsonb("extracted_data"), // Structured data we stored
+  model: text("model"), // AI model used (if applicable)
+  costUsd: real("cost_usd"), // Cost of this enrichment step
+  confidence: real("confidence"), // Confidence score (if applicable)
+  durationMs: integer("duration_ms"), // Processing time in ms
+  status: text("status").notNull().default("success"), // success | error | skipped
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Ossy Memory System ────────────────────────────────
+
+export const memoryEntries = pgTable("memory_entries", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  theme: text("theme").notNull(), // e.g., "partner_preferences", "firm_capabilities", "personal_style"
+  content: text("content").notNull(), // The memory content
+  confidence: real("confidence").default(0.8), // How confident Ossy is about this memory
+  sourceConversationId: text("source_conversation_id").references(
+    () => conversations.id,
+    { onDelete: "set null" }
+  ),
+  sourceMessageId: text("source_message_id"),
+  // embedding: vector(1536) — added when pgvector extension is enabled
+  expiresAt: timestamp("expires_at"), // Optional expiry for time-bound memories
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const memoryThemes = pgTable("memory_themes", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  theme: text("theme").notNull(), // Theme identifier
+  summary: text("summary"), // AI-generated summary of all entries in this theme
+  entryCount: integer("entry_count").default(0),
+  lastUpdatedAt: timestamp("last_updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Partnerships ──────────────────────────────────────
+
+export const partnershipStatusEnum = pgEnum("partnership_status", [
+  "suggested",
+  "requested",
+  "accepted",
+  "declined",
+  "inactive",
+]);
+
+export const partnershipTypeEnum = pgEnum("partnership_type", [
+  "trusted_partner",
+  "collective",
+  "vendor_network",
+]);
+
+export const partnerships = pgTable("partnerships", {
+  id: text("id").primaryKey(),
+  firmAId: text("firm_a_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  firmBId: text("firm_b_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  status: partnershipStatusEnum("status").notNull().default("suggested"),
+  type: partnershipTypeEnum("type").notNull().default("trusted_partner"),
+  initiatedBy: text("initiated_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  matchScore: real("match_score"), // From matching engine
+  matchExplanation: text("match_explanation"), // "Why this match" from LLM
+  notes: text("notes"),
+  acceptedAt: timestamp("accepted_at"),
+  declinedAt: timestamp("declined_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const partnershipEvents = pgTable("partnership_events", {
+  id: text("id").primaryKey(),
+  partnershipId: text("partnership_id")
+    .notNull()
+    .references(() => partnerships.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(), // requested | accepted | declined | message | referral | intro_sent
+  actorId: text("actor_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Opportunities ─────────────────────────────────────
+
+export const opportunityStatusEnum = pgEnum("opportunity_status", [
+  "open",
+  "shared",
+  "claimed",
+  "won",
+  "lost",
+  "expired",
+]);
+
+export const opportunities = pgTable("opportunities", {
+  id: text("id").primaryKey(),
+  firmId: text("firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  requiredSkills: jsonb("required_skills").$type<string[]>(),
+  requiredIndustries: jsonb("required_industries").$type<string[]>(),
+  estimatedValue: text("estimated_value"), // "10k-25k", "50k-100k", etc.
+  timeline: text("timeline"), // "immediate", "1-3 months", "3-6 months"
+  clientType: text("client_type"), // industry + size signals
+  source: text("source").notNull().default("manual"), // manual | call | email | ossy
+  status: opportunityStatusEnum("status").notNull().default("open"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const opportunityShares = pgTable("opportunity_shares", {
+  id: text("id").primaryKey(),
+  opportunityId: text("opportunity_id")
+    .notNull()
+    .references(() => opportunities.id, { onDelete: "cascade" }),
+  sharedWithFirmId: text("shared_with_firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  sharedBy: text("shared_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  viewedAt: timestamp("viewed_at"),
+  claimedAt: timestamp("claimed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Referrals ─────────────────────────────────────────
+
+export const referrals = pgTable("referrals", {
+  id: text("id").primaryKey(),
+  partnershipId: text("partnership_id").references(() => partnerships.id, {
+    onDelete: "set null",
+  }),
+  opportunityId: text("opportunity_id").references(() => opportunities.id, {
+    onDelete: "set null",
+  }),
+  referringFirmId: text("referring_firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  receivingFirmId: text("receiving_firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"), // pending | converted | lost
+  estimatedValue: text("estimated_value"),
+  actualValue: text("actual_value"),
+  convertedAt: timestamp("converted_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─── Email Threads ────────────────────────────────────
+
+export const emailThreads = pgTable("email_threads", {
+  id: text("id").primaryKey(),
+  firmId: text("firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  subject: text("subject").notNull(),
+  participants: jsonb("participants").$type<string[]>(), // email addresses
+  partnershipId: text("partnership_id").references(() => partnerships.id, {
+    onDelete: "set null",
+  }),
+  opportunityId: text("opportunity_id").references(() => opportunities.id, {
+    onDelete: "set null",
+  }),
+  status: text("status").notNull().default("active"), // active | archived | resolved
+  intent: text("intent"), // opportunity | follow_up | context | question | intro
+  lastMessageAt: timestamp("last_message_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─── Email Messages ───────────────────────────────────
+
+export const emailMessages = pgTable("email_messages", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id")
+    .notNull()
+    .references(() => emailThreads.id, { onDelete: "cascade" }),
+  externalMessageId: text("external_message_id"), // Resend/provider message ID
+  direction: text("direction").notNull(), // inbound | outbound
+  fromEmail: text("from_email").notNull(),
+  fromName: text("from_name"),
+  toEmails: jsonb("to_emails").$type<string[]>().notNull(),
+  ccEmails: jsonb("cc_emails").$type<string[]>(),
+  subject: text("subject").notNull(),
+  bodyHtml: text("body_html"),
+  bodyText: text("body_text"),
+  // AI-extracted metadata
+  extractedIntent: text("extracted_intent"), // opportunity | follow_up | context | question
+  extractedEntities: jsonb("extracted_entities").$type<{
+    firmNames?: string[];
+    personNames?: string[];
+    skills?: string[];
+    industries?: string[];
+    values?: string[];
+  }>(),
+  confidence: real("confidence"),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Email Approval Queue ─────────────────────────────
+
+export const emailApprovalQueue = pgTable("email_approval_queue", {
+  id: text("id").primaryKey(),
+  firmId: text("firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  emailType: text("email_type").notNull(), // intro | follow_up | opportunity_share | digest
+  toEmails: jsonb("to_emails").$type<string[]>().notNull(),
+  ccEmails: jsonb("cc_emails").$type<string[]>(),
+  subject: text("subject").notNull(),
+  bodyHtml: text("body_html").notNull(),
+  bodyText: text("body_text"),
+  context: jsonb("context").$type<{
+    partnershipId?: string;
+    opportunityId?: string;
+    reason?: string;
+  }>(),
+  status: text("status").notNull().default("pending"), // pending | approved | rejected | sent
+  reviewedBy: text("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  sentAt: timestamp("sent_at"),
+  externalMessageId: text("external_message_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

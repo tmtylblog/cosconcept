@@ -40,7 +40,7 @@ const envSchema = z.object({
   GOOGLE_AI_API_KEY: z.string().optional(),
   DEEPGRAM_API_KEY: z.string().optional(),
   JINA_API_KEY: z.string().optional(),
-  PROXYCURL_API_KEY: z.string().optional(),
+  PDL_API_KEY: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
 });
 

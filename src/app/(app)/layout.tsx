@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { NavBar } from "@/components/nav-bar";
 import { ChatPanel } from "@/components/chat-panel";
 import { SlidePanel } from "@/components/slide-panel";
 import { LoginPanel } from "@/components/login-panel";
+import { EnrichmentProvider, useEnrichment } from "@/hooks/use-enrichment";
 import { useSession } from "@/lib/auth-client";
-import { ChevronLeft, Compass, Building2, Users, Handshake } from "lucide-react";
+import { ChevronLeft, Compass, Building2, Users, Handshake, RotateCcw } from "lucide-react";
 
 /**
  * Routes that open in the slide panel.
@@ -35,12 +36,27 @@ export default function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  return (
+    <EnrichmentProvider>
+      <AppLayoutInner>{children}</AppLayoutInner>
+    </EnrichmentProvider>
+  );
+}
+
+function AppLayoutInner({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session } = useSession();
+  const { status: enrichmentStatus, reset: resetEnrichment } = useEnrichment();
   const isGuest = !session?.user;
 
   const [navCollapsed, setNavCollapsed] = useState(true);
   const [loginPanelOpen, setLoginPanelOpen] = useState(false);
+  const [chatKey, setChatKey] = useState(0);
 
   const panelConfig = useMemo(() => getPanelConfig(pathname), [pathname]);
   const panelOpen = panelConfig !== null;
@@ -51,6 +67,13 @@ export default function AppLayout({
     setManualClose(false);
   }, [pathname]);
 
+  // Auto-open My Firm panel when enrichment completes
+  useEffect(() => {
+    if (enrichmentStatus === "done" && pathname === "/dashboard") {
+      router.push("/firm");
+    }
+  }, [enrichmentStatus, pathname, router]);
+
   const showPanel = panelOpen && !manualClose && !isGuest;
 
   const handleRequestLogin = () => {
@@ -59,6 +82,16 @@ export default function AppLayout({
 
   const handleLoginSuccess = () => {
     window.location.reload();
+  };
+
+  /** DEV: Simulate adding a new agency — resets chat + enrichment state */
+  const handleSimulateNewAgency = () => {
+    resetEnrichment();
+    setChatKey((k) => k + 1);
+    setManualClose(false);
+    if (pathname !== "/dashboard") {
+      router.push("/dashboard");
+    }
   };
 
   return (
@@ -72,11 +105,24 @@ export default function AppLayout({
       />
 
       {/* Center: Ossy chat — main stage */}
-      <main className="flex min-w-0 flex-1 flex-col bg-cos-cloud/60">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-cos-cloud/60">
         <ChatPanel
+          key={chatKey}
           isGuest={isGuest}
           onRequestLogin={handleRequestLogin}
         />
+
+        {/* DEV: Test button — simulate new agency onboarding */}
+        {!isGuest && (
+          <button
+            onClick={handleSimulateNewAgency}
+            className="absolute bottom-20 left-4 z-50 flex items-center gap-1.5 rounded-cos-pill border border-cos-border bg-white/90 px-3 py-1.5 text-[11px] font-medium text-cos-slate shadow-sm backdrop-blur transition-colors hover:border-cos-electric hover:text-cos-electric"
+            title="Reset chat and enrichment — simulate adding a new agency"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Test: New Agency
+          </button>
+        )}
       </main>
 
       {/* Right: Hint bar — shows when no panel is open */}

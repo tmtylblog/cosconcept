@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
+import { authClient, useSession } from "@/lib/auth-client";
+import { Loader2 } from "lucide-react";
 
 interface Organization {
   id: string;
@@ -12,113 +12,126 @@ interface Organization {
   logo: string | null;
 }
 
+/**
+ * Org Select — mostly invisible.
+ *
+ * Flow:
+ *   0 orgs → auto-create from user's email domain → dashboard
+ *   1 org  → auto-select → dashboard
+ *   2+ orgs → show picker (rare)
+ */
 export default function OrgSelectPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [newOrgName, setNewOrgName] = useState("");
+  const [status, setStatus] = useState("Loading...");
 
   useEffect(() => {
-    loadOrgs();
-  }, []);
+    if (session?.user) {
+      handleOrgSetup();
+    }
+  }, [session]);
 
-  async function loadOrgs() {
+  async function handleOrgSetup() {
     try {
       const { data } = await authClient.organization.list();
-      setOrgs((data as Organization[]) ?? []);
-    } catch {
-      // If listing fails, user may have no orgs yet
-      setOrgs([]);
-    } finally {
+      const orgList = (data as Organization[]) ?? [];
+
+      if (orgList.length === 1) {
+        // Auto-select the only org
+        await authClient.organization.setActive({ organizationId: orgList[0].id });
+        router.replace("/dashboard");
+        return;
+      }
+
+      if (orgList.length === 0) {
+        // Auto-create from email domain
+        setStatus("Setting up your workspace...");
+        const email = session?.user?.email ?? "";
+        const domain = email.split("@")[1] ?? "my-firm";
+        const orgName = domainToOrgName(domain);
+        const slug = domain.replace(/\./g, "-");
+
+        const { data: newOrg } = await authClient.organization.create({
+          name: orgName,
+          slug,
+        });
+        if (newOrg) {
+          await authClient.organization.setActive({ organizationId: newOrg.id });
+        }
+        router.replace("/dashboard");
+        return;
+      }
+
+      // Multiple orgs — show picker
+      setOrgs(orgList);
       setLoading(false);
+    } catch {
+      // Fallback — just go to dashboard
+      router.replace("/dashboard");
     }
   }
 
   async function selectOrg(orgId: string) {
     await authClient.organization.setActive({ organizationId: orgId });
-    router.push("/dashboard");
+    router.replace("/dashboard");
   }
 
-  async function createOrg() {
-    if (!newOrgName.trim()) return;
-    setCreating(true);
-    try {
-      const slug = newOrgName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "");
-      const { data } = await authClient.organization.create({
-        name: newOrgName.trim(),
-        slug,
-      });
-      if (data) {
-        await selectOrg(data.id);
-      }
-    } finally {
-      setCreating(false);
-    }
-  }
-
+  // Loading / auto-setup state
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-cos-cloud">
-        <p className="text-cos-slate">Loading organizations...</p>
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
+          <p className="text-sm text-cos-slate">{status}</p>
+        </div>
       </div>
     );
   }
 
+  // Only shown for multi-org users (rare)
   return (
     <div className="flex min-h-screen items-center justify-center bg-cos-cloud">
       <div className="w-full max-w-md space-y-6 rounded-cos-xl border border-cos-border bg-cos-surface p-8 shadow-sm">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-cos-midnight">
-            Select Organization
+            Choose Workspace
           </h1>
           <p className="mt-1 text-sm text-cos-slate">
-            Choose a workspace to continue
+            You belong to multiple organizations
           </p>
         </div>
 
-        {orgs.length > 0 && (
-          <div className="space-y-2">
-            {orgs.map((org) => (
-              <button
-                key={org.id}
-                onClick={() => selectOrg(org.id)}
-                className="flex w-full items-center gap-3 rounded-cos-lg border border-cos-border bg-cos-surface p-4 text-left transition hover:border-cos-electric hover:bg-cos-cloud"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-cos-lg bg-cos-electric/10 text-cos-electric font-bold">
-                  {org.name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="font-medium text-cos-midnight">{org.name}</p>
-                  <p className="text-xs text-cos-slate">{org.slug}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="border-t border-cos-border pt-4">
-          <p className="mb-2 text-sm font-medium text-cos-midnight">
-            Create a new organization
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Organization name"
-              value={newOrgName}
-              onChange={(e) => setNewOrgName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && createOrg()}
-              className="flex-1 rounded-cos-lg border border-cos-border bg-cos-surface px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
-            />
-            <Button onClick={createOrg} disabled={creating || !newOrgName.trim()}>
-              {creating ? "..." : "Create"}
-            </Button>
-          </div>
+        <div className="space-y-2">
+          {orgs.map((org) => (
+            <button
+              key={org.id}
+              onClick={() => selectOrg(org.id)}
+              className="flex w-full items-center gap-3 rounded-cos-lg border border-cos-border bg-cos-surface p-4 text-left transition hover:border-cos-electric hover:bg-cos-cloud"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-cos-lg bg-cos-electric/10 text-cos-electric font-bold">
+                {org.name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="font-medium text-cos-midnight">{org.name}</p>
+                <p className="text-xs text-cos-slate">{org.slug}</p>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
     </div>
   );
+}
+
+/** Convert a domain like "chameleon.co" to a nice org name like "Chameleon" */
+function domainToOrgName(domain: string): string {
+  // Strip common TLDs to get the company part
+  const parts = domain.split(".");
+  const companyPart = parts[0];
+  // Capitalize first letter of each word
+  return companyPart
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }

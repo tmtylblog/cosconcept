@@ -14,6 +14,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   LogOut,
+  LogIn,
   ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -140,7 +141,15 @@ export function NavBar({ collapsed, onToggle, isGuest, onRequestLogin }: NavBarP
           )}
           {showLabels && <span className="truncate">Collapse</span>}
         </button>
-        {!isGuest && (
+        {isGuest ? (
+          <button
+            onClick={onRequestLogin}
+            className="flex w-full items-center gap-3 rounded-cos-lg px-3 py-2.5 text-sm font-medium text-cos-electric transition-colors hover:bg-cos-electric/10"
+          >
+            <LogIn className="h-5 w-5 shrink-0" />
+            {showLabels && <span className="truncate">Sign In</span>}
+          </button>
+        ) : (
           <button
             onClick={() =>
               signOut({

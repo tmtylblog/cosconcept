@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import Image from "next/image";
-import { Send, Mic, Loader2, Globe } from "lucide-react";
+import { Send, Mic, Loader2, Globe, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useActiveOrganization } from "@/lib/auth-client";
+import { useActiveOrganization, signIn, signUp } from "@/lib/auth-client";
+import { useEnrichment } from "@/hooks/use-enrichment";
+import { isPersonalEmail, CORPORATE_EMAIL_ERROR } from "@/lib/email-validation";
 import { cn } from "@/lib/utils";
 
 const GUEST_MESSAGE_LIMIT = 5;
@@ -55,14 +57,15 @@ interface ChatPanelProps {
   onRequestLogin?: () => void;
 }
 
-export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
+export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPanelProps) {
   const { data: activeOrg } = useActiveOrganization();
+  const {
+    status: enrichmentStatus,
+    contextForOssy,
+    triggerEnrichment,
+  } = useEnrichment();
   const [input, setInput] = useState("");
   const [guestMessageCount, setGuestMessageCount] = useState(0);
-  const [enrichmentData, setEnrichmentData] = useState<string | null>(null);
-  const [enrichmentStatus, setEnrichmentStatus] = useState<
-    "idle" | "loading" | "done" | "error"
-  >("idle");
   const enrichedUrlRef = useRef<string | null>(null);
 
   const chatEndpoint = isGuest ? "/api/chat/guest" : "/api/chat";
@@ -72,8 +75,8 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
     transport: new DefaultChatTransport({
       api: chatEndpoint,
       body: isGuest
-        ? { websiteContext: enrichmentData }
-        : { organizationId: activeOrg?.id ?? "", websiteContext: enrichmentData },
+        ? { websiteContext: contextForOssy }
+        : { organizationId: activeOrg?.id ?? "", websiteContext: contextForOssy },
     }),
   });
 
@@ -91,55 +94,15 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
     inputRef.current?.focus();
   }, []);
 
-  // Track guest messages and trigger login prompt
+  // Track guest messages for inline login prompt
   useEffect(() => {
     if (isGuest) {
       const userMessages = messages.filter((m) => m.role === "user");
       setGuestMessageCount(userMessages.length);
-
-      if (userMessages.length >= GUEST_MESSAGE_LIMIT && onRequestLogin) {
-        onRequestLogin();
-      }
     }
-  }, [messages, isGuest, onRequestLogin]);
+  }, [messages, isGuest]);
 
-  // Detect URLs in user messages and trigger background enrichment
-  const triggerEnrichment = useCallback(async (url: string) => {
-    if (enrichedUrlRef.current === url) return; // Already enriched this URL
-    enrichedUrlRef.current = url;
-    setEnrichmentStatus("loading");
-
-    try {
-      const res = await fetch("/api/enrich/website", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-
-      if (!res.ok) throw new Error("Enrichment failed");
-
-      const data = await res.json();
-      // Build a concise context string for Ossy
-      const context = [
-        `[WEBSITE RESEARCH RESULTS for ${url}]`,
-        `Title: ${data.title}`,
-        data.description ? `Description: ${data.description}` : null,
-        `Pages scraped: ${data.pagesScraped}`,
-        `\nContent:\n${data.content}`,
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      setEnrichmentData(context);
-      setEnrichmentStatus("done");
-      console.log(`[Enrichment] Website scraped: ${url}, ${data.pagesScraped} pages`);
-    } catch (err) {
-      console.error("[Enrichment] Failed:", err);
-      setEnrichmentStatus("error");
-    }
-  }, []);
-
-  // Watch user messages for URLs
+  // Watch user messages for URLs and trigger shared enrichment
   useEffect(() => {
     if (enrichedUrlRef.current) return; // Already processing
     const userMessages = messages.filter((m) => m.role === "user");
@@ -147,6 +110,7 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
       const text = getMessageText(msg);
       const url = extractUrl(text);
       if (url) {
+        enrichedUrlRef.current = url;
         triggerEnrichment(url);
         break;
       }
@@ -286,22 +250,26 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
           </div>
         )}
 
-        {/* Guest limit message */}
+        {/* Inline login — appears in chat after guest message limit */}
         {atGuestLimit && (
-          <div className="mx-auto max-w-md rounded-cos-2xl border border-cos-electric/20 bg-gradient-to-br from-cos-electric/5 to-cos-signal/5 px-6 py-5 text-center">
-            <p className="font-heading text-base font-semibold text-cos-midnight">
-              Loving the conversation?
-            </p>
-            <p className="mt-1 text-sm text-cos-slate-dim">
-              Create a free account to continue chatting, save your progress,
-              and unlock partner matching.
-            </p>
-            <button
-              onClick={onRequestLogin}
-              className="mt-3 rounded-cos-pill bg-cos-electric px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-cos-electric-hover"
-            >
-              Create Free Account
-            </button>
+          <div className="flex gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20">
+              <Image
+                src="/logo.png"
+                alt="Ossy"
+                width={24}
+                height={24}
+                className="h-6 w-6 object-cover"
+              />
+            </div>
+            <div className="max-w-[720px] space-y-3">
+              <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-6 py-4">
+                <p className="text-base leading-relaxed text-cos-midnight">
+                  I can already see some great partnership opportunities based on what you&apos;ve told me. Sign in below to save your preferences and start your growth journey — it takes 10 seconds.
+                </p>
+              </div>
+              <InlineChatLogin />
+            </div>
           </div>
         )}
       </div>
@@ -342,6 +310,145 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ─── Inline Chat Login ──────────────────────────────────────
+// Renders Google OAuth + expandable email form directly in the chat flow.
+
+function InlineChatLogin() {
+  const [showEmail, setShowEmail] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [isSignUp, setIsSignUp] = useState(true);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleGoogle() {
+    try {
+      await signIn.social({
+        provider: "google",
+        callbackURL: "/dashboard",
+      });
+    } catch {
+      setError("Google sign-in failed. Try again.");
+    }
+  }
+
+  async function handleEmailSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (isPersonalEmail(email)) {
+      setError(CORPORATE_EMAIL_ERROR);
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      if (isSignUp) {
+        const res = await signUp.email({
+          email,
+          password,
+          name: name || email.split("@")[0],
+        });
+        if (res.error) {
+          setError(res.error.message ?? "Sign up failed");
+          return;
+        }
+      } else {
+        const res = await signIn.email({ email, password });
+        if (res.error) {
+          setError(res.error.message ?? "Sign in failed");
+          return;
+        }
+      }
+      window.location.href = "/dashboard";
+    } catch {
+      setError("Something went wrong. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-cos-xl border border-cos-electric/20 bg-gradient-to-br from-cos-electric/5 to-cos-signal/5 p-4">
+      <div className="space-y-2.5">
+        {/* Google OAuth — primary */}
+        <button
+          onClick={handleGoogle}
+          className="flex w-full items-center justify-center gap-2 rounded-cos-lg border border-cos-border bg-white px-4 py-2.5 text-sm font-medium text-cos-midnight shadow-sm transition-colors hover:bg-cos-cloud"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+          </svg>
+          Continue with Google
+        </button>
+
+        {/* Email toggle */}
+        {!showEmail ? (
+          <button
+            onClick={() => setShowEmail(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-cos-lg border border-cos-border/50 bg-white/50 px-4 py-2.5 text-sm text-cos-slate transition-colors hover:bg-white hover:text-cos-midnight"
+          >
+            <Mail className="h-4 w-4" />
+            Continue with email
+          </button>
+        ) : (
+          <form onSubmit={handleEmailSubmit} className="space-y-2">
+            {isSignUp && (
+              <input
+                type="text"
+                placeholder="Your name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+              />
+            )}
+            <input
+              type="email"
+              placeholder="Work email (e.g., you@yourfirm.com)"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setError(""); }}
+              required
+              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-cos-lg bg-cos-electric px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cos-electric-hover disabled:opacity-50"
+            >
+              {loading ? "..." : isSignUp ? "Create Account" : "Sign In"}
+            </button>
+            <p className="text-center text-xs text-cos-slate">
+              {isSignUp ? "Have an account?" : "Need an account?"}{" "}
+              <button
+                type="button"
+                onClick={() => { setIsSignUp(!isSignUp); setError(""); }}
+                className="text-cos-electric hover:underline"
+              >
+                {isSignUp ? "Sign in" : "Sign up"}
+              </button>
+            </p>
+          </form>
+        )}
+      </div>
+
+      {error && (
+        <p className="mt-2 text-xs text-cos-danger">{error}</p>
+      )}
     </div>
   );
 }

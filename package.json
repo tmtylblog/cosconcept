@@ -10,7 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed:neo4j": "tsx scripts/seed-neo4j.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.118",
@@ -22,6 +23,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.1",
+    "inngest": "^3.52.6",
     "lucide-react": "^0.577.0",
     "neo4j-driver": "^6.0.1",
     "next": "^15.3.0",
@@ -42,6 +44,7 @@
     "eslint": "^9.25.0",
     "eslint-config-next": "^15.3.0",
     "tailwindcss": "^4.1.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.8.0"
   }
 }

@@ -1,19 +1,25 @@
 import { NextResponse } from "next/server";
 import { scrapeFirmWebsite } from "@/lib/enrichment/jina-scraper";
+import { enrichCompany } from "@/lib/enrichment/pdl";
+import { classifyFirm } from "@/lib/enrichment/ai-classifier";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
  * POST /api/enrich/website
- * Scrapes a firm's website using Jina Reader API and returns structured content.
- * Can be called from chat (guest or authenticated) when user provides their URL.
+ *
+ * Combined enrichment pipeline:
+ * 1. PDL — structured firmographic data (headcount, industry, funding, location)
+ * 2. Jina — Ground Truth evidence (case studies, clients, services, team)
+ * 3. AI Classifier — taxonomy classification against COS reference data
+ *
+ * PDL + Jina run in parallel. AI Classifier runs after both complete.
  */
 export async function POST(req: Request) {
   try {
-    const { url, organizationId } = (await req.json()) as {
+    const { url } = (await req.json()) as {
       url: string;
-      organizationId?: string;
     };
 
     if (!url) {
@@ -23,7 +29,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Validate it looks like a real URL
+    // Normalize URL
     const normalized = url.startsWith("http") ? url : `https://${url}`;
     try {
       new URL(normalized);
@@ -34,41 +40,199 @@ export async function POST(req: Request) {
       );
     }
 
-    console.log(`[Enrich] Scraping website: ${normalized}`);
-    const result = await scrapeFirmWebsite(normalized);
+    // Extract domain for PDL lookup
+    const domain = new URL(normalized).hostname.replace(/^www\./, "");
 
-    // Combine content for a summary
-    const allContent = [
-      result.homepage.content,
-      ...result.subpages.map((s) => s.content),
-    ].join("\n\n---\n\n");
+    console.log(`[Enrich] Starting combined enrichment for: ${domain}`);
 
-    // Truncate to prevent extremely large payloads
-    const truncatedContent =
-      allContent.length > 15000
-        ? allContent.slice(0, 15000) + "\n\n[Content truncated]"
-        : allContent;
+    // ─── Stage 1: PDL + Jina in parallel ───────────────────
+    const [pdlResult, jinaResult] = await Promise.allSettled([
+      enrichCompany({ website: domain }),
+      scrapeFirmWebsite(normalized),
+    ]);
+
+    // Process PDL result
+    const companyData =
+      pdlResult.status === "fulfilled" ? pdlResult.value : null;
+    if (pdlResult.status === "rejected") {
+      console.warn("[Enrich] PDL enrichment failed:", pdlResult.reason);
+    }
+
+    // Process Jina result
+    const groundTruth =
+      jinaResult.status === "fulfilled" ? jinaResult.value : null;
+    if (jinaResult.status === "rejected") {
+      console.warn("[Enrich] Jina scrape failed:", jinaResult.reason);
+    }
+
+    // Build PDL summary
+    let companyCardSummary = "";
+    if (companyData) {
+      const parts: string[] = [
+        `Company: ${companyData.displayName}`,
+        companyData.industry ? `Industry: ${companyData.industry}` : null,
+        companyData.size ? `Size: ${companyData.size}` : null,
+        companyData.employeeCount
+          ? `Employees: ${companyData.employeeCount.toLocaleString()}`
+          : null,
+        companyData.founded ? `Founded: ${companyData.founded}` : null,
+        companyData.location?.name
+          ? `HQ: ${companyData.location.name}`
+          : null,
+        companyData.summary ? `About: ${companyData.summary}` : null,
+        companyData.tags?.length
+          ? `Tags: ${companyData.tags.join(", ")}`
+          : null,
+        companyData.totalFundingRaised
+          ? `Total Funding: $${(companyData.totalFundingRaised / 1_000_000).toFixed(1)}M`
+          : null,
+        companyData.latestFundingStage
+          ? `Latest Funding: ${companyData.latestFundingStage}`
+          : null,
+        companyData.inferredRevenue
+          ? `Revenue: ${companyData.inferredRevenue}`
+          : null,
+        companyData.linkedinUrl
+          ? `LinkedIn: ${companyData.linkedinUrl}`
+          : null,
+        companyData.type ? `Type: ${companyData.type}` : null,
+      ].filter(Boolean) as string[];
+
+      companyCardSummary = parts.join("\n");
+    }
+
+    // Build Ground Truth display content from Jina
+    let groundTruthContent = "";
+    if (groundTruth) {
+      const sections: string[] = [];
+
+      if (groundTruth.homepage.content) {
+        const homepageSnippet =
+          groundTruth.homepage.content.length > 2000
+            ? groundTruth.homepage.content.slice(0, 2000) + "..."
+            : groundTruth.homepage.content;
+        sections.push(`### Homepage\n${homepageSnippet}`);
+      }
+
+      const byCategory: Record<string, string[]> = {};
+      for (const ev of groundTruth.evidence) {
+        if (!byCategory[ev.category]) byCategory[ev.category] = [];
+        const snippet =
+          ev.page.content.length > 3000
+            ? ev.page.content.slice(0, 3000) + "..."
+            : ev.page.content;
+        byCategory[ev.category].push(
+          `**${ev.page.title || ev.page.url}**\n${snippet}`
+        );
+      }
+
+      const categoryLabels: Record<string, string> = {
+        case_studies:
+          "Case Studies & Portfolio (GROUND TRUTH — highest value)",
+        clients: "Clients & Testimonials (proof of relationships)",
+        services: "Services & Capabilities",
+        team: "Team & Leadership",
+        industries: "Industries & Verticals",
+      };
+
+      for (const [cat, label] of Object.entries(categoryLabels)) {
+        if (byCategory[cat]) {
+          sections.push(`### ${label}\n${byCategory[cat].join("\n\n")}`);
+        }
+      }
+
+      groundTruthContent = sections.join("\n\n---\n\n");
+      if (groundTruthContent.length > 12000) {
+        groundTruthContent =
+          groundTruthContent.slice(0, 12000) + "\n\n[Content truncated]";
+      }
+    }
+
+    // ─── Stage 2: AI Classification ────────────────────────
+    // Runs after Jina + PDL so it has full context
+    let classification = null;
+    if (groundTruth?.rawContent || companyCardSummary) {
+      try {
+        console.log("[Enrich] Starting AI classification...");
+        classification = await classifyFirm({
+          rawContent: groundTruth?.rawContent ?? "",
+          pdlSummary: companyCardSummary || undefined,
+          services: groundTruth?.extracted.services,
+          aboutPitch: groundTruth?.extracted.aboutPitch,
+        });
+        console.log(
+          `[Enrich] Classification: ${classification.categories.join(", ")} (${classification.confidence.toFixed(2)})`
+        );
+      } catch (err) {
+        console.warn("[Enrich] AI classification failed:", err);
+      }
+    }
+
+    const totalPagesScraped = groundTruth
+      ? 1 + groundTruth.evidence.length
+      : 0;
 
     console.log(
-      `[Enrich] Scraped ${1 + result.subpages.length} pages, ` +
-        `${truncatedContent.length} chars total`
+      `[Enrich] Done: PDL ${companyData ? "found" : "miss"}, ` +
+        `Jina scraped ${totalPagesScraped} pages, ` +
+        `${groundTruth?.extracted.teamMembers.length ?? 0} team names extracted`
     );
 
     return NextResponse.json({
       url: normalized,
-      title: result.homepage.title,
-      description: result.homepage.description,
-      content: truncatedContent,
-      pagesScraped: 1 + result.subpages.length,
-      subpages: result.subpages.map((s) => ({
-        url: s.url,
-        title: s.title,
-      })),
+      domain,
+
+      // PDL firmographic data
+      companyCard: companyCardSummary || null,
+      companyData: companyData
+        ? {
+            name: companyData.displayName,
+            industry: companyData.industry,
+            size: companyData.size,
+            employeeCount: companyData.employeeCount,
+            founded: companyData.founded,
+            location: companyData.location?.name,
+            tags: companyData.tags,
+          }
+        : null,
+
+      // Jina Ground Truth (display text for Ossy)
+      groundTruth: groundTruthContent || null,
+      pagesScraped: totalPagesScraped,
+      evidenceCategories: groundTruth
+        ? groundTruth.evidence.map((e) => e.category)
+        : [],
+
+      // Structured extracted data
+      extracted: groundTruth
+        ? {
+            clients: groundTruth.extracted.clients,
+            caseStudyUrls: groundTruth.extracted.caseStudyUrls,
+            services: groundTruth.extracted.services,
+            aboutPitch: groundTruth.extracted.aboutPitch,
+            teamMembers: groundTruth.extracted.teamMembers,
+          }
+        : null,
+
+      // AI Classification against COS taxonomy
+      classification: classification
+        ? {
+            categories: classification.categories,
+            skills: classification.skills,
+            industries: classification.industries,
+            markets: classification.markets,
+            languages: classification.languages,
+            confidence: classification.confidence,
+          }
+        : null,
     });
   } catch (error) {
-    console.error("[Enrich] Website scrape error:", error);
+    console.error("[Enrich] Website enrichment error:", error);
     return NextResponse.json(
-      { error: "Failed to scrape website. Please check the URL and try again." },
+      {
+        error:
+          "Failed to enrich website. Please check the URL and try again.",
+      },
       { status: 500 }
     );
   }

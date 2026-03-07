@@ -1,0 +1,36 @@
+import { serve } from "inngest/next";
+import { inngest } from "@/inngest/client";
+import {
+  deepCrawl,
+  graphSyncFirm,
+  caseStudyIngest,
+  expertLinkedIn,
+  weeklyRecrawl,
+  extractMemories,
+  postCallAnalysis,
+  processInboundEmail,
+  scheduleFollowUp,
+  checkStalePartnerships,
+  weeklyDigest,
+} from "@/inngest/functions";
+
+/**
+ * Inngest serve endpoint — registers all background job functions.
+ * Inngest discovers functions by hitting this endpoint.
+ */
+export const { GET, POST, PUT } = serve({
+  client: inngest,
+  functions: [
+    deepCrawl,
+    graphSyncFirm,
+    caseStudyIngest,
+    expertLinkedIn,
+    weeklyRecrawl,
+    extractMemories,
+    postCallAnalysis,
+    processInboundEmail,
+    scheduleFollowUp,
+    checkStalePartnerships,
+    weeklyDigest,
+  ],
+});

@@ -1,6 +1,18 @@
 /**
- * Jina Reader API — scrapes a website URL and returns clean markdown content.
- * Used during onboarding to pre-populate firm profiles from their website.
+ * Jina Reader API — targeted website scraping for Ground Truth data.
+ *
+ * Jina extracts the RAW EVIDENCE of what a firm has actually done.
+ * It does NOT do taxonomy matching — that's the AI Classifier's job.
+ *
+ * Jina extracts:
+ * 1. CLIENTS — names/logos from clients/testimonials pages
+ * 2. CASE STUDY URLS — links queued for deep ingestion later
+ * 3. SERVICES — what they offer
+ * 4. ABOUT / PITCH — who they are, what they do
+ * 5. TEAM MEMBERS — names for PDL person enrichment
+ * 6. RAW CONTENT — all page text, fed to AI Classifier for taxonomy tagging
+ *
+ * Ground Truth Principle: what firms have DONE > what they SAY they can do.
  */
 
 const JINA_READER_BASE = "https://r.jina.ai";
@@ -15,9 +27,91 @@ export interface JinaScrapeResult {
 }
 
 /**
- * Scrape a URL using Jina Reader API.
- * Returns clean markdown content extracted from the page.
+ * Pages we target, ranked by data value.
  */
+const TARGET_PAGES: {
+  category: string;
+  dataTarget: string;
+  patterns: RegExp[];
+  priority: number;
+}[] = [
+  {
+    category: "case_studies",
+    dataTarget: "Case study URLs for later deep ingestion",
+    patterns: [
+      /\/case.?stud/i,
+      /\/success.?stor/i,
+      /\/results/i,
+      /\/our-work/i,
+      /\/work\b/i,
+      /\/portfolio/i,
+      /\/projects/i,
+    ],
+    priority: 1,
+  },
+  {
+    category: "clients",
+    dataTarget: "Client names/logos for clients DB",
+    patterns: [
+      /\/clients/i,
+      /\/customers/i,
+      /\/brands/i,
+      /\/who-we-work/i,
+      /\/trusted.?by/i,
+      /\/testimonial/i,
+    ],
+    priority: 2,
+  },
+  {
+    category: "services",
+    dataTarget: "Services/solutions list for firm profile",
+    patterns: [
+      /\/services/i,
+      /\/what-we-do/i,
+      /\/capabilities/i,
+      /\/solutions/i,
+      /\/offerings/i,
+      /\/expertise/i,
+      /\/how-we-help/i,
+    ],
+    priority: 3,
+  },
+  {
+    category: "about",
+    dataTarget: "About/pitch for general analysis",
+    patterns: [
+      /\/about/i,
+      /\/who-we-are/i,
+      /\/our-story/i,
+      /\/mission/i,
+      /\/company/i,
+    ],
+    priority: 4,
+  },
+  {
+    category: "industries",
+    dataTarget: "Industries/verticals the firm serves",
+    patterns: [
+      /\/industr/i,
+      /\/sectors/i,
+      /\/verticals/i,
+      /\/markets/i,
+    ],
+    priority: 5,
+  },
+  {
+    category: "team",
+    dataTarget: "Team members for PDL person enrichment",
+    patterns: [
+      /\/team/i,
+      /\/people/i,
+      /\/leadership/i,
+    ],
+    priority: 6,
+  },
+];
+
+/** Scrape a single URL using Jina Reader API. */
 export async function scrapeUrl(url: string): Promise<JinaScrapeResult> {
   const jinaApiKey = process.env.JINA_API_KEY;
 
@@ -53,65 +147,253 @@ export async function scrapeUrl(url: string): Promise<JinaScrapeResult> {
   };
 }
 
+// ─── Structured extraction results ─────────────────────────
+
+export interface FirmGroundTruth {
+  homepage: JinaScrapeResult;
+  evidence: { category: string; page: JinaScrapeResult }[];
+  /** Raw structured data extracted from page content */
+  extracted: {
+    /** Client names from clients/testimonials pages */
+    clients: string[];
+    /** Case study URLs queued for later deep ingestion */
+    caseStudyUrls: string[];
+    /** Services/solutions the firm offers */
+    services: string[];
+    /** About/pitch — concise firm description */
+    aboutPitch: string;
+    /** Team member names for PDL person lookup */
+    teamMembers: string[];
+  };
+  /** ALL scraped content combined — fed to AI Classifier for taxonomy tagging */
+  rawContent: string;
+  /** Page titles for context */
+  pageTitles: string[];
+}
+
 /**
- * Scrape a firm's website and key subpages (about, services, case studies).
- * Returns combined content for AI analysis.
+ * Scrape a firm's website and extract structured Ground Truth data.
+ *
+ * This extracts RAW content and structured data (clients, case studies, etc.)
+ * Taxonomy classification (skills, categories, markets, languages, industries)
+ * is handled separately by the AI Classifier service.
  */
 export async function scrapeFirmWebsite(
   websiteUrl: string
-): Promise<{
-  homepage: JinaScrapeResult;
-  subpages: JinaScrapeResult[];
-}> {
-  // Normalize URL
+): Promise<FirmGroundTruth> {
   let baseUrl = websiteUrl.trim();
-  if (!baseUrl.startsWith("http")) {
-    baseUrl = `https://${baseUrl}`;
-  }
-  // Remove trailing slash
+  if (!baseUrl.startsWith("http")) baseUrl = `https://${baseUrl}`;
   baseUrl = baseUrl.replace(/\/$/, "");
 
-  // Scrape homepage first
+  // 1. Scrape homepage
   const homepage = await scrapeUrl(baseUrl);
+  const homeDomain = new URL(baseUrl).hostname;
 
-  // Find interesting subpages from homepage links
-  const subpagePatterns = [
-    /\/about/i,
-    /\/services/i,
-    /\/what-we-do/i,
-    /\/capabilities/i,
-    /\/case-stud/i,
-    /\/work\b/i,
-    /\/portfolio/i,
-    /\/clients/i,
-    /\/team/i,
-    /\/industries/i,
-  ];
-
-  const candidateLinks = (homepage.links ?? []).filter((link) => {
+  // 2. Find and rank subpages from homepage links
+  const candidates: { url: string; category: string; priority: number }[] = [];
+  for (const link of homepage.links ?? []) {
     try {
       const linkUrl = new URL(link, baseUrl);
-      // Only scrape same-domain links matching patterns
-      const homeDomain = new URL(baseUrl).hostname;
-      if (linkUrl.hostname !== homeDomain) return false;
-      return subpagePatterns.some((p) => p.test(linkUrl.pathname));
+      if (linkUrl.hostname !== homeDomain) continue;
+      for (const target of TARGET_PAGES) {
+        if (target.patterns.some((p) => p.test(linkUrl.pathname))) {
+          candidates.push({
+            url: linkUrl.href,
+            category: target.category,
+            priority: target.priority,
+          });
+          break;
+        }
+      }
     } catch {
-      return false;
-    }
-  });
-
-  // Limit to max 3 subpages to control cost/time
-  const subpageUrls = [...new Set(candidateLinks)].slice(0, 3);
-
-  const subpages: JinaScrapeResult[] = [];
-  for (const subUrl of subpageUrls) {
-    try {
-      const result = await scrapeUrl(subUrl);
-      subpages.push(result);
-    } catch (err) {
-      console.warn(`[Jina] Failed to scrape subpage ${subUrl}:`, err);
+      /* skip invalid URLs */
     }
   }
 
-  return { homepage, subpages };
+  // Deduplicate and sort by priority
+  const seen = new Set<string>();
+  const unique = candidates
+    .sort((a, b) => a.priority - b.priority)
+    .filter((c) => {
+      if (seen.has(c.url)) return false;
+      seen.add(c.url);
+      return true;
+    });
+
+  // 3. Scrape top 5 priority subpages
+  const evidence: FirmGroundTruth["evidence"] = [];
+  for (const candidate of unique.slice(0, 5)) {
+    try {
+      const page = await scrapeUrl(candidate.url);
+      evidence.push({ category: candidate.category, page });
+    } catch (err) {
+      console.warn(
+        `[Jina] Failed: ${candidate.category} ${candidate.url}:`,
+        err
+      );
+    }
+  }
+
+  // 4. Collect ALL case study URLs (even unscraped) for later ingestion
+  const caseStudyUrls = unique
+    .filter((c) => c.category === "case_studies")
+    .map((c) => c.url);
+
+  for (const ev of evidence.filter((e) => e.category === "case_studies")) {
+    for (const link of ev.page.links ?? []) {
+      try {
+        const linkUrl = new URL(link, baseUrl);
+        if (
+          linkUrl.hostname === homeDomain &&
+          /case|stud|project|work|portfolio/i.test(linkUrl.pathname) &&
+          !caseStudyUrls.includes(linkUrl.href)
+        ) {
+          caseStudyUrls.push(linkUrl.href);
+        }
+      } catch {
+        /* skip */
+      }
+    }
+  }
+
+  // 5. Combine all content for the AI Classifier
+  const allContent = [
+    homepage.content,
+    ...evidence.map((e) => e.page.content),
+  ].join("\n\n");
+
+  // Truncate to 15k chars max for AI context
+  const rawContent =
+    allContent.length > 15000 ? allContent.slice(0, 15000) : allContent;
+
+  // 6. Extract structured data (non-taxonomy)
+  const extracted: FirmGroundTruth["extracted"] = {
+    clients: extractClients(
+      evidence
+        .filter((e) => e.category === "clients")
+        .map((e) => e.page.content)
+        .join("\n") || homepage.content
+    ),
+    caseStudyUrls: [...new Set(caseStudyUrls)].slice(0, 50),
+    services: extractListItems(
+      evidence
+        .filter((e) => e.category === "services")
+        .map((e) => e.page.content)
+        .join("\n")
+    ),
+    aboutPitch: extractAboutPitch(
+      evidence
+        .filter((e) => e.category === "about")
+        .map((e) => e.page.content)
+        .join("\n") ||
+        homepage.description ||
+        homepage.content
+    ),
+    teamMembers: extractTeamNames(
+      evidence
+        .filter((e) => e.category === "team")
+        .map((e) => e.page.content)
+        .join("\n")
+    ),
+  };
+
+  const pageTitles = [
+    homepage.title,
+    ...evidence.map((e) => e.page.title),
+  ].filter(Boolean);
+
+  return { homepage, evidence, extracted, rawContent, pageTitles };
+}
+
+// ─── Extraction helpers ───────────────────────────────────
+// These extract STRUCTURED data from page content.
+// NO taxonomy matching — that's handled by the AI Classifier.
+
+function extractClients(content: string): string[] {
+  if (!content) return [];
+  const clients = new Set<string>();
+  const patterns = [
+    /\*\*([A-Z][A-Za-z0-9\s&'.,-]{2,40})\*\*/g,
+    /^[-*]\s+([A-Z][A-Za-z0-9\s&'.,-]{2,40})$/gm,
+    /!\[([A-Z][A-Za-z0-9\s&'.,-]{2,40})\]/g,
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(content)) !== null) {
+      const name = match[1].trim();
+      if (
+        name.length > 2 &&
+        name.length < 50 &&
+        !name.match(
+          /^(Read|Learn|View|See|Get|Our|The|About|Click|Download|Home|Menu|Contact|Blog|Login|Sign)/i
+        )
+      ) {
+        clients.add(name);
+      }
+    }
+  }
+  return [...clients].slice(0, 50);
+}
+
+function extractListItems(content: string): string[] {
+  if (!content) return [];
+  const items = new Set<string>();
+  const patterns = [
+    /^[-*]\s+\*?\*?([^*\n]{3,80})\*?\*?\s*$/gm,
+    /^#{1,3}\s+([^#\n]{3,80})$/gm,
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(content)) !== null) {
+      const item = match[1].trim();
+      if (
+        item.length > 3 &&
+        !item.match(
+          /^(Home|Menu|Contact|About|Blog|Login|Sign|Back|Next|Previous|Footer|Header|Navigation)/i
+        )
+      ) {
+        items.add(item);
+      }
+    }
+  }
+  return [...items].slice(0, 30);
+}
+
+function extractAboutPitch(content: string): string {
+  if (!content) return "";
+  const lines = content
+    .split("\n")
+    .filter(
+      (l) =>
+        l.trim().length > 30 &&
+        !l.startsWith("#") &&
+        !l.startsWith("[") &&
+        !l.startsWith("!")
+    );
+  return lines.slice(0, 5).join("\n").slice(0, 1000);
+}
+
+function extractTeamNames(content: string): string[] {
+  if (!content) return [];
+  const names = new Set<string>();
+  const patterns = [
+    /^#{1,3}\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\s*$/gm,
+    /\*\*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\*\*/g,
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(content)) !== null) {
+      const name = match[1].trim();
+      if (
+        name.length > 4 &&
+        name.length < 40 &&
+        !name.match(
+          /^(Our |The |About |Meet |Contact |Read |Learn |View |Get |See )/i
+        )
+      ) {
+        names.add(name);
+      }
+    }
+  }
+  return [...names].slice(0, 20);
 }
