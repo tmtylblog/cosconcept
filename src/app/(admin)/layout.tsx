@@ -1,33 +1,26 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 
 /**
- * Admin layout — server-side role check.
- * The middleware already blocks non-superadmin users from /admin/* routes,
- * but this is a defense-in-depth check.
+ * Admin layout — server-side role check using Better Auth's
+ * direct API (no internal HTTP fetch, avoids Edge → Serverless issues on Vercel).
  */
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Verify superadmin role via session
   const headersList = await headers();
-  const sessionRes = await fetch(
-    `${process.env.BETTER_AUTH_URL}/api/auth/get-session`,
-    {
-      headers: {
-        cookie: headersList.get("cookie") ?? "",
-      },
-    }
-  );
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
 
-  if (!sessionRes.ok) {
+  if (!session?.user) {
     redirect("/login");
   }
 
-  const session = await sessionRes.json();
-  if (session?.user?.role !== "superadmin") {
+  if (session.user.role !== "superadmin") {
     redirect("/dashboard");
   }
 
