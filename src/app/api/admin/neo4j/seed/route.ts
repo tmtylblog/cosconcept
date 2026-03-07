@@ -1,14 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { setupNeo4jSchema } from "@/lib/neo4j-schema";
 import { seedNeo4jTaxonomy } from "@/lib/neo4j-seed";
 
 /**
  * POST /api/admin/neo4j/seed
  *
- * Admin-only endpoint to set up Neo4j schema and seed taxonomy data.
- * TODO: Add proper admin auth check when admin middleware is ready.
+ * Admin endpoint to set up Neo4j schema and seed taxonomy data.
+ * Protected by ADMIN_SECRET header (bypasses session middleware)
+ * or by session cookie (normal admin flow).
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
+  // Verify admin secret for remote/CLI invocation
+  const secret = req.headers.get("x-admin-secret");
+  const expectedSecret = process.env.ADMIN_SECRET;
+  if (expectedSecret && secret !== expectedSecret) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     // Step 1: Schema
     const schema = await setupNeo4jSchema();

@@ -17,8 +17,9 @@ const PROTECTED_API_PATHS = [
 
 /** Routes that are always public even if they match protected patterns */
 const PUBLIC_EXCEPTIONS = [
-  "/api/chat/guest",     // guest chat endpoint
-  "/api/chat/migrate",   // conversation migration
+  "/api/chat/guest",         // guest chat endpoint
+  "/api/chat/migrate",       // conversation migration
+  "/api/admin/neo4j/seed",   // neo4j seed (protected by ADMIN_SECRET header)
 ];
 
 function isProtectedPath(pathname: string): boolean {
