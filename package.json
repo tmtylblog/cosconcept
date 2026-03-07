@@ -1,0 +1,47 @@
+{
+  "name": "cos-concept",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "^3.0.118",
+    "@neondatabase/serverless": "^1.0.2",
+    "@openrouter/ai-sdk-provider": "^2.2.5",
+    "@radix-ui/react-slot": "^1.2.4",
+    "ai": "^6.0.116",
+    "better-auth": "^1.5.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.1",
+    "lucide-react": "^0.577.0",
+    "neo4j-driver": "^6.0.1",
+    "next": "^15.3.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "stripe": "^20.4.1",
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "dotenv": "^17.3.1",
+    "drizzle-kit": "^0.31.9",
+    "eslint": "^9.25.0",
+    "eslint-config-next": "^15.3.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.0"
+  }
+}

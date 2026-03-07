@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/*
+ * COS CONCEPT — Collective OS Design Tokens
+ * Aligned to joincollectiveos.com brand aesthetic
+ * All tokens use the cos- prefix
+ */
+@theme {
+  /* Brand Colors — from joincollectiveos.com */
+  --color-cos-midnight: #3a302d;
+  --color-cos-midnight-light: #4a403d;
+  --color-cos-electric: #1f86a1;
+  --color-cos-electric-hover: #176d85;
+  --color-cos-cloud: #f6f4ef;
+  --color-cos-cloud-dim: #edeae4;
+  --color-cos-signal: #60b9bf;
+  --color-cos-signal-dim: #4a9da3;
+  --color-cos-ember: #e44627;
+  --color-cos-ember-dim: #c93b20;
+  --color-cos-warm: #f3af3d;
+  --color-cos-warm-dim: #d99a2f;
+  --color-cos-slate: #9b9590;
+  --color-cos-slate-light: #b5aea9;
+  --color-cos-slate-dim: #6b6560;
+
+  /* Semantic Colors */
+  --color-cos-danger: #e44627;
+  --color-cos-danger-dim: #c93b20;
+
+  /* Surfaces */
+  --color-cos-surface: #ffffff;
+  --color-cos-surface-raised: #faf8f5;
+  --color-cos-surface-overlay: rgba(58, 48, 45, 0.6);
+
+  /* Borders */
+  --color-cos-border: #e5e0da;
+  --color-cos-border-strong: #d1cbc4;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "DM Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, monospace;
+
+  /* Border Radius — larger, warmer feel */
+  --radius-cos-sm: 0.5rem;
+  --radius-cos-md: 0.75rem;
+  --radius-cos-lg: 1rem;
+  --radius-cos-xl: 1.25rem;
+  --radius-cos-2xl: 1.5rem;
+  --radius-cos-pill: 3.6875rem;
+  --radius-cos-full: 9999px;
+}
+
+/* Base styles */
+body {
+  font-family: var(--font-sans);
+  color: var(--color-cos-midnight);
+  background-color: var(--color-cos-cloud);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus ring utility */
+*:focus-visible {
+  outline: 2px solid var(--color-cos-electric);
+  outline-offset: 2px;
+}
+
+/* Scrollbar styling for chat */
+.cos-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.cos-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cos-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-cos-border-strong);
+  border-radius: 3px;
+}
+.cos-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-cos-slate-light);
+}
