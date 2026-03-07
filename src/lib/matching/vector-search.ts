@@ -48,6 +48,10 @@ export async function generateQueryEmbedding(
   }
 
   const data = await response.json();
+  if (!data.data?.[0]?.embedding) {
+    console.error("[VectorSearch] No embedding returned from OpenAI");
+    return [];
+  }
   return data.data[0].embedding;
 }
 

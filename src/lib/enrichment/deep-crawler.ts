@@ -306,11 +306,15 @@ async function scrapeWithTimeout(
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), SCRAPE_TIMEOUT_MS);
-    const result = await scrapeUrl(url);
+    const result = await scrapeUrl(url, { signal: controller.signal });
     clearTimeout(timeout);
     return result;
   } catch (err) {
-    console.warn(`[DeepCrawl] Failed to scrape ${url}:`, err);
+    if (err instanceof Error && err.name === "AbortError") {
+      console.warn(`[DeepCrawl] Timeout scraping ${url}`);
+    } else {
+      console.warn(`[DeepCrawl] Failed to scrape ${url}:`, err);
+    }
     return null;
   }
 }

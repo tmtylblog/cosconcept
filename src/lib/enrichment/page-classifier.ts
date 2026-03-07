@@ -36,7 +36,12 @@ export type PageType =
  * Returns a likely type or null if unsure (falls through to AI).
  */
 function regexPreClassify(url: string, title: string): PageType | null {
-  const path = new URL(url).pathname.toLowerCase();
+  let path: string;
+  try {
+    path = new URL(url).pathname.toLowerCase();
+  } catch {
+    return null; // Malformed URL — fall through to AI classification
+  }
   const t = title.toLowerCase();
 
   // High-confidence regex patterns
@@ -122,12 +127,16 @@ Page types:
   } catch (err) {
     console.warn(`[PageClassifier] AI classification failed for ${url}:`, err);
     // Fallback: try basic heuristics
-    const path = new URL(url).pathname.toLowerCase();
-    if (/service|capabilit|solution|offering/.test(path)) return "services";
-    if (/case|stud|project/.test(path)) return "case_study";
-    if (/work|portfolio/.test(path)) return "portfolio";
-    if (/about/.test(path)) return "about";
-    if (/team|people/.test(path)) return "team";
+    try {
+      const path = new URL(url).pathname.toLowerCase();
+      if (/service|capabilit|solution|offering/.test(path)) return "services";
+      if (/case|stud|project/.test(path)) return "case_study";
+      if (/work|portfolio/.test(path)) return "portfolio";
+      if (/about/.test(path)) return "about";
+      if (/team|people/.test(path)) return "team";
+    } catch {
+      // Malformed URL — can't apply heuristics
+    }
     return "other";
   }
 }

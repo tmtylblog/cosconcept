@@ -112,7 +112,10 @@ const TARGET_PAGES: {
 ];
 
 /** Scrape a single URL using Jina Reader API. */
-export async function scrapeUrl(url: string): Promise<JinaScrapeResult> {
+export async function scrapeUrl(
+  url: string,
+  options?: { signal?: AbortSignal }
+): Promise<JinaScrapeResult> {
   const jinaApiKey = process.env.JINA_API_KEY;
 
   const headers: Record<string, string> = {
@@ -127,6 +130,7 @@ export async function scrapeUrl(url: string): Promise<JinaScrapeResult> {
   const response = await fetch(`${JINA_READER_BASE}/${url}`, {
     method: "GET",
     headers,
+    signal: options?.signal,
   });
 
   if (!response.ok) {
