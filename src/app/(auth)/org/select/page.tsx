@@ -31,7 +31,7 @@ export default function OrgSelectPage() {
     if (session?.user) {
       handleOrgSetup();
     }
-  }, [session]);
+  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleOrgSetup() {
     try {

@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
   try {
     // Get expert abstraction profiles
-    let query = db
+    const query = db
       .select()
       .from(abstractionProfiles)
       .where(eq(abstractionProfiles.entityType, "expert"))

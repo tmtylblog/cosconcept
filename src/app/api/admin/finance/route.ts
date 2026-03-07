@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { aiUsageLog, organizations, users } from "@/lib/db/schema";
-import { sql, eq, and, gte, lte, desc } from "drizzle-orm";
+import { sql, eq, and, gte, desc } from "drizzle-orm";
 
 /**
  * GET /api/admin/finance — AI cost analytics for admin dashboard

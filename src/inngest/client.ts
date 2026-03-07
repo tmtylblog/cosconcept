@@ -86,6 +86,44 @@ export type WeeklyRecrawlEvent = {
   data: Record<string, never>;
 };
 
+/** Post-call analysis for a recorded call */
+export type PostCallAnalysisEvent = {
+  name: "calls/analyze";
+  data: {
+    callId: string;
+    firmId: string;
+    transcript: string;
+    callType: string;
+    participants?: string[];
+    duration?: number;
+  };
+};
+
+/** Process an inbound email received at ossy@ */
+export type ProcessInboundEmailEvent = {
+  name: "email/process-inbound";
+  data: {
+    messageId: string;
+    threadId: string;
+    firmId: string;
+    from: string;
+    subject: string;
+    bodyText: string;
+  };
+};
+
+/** Schedule a follow-up reminder for an email thread */
+export type ScheduleFollowUpEvent = {
+  name: "email/schedule-follow-up";
+  data: {
+    threadId: string;
+    firmId: string;
+    reason?: string;
+    action?: string;
+    suggestedDate?: string;
+  };
+};
+
 // Union type for all events
 export type CosEvent =
   | DeepCrawlEvent
@@ -94,4 +132,7 @@ export type CosEvent =
   | FirmAbstractionEvent
   | GraphSyncFirmEvent
   | ExtractMemoriesEvent
-  | WeeklyRecrawlEvent;
+  | WeeklyRecrawlEvent
+  | PostCallAnalysisEvent
+  | ProcessInboundEmailEvent
+  | ScheduleFollowUpEvent;

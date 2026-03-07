@@ -10,20 +10,14 @@ import { inngest } from "../client";
 import { db } from "@/lib/db";
 import {
   partnerships,
-  partnershipEvents,
-  emailThreads,
-  emailApprovalQueue,
   serviceFirms,
   members,
   users,
+  emailThreads,
 } from "@/lib/db/schema";
-import { eq, and, lt, or } from "drizzle-orm";
+import { eq, and, lt } from "drizzle-orm";
 import { buildFollowUpHtml, buildFollowUpText } from "@/lib/email/templates/follow-up-reminder";
 import { sendEmail } from "@/lib/email/email-client";
-
-function generateId(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 /**
  * Schedule a follow-up reminder for a specific email thread.
@@ -91,7 +85,7 @@ export const scheduleFollowUp = inngest.createFunction(
       });
 
       // Auto-send follow-up reminders (tier 1: auto-send)
-      await sendEmail({
+      const result = await sendEmail({
         to: firmOwner.email,
         subject: `Quick follow-up: ${thread!.subject}`,
         html,
@@ -101,6 +95,10 @@ export const scheduleFollowUp = inngest.createFunction(
           { name: "thread", value: threadId },
         ],
       });
+
+      if (!result.success) {
+        console.error(`[FollowUp] Failed to send reminder for thread ${threadId}:`, result.error);
+      }
     });
 
     return { sent: true, to: firmOwner.email, thread: thread!.subject };
@@ -199,7 +197,7 @@ export const checkStalePartnerships = inngest.createFunction(
           actionUrl: `https://joincollectiveos.com/partnerships`,
         });
 
-        await sendEmail({
+        const result = await sendEmail({
           to: user.email,
           subject: `Pending partnership request from ${firmA?.name ?? "a partner"}`,
           html,
@@ -209,6 +207,11 @@ export const checkStalePartnerships = inngest.createFunction(
             { name: "partnership", value: partnership.id },
           ],
         });
+
+        if (!result.success) {
+          console.error(`[StalePartnership] Failed to send nudge for partnership ${partnership.id}:`, result.error);
+          return;
+        }
 
         nudgesSent++;
       });

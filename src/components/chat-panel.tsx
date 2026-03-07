@@ -57,6 +57,7 @@ interface ChatPanelProps {
   onRequestLogin?: () => void;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPanelProps) {
   const { data: activeOrg } = useActiveOrganization();
   const {

@@ -236,12 +236,15 @@ export default function EmailQueuePage() {
                     </div>
                   )}
                 </div>
-                <div
-                  className="p-4 prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{
-                    __html: selectedEmail.bodyHtml,
-                  }}
-                />
+                <div className="p-4 prose prose-sm max-w-none">
+                  {/* Render email body as safe text — bodyHtml comes from our own templates */}
+                  <iframe
+                    srcDoc={selectedEmail.bodyHtml}
+                    title="Email preview"
+                    className="w-full min-h-[400px] border-0"
+                    sandbox=""
+                  />
+                </div>
               </div>
             ) : (
               <div className="flex items-center justify-center h-64 text-gray-400">

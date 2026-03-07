@@ -12,28 +12,40 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useActiveOrganization } from "@/lib/auth-client";
 
 export default function CallsPage() {
+  const { data: activeOrg } = useActiveOrganization();
   const [uploading, setUploading] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmitTranscript = async () => {
     if (!transcript.trim()) return;
+    if (!activeOrg?.id) {
+      setError("No active organization. Please select a workspace first.");
+      return;
+    }
     setUploading(true);
+    setError(null);
 
     try {
-      await fetch("/api/calls", {
+      const res = await fetch("/api/calls", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          firmId: "current", // Will be replaced with actual firmId
+          firmId: activeOrg.id,
           transcript: transcript.trim(),
           callType: "sales",
         }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Request failed (${res.status})`);
+      }
       setTranscript("");
-    } catch {
-      /* ignore */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit transcript");
     } finally {
       setUploading(false);
     }
@@ -92,6 +104,9 @@ export default function CallsPage() {
           className="mt-3 w-full rounded-cos-lg border border-cos-border bg-cos-cloud px-4 py-3 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
           rows={6}
         />
+        {error && (
+          <p className="mt-2 text-xs text-cos-ember">{error}</p>
+        )}
         <div className="mt-3 flex items-center justify-between">
           <span className="text-xs text-cos-slate">
             {transcript.length > 0

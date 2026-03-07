@@ -12,9 +12,32 @@ import {
   emailThreads,
   opportunities,
   memoryEntries,
+  members,
+  users,
 } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { classifyEmail, extractEmailContext } from "@/lib/ai/email-intent-classifier";
+
+/**
+ * Resolve the owner user ID for a firm (org).
+ * Falls back to null if no owner is found.
+ */
+async function getFirmOwnerUserId(firmId: string): Promise<string | null> {
+  try {
+    const member = await db.query.members.findFirst({
+      where: and(eq(members.organizationId, firmId), eq(members.role, "owner")),
+    });
+    if (!member) return null;
+
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, member.userId),
+      columns: { id: true },
+    });
+    return user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -62,13 +85,20 @@ export const processInboundEmail = inngest.createFunction(
       await step.run("create-opportunity-from-email", async () => {
         if (!firmId || firmId === "unknown") return;
 
+        // Resolve the firm owner's user ID to avoid FK violation
+        const ownerUserId = await getFirmOwnerUserId(firmId);
+        if (!ownerUserId) {
+          console.warn(`[ProcessEmail] No owner found for firm ${firmId}, skipping opportunity creation`);
+          return;
+        }
+
         const signals = classification.opportunitySignals!;
         const oppId = generateId("opp");
 
         await db.insert(opportunities).values({
           id: oppId,
           firmId,
-          createdBy: "ossy", // system-created
+          createdBy: ownerUserId,
           title: signals.title ?? `Opportunity from ${from}`,
           description: classification.summary,
           requiredSkills: signals.requiredSkills ?? null,
@@ -96,6 +126,13 @@ export const processInboundEmail = inngest.createFunction(
     // Step 4: Extract context for memory
     if (classification.intent !== "unrelated" && firmId && firmId !== "unknown") {
       await step.run("extract-email-context", async () => {
+        // Resolve the firm owner's user ID to avoid FK violation on memoryEntries.userId
+        const ownerUserId = await getFirmOwnerUserId(firmId);
+        if (!ownerUserId) {
+          console.warn(`[ProcessEmail] No owner found for firm ${firmId}, skipping memory extraction`);
+          return { themes: [], keyFacts: [] };
+        }
+
         const context = await extractEmailContext({
           from,
           subject,
@@ -107,7 +144,7 @@ export const processInboundEmail = inngest.createFunction(
         for (const fact of context.keyFacts) {
           await db.insert(memoryEntries).values({
             id: generateId("mem"),
-            userId: "system",
+            userId: ownerUserId,
             organizationId: firmId,
             theme: "email_intelligence",
             content: fact,

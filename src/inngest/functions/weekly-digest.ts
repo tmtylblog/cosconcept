@@ -156,7 +156,7 @@ export const weeklyDigest = inngest.createFunction(
         const html = buildDigestHtml(digestData);
         const text = buildDigestText(digestData);
 
-        await sendEmail({
+        const result = await sendEmail({
           to: user.email,
           subject: `Your Weekly Partnership Digest — ${weekOf}`,
           html,
@@ -166,6 +166,11 @@ export const weeklyDigest = inngest.createFunction(
             { name: "firm", value: firm.id },
           ],
         });
+
+        if (!result.success) {
+          console.error(`[WeeklyDigest] Failed to send digest for firm ${firm.id}:`, result.error);
+          return;
+        }
 
         digestsSent++;
       });

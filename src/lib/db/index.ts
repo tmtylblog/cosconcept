@@ -14,7 +14,11 @@ const globalForDb = globalThis as unknown as {
 
 export function getDb(): NeonHttpDatabase<typeof schema> {
   if (!globalForDb.db) {
-    const sql = neon(process.env.DATABASE_URL!);
+    const url = process.env.DATABASE_URL;
+    if (!url) {
+      throw new Error("DATABASE_URL environment variable is not set");
+    }
+    const sql = neon(url);
     globalForDb.db = drizzle(sql, { schema });
   }
   return globalForDb.db;

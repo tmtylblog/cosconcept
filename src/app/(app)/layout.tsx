@@ -19,6 +19,8 @@ const PANEL_ROUTES: Record<string, { title: string; width?: string }> = {
   "/firm": { title: "My Firm", width: "w-[520px]" },
   "/network": { title: "Network", width: "w-[520px]" },
   "/partnerships": { title: "Partnerships", width: "w-[520px]" },
+  "/calls": { title: "Call Intelligence", width: "w-[520px]" },
+  "/email": { title: "Email", width: "w-[520px]" },
   "/settings": { title: "Settings", width: "w-[520px]" },
 };
 

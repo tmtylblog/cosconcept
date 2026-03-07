@@ -80,7 +80,7 @@ export function VoiceButton({
     } catch {
       setState("idle");
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -240,33 +240,23 @@ export function VoiceButton({
   );
 }
 
-// ─── Deepgram Client-Side Transcription ─────────────────
+// ─── Deepgram Transcription via Server Proxy ─────────────
 
 async function transcribeWithDeepgram(audioBlob: Blob): Promise<string> {
-  // Use the pre-recorded endpoint for one-shot transcription
-  const res = await fetch(
-    "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&punctuate=true",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Token ${getDeepgramApiKey()}`,
-        "Content-Type": audioBlob.type,
-      },
-      body: audioBlob,
-    }
-  );
+  // Proxy through our API route to keep the Deepgram key server-side
+  const res = await fetch("/api/voice/transcribe", {
+    method: "POST",
+    headers: {
+      "Content-Type": audioBlob.type,
+    },
+    body: audioBlob,
+  });
 
   if (!res.ok) {
-    console.error("[Voice] Deepgram error:", res.status);
+    console.error("[Voice] Transcription error:", res.status);
     return "";
   }
 
   const data = await res.json();
-  return data.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
-}
-
-function getDeepgramApiKey(): string {
-  // In production, this should come from a server-side proxy
-  // to avoid exposing the API key in the client
-  return process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY ?? "";
+  return data.transcript ?? "";
 }

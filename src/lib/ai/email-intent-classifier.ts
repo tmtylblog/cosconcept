@@ -7,7 +7,7 @@
 
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -58,11 +58,12 @@ export async function classifyEmail(opts: {
 }): Promise<EmailClassification> {
   const { from, subject, bodyText, threadContext } = opts;
 
-  const result = await generateObject({
-    model: openrouter.chat("google/gemini-flash-1.5"),
-    schema: emailClassificationSchema,
-    maxOutputTokens: 1000,
-    system: `You are an AI email classifier for Collective OS, a partnership platform for professional services firms.
+  try {
+    const result = await generateObject({
+      model: openrouter.chat("google/gemini-2.0-flash-001"),
+      schema: emailClassificationSchema,
+      maxOutputTokens: 1000,
+      system: `You are an AI email classifier for Collective OS, a partnership platform for professional services firms.
 
 Classify inbound emails sent to or CC'd to ossy@joincollectiveos.com.
 
@@ -76,7 +77,7 @@ Intent definitions:
 
 Extract entities carefully — only include what's explicitly mentioned.
 For opportunity signals, only populate if the email genuinely describes a business opportunity.`,
-    prompt: `Classify this email:
+      prompt: `Classify this email:
 
 From: ${from}
 Subject: ${subject}
@@ -85,9 +86,18 @@ Body:
 ${bodyText.slice(0, 3000)}
 
 ${threadContext ? `Previous thread context:\n${threadContext}` : ""}`,
-  });
+    });
 
-  return result.object;
+    return result.object;
+  } catch (err) {
+    console.error("[EmailClassifier] Classification failed:", err);
+    return {
+      intent: "unrelated",
+      confidence: 0,
+      summary: "Classification failed — could not process email",
+      entities: {},
+    };
+  }
 }
 
 /**
@@ -101,20 +111,21 @@ export async function extractEmailContext(opts: {
 }): Promise<{ themes: string[]; keyFacts: string[] }> {
   const { from, subject, bodyText, classification } = opts;
 
-  const result = await generateObject({
-    model: openrouter.chat("google/gemini-flash-1.5"),
-    schema: z.object({
-      themes: z
-        .array(z.string())
-        .describe("Key themes from this email (e.g., 'SEO services', 'fintech clients')"),
-      keyFacts: z
-        .array(z.string())
-        .describe(
-          "Important facts to remember (e.g., 'Firm X is looking for a Shopify partner', 'Client Y needs SEO audit by March')"
-        ),
-    }),
-    maxOutputTokens: 500,
-    prompt: `Extract key themes and facts from this email for future reference.
+  try {
+    const result = await generateObject({
+      model: openrouter.chat("google/gemini-2.0-flash-001"),
+      schema: z.object({
+        themes: z
+          .array(z.string())
+          .describe("Key themes from this email (e.g., 'SEO services', 'fintech clients')"),
+        keyFacts: z
+          .array(z.string())
+          .describe(
+            "Important facts to remember (e.g., 'Firm X is looking for a Shopify partner', 'Client Y needs SEO audit by March')"
+          ),
+      }),
+      maxOutputTokens: 500,
+      prompt: `Extract key themes and facts from this email for future reference.
 
 From: ${from}
 Subject: ${subject}
@@ -123,7 +134,11 @@ Summary: ${classification.summary}
 
 Body:
 ${bodyText.slice(0, 2000)}`,
-  });
+    });
 
-  return result.object;
+    return result.object;
+  } catch (err) {
+    console.error("[EmailClassifier] Context extraction failed:", err);
+    return { themes: [], keyFacts: [] };
+  }
 }

@@ -57,6 +57,7 @@ export async function analyzeCall(
   transcript: string,
   context?: { firmName?: string; callType?: string }
 ): Promise<CallCoachingAnalysis> {
+  try {
   const result = await generateObject({
     model: openrouter.chat("google/gemini-2.0-flash-001"),
     prompt: `Analyze this call transcript and provide coaching feedback for a professional services firm.
@@ -117,4 +118,8 @@ Be specific and actionable in feedback.`,
   });
 
   return result.object;
+  } catch (err) {
+    console.error("[CoachingAnalyzer] Analysis failed:", err);
+    throw new Error(`Call analysis failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
