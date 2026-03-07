@@ -16,9 +16,16 @@ export default function AdminOverviewPage() {
 
   useEffect(() => {
     fetch("/api/admin/metrics")
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) {
+          throw new Error(`Failed to fetch metrics (${r.status})`);
+        }
+        return r.json();
+      })
       .then(setMetrics)
-      .catch(console.error)
+      .catch((err) => {
+        console.error("[Admin] Metrics load error:", err);
+      })
       .finally(() => setLoading(false));
   }, []);
 

@@ -11,10 +11,16 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
+  let session;
+  try {
+    const headersList = await headers();
+    session = await auth.api.getSession({
+      headers: headersList,
+    });
+  } catch (error) {
+    console.error("[Admin] Session check failed:", error);
+    redirect("/login");
+  }
 
   if (!session?.user) {
     redirect("/login");

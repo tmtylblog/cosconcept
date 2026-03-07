@@ -15,8 +15,9 @@ const openrouter = createOpenRouter({
  */
 export async function POST(req: Request) {
   try {
-    const { messages } = (await req.json()) as {
+    const { messages, websiteContext } = (await req.json()) as {
       messages: UIMessage[];
+      websiteContext?: string;
     };
 
     // Hard limit: reject if too many user messages
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
     const systemPrompt = getOssyPrompt({
       isOnboarding: true,
       isGuest: true,
+      websiteContext: websiteContext ?? undefined,
     });
 
     const modelMessages = await convertToModelMessages(messages);

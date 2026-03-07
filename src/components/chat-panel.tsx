@@ -1,22 +1,40 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import Image from "next/image";
-import { Send, Mic, Loader2 } from "lucide-react";
+import { Send, Mic, Loader2, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 
 const GUEST_MESSAGE_LIMIT = 5;
 
+/** Simple URL regex — catches common website URLs in user messages */
+const URL_REGEX =
+  /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z]{2,10}\b(?:[-a-zA-Z0-9()@:%_+.~#?&/=]*)/gi;
+
 function getMessageText(message: UIMessage): string {
   return message.parts
     .filter((p): p is { type: "text"; text: string } => p.type === "text")
     .map((p) => p.text)
     .join("");
+}
+
+function extractUrl(text: string): string | null {
+  const matches = text.match(URL_REGEX);
+  if (!matches) return null;
+  // Filter out common false positives
+  const real = matches.find(
+    (m) =>
+      m.includes(".") &&
+      !m.startsWith("e.g.") &&
+      !m.match(/^\d+\.\d+/) &&
+      m.length > 5
+  );
+  return real || null;
 }
 
 const initialMessages: UIMessage[] = [
@@ -26,7 +44,7 @@ const initialMessages: UIMessage[] = [
     parts: [
       {
         type: "text",
-        text: "Hey! I'm Ossy, your AI growth consultant. I'm here to help you find the perfect partners for your firm. Tell me a bit about what you do \u2014 what services does your firm provide?",
+        text: "Hey! I'm Ossy, your AI growth consultant. I'd love to get to know you and your firm so I can start finding the right partners. While we chat, could you share your firm's website? I'll do some behind-the-scenes research so we can hit the ground running. Just drop the URL whenever you're ready \u2014 and in the meantime, tell me a bit about what you do!",
       },
     ],
   },
@@ -41,6 +59,11 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const { data: activeOrg } = useActiveOrganization();
   const [input, setInput] = useState("");
   const [guestMessageCount, setGuestMessageCount] = useState(0);
+  const [enrichmentData, setEnrichmentData] = useState<string | null>(null);
+  const [enrichmentStatus, setEnrichmentStatus] = useState<
+    "idle" | "loading" | "done" | "error"
+  >("idle");
+  const enrichedUrlRef = useRef<string | null>(null);
 
   const chatEndpoint = isGuest ? "/api/chat/guest" : "/api/chat";
 
@@ -49,8 +72,8 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
     transport: new DefaultChatTransport({
       api: chatEndpoint,
       body: isGuest
-        ? {}
-        : { organizationId: activeOrg?.id ?? "" },
+        ? { websiteContext: enrichmentData }
+        : { organizationId: activeOrg?.id ?? "", websiteContext: enrichmentData },
     }),
   });
 
@@ -80,6 +103,56 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
     }
   }, [messages, isGuest, onRequestLogin]);
 
+  // Detect URLs in user messages and trigger background enrichment
+  const triggerEnrichment = useCallback(async (url: string) => {
+    if (enrichedUrlRef.current === url) return; // Already enriched this URL
+    enrichedUrlRef.current = url;
+    setEnrichmentStatus("loading");
+
+    try {
+      const res = await fetch("/api/enrich/website", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+
+      if (!res.ok) throw new Error("Enrichment failed");
+
+      const data = await res.json();
+      // Build a concise context string for Ossy
+      const context = [
+        `[WEBSITE RESEARCH RESULTS for ${url}]`,
+        `Title: ${data.title}`,
+        data.description ? `Description: ${data.description}` : null,
+        `Pages scraped: ${data.pagesScraped}`,
+        `\nContent:\n${data.content}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      setEnrichmentData(context);
+      setEnrichmentStatus("done");
+      console.log(`[Enrichment] Website scraped: ${url}, ${data.pagesScraped} pages`);
+    } catch (err) {
+      console.error("[Enrichment] Failed:", err);
+      setEnrichmentStatus("error");
+    }
+  }, []);
+
+  // Watch user messages for URLs
+  useEffect(() => {
+    if (enrichedUrlRef.current) return; // Already processing
+    const userMessages = messages.filter((m) => m.role === "user");
+    for (const msg of userMessages) {
+      const text = getMessageText(msg);
+      const url = extractUrl(text);
+      if (url) {
+        triggerEnrichment(url);
+        break;
+      }
+    }
+  }, [messages, triggerEnrichment]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -106,7 +179,7 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
             className="h-full w-full rounded-full object-cover"
           />
         </div>
-        <div>
+        <div className="flex-1">
           <h2 className="font-heading text-lg font-semibold text-cos-midnight">
             Ossy
           </h2>
@@ -118,47 +191,75 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
                 : "Online"}
           </p>
         </div>
+        {/* Enrichment status indicator */}
+        {enrichmentStatus === "loading" && (
+          <div className="flex items-center gap-1.5 rounded-cos-pill bg-cos-electric/10 px-3 py-1">
+            <Globe className="h-3.5 w-3.5 animate-pulse text-cos-electric" />
+            <span className="text-xs font-medium text-cos-electric">
+              Researching website...
+            </span>
+          </div>
+        )}
+        {enrichmentStatus === "done" && (
+          <div className="flex items-center gap-1.5 rounded-cos-pill bg-cos-signal/10 px-3 py-1">
+            <Globe className="h-3.5 w-3.5 text-cos-signal" />
+            <span className="text-xs font-medium text-cos-signal">
+              Website analyzed
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Messages area */}
       <div
         ref={scrollRef}
-        className="cos-scrollbar relative flex-1 space-y-6 overflow-y-auto px-6 py-6"
+        className="cos-scrollbar relative flex-1 space-y-2 overflow-y-auto px-6 py-6"
       >
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={cn(
-              "flex gap-3",
-              message.role === "user" && "flex-row-reverse"
-            )}
-          >
-            {message.role === "assistant" && (
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20">
-                <Image
-                  src="/logo.png"
-                  alt="Ossy"
-                  width={24}
-                  height={24}
-                  className="h-6 w-6 object-cover"
-                />
-              </div>
-            )}
+        {messages.map((message, idx) => {
+          const prevMessage = idx > 0 ? messages[idx - 1] : null;
+          const isNewSpeaker = !prevMessage || prevMessage.role !== message.role;
 
+          return (
             <div
+              key={message.id}
               className={cn(
-                "max-w-[720px] rounded-cos-xl px-6 py-4",
-                message.role === "assistant"
-                  ? "rounded-tl-cos-sm bg-cos-surface-raised"
-                  : "rounded-tr-cos-sm bg-cos-electric text-white"
+                "flex gap-3",
+                message.role === "user" && "flex-row-reverse",
+                isNewSpeaker && idx > 0 && "mt-4"
               )}
             >
-              <p className="whitespace-pre-wrap text-base leading-relaxed">
-                {getMessageText(message)}
-              </p>
+              {message.role === "assistant" && (
+                <div
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20",
+                    !isNewSpeaker && "invisible"
+                  )}
+                >
+                  <Image
+                    src="/logo.png"
+                    alt="Ossy"
+                    width={24}
+                    height={24}
+                    className="h-6 w-6 object-cover"
+                  />
+                </div>
+              )}
+
+              <div
+                className={cn(
+                  "max-w-[720px] rounded-cos-xl px-6 py-4",
+                  message.role === "assistant"
+                    ? "rounded-tl-cos-sm bg-cos-surface-raised"
+                    : "ml-auto rounded-tr-cos-sm bg-cos-electric text-white"
+                )}
+              >
+                <p className="whitespace-pre-wrap text-base leading-relaxed">
+                  {getMessageText(message)}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {isLoading && messages[messages.length - 1]?.role === "user" && (
           <div className="flex gap-3">
@@ -192,7 +293,8 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
               Loving the conversation?
             </p>
             <p className="mt-1 text-sm text-cos-slate-dim">
-              Create a free account to continue chatting, save your progress, and unlock partner matching.
+              Create a free account to continue chatting, save your progress,
+              and unlock partner matching.
             </p>
             <button
               onClick={onRequestLogin}
@@ -213,7 +315,11 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={atGuestLimit ? "Sign in to keep chatting..." : "Ask Ossy anything..."}
+              placeholder={
+                atGuestLimit
+                  ? "Sign in to keep chatting..."
+                  : "Ask Ossy anything..."
+              }
               disabled={isLoading || atGuestLimit}
               className="flex-1 bg-transparent py-3 text-base text-cos-midnight placeholder:text-cos-slate-light focus:outline-none disabled:opacity-50"
             />

@@ -74,6 +74,7 @@ export function getOssyPrompt(context?: {
   firmName?: string;
   isOnboarding?: boolean;
   isGuest?: boolean;
+  websiteContext?: string;
 }): string {
   let prompt = OSSY_SYSTEM_PROMPT;
 
@@ -102,6 +103,18 @@ Your job is to:
   } else if (context?.isOnboarding) {
     prompt += `\n## Active Mode: ONBOARDING
 You are currently in onboarding mode. Start by warmly welcoming the user and begin exploring their firm's partnership profile. Start with their service offerings and capabilities. Remember: one question at a time, conversational tone.\n`;
+  }
+
+  if (context?.websiteContext) {
+    prompt += `\n## Website Research Data
+The following data was automatically scraped from the user's firm website. Use this to:
+- CONFIRM what you already know rather than re-asking ("I can see from your website that you focus on X — is that accurate?")
+- Ask more TARGETED questions based on what you found ("Your case studies show a lot of work in fintech — is that your sweet spot?")
+- Skip basic questions if the website already answers them
+- Reference specific details to show you've done your homework
+- Don't overwhelm them with everything you found — weave it in naturally
+
+${context.websiteContext}\n`;
   }
 
   return prompt;

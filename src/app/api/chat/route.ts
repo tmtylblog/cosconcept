@@ -14,9 +14,10 @@ const openrouter = createOpenRouter({
 
 export async function POST(req: Request) {
   try {
-    const { messages, organizationId } = (await req.json()) as {
+    const { messages, organizationId, websiteContext } = (await req.json()) as {
       messages: UIMessage[];
       organizationId?: string;
+      websiteContext?: string;
     };
 
     // Feature gate: check messaging limits
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
 
     const systemPrompt = getOssyPrompt({
       isOnboarding: messages.length <= 2,
+      websiteContext: websiteContext ?? undefined,
     });
 
     const modelMessages = await convertToModelMessages(messages);
