@@ -15,11 +15,19 @@ export interface ProfileData {
   markets?: string[];
   languages?: string[];
   industries?: string[];
-  // Partner preference fields (from partnerPreferences table)
+  // Partner preference fields (from partnerPreferences table columns)
   preferredPartnerTypes?: string[];
+  preferredPartnerSize?: string[];
+  requiredPartnerIndustries?: string[];
+  preferredPartnerLocations?: string[];
   partnershipModels?: string[];
   dealBreakers?: string[];
   growthGoals?: string;
+  // Partner criteria (from rawOnboardingData)
+  desiredPartnerServices?: string[];
+  idealPartnerClientSize?: string;
+  idealProjectSize?: string;
+  typicalHourlyRates?: string;
 }
 
 interface ProfileContextValue {

@@ -15,6 +15,11 @@ import {
   Target,
   ShieldAlert,
   TrendingUp,
+  Search,
+  Building,
+  DollarSign,
+  Ruler,
+  MapPin,
 } from "lucide-react";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useProfile } from "@/hooks/use-profile";
@@ -139,9 +144,16 @@ export default function DashboardPage() {
 
   // Partner preference data (only from profile/chat confirmations)
   const partnerTypes = profile.preferredPartnerTypes ?? [];
+  const partnerSize = profile.preferredPartnerSize ?? [];
+  const partnerIndustries = profile.requiredPartnerIndustries ?? [];
+  const partnerLocations = profile.preferredPartnerLocations ?? [];
   const partnerModels = profile.partnershipModels ?? [];
   const dealBreakers = profile.dealBreakers ?? [];
   const growthGoals = profile.growthGoals;
+  const desiredServices = profile.desiredPartnerServices ?? [];
+  const clientSize = profile.idealPartnerClientSize;
+  const projectSize = profile.idealProjectSize;
+  const hourlyRates = profile.typicalHourlyRates;
 
   const hasEnrichment = isDone && (companyData || extracted || classification);
   const hasProfile = Object.keys(profile).length > 0;
@@ -283,8 +295,38 @@ export default function DashboardPage() {
           )}
 
           {/* ─── Partner Preferences (from chat confirmations) ── */}
+          {desiredServices.length > 0 && (
+            <RevealCard icon={Search} label="Services Wanted from Partners" delay={600}>
+              <PillList
+                items={desiredServices}
+                pillClass="bg-cos-electric/8 text-cos-electric"
+              />
+            </RevealCard>
+          )}
+
+          {partnerIndustries.length > 0 && (
+            <RevealCard icon={Briefcase} label="Required Partner Industries" delay={620}>
+              <PillList
+                items={partnerIndustries}
+                pillClass="bg-cos-signal/8 text-cos-signal"
+              />
+            </RevealCard>
+          )}
+
+          {clientSize && (
+            <RevealCard icon={Users} label="Ideal Partner Client Size" delay={640}>
+              <p>{clientSize}</p>
+            </RevealCard>
+          )}
+
+          {partnerLocations.length > 0 && (
+            <RevealCard icon={MapPin} label="Partner Locations" delay={660}>
+              <p>{partnerLocations.join(", ")}</p>
+            </RevealCard>
+          )}
+
           {partnerTypes.length > 0 && (
-            <RevealCard icon={Handshake} label="Preferred Partner Types" delay={600}>
+            <RevealCard icon={Handshake} label="Preferred Partner Types" delay={680}>
               <PillList
                 items={partnerTypes}
                 pillClass="bg-cos-signal/10 text-cos-signal"
@@ -292,8 +334,29 @@ export default function DashboardPage() {
             </RevealCard>
           )}
 
+          {partnerSize.length > 0 && (
+            <RevealCard icon={Building} label="Preferred Partner Size" delay={700}>
+              <PillList
+                items={partnerSize}
+                pillClass="bg-cos-midnight/6 text-cos-midnight"
+              />
+            </RevealCard>
+          )}
+
+          {projectSize && (
+            <RevealCard icon={Ruler} label="Ideal Project Size" delay={720}>
+              <p>{projectSize}</p>
+            </RevealCard>
+          )}
+
+          {hourlyRates && (
+            <RevealCard icon={DollarSign} label="Typical Hourly Rates" delay={740}>
+              <p>{hourlyRates}</p>
+            </RevealCard>
+          )}
+
           {partnerModels.length > 0 && (
-            <RevealCard icon={Target} label="Partnership Models" delay={650}>
+            <RevealCard icon={Target} label="Partnership Models" delay={760}>
               <PillList
                 items={partnerModels}
                 pillClass="bg-cos-electric/10 text-cos-electric"
@@ -302,7 +365,7 @@ export default function DashboardPage() {
           )}
 
           {dealBreakers.length > 0 && (
-            <RevealCard icon={ShieldAlert} label="Deal Breakers" delay={700}>
+            <RevealCard icon={ShieldAlert} label="Deal Breakers" delay={780}>
               <PillList
                 items={dealBreakers}
                 pillClass="bg-cos-ember/10 text-cos-ember"
@@ -311,7 +374,7 @@ export default function DashboardPage() {
           )}
 
           {growthGoals && (
-            <RevealCard icon={TrendingUp} label="Growth Goals" delay={750}>
+            <RevealCard icon={TrendingUp} label="Growth Goals" delay={800}>
               <p>{growthGoals}</p>
             </RevealCard>
           )}

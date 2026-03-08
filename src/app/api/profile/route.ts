@@ -49,11 +49,20 @@ export async function GET(req: Request) {
         .limit(1);
 
       if (pref) {
+        const rawData = (pref.rawOnboardingData as Record<string, unknown>) || {};
         prefs = {
           preferredPartnerTypes: pref.preferredFirmTypes,
+          preferredPartnerSize: pref.preferredSizeBands,
+          requiredPartnerIndustries: pref.preferredIndustries,
+          preferredPartnerLocations: pref.preferredMarkets,
           partnershipModels: pref.partnershipModels,
           dealBreakers: pref.dealBreakers,
           growthGoals: pref.growthGoals,
+          // Fields from rawOnboardingData
+          desiredPartnerServices: rawData.desiredPartnerServices,
+          idealPartnerClientSize: rawData.idealPartnerClientSize,
+          idealProjectSize: rawData.idealProjectSize,
+          typicalHourlyRates: rawData.typicalHourlyRates,
         };
       }
     }

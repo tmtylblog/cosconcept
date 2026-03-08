@@ -18,10 +18,21 @@ const FIRM_FIELDS = new Set([
 /** Column mapping for partner preference fields → DB columns */
 const PARTNER_COLUMN_MAP: Record<string, string> = {
   preferredPartnerTypes: "preferredFirmTypes",
+  preferredPartnerSize: "preferredSizeBands",
+  requiredPartnerIndustries: "preferredIndustries",
+  preferredPartnerLocations: "preferredMarkets",
   partnershipModels: "partnershipModels",
   dealBreakers: "dealBreakers",
   growthGoals: "growthGoals",
 };
+
+/** Fields stored in partnerPreferences.rawOnboardingData JSONB (no dedicated column) */
+const RAW_ONBOARDING_FIELDS = new Set([
+  "desiredPartnerServices",
+  "idealPartnerClientSize",
+  "idealProjectSize",
+  "typicalHourlyRates",
+]);
 
 /** Generate a short unique ID */
 function uid(prefix: string): string {
@@ -29,6 +40,7 @@ function uid(prefix: string): string {
 }
 
 const profileFieldSchema = z.enum([
+  // Firm profile (confirm enrichment)
   "firmCategory",
   "services",
   "clients",
@@ -36,23 +48,34 @@ const profileFieldSchema = z.enum([
   "markets",
   "languages",
   "industries",
+  // Partner preferences (unique to conversation)
   "preferredPartnerTypes",
+  "preferredPartnerSize",
+  "requiredPartnerIndustries",
+  "preferredPartnerLocations",
   "partnershipModels",
   "dealBreakers",
   "growthGoals",
+  // Partner criteria (stored in rawOnboardingData)
+  "desiredPartnerServices",
+  "idealPartnerClientSize",
+  "idealProjectSize",
+  "typicalHourlyRates",
 ]);
 
 const toolInputSchema = z.object({
   field: profileFieldSchema.describe(
-    "The profile field to update. Firm fields: firmCategory, services, clients, skills, markets, languages, industries. " +
-    "Partner preference fields: preferredPartnerTypes, partnershipModels, dealBreakers, growthGoals."
+    "The profile field to update. " +
+    "Firm fields: firmCategory, services, clients, skills, markets, languages, industries. " +
+    "Partner preferences: preferredPartnerTypes, preferredPartnerSize, requiredPartnerIndustries, preferredPartnerLocations, partnershipModels, dealBreakers, growthGoals. " +
+    "Partner criteria: desiredPartnerServices, idealPartnerClientSize, idealProjectSize, typicalHourlyRates."
   ),
   value: z.union([
     z.string(),
     z.array(z.string()),
   ]).describe(
-    "The confirmed value. Use a string for single-value fields (firmCategory, growthGoals). " +
-    "Use an array of strings for multi-value fields (services, skills, etc.)."
+    "The confirmed value. Use a string for single-value fields (firmCategory, growthGoals, idealPartnerClientSize, idealProjectSize, typicalHourlyRates). " +
+    "Use an array of strings for multi-value fields (services, skills, preferredPartnerTypes, etc.)."
   ),
 });
 
@@ -94,8 +117,31 @@ export function createOssyTools(organizationId: string, firmId: string) {
                 updatedAt: new Date(),
               })
               .where(eq(serviceFirms.id, firmId));
+          } else if (RAW_ONBOARDING_FIELDS.has(field)) {
+            // Store in partnerPreferences.rawOnboardingData JSONB
+            const [existing] = await db
+              .select({ id: partnerPreferences.id, rawOnboardingData: partnerPreferences.rawOnboardingData })
+              .from(partnerPreferences)
+              .where(eq(partnerPreferences.firmId, firmId))
+              .limit(1);
+
+            const rawData = (existing?.rawOnboardingData as Record<string, unknown>) || {};
+            rawData[field] = value;
+
+            if (existing) {
+              await db
+                .update(partnerPreferences)
+                .set({ rawOnboardingData: rawData, updatedAt: new Date() })
+                .where(eq(partnerPreferences.firmId, firmId));
+            } else {
+              await db.insert(partnerPreferences).values({
+                id: uid("pref"),
+                firmId,
+                rawOnboardingData: rawData,
+              });
+            }
           } else {
-            // Upsert into partnerPreferences table
+            // Upsert into partnerPreferences table (dedicated column)
             const dbColumn = PARTNER_COLUMN_MAP[field] || field;
             const [existing] = await db
               .select({ id: partnerPreferences.id })
