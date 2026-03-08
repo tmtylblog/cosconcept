@@ -16,6 +16,7 @@ import {
   getMarkets,
 } from "@/lib/taxonomy";
 import type { SearchFilters } from "./types";
+import { logUsage } from "@/lib/ai/gateway";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -38,6 +39,7 @@ export async function parseSearchQuery(
   const markets = getMarkets().slice(0, 80); // Top markets for prompt context
 
   try {
+    const parseStart = Date.now();
     const result = await generateObject({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       prompt: `Parse this search query into structured filters for a professional services partner search.
@@ -84,6 +86,17 @@ Only extract what the query explicitly or strongly implies. Don't over-extract.`
           .describe("Firm size: micro, small, medium, large"),
       }),
       maxOutputTokens: 256,
+    });
+
+    const parseDuration = Date.now() - parseStart;
+
+    // Log AI usage
+    await logUsage({
+      model: "google/gemini-2.0-flash-001",
+      feature: "matching",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      durationMs: parseDuration,
     });
 
     // Validate against actual taxonomy

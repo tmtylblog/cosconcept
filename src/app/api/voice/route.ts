@@ -17,6 +17,7 @@ import { headers } from "next/headers";
 import { streamTTS, splitIntoSentences } from "@/lib/voice/elevenlabs-tts";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText } from "ai";
+import { logUsage } from "@/lib/ai/gateway";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Generate AI response
+  const voiceStart = Date.now();
   const result = await generateText({
     model: openrouter.chat("anthropic/claude-sonnet-4"),
     system: `You are Ossy, the AI consultant at Collective OS. You help professional services firms find partners, share opportunities, and grow their business through partnerships.
@@ -55,8 +57,19 @@ Be warm, knowledgeable, and direct.`,
     prompt: transcript,
     maxOutputTokens: 300,
   });
+  const voiceDuration = Date.now() - voiceStart;
 
   const aiResponse = result.text;
+
+  // Log AI usage
+  await logUsage({
+    userId: session.user.id,
+    model: "anthropic/claude-sonnet-4",
+    feature: "voice",
+    inputTokens: result.usage?.inputTokens ?? 0,
+    outputTokens: result.usage?.outputTokens ?? 0,
+    durationMs: voiceDuration,
+  });
 
   // If audio is requested, generate TTS
   if (returnAudio) {

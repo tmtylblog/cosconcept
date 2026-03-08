@@ -13,6 +13,7 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod/v4";
+import { logUsage } from "@/lib/ai/gateway";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -58,6 +59,7 @@ export async function analyzeCall(
   context?: { firmName?: string; callType?: string }
 ): Promise<CallCoachingAnalysis> {
   try {
+  const coachStart = Date.now();
   const result = await generateObject({
     model: openrouter.chat("google/gemini-2.0-flash-001"),
     prompt: `Analyze this call transcript and provide coaching feedback for a professional services firm.
@@ -115,6 +117,17 @@ Be specific and actionable in feedback.`,
       partnerRecommendations: z.array(z.string()).describe("Types of partners that could help based on call topics"),
     }),
     maxOutputTokens: 1536,
+  });
+
+  const coachDuration = Date.now() - coachStart;
+
+  // Log AI usage
+  await logUsage({
+    model: "google/gemini-2.0-flash-001",
+    feature: "enrichment",
+    inputTokens: result.usage?.inputTokens ?? 0,
+    outputTokens: result.usage?.outputTokens ?? 0,
+    durationMs: coachDuration,
   });
 
   return result.object;

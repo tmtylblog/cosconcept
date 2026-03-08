@@ -16,6 +16,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod/v4";
 import type { MatchCandidate, AbstractionProfile } from "./types";
+import { logUsage } from "@/lib/ai/gateway";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -65,6 +66,7 @@ Goals: ${searcherProfile.partnershipReadiness.partnershipGoals.join(", ")}
     : "";
 
   try {
+    const rankStart = Date.now();
     const result = await generateObject({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       prompt: `You are ranking potential partnership matches for a professional services firm.
@@ -106,6 +108,17 @@ Prioritize firms that have PROVEN work in the relevant areas (case studies > cla
         ),
       }),
       maxOutputTokens: 2048,
+    });
+
+    const rankDuration = Date.now() - rankStart;
+
+    // Log AI usage
+    await logUsage({
+      model: "google/gemini-2.0-flash-001",
+      feature: "matching",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      durationMs: rankDuration,
     });
 
     // Map LLM rankings back to candidates

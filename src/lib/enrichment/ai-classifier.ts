@@ -23,6 +23,7 @@ import {
   getMarkets,
   getLanguages,
 } from "@/lib/taxonomy";
+import { logUsage } from "@/lib/ai/gateway";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -115,6 +116,7 @@ Available: ${languages.slice(0, 30).join(", ")}...
 Be precise. Only tag what the evidence supports. Don't guess.`;
 
   try {
+    const classifyStart = Date.now();
     const result = await generateObject({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       prompt,
@@ -139,6 +141,16 @@ Be precise. Only tag what the evidence supports. Don't guess.`;
           .describe("Confidence score 0-1 based on evidence quality"),
       }),
       maxOutputTokens: 1024,
+    });
+    const classifyDuration = Date.now() - classifyStart;
+
+    // Log AI usage
+    await logUsage({
+      model: "google/gemini-2.0-flash-001",
+      feature: "classification",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      durationMs: classifyDuration,
     });
 
     // Validate against our actual taxonomy

@@ -15,6 +15,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod/v4";
 import type { PdlPerson } from "./pdl";
+import { logUsage } from "@/lib/ai/gateway";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -97,6 +98,7 @@ export async function generateSpecialistProfiles(params: {
     .join("\n");
 
   try {
+    const specStart = Date.now();
     const result = await generateObject({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       prompt: `Generate specialist profiles for this professional services expert.
@@ -174,6 +176,17 @@ Be precise. Only generate profiles supported by the evidence.`,
           .describe("Top 10-15 skills from all evidence"),
       }),
       maxOutputTokens: 1024,
+    });
+
+    const specDuration = Date.now() - specStart;
+
+    // Log AI usage
+    await logUsage({
+      model: "google/gemini-2.0-flash-001",
+      feature: "expert",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      durationMs: specDuration,
     });
 
     const analysis = result.object;

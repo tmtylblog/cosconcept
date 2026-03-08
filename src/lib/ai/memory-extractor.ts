@@ -22,6 +22,7 @@ import { z } from "zod/v4";
 import { db } from "@/lib/db";
 import { memoryEntries, memoryThemes, messages } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import { logUsage } from "@/lib/ai/gateway";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -81,6 +82,7 @@ export async function extractMemoriesFromConversation(params: {
   const truncated = transcript.slice(0, 12000);
 
   try {
+    const memoryStart = Date.now();
     const result = await generateObject({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       prompt: `You are a memory extraction system for Ossy, an AI consultant.
@@ -115,6 +117,21 @@ Return an empty array if nothing worth remembering was discussed.`,
         ),
       }),
       maxOutputTokens: 1024,
+    });
+
+    const memoryDuration = Date.now() - memoryStart;
+
+    // Log AI usage
+    await logUsage({
+      userId: params.userId,
+      organizationId: params.organizationId,
+      model: "google/gemini-2.0-flash-001",
+      feature: "memory",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      entityType: "conversation",
+      entityId: params.conversationId,
+      durationMs: memoryDuration,
     });
 
     const memories = result.object.memories.filter((m) => m.confidence >= 0.6);
