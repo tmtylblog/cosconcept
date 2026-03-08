@@ -317,20 +317,31 @@ function extractClients(content: string): string[] {
   if (!content) return [];
   const clients = new Set<string>();
   const patterns = [
-    /\*\*([A-Z][A-Za-z0-9\s&'.,-]{2,40})\*\*/g,
-    /^[-*]\s+([A-Z][A-Za-z0-9\s&'.,-]{2,40})$/gm,
-    /!\[([A-Z][A-Za-z0-9\s&'.,-]{2,40})\]/g,
+    // Bold company names (must be 2+ words to avoid nav items)
+    /\*\*([A-Z][A-Za-z0-9\s&'.,-]{4,40})\*\*/g,
+    // List items that look like company names (2+ capitalized words)
+    /^[-*]\s+([A-Z][a-z]+(?:\s+[A-Z&][A-Za-z0-9'.,-]*){1,5})$/gm,
   ];
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(content)) !== null) {
       const name = match[1].trim();
       if (
-        name.length > 2 &&
+        name.length > 4 &&
         name.length < 50 &&
+        // Must contain at least one space — real company names are multi-word
+        // Single words like "Brand", "Marketing", "Commerce" are divisions, not clients
+        name.includes(" ") &&
+        // Filter out navigation, UI, and generic web elements
         !name.match(
-          /^(Read|Learn|View|See|Get|Our|The|About|Click|Download|Home|Menu|Contact|Blog|Login|Sign)/i
-        )
+          /^(Read|Learn|View|See|Get|Our|The|About|Click|Download|Home|Menu|Contact|Blog|Login|Sign|Back|Next|Previous|Footer|Header|Navigation|Skip|Search|Close|Open|Show|Hide|Toggle|Submit|Cancel|Accept|Reject|Dismiss|Loading|Chapter|Section|Page|Slide)/i
+        ) &&
+        // Filter out generic section/category/business words
+        !name.match(
+          /^(Solutions?|Services?|Products?|Industries?|Resources?|Company|Capabilities|Insights?|Platform|Overview|Features?|Pricing|Careers?|News|Events?|Partners?|Support|Documentation|FAQ|Help|Legal|Privacy|Terms|Sitemap|Copyright|Descriptions?|Brand|Marketing|Experience|Commerce|Sales|Technology|Digital|Strategy|Creative|Design|Analytics|Consulting|Advisory|Management|Operations|Engineering|Data|Media|Content|Growth|Innovation|Transformation|Performance|Leadership|Culture|Talent|People|Finance|Sustainability|Healthcare|Education|Retail|Automotive|Energy|Real Estate|Government|Nonprofit)\b/i
+        ) &&
+        // Filter out image references
+        !name.match(/^Image\b/i)
       ) {
         clients.add(name);
       }
@@ -353,8 +364,14 @@ function extractListItems(content: string): string[] {
       if (
         item.length > 3 &&
         !item.match(
-          /^(Home|Menu|Contact|About|Blog|Login|Sign|Back|Next|Previous|Footer|Header|Navigation)/i
-        )
+          /^(Home|Menu|Contact|About|Blog|Login|Sign|Back|Next|Previous|Footer|Header|Navigation|Skip|Search|Close|Chapter|Slide|Read|Learn|View|See|Get|Our|The|Click|Download)/i
+        ) &&
+        // Filter out generic nav/web/business terms
+        !item.match(
+          /^(Solutions?|Products?|Industries?|Resources?|Company|Insights?|Platform|Overview|Pricing|Careers?|News|Events?|Partners?|Support|Documentation|FAQ|Help|Legal|Privacy|Terms|Sitemap|Copyright|Descriptions?|Brand|Marketing|Experience|Commerce|Sales|Technology|Digital|Strategy|Creative|Design|Analytics|Consulting|Advisory|Management|Operations|Engineering|Data|Media|Content|Growth|Innovation|Transformation|Performance|Leadership|Culture|Talent|People|Finance|Sustainability)\s*$/i
+        ) &&
+        // Filter out image references
+        !item.match(/^Image\b/i)
       ) {
         items.add(item);
       }

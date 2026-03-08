@@ -104,6 +104,9 @@ export default function DashboardPage() {
   const firmIndustry = companyData?.industry;
   const firmLocation = companyData?.location;
   const firmSize = companyData?.size;
+  const firmEmployeeCount = companyData?.employeeCount;
+  const firmFounded = companyData?.founded;
+  const firmTags = companyData?.tags;
 
   // Merge: confirmed profile data takes precedence over enrichment
   const services = profile.services?.length
@@ -215,14 +218,36 @@ export default function DashboardPage() {
       {/* Progressive reveal cards — only appear when data exists */}
       {hasAnyData && (
         <div className={cn("flex w-full flex-col gap-3", isDone && "mt-2")}>
-          {/* Firm identity */}
+          {/* Firm identity — PDL company data */}
           {firmName && (
             <RevealCard icon={Building2} label="Your Firm" delay={0}>
-              <p className="font-semibold">{firmName}</p>
-              {(firmIndustry || firmLocation || firmSize) && (
-                <p className="mt-0.5 text-xs text-cos-slate">
-                  {[firmIndustry, firmSize, firmLocation].filter(Boolean).join(" · ")}
-                </p>
+              <p className="text-base font-semibold">{firmName}</p>
+              {firmIndustry && (
+                <p className="mt-1 text-xs text-cos-slate">{firmIndustry}</p>
+              )}
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-cos-slate">
+                {firmSize && (
+                  <span>{firmSize}{firmEmployeeCount ? ` (${firmEmployeeCount.toLocaleString()} employees)` : ""}</span>
+                )}
+                {firmLocation && <span>{firmLocation}</span>}
+                {firmFounded && <span>Founded {firmFounded}</span>}
+              </div>
+              {firmTags && firmTags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {firmTags.slice(0, 8).map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] text-cos-slate"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                  {firmTags.length > 8 && (
+                    <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] text-cos-slate">
+                      +{firmTags.length - 8} more
+                    </span>
+                  )}
+                </div>
               )}
             </RevealCard>
           )}
