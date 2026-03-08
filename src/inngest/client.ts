@@ -148,7 +148,9 @@ export type FirmCaseStudyIngestEvent = {
     firmId: string;
     organizationId: string;
     sourceUrl: string;
-    sourceType: "url" | "pdf_url";
+    sourceType: "url" | "pdf_url" | "text";
+    rawText?: string; // For PDF-extracted or manually pasted text
+    filename?: string; // Original filename for PDFs
   };
 };
 

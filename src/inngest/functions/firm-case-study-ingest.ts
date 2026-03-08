@@ -32,7 +32,7 @@ export const firmCaseStudyIngest = inngest.createFunction(
   },
   { event: "enrich/firm-case-study-ingest" },
   async ({ event, step }) => {
-    const { caseStudyId, firmId, organizationId, sourceUrl, sourceType } =
+    const { caseStudyId, firmId, organizationId, sourceUrl, rawText } =
       event.data;
 
     // Step 1: Set status → "ingesting"
@@ -49,9 +49,19 @@ export const firmCaseStudyIngest = inngest.createFunction(
 
     // Step 2: Ingest content via existing multi-format ingestor
     const analysis = await step.run("ingest-and-extract", async () => {
+      // If raw text was provided (PDF upload or text paste), use it directly
+      if (rawText) {
+        return ingestCaseStudy({
+          firmId,
+          sourceType: "text",
+          rawText,
+          filename: event.data.filename,
+        });
+      }
+      // Otherwise, scrape the URL
       return ingestCaseStudy({
         firmId,
-        sourceType: sourceType === "pdf_url" ? "url" : "url",
+        sourceType: "url",
         url: sourceUrl,
       });
     });
