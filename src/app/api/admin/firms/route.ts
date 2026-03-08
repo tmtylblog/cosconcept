@@ -159,23 +159,20 @@ export async function GET(req: NextRequest) {
         params.nameRegex = `(?i).*${escapeRegex(search)}.*`;
       }
 
-      // Count across all three node types
+      // Count ServiceFirm (enriched) + Organization (legacy) nodes
+      // Note: Company nodes are client companies (Coca-Cola etc.), not service firms
       const countQuery = search
         ? `
           CALL {
-            MATCH (f:ServiceFirm) WHERE f.name =~ $nameRegex RETURN f AS n
+            MATCH (f:ServiceFirm) WHERE f.name =~ $nameRegex RETURN count(f) AS c
             UNION ALL
-            MATCH (c:Company) WHERE c.name =~ $nameRegex RETURN c AS n
-            UNION ALL
-            MATCH (o:Organization) WHERE o.name =~ $nameRegex RETURN o AS n
+            MATCH (o:Organization) WHERE o.name =~ $nameRegex RETURN count(o) AS c
           }
-          RETURN count(n) AS total
+          RETURN sum(c) AS total
         `
         : `
           CALL {
             MATCH (f:ServiceFirm) RETURN count(f) AS c
-            UNION ALL
-            MATCH (c:Company) RETURN count(c) AS c
             UNION ALL
             MATCH (o:Organization) RETURN count(o) AS c
           }
@@ -209,30 +206,6 @@ export async function GET(req: NextRequest) {
                  'enriched' AS source,
                  false AS isLegacy,
                  true AS isCustomer
-          UNION ALL
-          MATCH (co:Company)
-          WHERE NOT co:Organization
-          OPTIONAL MATCH (co)-[:IN_CATEGORY]->(c:Category)
-          OPTIONAL MATCH (co)-[:SERVES_INDUSTRY]->(i:Industry)
-          OPTIONAL MATCH (co)-[:OPERATES_IN]->(m:Market)
-          OPTIONAL MATCH (co)-[:IS_FIRM_TYPE]->(ft:FirmType)
-          RETURN co.id AS id,
-                 co.name AS name,
-                 co.website AS website,
-                 co.description AS description,
-                 co.employeeCount AS employeeCount,
-                 co.foundedYear AS foundedYear,
-                 co.location AS location,
-                 co.industry AS industry,
-                 co.sourceId AS sourceId,
-                 labels(co) AS labels,
-                 COLLECT(DISTINCT c.name) AS categories,
-                 COLLECT(DISTINCT i.name) AS industries,
-                 COLLECT(DISTINCT m.name) AS markets,
-                 ft.name AS firmType,
-                 'company' AS source,
-                 false AS isLegacy,
-                 false AS isCustomer
           UNION ALL
           MATCH (o:Organization)
           OPTIONAL MATCH (o)-[:IN_CATEGORY]->(c:Category)
