@@ -20,8 +20,9 @@ import {
   DollarSign,
   Ruler,
   MapPin,
+  Check,
 } from "lucide-react";
-import { useEnrichment } from "@/hooks/use-enrichment";
+import { useEnrichment, type StageStatus } from "@/hooks/use-enrichment";
 import { useProfile } from "@/hooks/use-profile";
 import { cn } from "@/lib/utils";
 
@@ -87,13 +88,31 @@ function PillList({
   );
 }
 
+/** Small status chip for each enrichment stage */
+function StageChip({ label, stage }: { label: string; stage: StageStatus }) {
+  if (stage === "idle") return null;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-cos-pill px-2 py-0.5 text-[10px] font-medium",
+        stage === "loading" && "bg-cos-electric/10 text-cos-electric",
+        stage === "done" && "bg-cos-signal/10 text-cos-signal",
+        stage === "failed" && "bg-cos-slate/10 text-cos-slate"
+      )}
+    >
+      {stage === "loading" && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+      {stage === "done" && <Check className="h-2.5 w-2.5" />}
+      {label}
+    </span>
+  );
+}
+
 export default function DashboardPage() {
-  const { status: enrichmentStatus, result } = useEnrichment();
+  const { status: enrichmentStatus, stages, result } = useEnrichment();
   const { data: profile } = useProfile();
 
-  const isEnriching = enrichmentStatus === "loading";
+  const isEnriching = stages.overall === "enriching";
   const isFailed = enrichmentStatus === "failed";
-  const isDone = enrichmentStatus === "done";
 
   // Extract data sections
   const companyData = result?.companyData;
@@ -164,13 +183,14 @@ export default function DashboardPage() {
   const projectSize = profile.idealProjectSize;
   const hourlyRates = profile.typicalHourlyRates;
 
-  const hasEnrichment = isDone && (companyData || extracted || classification);
+  // Progressive data check — show cards section as soon as ANY data arrives
+  const hasEnrichment = !!(companyData || extracted || classification);
   const hasProfile = Object.keys(profile).length > 0;
-  const hasAnyData = hasEnrichment || hasProfile;
+  const hasAnyData = hasEnrichment || hasProfile || !!result || isEnriching;
 
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center px-6 py-10">
-      {/* Loading banner */}
+      {/* Stage-aware progress banner */}
       {isEnriching && (
         <div className="mb-6 flex w-full items-center gap-3 rounded-cos-xl border border-cos-electric/20 bg-gradient-to-r from-cos-electric/5 to-cos-signal/5 px-5 py-3.5">
           <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
@@ -178,9 +198,11 @@ export default function DashboardPage() {
             <p className="text-sm font-semibold text-cos-midnight">
               Researching your firm...
             </p>
-            <p className="text-xs text-cos-slate">
-              Analyzing your website and building your profile. This usually takes 30-60 seconds.
-            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <StageChip label="Company data" stage={stages.pdl} />
+              <StageChip label="Website scan" stage={stages.scrape} />
+              <StageChip label="Classification" stage={stages.classify} />
+            </div>
           </div>
         </div>
       )}
@@ -221,38 +243,48 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Progressive reveal cards — only appear when data exists */}
+      {/* Progressive reveal cards — appear as each stage resolves */}
       {hasAnyData && (
-        <div className={cn("flex w-full flex-col gap-3", isDone && "mt-2")}>
-          {/* Firm identity — show whenever enrichment result exists */}
-          {result && (
+        <div className="flex w-full flex-col gap-3 mt-2">
+          {/* Firm identity — shows as soon as result shell exists OR enrichment is running */}
+          {(result || isEnriching) && (
             <RevealCard icon={Building2} label="Your Firm" delay={0}>
-              <div className="flex items-start gap-3">
-                {/* Company logo via Clearbit */}
-                {firmDomain && (
-                  <img
-                    src={`https://logo.clearbit.com/${firmDomain}`}
-                    alt=""
-                    className="h-10 w-10 rounded-cos-lg object-contain bg-white border border-cos-border/30"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-base font-semibold text-cos-midnight">{firmName || firmDomain}</p>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-cos-slate">
-                    {firmSize && (
-                      <span>{firmSize}{firmEmployeeCount ? ` (${firmEmployeeCount.toLocaleString()})` : ""}</span>
-                    )}
-                    {firmRevenue && <span>{firmRevenue}</span>}
-                    {firmLocation && <span>{firmLocation}</span>}
-                    {firmFounded && <span>Est. {firmFounded}</span>}
+              {result ? (
+                <div className="flex items-start gap-3">
+                  {/* Company logo via Clearbit */}
+                  {firmDomain && (
+                    <img
+                      src={`https://logo.clearbit.com/${firmDomain}`}
+                      alt=""
+                      className="h-10 w-10 rounded-cos-lg object-contain bg-white border border-cos-border/30"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-base font-semibold text-cos-midnight">{firmName || firmDomain}</p>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-cos-slate">
+                      {firmSize && (
+                        <span>{firmSize}{firmEmployeeCount ? ` (${firmEmployeeCount.toLocaleString()})` : ""}</span>
+                      )}
+                      {firmRevenue && <span>{firmRevenue}</span>}
+                      {firmLocation && <span>{firmLocation}</span>}
+                      {firmFounded && <span>Est. {firmFounded}</span>}
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="animate-pulse flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-cos-lg bg-cos-cloud" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-32 rounded bg-cos-cloud" />
+                    <div className="h-3 w-48 rounded bg-cos-cloud" />
+                  </div>
+                </div>
+              )}
             </RevealCard>
           )}
 
-          {/* Firm Category (from chat confirmation) */}
+          {/* Firm Category */}
           {categories && (
             <RevealCard icon={Building2} label="Firm Category" delay={50}>
               <PillList
@@ -321,7 +353,7 @@ export default function DashboardPage() {
 
           {/* ─── Partner Preferences (from chat confirmations) ── */}
           {desiredServices.length > 0 && (
-            <RevealCard icon={Search} label="Services Wanted from Partners" delay={600}>
+            <RevealCard icon={Search} label="Services Wanted from Partners" delay={0}>
               <PillList
                 items={desiredServices}
                 pillClass="bg-cos-electric/8 text-cos-electric"
@@ -330,7 +362,7 @@ export default function DashboardPage() {
           )}
 
           {partnerIndustries.length > 0 && (
-            <RevealCard icon={Briefcase} label="Required Partner Industries" delay={620}>
+            <RevealCard icon={Briefcase} label="Required Partner Industries" delay={0}>
               <PillList
                 items={partnerIndustries}
                 pillClass="bg-cos-signal/8 text-cos-signal"
@@ -339,19 +371,19 @@ export default function DashboardPage() {
           )}
 
           {clientSize && (
-            <RevealCard icon={Users} label="Ideal Partner Client Size" delay={640}>
+            <RevealCard icon={Users} label="Ideal Partner Client Size" delay={0}>
               <p>{clientSize}</p>
             </RevealCard>
           )}
 
           {partnerLocations.length > 0 && (
-            <RevealCard icon={MapPin} label="Partner Locations" delay={660}>
+            <RevealCard icon={MapPin} label="Partner Locations" delay={0}>
               <p>{partnerLocations.join(", ")}</p>
             </RevealCard>
           )}
 
           {partnerTypes.length > 0 && (
-            <RevealCard icon={Handshake} label="Preferred Partner Types" delay={680}>
+            <RevealCard icon={Handshake} label="Preferred Partner Types" delay={0}>
               <PillList
                 items={partnerTypes}
                 pillClass="bg-cos-signal/10 text-cos-signal"
@@ -360,7 +392,7 @@ export default function DashboardPage() {
           )}
 
           {partnerSize.length > 0 && (
-            <RevealCard icon={Building} label="Preferred Partner Size" delay={700}>
+            <RevealCard icon={Building} label="Preferred Partner Size" delay={0}>
               <PillList
                 items={partnerSize}
                 pillClass="bg-cos-midnight/6 text-cos-midnight"
@@ -369,19 +401,19 @@ export default function DashboardPage() {
           )}
 
           {projectSize && (
-            <RevealCard icon={Ruler} label="Ideal Project Size" delay={720}>
+            <RevealCard icon={Ruler} label="Ideal Project Size" delay={0}>
               <p>{projectSize}</p>
             </RevealCard>
           )}
 
           {hourlyRates && (
-            <RevealCard icon={DollarSign} label="Typical Hourly Rates" delay={740}>
+            <RevealCard icon={DollarSign} label="Typical Hourly Rates" delay={0}>
               <p>{hourlyRates}</p>
             </RevealCard>
           )}
 
           {partnerModels.length > 0 && (
-            <RevealCard icon={Target} label="Partnership Models" delay={760}>
+            <RevealCard icon={Target} label="Partnership Models" delay={0}>
               <PillList
                 items={partnerModels}
                 pillClass="bg-cos-electric/10 text-cos-electric"
@@ -390,7 +422,7 @@ export default function DashboardPage() {
           )}
 
           {dealBreakers.length > 0 && (
-            <RevealCard icon={ShieldAlert} label="Deal Breakers" delay={780}>
+            <RevealCard icon={ShieldAlert} label="Deal Breakers" delay={0}>
               <PillList
                 items={dealBreakers}
                 pillClass="bg-cos-ember/10 text-cos-ember"
@@ -399,7 +431,7 @@ export default function DashboardPage() {
           )}
 
           {growthGoals && (
-            <RevealCard icon={TrendingUp} label="Growth Goals" delay={800}>
+            <RevealCard icon={TrendingUp} label="Growth Goals" delay={0}>
               <p>{growthGoals}</p>
             </RevealCard>
           )}
