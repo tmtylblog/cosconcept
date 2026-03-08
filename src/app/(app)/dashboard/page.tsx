@@ -224,8 +224,8 @@ export default function DashboardPage() {
       {/* Progressive reveal cards — only appear when data exists */}
       {hasAnyData && (
         <div className={cn("flex w-full flex-col gap-3", isDone && "mt-2")}>
-          {/* Firm identity — always show when enrichment is done */}
-          {isDone && (
+          {/* Firm identity — show whenever enrichment result exists */}
+          {result && (
             <RevealCard icon={Building2} label="Your Firm" delay={0}>
               <div className="flex items-start gap-3">
                 {/* Company logo via Clearbit */}
