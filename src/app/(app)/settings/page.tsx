@@ -51,7 +51,7 @@ export default function SettingsPage() {
   const { data: activeOrg } = useActiveOrganization();
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="mx-auto max-w-3xl space-y-6 p-6">
       <div>
         <h2 className="font-heading text-lg font-semibold text-cos-midnight">
           Settings

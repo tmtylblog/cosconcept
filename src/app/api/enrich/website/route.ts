@@ -1,7 +1,12 @@
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+
 import { scrapeFirmWebsite } from "@/lib/enrichment/jina-scraper";
 import { enrichCompany } from "@/lib/enrichment/pdl";
 import { classifyFirm } from "@/lib/enrichment/ai-classifier";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { serviceFirms } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -16,10 +21,40 @@ export const maxDuration = 60;
  *
  * PDL + Jina run in parallel. AI Classifier runs after both complete.
  */
+/** Calculate a simple profile completeness score (0-1) */
+function calculateProfileCompleteness(data: Record<string, unknown>): number {
+  let score = 0;
+  let total = 0;
+
+  const check = (val: unknown) => {
+    total++;
+    if (val && (typeof val !== "object" || (Array.isArray(val) && val.length > 0))) {
+      score++;
+    }
+  };
+
+  check(data.companyData);
+  check(data.groundTruth);
+  const extracted = data.extracted as Record<string, unknown> | null;
+  check(extracted?.clients);
+  check(extracted?.services);
+  check(extracted?.aboutPitch);
+  check(extracted?.teamMembers);
+  check(extracted?.caseStudyUrls);
+  const classification = data.classification as Record<string, unknown> | null;
+  check(classification?.categories);
+  check(classification?.skills);
+  check(classification?.industries);
+
+  return total > 0 ? score / total : 0;
+}
+
 export async function POST(req: Request) {
   try {
-    const { url } = (await req.json()) as {
+    const body = await req.json();
+    const { url, organizationId: bodyOrgId } = body as {
       url: string;
+      organizationId?: string;
     };
 
     if (!url) {
@@ -178,7 +213,7 @@ export async function POST(req: Request) {
         `${groundTruth?.extracted.teamMembers.length ?? 0} team names extracted`
     );
 
-    return NextResponse.json({
+    const responseData = {
       url: normalized,
       domain,
 
@@ -225,7 +260,57 @@ export async function POST(req: Request) {
             confidence: classification.confidence,
           }
         : null,
-    });
+    };
+
+    // ─── Persist to database (authenticated users only) ──────
+    try {
+      const session = await auth.api.getSession({ headers: await headers() });
+      if (session?.user?.id) {
+        const orgId = bodyOrgId;
+        if (orgId) {
+          const firmId = `firm_${orgId}`;
+          const firmName =
+            companyData?.displayName ||
+            domain.split(".")[0].charAt(0).toUpperCase() + domain.split(".")[0].slice(1);
+
+          await db
+            .insert(serviceFirms)
+            .values({
+              id: firmId,
+              organizationId: orgId,
+              name: firmName,
+              website: normalized,
+              description: groundTruth?.extracted.aboutPitch || null,
+              foundedYear: companyData?.founded || null,
+              enrichmentData: responseData,
+              enrichmentStatus: "enriched",
+              classificationConfidence: classification?.confidence || null,
+              profileCompleteness: calculateProfileCompleteness(responseData),
+            })
+            .onConflictDoUpdate({
+              target: serviceFirms.id,
+              set: {
+                name: firmName,
+                website: normalized,
+                description: groundTruth?.extracted.aboutPitch || null,
+                foundedYear: companyData?.founded || null,
+                enrichmentData: responseData,
+                enrichmentStatus: "enriched",
+                classificationConfidence: classification?.confidence || null,
+                profileCompleteness: calculateProfileCompleteness(responseData),
+                updatedAt: new Date(),
+              },
+            });
+
+          console.log(`[Enrich] Persisted enrichment to serviceFirms for org ${orgId}`);
+        }
+      }
+    } catch (err) {
+      // Don't block the response — persistence is best-effort
+      console.error("[Enrich] Failed to persist enrichment data:", err);
+    }
+
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error("[Enrich] Website enrichment error:", error);
     return NextResponse.json(

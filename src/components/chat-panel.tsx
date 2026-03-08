@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
@@ -39,7 +39,7 @@ function extractUrl(text: string): string | null {
   return real || null;
 }
 
-const initialMessages: UIMessage[] = [
+const defaultWelcomeMessages: UIMessage[] = [
   {
     id: "welcome",
     role: "assistant",
@@ -67,9 +67,52 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
   } = useEnrichment();
   const [input, setInput] = useState("");
   const [guestMessageCount, setGuestMessageCount] = useState(0);
+  const [initialMessages, setInitialMessages] = useState<UIMessage[]>(defaultWelcomeMessages);
+  const [historyLoaded, setHistoryLoaded] = useState(isGuest ? true : false);
   const enrichedUrlRef = useRef<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
 
   const chatEndpoint = isGuest ? "/api/chat/guest" : "/api/chat";
+
+  // Load greeting on mount — clean slate every session.
+  // Returning users get a personalized greeting; new users get onboarding welcome.
+  const loadGreeting = useCallback(async () => {
+    if (isGuest) return;
+    try {
+      const orgParam = activeOrg?.id ? `?organizationId=${activeOrg.id}` : "";
+
+      // Try to get personalized greeting for returning users
+      const greetingRes = await fetch(`/api/chat/greeting${orgParam}`);
+      if (greetingRes.ok) {
+        const { isReturning, greeting } = await greetingRes.json();
+        if (isReturning && greeting) {
+          // Clean slate with personalized greeting
+          setInitialMessages([
+            {
+              id: "greeting",
+              role: "assistant" as const,
+              parts: [{ type: "text" as const, text: greeting }],
+            },
+          ]);
+          setHistoryLoaded(true);
+          return;
+        }
+      }
+
+      // Not a returning user — use default onboarding welcome
+      // (initialMessages already set to defaultWelcomeMessages)
+    } catch (err) {
+      console.error("[ChatPanel] Failed to load greeting:", err);
+    } finally {
+      setHistoryLoaded(true);
+    }
+  }, [isGuest, activeOrg?.id]);
+
+  useEffect(() => {
+    if (!historyLoaded) {
+      loadGreeting();
+    }
+  }, [historyLoaded, loadGreeting]);
 
   const { messages, sendMessage, status, error } = useChat({
     messages: initialMessages,
@@ -77,7 +120,11 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
       api: chatEndpoint,
       body: isGuest
         ? { websiteContext: contextForOssy }
-        : { organizationId: activeOrg?.id ?? "", websiteContext: contextForOssy },
+        : {
+            organizationId: activeOrg?.id ?? "",
+            websiteContext: contextForOssy,
+            conversationId: conversationIdRef.current,
+          },
     }),
   });
 
@@ -129,26 +176,22 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
 
   return (
     <div className="relative flex h-full flex-col">
-      {/* Decorative warm blur circles */}
-      <div className="pointer-events-none absolute right-12 top-20 h-[200px] w-[200px] rounded-full bg-[#ffb070]/8 blur-[100px]" />
-      <div className="pointer-events-none absolute bottom-32 left-8 h-[150px] w-[150px] rounded-full bg-cos-signal/6 blur-[80px]" />
-
-      {/* Header */}
-      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-cos-border/50 px-6">
-        <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric to-cos-signal p-0.5">
+      {/* Header — compact for right column */}
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-cos-border/50 px-4">
+        <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric to-cos-signal p-0.5">
           <Image
             src="/logo.png"
             alt="Ossy"
-            width={36}
-            height={36}
+            width={28}
+            height={28}
             className="h-full w-full rounded-full object-cover"
           />
         </div>
-        <div className="flex-1">
-          <h2 className="font-heading text-lg font-semibold text-cos-midnight">
+        <div className="flex-1 min-w-0">
+          <h2 className="font-heading text-sm font-semibold text-cos-midnight">
             Ossy
           </h2>
-          <p className="text-xs text-cos-signal">
+          <p className="text-[10px] text-cos-signal">
             {status === "streaming"
               ? "Thinking..."
               : status === "submitted"
@@ -158,18 +201,18 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
         </div>
         {/* Enrichment status indicator */}
         {enrichmentStatus === "loading" && (
-          <div className="flex items-center gap-1.5 rounded-cos-pill bg-cos-electric/10 px-3 py-1">
-            <Globe className="h-3.5 w-3.5 animate-pulse text-cos-electric" />
-            <span className="text-xs font-medium text-cos-electric">
-              Researching website...
+          <div className="flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2 py-0.5">
+            <Globe className="h-3 w-3 animate-pulse text-cos-electric" />
+            <span className="text-[10px] font-medium text-cos-electric">
+              Researching...
             </span>
           </div>
         )}
         {enrichmentStatus === "done" && (
-          <div className="flex items-center gap-1.5 rounded-cos-pill bg-cos-signal/10 px-3 py-1">
-            <Globe className="h-3.5 w-3.5 text-cos-signal" />
-            <span className="text-xs font-medium text-cos-signal">
-              Website analyzed
+          <div className="flex items-center gap-1 rounded-cos-pill bg-cos-signal/10 px-2 py-0.5">
+            <Globe className="h-3 w-3 text-cos-signal" />
+            <span className="text-[10px] font-medium text-cos-signal">
+              Analyzed
             </span>
           </div>
         )}
@@ -178,7 +221,7 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
       {/* Messages area */}
       <div
         ref={scrollRef}
-        className="cos-scrollbar relative flex-1 space-y-2 overflow-y-auto px-6 py-6"
+        className="cos-scrollbar relative flex-1 space-y-2 overflow-y-auto px-4 py-4"
       >
         {messages.map((message, idx) => {
           const prevMessage = idx > 0 ? messages[idx - 1] : null;
@@ -188,37 +231,37 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
             <div
               key={message.id}
               className={cn(
-                "flex gap-3",
+                "flex gap-2",
                 message.role === "user" && "flex-row-reverse",
-                isNewSpeaker && idx > 0 && "mt-4"
+                isNewSpeaker && idx > 0 && "mt-3"
               )}
             >
               {message.role === "assistant" && (
                 <div
                   className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20",
+                    "flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20",
                     !isNewSpeaker && "invisible"
                   )}
                 >
                   <Image
                     src="/logo.png"
                     alt="Ossy"
-                    width={24}
-                    height={24}
-                    className="h-6 w-6 object-cover"
+                    width={18}
+                    height={18}
+                    className="h-[18px] w-[18px] object-cover"
                   />
                 </div>
               )}
 
               <div
                 className={cn(
-                  "max-w-[720px] rounded-cos-xl px-6 py-4",
+                  "rounded-cos-xl px-4 py-3",
                   message.role === "assistant"
                     ? "rounded-tl-cos-sm bg-cos-surface-raised"
                     : "ml-auto rounded-tr-cos-sm bg-cos-electric text-white"
                 )}
               >
-                <p className="whitespace-pre-wrap text-base leading-relaxed">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
                   {getMessageText(message)}
                 </p>
               </div>
@@ -227,25 +270,25 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
         })}
 
         {isLoading && messages[messages.length - 1]?.role === "user" && (
-          <div className="flex gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20">
+          <div className="flex gap-2">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20">
               <Image
                 src="/logo.png"
                 alt="Ossy"
-                width={24}
-                height={24}
-                className="h-6 w-6 object-cover"
+                width={18}
+                height={18}
+                className="h-[18px] w-[18px] object-cover"
               />
             </div>
-            <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-6 py-4">
-              <Loader2 className="h-5 w-5 animate-spin text-cos-slate" />
+            <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-4 py-3">
+              <Loader2 className="h-4 w-4 animate-spin text-cos-slate" />
             </div>
           </div>
         )}
 
         {error && (
-          <div className="rounded-cos-xl border border-cos-danger/20 bg-cos-danger/5 px-6 py-4">
-            <p className="text-base text-cos-danger">
+          <div className="rounded-cos-xl border border-cos-danger/20 bg-cos-danger/5 px-4 py-3">
+            <p className="text-sm text-cos-danger">
               Something went wrong. Please try again.
             </p>
           </div>
@@ -253,19 +296,19 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
 
         {/* Inline login — appears in chat after guest message limit */}
         {atGuestLimit && (
-          <div className="flex gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20">
+          <div className="flex gap-2">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20">
               <Image
                 src="/logo.png"
                 alt="Ossy"
-                width={24}
-                height={24}
-                className="h-6 w-6 object-cover"
+                width={18}
+                height={18}
+                className="h-[18px] w-[18px] object-cover"
               />
             </div>
-            <div className="max-w-[720px] space-y-3">
-              <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-6 py-4">
-                <p className="text-base leading-relaxed text-cos-midnight">
+            <div className="space-y-2">
+              <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-4 py-3">
+                <p className="text-sm leading-relaxed text-cos-midnight">
                   I can already see some great partnership opportunities based on what you&apos;ve told me. Sign in below to save your preferences and start your growth journey — it takes 10 seconds.
                 </p>
               </div>
@@ -275,10 +318,10 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
         )}
       </div>
 
-      {/* Input area */}
-      <div className="shrink-0 border-t border-cos-border/50 bg-white/80 px-6 py-4 backdrop-blur-sm">
+      {/* Input area — compact for right column */}
+      <div className="shrink-0 border-t border-cos-border/50 bg-white/80 px-4 py-3 backdrop-blur-sm">
         <form onSubmit={handleSubmit}>
-          <div className="flex items-center gap-2 rounded-cos-xl border border-cos-border bg-cos-cloud/80 px-4 py-1 transition-colors focus-within:border-cos-electric focus-within:ring-1 focus-within:ring-cos-electric">
+          <div className="flex items-center gap-1.5 rounded-cos-xl border border-cos-border bg-cos-cloud/80 px-3 py-0.5 transition-colors focus-within:border-cos-electric focus-within:ring-1 focus-within:ring-cos-electric">
             <input
               ref={inputRef}
               type="text"
@@ -290,23 +333,23 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
                   : "Ask Ossy anything..."
               }
               disabled={isLoading || atGuestLimit}
-              className="flex-1 bg-transparent py-3 text-base text-cos-midnight placeholder:text-cos-slate-light focus:outline-none disabled:opacity-50"
+              className="flex-1 bg-transparent py-2.5 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:outline-none disabled:opacity-50"
             />
             <Button
               type="button"
               size="icon"
               variant="ghost"
-              className="shrink-0 text-cos-slate hover:text-cos-midnight"
+              className="h-8 w-8 shrink-0 text-cos-slate hover:text-cos-midnight"
             >
-              <Mic className="h-5 w-5" />
+              <Mic className="h-4 w-4" />
             </Button>
             <Button
               type="submit"
               size="icon"
               disabled={isLoading || !input.trim() || atGuestLimit}
-              className="shrink-0"
+              className="h-8 w-8 shrink-0"
             >
-              <Send className="h-4 w-4" />
+              <Send className="h-3.5 w-3.5" />
             </Button>
           </div>
         </form>
@@ -373,14 +416,14 @@ function InlineChatLogin() {
   }
 
   return (
-    <div className="rounded-cos-xl border border-cos-electric/20 bg-gradient-to-br from-cos-electric/5 to-cos-signal/5 p-4">
-      <div className="space-y-2.5">
+    <div className="rounded-cos-xl border border-cos-electric/20 bg-gradient-to-br from-cos-electric/5 to-cos-signal/5 p-3">
+      <div className="space-y-2">
         {/* Google OAuth — primary */}
         <button
           onClick={handleGoogle}
-          className="flex w-full items-center justify-center gap-2 rounded-cos-lg border border-cos-border bg-white px-4 py-2.5 text-sm font-medium text-cos-midnight shadow-sm transition-colors hover:bg-cos-cloud"
+          className="flex w-full items-center justify-center gap-2 rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-xs font-medium text-cos-midnight shadow-sm transition-colors hover:bg-cos-cloud"
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24">
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
@@ -393,20 +436,20 @@ function InlineChatLogin() {
         {!showEmail ? (
           <button
             onClick={() => setShowEmail(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-cos-lg border border-cos-border/50 bg-white/50 px-4 py-2.5 text-sm text-cos-slate transition-colors hover:bg-white hover:text-cos-midnight"
+            className="flex w-full items-center justify-center gap-2 rounded-cos-lg border border-cos-border/50 bg-white/50 px-3 py-2 text-xs text-cos-slate transition-colors hover:bg-white hover:text-cos-midnight"
           >
-            <Mail className="h-4 w-4" />
+            <Mail className="h-3.5 w-3.5" />
             Continue with email
           </button>
         ) : (
-          <form onSubmit={handleEmailSubmit} className="space-y-2">
+          <form onSubmit={handleEmailSubmit} className="space-y-1.5">
             {isSignUp && (
               <input
                 type="text"
                 placeholder="Your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+                className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
               />
             )}
             <input
@@ -415,7 +458,7 @@ function InlineChatLogin() {
               value={email}
               onChange={(e) => { setEmail(e.target.value); setError(""); }}
               required
-              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
             />
             <input
               type="password"
@@ -424,16 +467,16 @@ function InlineChatLogin() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
             />
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-cos-lg bg-cos-electric px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cos-electric-hover disabled:opacity-50"
+              className="w-full rounded-cos-lg bg-cos-electric px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-cos-electric-hover disabled:opacity-50"
             >
               {loading ? "..." : isSignUp ? "Create Account" : "Sign In"}
             </button>
-            <p className="text-center text-xs text-cos-slate">
+            <p className="text-center text-[10px] text-cos-slate">
               {isSignUp ? "Have an account?" : "Need an account?"}{" "}
               <button
                 type="button"
@@ -448,7 +491,7 @@ function InlineChatLogin() {
       </div>
 
       {error && (
-        <p className="mt-2 text-xs text-cos-danger">{error}</p>
+        <p className="mt-1.5 text-[10px] text-cos-danger">{error}</p>
       )}
     </div>
   );

@@ -100,7 +100,7 @@ const COMMON_PATHS = [
   "/blog",
 ];
 
-const MAX_PAGES = 15;
+const MAX_PAGES = 30;
 const SCRAPE_TIMEOUT_MS = 10000;
 
 // ─── Main orchestrator ─────────────────────────────────────
@@ -479,7 +479,7 @@ function collectCaseStudyUrls(pages: CrawledPage[], domain: string): string[] {
     }
   }
 
-  return [...urls].slice(0, 50);
+  return [...urls].slice(0, 200);
 }
 
 function emptyResult(

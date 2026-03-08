@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  MessageCircle,
+  LayoutDashboard,
   Search,
   Building2,
   Users,
@@ -16,12 +16,13 @@ import {
   LogOut,
   LogIn,
   ArrowLeftRight,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut, useActiveOrganization } from "@/lib/auth-client";
 
 const navItems = [
-  { icon: MessageCircle, label: "Ossy", href: "/dashboard" },
+  { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
   { icon: Search, label: "Discover", href: "/discover" },
   { icon: Building2, label: "My Firm", href: "/firm" },
   { icon: Users, label: "Network", href: "/network" },
@@ -34,16 +35,23 @@ interface NavBarProps {
   onToggle: () => void;
   isGuest?: boolean;
   onRequestLogin?: () => void;
+  onSimulateNewUser?: () => void;
 }
 
-export function NavBar({ collapsed, onToggle, isGuest, onRequestLogin }: NavBarProps) {
+export function NavBar({
+  collapsed,
+  onToggle,
+  isGuest,
+  onRequestLogin,
+  onSimulateNewUser,
+}: NavBarProps) {
   const pathname = usePathname();
   const { data: activeOrg } = useActiveOrganization();
   const [hovering, setHovering] = useState(false);
 
   const showLabels = !collapsed || hovering;
 
-  // In guest mode, only show Ossy and a sign-in prompt
+  // In guest mode, only show Overview and a sign-in prompt
   const visibleItems = isGuest
     ? navItems.filter((item) => item.href === "/dashboard")
     : navItems;
@@ -130,6 +138,20 @@ export function NavBar({ collapsed, onToggle, isGuest, onRequestLogin }: NavBarP
 
       {/* Bottom section */}
       <div className="border-t border-white/10 p-2">
+        {/* DEV: Simulate New User — above Collapse */}
+        {!isGuest && onSimulateNewUser && (
+          <button
+            onClick={onSimulateNewUser}
+            title="Reset chat and enrichment — simulate a new user onboarding"
+            className="flex w-full items-center gap-3 rounded-cos-lg px-3 py-2 text-[11px] font-medium text-cos-warm/80 transition-colors hover:bg-cos-warm/10 hover:text-cos-warm"
+          >
+            <RotateCcw className="h-4 w-4 shrink-0" />
+            {showLabels && (
+              <span className="truncate">Simulate New User</span>
+            )}
+          </button>
+        )}
+
         <button
           onClick={onToggle}
           className="flex w-full items-center gap-3 rounded-cos-lg px-3 py-2.5 text-sm font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"

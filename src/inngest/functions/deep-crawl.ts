@@ -129,7 +129,7 @@ export const deepCrawl = inngest.createFunction(
     // Step 5: Queue case study deep ingestion
     if (crawlResult.extracted.caseStudyUrls.length > 0) {
       await step.run("queue-case-studies", async () => {
-        const urls = crawlResult.extracted.caseStudyUrls.slice(0, 10);
+        const urls = crawlResult.extracted.caseStudyUrls.slice(0, 25);
         console.log(
           `[DeepCrawl] Queueing ${urls.length} case studies for deep ingestion`
         );
@@ -192,7 +192,7 @@ export const deepCrawl = inngest.createFunction(
       graph: graphResult,
       caseStudiesQueued: Math.min(
         crawlResult.extracted.caseStudyUrls.length,
-        10
+        25
       ),
       teamMembersQueued: Math.min(teamToEnrich.length, 20),
     };

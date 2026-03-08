@@ -15,23 +15,17 @@ import {
   BarChart3,
   Loader2,
   CheckCircle2,
-  ExternalLink,
   Pencil,
   X,
   Plus,
-  Presentation,
-  HardDrive,
-  Link2,
-  Clock,
+  ChevronRight,
 } from "lucide-react";
+import Link from "next/link";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
+import { useLegacyData } from "@/hooks/use-legacy-data";
 import { cn } from "@/lib/utils";
-import {
-  CHAMELEON_CASE_STUDIES,
-  CHAMELEON_EXPERTS,
-} from "@/data/dummy/chameleon-collective";
-import type { CaseStudy, Expert, ExpertSpecialistProfile } from "@/types/cos-data";
+import type { Expert, ExpertSpecialistProfile } from "@/types/cos-data";
 
 /** Local edit overrides — user edits take precedence over enrichment data */
 interface FirmEdits {
@@ -48,9 +42,17 @@ interface FirmEdits {
 export default function FirmPage() {
   const { data: activeOrg } = useActiveOrganization();
   const { status, result } = useEnrichment();
+  const {
+    experts: legacyExperts,
+    totalExperts,
+    totalCaseStudies,
+    isLoading: legacyLoading,
+    // hasLegacyData,
+  } = useLegacyData(activeOrg?.name);
   const [edits, setEdits] = useState<FirmEdits>({});
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [editInput, setEditInput] = useState("");
+  const [showAllExperts, setShowAllExperts] = useState(false);
 
   // Merge enrichment data with user edits (edits take precedence)
   const company = result?.companyData;
@@ -128,7 +130,7 @@ export default function FirmPage() {
   );
 
   return (
-    <div className="cos-scrollbar space-y-4 overflow-y-auto p-5">
+    <div className="cos-scrollbar mx-auto max-w-3xl space-y-4 overflow-y-auto p-6">
       {/* Enrichment status banner */}
       {status === "loading" && (
         <div className="flex items-center gap-2 rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-4 py-3">
@@ -299,77 +301,39 @@ export default function FirmPage() {
         emptyHint="Client names from your website"
       />
 
-      {/* Case Studies — two tiers: ingested (COS analysis) and discovered (pending) */}
+      {/* Case Studies — summary card linking to dedicated page */}
       <ProfileSection
         icon={<FileText className="h-4 w-4" />}
         title="Case Studies"
-        count={CHAMELEON_CASE_STUDIES.length + (extracted?.caseStudyUrls?.length ?? 0)}
-        loading={status === "loading"}
+        count={totalCaseStudies + (extracted?.caseStudyUrls?.length ?? 0)}
+        loading={legacyLoading || status === "loading"}
       >
-        <div className="space-y-3">
-          {/* Tier 1: Ingested case studies with COS analysis */}
-          {CHAMELEON_CASE_STUDIES.filter((cs) => cs.cosAnalysis).map((cs) => (
-            <CaseStudyCard key={cs.id} caseStudy={cs} />
-          ))}
-
-          {/* Tier 2: Discovered but pending ingestion */}
-          {(() => {
-            const pending = CHAMELEON_CASE_STUDIES.filter((cs) => !cs.cosAnalysis);
-            const discoveredUrls = extracted?.caseStudyUrls ?? [];
-            if (pending.length === 0 && discoveredUrls.length === 0) return null;
-            return (
-              <div className="border-t border-cos-border/50 pt-2">
-                <p className="mb-1.5 text-[10px] uppercase tracking-wider text-cos-slate-dim">
-                  <Clock className="mr-1 inline h-2.5 w-2.5" />
-                  Pending ingestion ({pending.length + discoveredUrls.length})
-                </p>
-                <div className="space-y-1">
-                  {pending.map((cs) => (
-                    <a
-                      key={cs.id}
-                      href={cs.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 rounded-cos-md bg-cos-cloud-dim/50 px-2.5 py-1.5 transition-colors hover:bg-cos-cloud-dim"
-                    >
-                      <SourceTypeIcon sourceType={cs.sourceType} className="h-3 w-3 shrink-0 text-cos-slate-dim" />
-                      <p className="min-w-0 flex-1 truncate text-xs font-medium text-cos-midnight">{cs.title}</p>
-                      <ExternalLink className="h-3 w-3 shrink-0 text-cos-electric" />
-                    </a>
-                  ))}
-                  {discoveredUrls.slice(0, 8).map((csUrl, i) => {
-                    const shortUrl = csUrl.replace(/^https?:\/\//, "").replace(/^www\./, "");
-                    const title = shortUrl.split("/").filter(Boolean).pop()?.replace(/[-_]/g, " ") ?? shortUrl;
-                    return (
-                      <a
-                        key={`disc-${i}`}
-                        href={csUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 rounded-cos-md bg-cos-cloud-dim/50 px-2.5 py-1.5 transition-colors hover:bg-cos-cloud-dim"
-                      >
-                        <Globe className="h-3 w-3 shrink-0 text-cos-slate-dim" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium capitalize text-cos-midnight">{title}</p>
-                          <p className="truncate text-[10px] text-cos-slate-dim">{shortUrl}</p>
-                        </div>
-                        <ExternalLink className="h-3 w-3 shrink-0 text-cos-electric" />
-                      </a>
-                    );
-                  })}
-                  {discoveredUrls.length > 8 && (
-                    <p className="text-[10px] text-cos-slate-dim">+{discoveredUrls.length - 8} more discovered</p>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-
-          {CHAMELEON_CASE_STUDIES.length === 0 && !extracted?.caseStudyUrls?.length && (
-            <EmptyHint text="Case studies from your website and portfolio" />
-          )}
-        </div>
-      </ProfileSection>
+        {totalCaseStudies > 0 || (extracted?.caseStudyUrls?.length ?? 0) > 0 ? (
+          <Link
+            href="/firm/case-studies"
+            className="flex items-center gap-3 rounded-cos-lg border border-cos-border/60 bg-cos-surface-raised p-3 transition-colors hover:border-cos-electric/30 hover:bg-cos-electric/3"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-cos-md bg-cos-electric/10 text-cos-electric">
+              <FileText className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-cos-midnight">
+                {totalCaseStudies > 0 ? `${totalCaseStudies} case studies` : ""}
+                {totalCaseStudies > 0 && (extracted?.caseStudyUrls?.length ?? 0) > 0 ? " · " : ""}
+                {(extracted?.caseStudyUrls?.length ?? 0) > 0 ? `${extracted!.caseStudyUrls!.length} discovered from website` : ""}
+              </p>
+              <p className="text-[10px] text-cos-slate-dim">
+                Click to review and manage
+              </p>
+            </div>
+            <span className="shrink-0 rounded-cos-pill bg-cos-warm/10 px-2 py-0.5 text-[9px] font-semibold text-cos-warm">
+              For Review
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-cos-slate-light" />
+          </Link>
+        ) : (
+          <EmptyHint text="Case studies from your website and portfolio" />
+        )}</ProfileSection>
 
       {/* Markets — editable tags */}
       <EditableTagSection
@@ -409,32 +373,38 @@ export default function FirmPage() {
       <ProfileSection
         icon={<Users className="h-4 w-4" />}
         title="Experts"
-        count={CHAMELEON_EXPERTS.length}
-        loading={status === "loading"}
+        count={totalExperts || undefined}
+        loading={legacyLoading || status === "loading"}
       >
-        {CHAMELEON_EXPERTS.length > 0 ? (
+        {legacyExperts.length > 0 ? (
           <div className="space-y-2">
-            {CHAMELEON_EXPERTS.map((expert) => (
+            {(showAllExperts ? legacyExperts : legacyExperts.slice(0, 20)).map((expert) => (
               <ExpertCard key={expert.id} expert={expert} />
             ))}
-            {/* Also show names detected from website that aren't matched to experts yet */}
-            {extracted?.teamMembers?.length ? (
-              <div className="border-t border-cos-border/50 pt-2">
-                <p className="mb-1 text-[10px] uppercase tracking-wider text-cos-slate-dim">
-                  Detected from website (not yet matched)
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {extracted.teamMembers.map((name) => (
-                    <span key={name} className="rounded-cos-pill bg-cos-cloud-dim px-2 py-0.5 text-[10px] text-cos-slate-dim">
-                      {name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            {legacyExperts.length > 20 && !showAllExperts && (
+              <button
+                onClick={() => setShowAllExperts(true)}
+                className="w-full rounded-cos-md border border-cos-border/50 py-2 text-xs font-medium text-cos-electric transition-colors hover:bg-cos-electric/5"
+              >
+                Show all {totalExperts} experts
+              </button>
+            )}
+          </div>
+        ) : extracted?.teamMembers?.length ? (
+          <div>
+            <p className="mb-1.5 text-[10px] uppercase tracking-wider text-cos-slate-dim">
+              Detected from website
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {extracted.teamMembers.map((name) => (
+                <span key={name} className="rounded-cos-pill bg-cos-cloud-dim px-2 py-0.5 text-[10px] text-cos-slate-dim">
+                  {name}
+                </span>
+              ))}
+            </div>
           </div>
         ) : (
-          <EmptyHint text="Expert profiles from your team" />
+          <EmptyHint text="Expert profiles will appear here" />
         )}
       </ProfileSection>
 
@@ -620,120 +590,6 @@ function EmptyHint({ text }: { text: string }) {
   return (
     <p className="text-xs italic text-cos-slate-light">{text}</p>
   );
-}
-
-function CaseStudyCard({ caseStudy }: { caseStudy: CaseStudy }) {
-  const [expanded, setExpanded] = useState(false);
-  const analysis = caseStudy.cosAnalysis;
-
-  return (
-    <div className="rounded-cos-lg border border-cos-border/60 bg-cos-surface-raised p-3">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full text-left"
-      >
-        <div className="flex items-start gap-2">
-          <SourceTypeIcon sourceType={caseStudy.sourceType} className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cos-slate-dim" />
-          <div className="min-w-0 flex-1">
-            <h4 className="text-xs font-semibold text-cos-midnight leading-snug line-clamp-2">
-              {caseStudy.title}
-            </h4>
-            <div className="mt-1 flex items-center gap-2 text-[10px] text-cos-slate-dim">
-              {analysis?.clientMentioned && (
-                <>
-                  <span>{analysis.clientMentioned}</span>
-                  <span className="text-cos-border">|</span>
-                </>
-              )}
-              {analysis?.industries.slice(0, 2).map((ind) => (
-                <span key={ind}>{ind}</span>
-              ))}
-              {analysis && (
-                <span className="ml-auto text-[9px] text-cos-signal">
-                  {Math.round(analysis.confidence * 100)}% match
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </button>
-
-      {expanded && analysis && (
-        <div className="mt-2 space-y-2 border-t border-cos-border/30 pt-2">
-          <p className="text-[11px] leading-relaxed text-cos-slate-dim line-clamp-4">
-            {analysis.summary}
-          </p>
-
-          {analysis.services.length > 0 && (
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate-dim">Services</p>
-              <div className="flex flex-wrap gap-1">
-                {analysis.services.map((s) => (
-                  <span key={s} className="rounded-cos-pill bg-cos-electric/8 px-2 py-0.5 text-[10px] text-cos-electric">
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {analysis.skills.length > 0 && (
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate-dim">Skills</p>
-              <div className="flex flex-wrap gap-1">
-                {analysis.skills.map((s) => (
-                  <span key={s} className="rounded-cos-pill bg-cos-midnight/5 px-2 py-0.5 text-[10px] text-cos-slate">
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {analysis.outcomes.length > 0 && (
-            <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate-dim">Outcomes</p>
-              <ul className="space-y-0.5">
-                {analysis.outcomes.map((o) => (
-                  <li key={o} className="flex items-start gap-1.5 text-[10px] text-cos-slate">
-                    <CheckCircle2 className="mt-0.5 h-2.5 w-2.5 shrink-0 text-cos-signal" />
-                    <span>{o}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Link back to original source */}
-          <a
-            href={caseStudy.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 flex items-center gap-1 text-[10px] text-cos-electric hover:underline"
-          >
-            <ExternalLink className="h-2.5 w-2.5" />
-            View original
-          </a>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Icon for different case study source types */
-function SourceTypeIcon({ sourceType, className }: { sourceType: string; className?: string }) {
-  switch (sourceType) {
-    case "google_slides":
-      return <Presentation className={className} />;
-    case "pdf":
-      return <FileText className={className} />;
-    case "google_drive":
-      return <HardDrive className={className} />;
-    case "website":
-      return <Globe className={className} />;
-    default:
-      return <Link2 className={className} />;
-  }
 }
 
 function ExpertCard({ expert }: { expert: Expert }) {

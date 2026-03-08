@@ -59,7 +59,7 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="space-y-8 p-6">
+    <div className="mx-auto max-w-3xl space-y-8 p-6">
       <div>
         <h2 className="font-heading text-lg font-semibold text-cos-midnight">
           Billing & Plans

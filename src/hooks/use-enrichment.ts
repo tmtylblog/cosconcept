@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useCallback, useState } from "react";
+import { createContext, useContext, useCallback, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import React from "react";
 
@@ -47,6 +47,38 @@ export interface EnrichmentResult {
 
 export type EnrichmentStatus = "idle" | "loading" | "done" | "error";
 
+// ─── Helpers ──────────────────────────────────────────────
+
+/** Build context string for Ossy prompt from enrichment data */
+function buildContextForOssy(data: EnrichmentResult): string {
+  const parts: string[] = [
+    `[ENRICHMENT RESULTS for ${data.domain || data.url}]`,
+  ];
+  if (data.companyCard) {
+    parts.push(`\n## Company Profile (PDL)\n${data.companyCard}`);
+  }
+  if (data.groundTruth) {
+    parts.push(
+      `\n## Ground Truth Evidence (Website Scrape)\n${data.groundTruth}`
+    );
+  }
+  if (data.classification) {
+    parts.push(
+      `\n## AI Classification\nCategories: ${data.classification.categories.join(", ") || "unknown"}` +
+        `\nSkills: ${data.classification.skills.join(", ") || "unknown"}` +
+        `\nIndustries: ${data.classification.industries.join(", ") || "unknown"}` +
+        `\nMarkets: ${data.classification.markets.join(", ") || "unknown"}` +
+        `\nLanguages: ${data.classification.languages.join(", ") || "unknown"}`
+    );
+  }
+  if (data.extracted?.teamMembers?.length) {
+    parts.push(
+      `\nTeam members detected: ${data.extracted.teamMembers.join(", ")}`
+    );
+  }
+  return parts.join("\n");
+}
+
 interface EnrichmentContextValue {
   status: EnrichmentStatus;
   result: EnrichmentResult | null;
@@ -74,11 +106,43 @@ export function useEnrichment() {
 
 // ─── Provider ────────────────────────────────────────────
 
-export function EnrichmentProvider({ children }: { children: ReactNode }) {
+export function EnrichmentProvider({
+  children,
+  organizationId,
+}: {
+  children: ReactNode;
+  organizationId?: string;
+}) {
   const [status, setStatus] = useState<EnrichmentStatus>("idle");
   const [result, setResult] = useState<EnrichmentResult | null>(null);
   const [contextForOssy, setContextForOssy] = useState<string | null>(null);
   const [enrichedUrl, setEnrichedUrl] = useState<string | null>(null);
+
+  // Hydrate from DB on mount — if enrichment was done previously, load it
+  useEffect(() => {
+    if (!organizationId || result) return;
+    let cancelled = false;
+
+    async function hydrate() {
+      try {
+        const res = await fetch(`/api/enrich/firm?organizationId=${organizationId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data.enrichmentData) return;
+
+        const enrichmentData = data.enrichmentData as EnrichmentResult;
+        setResult(enrichmentData);
+        setEnrichedUrl(enrichmentData.url);
+        setContextForOssy(buildContextForOssy(enrichmentData));
+        setStatus("done");
+      } catch {
+        // Silently ignore hydration failures
+      }
+    }
+
+    hydrate();
+    return () => { cancelled = true; };
+  }, [organizationId, result]);
 
   const reset = useCallback(() => {
     setStatus("idle");
@@ -97,41 +161,14 @@ export function EnrichmentProvider({ children }: { children: ReactNode }) {
         const res = await fetch("/api/enrich/website", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ url, organizationId }),
         });
 
         if (!res.ok) throw new Error("Enrichment failed");
 
         const data: EnrichmentResult = await res.json();
         setResult(data);
-
-        // Build context string for Ossy
-        const parts: string[] = [
-          `[ENRICHMENT RESULTS for ${data.domain || url}]`,
-        ];
-        if (data.companyCard) {
-          parts.push(`\n## Company Profile (PDL)\n${data.companyCard}`);
-        }
-        if (data.groundTruth) {
-          parts.push(
-            `\n## Ground Truth Evidence (Website Scrape)\n${data.groundTruth}`
-          );
-        }
-        if (data.classification) {
-          parts.push(
-            `\n## AI Classification\nCategories: ${data.classification.categories.join(", ") || "unknown"}` +
-              `\nSkills: ${data.classification.skills.join(", ") || "unknown"}` +
-              `\nIndustries: ${data.classification.industries.join(", ") || "unknown"}` +
-              `\nMarkets: ${data.classification.markets.join(", ") || "unknown"}` +
-              `\nLanguages: ${data.classification.languages.join(", ") || "unknown"}`
-          );
-        }
-        if (data.extracted?.teamMembers?.length) {
-          parts.push(
-            `\nTeam members detected: ${data.extracted.teamMembers.join(", ")}`
-          );
-        }
-        setContextForOssy(parts.join("\n"));
+        setContextForOssy(buildContextForOssy(data));
         setStatus("done");
 
         console.log(
@@ -144,7 +181,7 @@ export function EnrichmentProvider({ children }: { children: ReactNode }) {
         setStatus("error");
       }
     },
-    [enrichedUrl]
+    [enrichedUrl, organizationId]
   );
 
   const value: EnrichmentContextValue = {

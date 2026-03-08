@@ -161,3 +161,33 @@ export const DIVISION_COLORS: Record<ExpertDivision, string> = {
 export function getDivisionColor(division: ExpertDivision): string {
   return DIVISION_COLORS[division] ?? DIVISION_COLORS.Unknown;
 }
+
+// ─── Legacy Case Study ────────────────────────────────────
+
+/**
+ * A case study from the legacy COS platform, imported from JSON.
+ * Distinct from the enrichment-pipeline `CaseStudy` type which
+ * has sourceUrl / cosAnalysis fields.
+ */
+export interface LegacyCaseStudy {
+  /** Stable identifier (e.g., "legacy-cs-42") */
+  id: string;
+  /** Extracted title — from summary, HTML bold, first sentence, or client names */
+  title: string;
+  /** Plain-text body, HTML stripped, truncated to ~500 chars */
+  aboutText: string;
+  /** Publication status: "published" | "draft" */
+  status: string;
+  /** Tagged skills (e.g., "Performance Marketing", "SEO") */
+  skills: string[];
+  /** Tagged industries (e.g., "Health & Wellness", "E-Commerce") */
+  industries: string[];
+  /** Client company names (excluding the firm itself) */
+  clients: string[];
+  /** External links (presentation URLs, website links) */
+  links: string[];
+  /** Market country codes (e.g., "US", "GB") */
+  markets: string[];
+  /** Names of contributing experts */
+  contributorNames: string[];
+}

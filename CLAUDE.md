@@ -98,3 +98,23 @@ drizzle.config.ts                   # Drizzle Kit config
 4. **Cost Consciousness:** Cheapest model that can do the job; AI cost gateway tracks everything
 5. **Bidirectional Matching:** Both parties must want what the other offers
 6. **Progressive Disclosure:** Get basic info first, enrich over time
+
+## Multi-Dev Coordination Rules
+
+These rules apply to **all Claude Code instances** working on this repo:
+
+1. **Never push directly to main.** All work happens on feature branches, merged via PR only.
+2. **One branch per task, one dev per branch.** Never have two devs on the same branch.
+3. **Branch naming:** `<dev-id>/<type>/<short-description>` (e.g., `dev-1/feat/ossy-chat`). Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`.
+4. **Always branch from latest main.** Pull before you branch.
+5. **Assign area ownership.** Each dev owns specific directories/features. Stay in your lane. If you need to edit outside your area, coordinate first.
+6. **Schema changes are serialized.** Only one dev modifies database schema/migrations at a time. Commit schema changes separately from feature code. Push immediately.
+7. **Never edit existing migrations.** Only add new ones.
+8. **Coordinate new dependencies.** Don't `npm install` new packages without mentioning it. Always commit `package-lock.json` with `package.json`.
+9. **Commit often, commit small.** One concern per commit. Clear messages: `<type>: <what changed>`.
+10. **Build + lint must pass before every PR.** Never merge a broken build.
+11. **Rebase on main before merging.** Resolve conflicts on your branch, not on main.
+12. **Update CLAUDE.md when you establish new patterns.** This is how you communicate decisions to other devs.
+13. **Keep a STATUS.md** at project root listing each dev's current branch, task, and files being modified. Update it before starting and after finishing each task.
+14. **Don't make drive-by fixes.** If you spot something outside your task, make a separate branch/PR.
+15. **Don't let branches live for days.** Merge early and often to avoid drift.

@@ -5,6 +5,7 @@ import { Search, Filter, Sparkles, Building2, ArrowRight, ChevronDown, X } from 
 import { Button } from "@/components/ui/button";
 import { usePlan } from "@/hooks/use-plan";
 import { UpgradePrompt } from "@/components/upgrade-prompt";
+import { useActiveOrganization } from "@/lib/auth-client";
 
 interface MatchCandidate {
   firmId: string;
@@ -35,6 +36,7 @@ interface SearchStats {
 export default function DiscoverPage() {
   const { canUse } = usePlan();
   const canSearch = canUse("canSearchNetwork");
+  const { data: activeOrg } = useActiveOrganization();
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MatchCandidate[]>([]);
@@ -42,6 +44,33 @@ export default function DiscoverPage() {
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [requestingPartnership, setRequestingPartnership] = useState<string | null>(null);
+  const [partnershipRequested, setPartnershipRequested] = useState<Set<string>>(new Set());
+
+  const handleRequestPartnership = useCallback(
+    async (targetFirmId: string) => {
+      if (!activeOrg?.id) return;
+      const firmId = `firm_${activeOrg.id}`;
+      setRequestingPartnership(targetFirmId);
+
+      try {
+        const res = await fetch("/api/partnerships", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ firmId, targetFirmId }),
+        });
+
+        if (res.ok || res.status === 409) {
+          setPartnershipRequested((prev) => new Set(prev).add(targetFirmId));
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        setRequestingPartnership(null);
+      }
+    },
+    [activeOrg?.id]
+  );
 
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return;
@@ -80,7 +109,7 @@ export default function DiscoverPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="mx-auto max-w-3xl space-y-6 p-6">
       <div>
         <h2 className="font-heading text-lg font-semibold text-cos-midnight">
           Discover Partners
@@ -161,7 +190,13 @@ export default function DiscoverPage() {
       {results.length > 0 ? (
         <div className="space-y-3">
           {results.map((match) => (
-            <MatchCard key={match.firmId} match={match} />
+            <MatchCard
+              key={match.firmId}
+              match={match}
+              onRequestPartnership={handleRequestPartnership}
+              requesting={requestingPartnership === match.firmId}
+              requested={partnershipRequested.has(match.firmId)}
+            />
           ))}
         </div>
       ) : hasSearched && !searching ? (
@@ -213,7 +248,17 @@ export default function DiscoverPage() {
 
 // ─── Match Card ──────────────────────────────────────────
 
-function MatchCard({ match }: { match: MatchCandidate }) {
+function MatchCard({
+  match,
+  onRequestPartnership,
+  requesting,
+  requested,
+}: {
+  match: MatchCandidate;
+  onRequestPartnership: (firmId: string) => void;
+  requesting: boolean;
+  requested: boolean;
+}) {
   const scorePercent = Math.round(match.totalScore * 100);
 
   return (
@@ -292,8 +337,18 @@ function MatchCard({ match }: { match: MatchCandidate }) {
           View Profile
           <ArrowRight className="ml-1 h-3 w-3" />
         </Button>
-        <Button variant="ghost" size="sm" className="text-cos-slate">
-          Request Partnership
+        <Button
+          variant="ghost"
+          size="sm"
+          className={requested ? "text-cos-signal" : "text-cos-slate"}
+          disabled={requesting || requested}
+          onClick={() => onRequestPartnership(match.firmId)}
+        >
+          {requested
+            ? "Requested ✓"
+            : requesting
+              ? "Requesting..."
+              : "Request Partnership"}
         </Button>
       </div>
     </div>

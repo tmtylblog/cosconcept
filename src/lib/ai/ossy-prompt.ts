@@ -75,6 +75,7 @@ export function getOssyPrompt(context?: {
   isOnboarding?: boolean;
   isGuest?: boolean;
   websiteContext?: string;
+  memoryContext?: string;
 }): string {
   let prompt = OSSY_SYSTEM_PROMPT;
 
@@ -119,6 +120,10 @@ The following data was automatically scraped from the user's firm website. Use t
 - Don't overwhelm them with everything you found — weave it in naturally
 
 ${context.websiteContext}\n`;
+  }
+
+  if (context?.memoryContext) {
+    prompt += `\n${context.memoryContext}\n`;
   }
 
   return prompt;

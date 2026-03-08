@@ -205,6 +205,10 @@ export const serviceFirms = pgTable("service_firms", {
   profileCompleteness: real("profile_completeness").default(0),
   partnershipReadinessScore: real("partnership_readiness_score"),
   responseVelocity: real("response_velocity"),
+  // Enrichment data — stores the full enrichment response for hydration
+  enrichmentData: jsonb("enrichment_data"),
+  enrichmentStatus: text("enrichment_status").default("pending"), // pending | enriched | verified
+  classificationConfidence: real("classification_confidence"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
