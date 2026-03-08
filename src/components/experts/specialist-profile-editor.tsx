@@ -8,7 +8,7 @@ import { PdlExperiencePicker } from "./pdl-experience-picker";
 
 interface PdlExperience {
   company: { name: string; website?: string | null; industry?: string | null };
-  title: { name: string };
+  title: string;
   startDate?: string | null;
   endDate?: string | null;
   isCurrent?: boolean;
@@ -155,7 +155,7 @@ export function SpecialistProfileEditor({
   const handlePdlSelect = useCallback(
     (ex: PdlExperience, pdlIdx: number) => {
       updateExample(pickerTargetIdx, {
-        title: ex.title.name,
+        title: ex.title,
         companyName: ex.company.name,
         companyIndustry: ex.company.industry ?? "",
         startDate: ex.startDate ?? "",

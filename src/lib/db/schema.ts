@@ -973,7 +973,7 @@ export const expertProfiles = pgTable("expert_profiles", {
     id?: string;
     experience?: {
       company: { name: string; website: string | null; industry: string | null };
-      title: { name: string };
+      title: string;
       startDate: string | null;
       endDate: string | null;
       isCurrent: boolean;

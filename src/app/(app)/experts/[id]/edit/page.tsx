@@ -8,7 +8,7 @@ import { SpecialistProfileCard } from "@/components/experts/specialist-profile-c
 
 interface PdlExperience {
   company: { name: string; website?: string | null; industry?: string | null };
-  title: { name: string };
+  title: string;
   startDate?: string | null;
   endDate?: string | null;
   isCurrent?: boolean;

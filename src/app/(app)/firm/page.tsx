@@ -596,6 +596,27 @@ function EmptyHint({ text }: { text: string }) {
 
 function ExpertCard({ expert }: { expert: Expert }) {
   const [expanded, setExpanded] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [inviteSent, setInviteSent] = useState(false);
+
+  const handleInvite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!expert.id || inviting || inviteSent) return;
+    setInviting(true);
+    try {
+      const res = await fetch(`/api/experts/${expert.id}/invite`, { method: "POST" });
+      if (res.ok) {
+        setInviteSent(true);
+      } else {
+        const data = await res.json();
+        alert(data.error ?? "Failed to send invite");
+      }
+    } catch {
+      alert("Failed to send invite");
+    } finally {
+      setInviting(false);
+    }
+  };
 
   // Determine best specialist profile title and quality summary
   const sps = expert.specialistProfiles ?? [];
@@ -747,9 +768,13 @@ function ExpertCard({ expert }: { expert: Expert }) {
               </Link>
             )}
             {expert.email && (
-              <button className="flex items-center gap-1 rounded-cos-md border border-cos-border px-2.5 py-1 text-[10px] font-medium text-cos-slate-dim hover:border-cos-electric/40 hover:text-cos-electric transition-colors">
+              <button
+                onClick={handleInvite}
+                disabled={inviting || inviteSent}
+                className="flex items-center gap-1 rounded-cos-md border border-cos-border px-2.5 py-1 text-[10px] font-medium text-cos-slate-dim hover:border-cos-electric/40 hover:text-cos-electric transition-colors disabled:opacity-50"
+              >
                 <Mail className="h-2.5 w-2.5" />
-                Invite to edit
+                {inviteSent ? "Invite sent ✓" : inviting ? "Sending..." : "Invite to edit"}
               </button>
             )}
           </div>

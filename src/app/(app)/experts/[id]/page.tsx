@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useSession } from "@/lib/auth-client";
 import {
   MapPin,
   Linkedin,
@@ -19,7 +20,7 @@ import { SpecialistProfileCard } from "@/components/experts/specialist-profile-c
 
 interface PdlExperience {
   company: { name: string; website?: string | null; industry?: string | null };
-  title: { name: string };
+  title: string;
   startDate?: string | null;
   endDate?: string | null;
   isCurrent?: boolean;
@@ -84,11 +85,11 @@ interface SpecialistProfile {
 export default function ExpertProfilePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { data: session } = useSession();
   const [expert, setExpert] = useState<ExpertProfile | null>(null);
   const [specialistProfiles, setSpecialistProfiles] = useState<SpecialistProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
-  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -97,21 +98,13 @@ export default function ExpertProfilePage() {
       .then((data) => {
         setExpert(data.expert);
         setSpecialistProfiles(data.specialistProfiles ?? []);
-        // Ownership determined server-side, but we can check via session
-        setIsOwner(false); // Will be refined via session context
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-
-    // Check session for ownership
-    fetch("/api/auth/session")
-      .then((r) => r.json())
-      .then((session) => {
-        // Will be set when expert.userId matches session.user.id
-        // Simplified here — the edit page handles auth properly
-      })
-      .catch(() => {});
   }, [id]);
+
+  // Owner = the expert has claimed this profile and it matches the current user
+  const isOwner = !!(expert?.userId && session?.user?.id && expert.userId === session.user.id);
 
   if (loading) {
     return (
@@ -337,7 +330,7 @@ export default function ExpertProfilePage() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-cos-midnight">
-                      {ex.title.name}
+                      {ex.title}
                     </p>
                     <p className="text-[11px] text-cos-slate-dim">
                       {ex.company.name}

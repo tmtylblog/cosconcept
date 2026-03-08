@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 interface PdlExperience {
   company: { name: string; website?: string | null; industry?: string | null };
-  title: { name: string };
+  title: string;
   startDate?: string | null;
   endDate?: string | null;
   isCurrent?: boolean;
@@ -78,7 +78,7 @@ export function PdlExperiencePicker({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[11px] font-semibold text-cos-midnight truncate">
-                      {ex.title.name}
+                      {ex.title}
                     </p>
                     <p className="text-[10px] text-cos-slate-dim truncate">
                       {ex.company.name}
