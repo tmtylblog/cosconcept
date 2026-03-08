@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Users,
   Building2,
+  Briefcase,
   CreditCard,
   Cpu,
   Handshake,
@@ -72,6 +73,7 @@ export default async function AdminLayout({
           <AdminNavLink href="/admin" icon={<LayoutDashboard className="h-4 w-4" />} label="Overview" />
           <AdminNavLink href="/admin/users" icon={<Users className="h-4 w-4" />} label="Users" />
           <AdminNavLink href="/admin/organizations" icon={<Building2 className="h-4 w-4" />} label="Firm Directory" />
+          <AdminNavLink href="/admin/clients" icon={<Briefcase className="h-4 w-4" />} label="Client Companies" />
           <AdminNavLink href="/admin/subscriptions" icon={<CreditCard className="h-4 w-4" />} label="Subscriptions" />
           <AdminNavLink href="/admin/finance" icon={<Cpu className="h-4 w-4" />} label="AI Costs" />
           <AdminNavLink href="/admin/partnerships" icon={<Handshake className="h-4 w-4" />} label="Partnerships" />

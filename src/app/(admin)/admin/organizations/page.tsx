@@ -15,6 +15,9 @@ import {
   Search,
   MapPin,
   Tag,
+  Briefcase,
+  FileText,
+  Loader2,
 } from "lucide-react";
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -87,6 +90,10 @@ interface DirectoryFirm {
   industry?: string | null;
   dataSource?: "service_firm" | "imported";
   labels?: string[];
+  // Association counts (from Neo4j)
+  expertCount?: number;
+  caseStudyCount?: number;
+  clientCount?: number;
   // Merged view fields
   onPlatform?: boolean;
   platformData?: Record<string, unknown> | null;
@@ -603,79 +610,98 @@ function FirmCard({
                 )}
               </div>
 
+              {/* Taxonomy tags (compact) */}
+              <div className="flex flex-wrap gap-2 text-xs">
+                {firm.categories && firm.categories.length > 0 && (
+                  <span className="flex items-center gap-1 text-cos-electric">
+                    <Tag className="h-3 w-3" />
+                    {firm.categories.length} categor{firm.categories.length === 1 ? "y" : "ies"}
+                  </span>
+                )}
+                {firm.industries && firm.industries.length > 0 && (
+                  <span className="text-cos-warm">
+                    {firm.industries.length} industr{firm.industries.length === 1 ? "y" : "ies"}
+                  </span>
+                )}
+                {firm.markets && firm.markets.length > 0 && (
+                  <span className="flex items-center gap-1 text-cos-signal">
+                    <MapPin className="h-3 w-3" />
+                    {firm.markets.length} market{firm.markets.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+
               <p className="font-mono text-[10px] text-cos-slate-light">
                 ID: {firm.id}
               </p>
             </div>
 
-            {/* Right: graph relationships */}
+            {/* Right: association links */}
             <div className="space-y-3">
-              {firm.categories && firm.categories.length > 0 && (
-                <div>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
-                    Categories
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {firm.categories.map((cat) => (
-                      <span
-                        key={cat}
-                        className="rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[10px] font-medium text-cos-electric"
-                      >
-                        {cat}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
+                Connections
+              </p>
+
+              {firm.expertCount != null && firm.expertCount > 0 && (
+                <FirmAssociationLink
+                  nodeId={firm.id}
+                  assocType="experts"
+                  label="Associated Experts"
+                  count={firm.expertCount}
+                  icon={<Users className="h-3.5 w-3.5 text-cos-signal" />}
+                  renderItem={(item) => (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-cos-midnight">{item.name}</span>
+                      {item.title && (
+                        <span className="text-xs text-cos-slate">{item.title}</span>
+                      )}
+                    </div>
+                  )}
+                />
               )}
 
-              {firm.industries && firm.industries.length > 0 && (
-                <div>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
-                    Industries
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {firm.industries.map((ind) => (
-                      <span
-                        key={ind}
-                        className="rounded-cos-pill bg-cos-warm/10 px-2 py-0.5 text-[10px] font-medium text-cos-warm"
-                      >
-                        {ind}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+              {firm.caseStudyCount != null && firm.caseStudyCount > 0 && (
+                <FirmAssociationLink
+                  nodeId={firm.id}
+                  assocType="caseStudies"
+                  label="Associated Case Studies"
+                  count={firm.caseStudyCount}
+                  icon={<FileText className="h-3.5 w-3.5 text-cos-warm" />}
+                  renderItem={(item) => (
+                    <div>
+                      <p className="text-sm text-cos-midnight">{item.title}</p>
+                      {item.summary && (
+                        <p className="mt-0.5 text-xs text-cos-slate line-clamp-2">{item.summary}</p>
+                      )}
+                    </div>
+                  )}
+                />
               )}
 
-              {firm.markets && firm.markets.length > 0 && (
-                <div>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
-                    Markets
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {firm.markets.slice(0, 10).map((mkt) => (
-                      <span
-                        key={mkt}
-                        className="flex items-center gap-0.5 rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-medium text-cos-signal"
-                      >
-                        <MapPin className="h-2.5 w-2.5" />
-                        {mkt}
-                      </span>
-                    ))}
-                    {firm.markets.length > 10 && (
-                      <span className="text-[10px] text-cos-slate">
-                        +{firm.markets.length - 10} more
-                      </span>
-                    )}
-                  </div>
-                </div>
+              {firm.clientCount != null && firm.clientCount > 0 && (
+                <FirmAssociationLink
+                  nodeId={firm.id}
+                  assocType="clients"
+                  label="Associated Clients"
+                  count={firm.clientCount}
+                  icon={<Briefcase className="h-3.5 w-3.5 text-purple-600" />}
+                  renderItem={(item) => (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-cos-midnight">{item.name}</span>
+                      {item.industry && (
+                        <span className="text-xs text-cos-slate">{item.industry}</span>
+                      )}
+                    </div>
+                  )}
+                />
               )}
 
-              {/* No graph data at all */}
-              {(!firm.categories || firm.categories.length === 0) &&
-                (!firm.industries || firm.industries.length === 0) &&
-                (!firm.markets || firm.markets.length === 0) && (
+              {/* No associations */}
+              {(!firm.expertCount || firm.expertCount === 0) &&
+                (!firm.caseStudyCount || firm.caseStudyCount === 0) &&
+                (!firm.clientCount || firm.clientCount === 0) && (
                   <p className="text-xs text-cos-slate-light">
-                    No knowledge graph data for this firm yet.
+                    No connections in the knowledge graph yet.
                   </p>
                 )}
             </div>
@@ -846,6 +872,105 @@ function OrgExpandedDetails({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ── Association Link (lazy-loaded expandable) ───────────────────── */
+
+interface AssocItem {
+  id: string;
+  name?: string;
+  title?: string;
+  summary?: string;
+  website?: string;
+  email?: string;
+  industry?: string;
+}
+
+function FirmAssociationLink({
+  nodeId,
+  assocType,
+  label,
+  count,
+  icon,
+  renderItem,
+}: {
+  nodeId: string;
+  assocType: string;
+  label: string;
+  count: number;
+  icon: React.ReactNode;
+  renderItem: (item: AssocItem) => React.ReactNode;
+}) {
+  const [items, setItems] = useState<AssocItem[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  async function loadItems() {
+    if (items) {
+      setOpen(!open);
+      return;
+    }
+    setLoading(true);
+    setOpen(true);
+    try {
+      const params = new URLSearchParams({
+        nodeId,
+        nodeType: "Organization",
+        assocType,
+      });
+      const res = await fetch(`/api/admin/graph/associations?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setItems(data.items ?? []);
+      }
+    } catch (err) {
+      console.error("Failed to load associations:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        onClick={loadItems}
+        className="flex items-center gap-2 text-sm font-medium text-cos-midnight hover:text-cos-electric transition-colors"
+      >
+        {icon}
+        <span>{label}</span>
+        <span className="rounded-cos-pill bg-cos-slate/10 px-1.5 py-0.5 text-[10px] font-medium text-cos-slate">
+          {count}
+        </span>
+        {open ? (
+          <ChevronDown className="h-3.5 w-3.5 text-cos-slate" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 text-cos-slate" />
+        )}
+      </button>
+
+      {open && (
+        <div className="mt-2 ml-5 space-y-1.5">
+          {loading ? (
+            <div className="flex items-center gap-2 text-xs text-cos-slate">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Loading...
+            </div>
+          ) : items && items.length > 0 ? (
+            items.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-cos-md bg-cos-cloud px-3 py-2"
+              >
+                {renderItem(item)}
+              </div>
+            ))
+          ) : (
+            <p className="text-xs text-cos-slate-light">None found.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

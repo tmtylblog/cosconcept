@@ -26,6 +26,9 @@ interface Neo4jFirm {
   source?: string;
   isLegacy?: boolean;
   isCustomer?: boolean;
+  expertCount?: number | { low: number } | null;
+  caseStudyCount?: number | { low: number } | null;
+  clientCount?: number | { low: number } | null;
 }
 
 /**
@@ -165,52 +168,45 @@ export async function GET(req: NextRequest) {
       const countRows = await neo4jRead<{ total: { low: number } }>(countQuery, params);
       const totalGraph = countRows[0]?.total?.low ?? (typeof countRows[0]?.total === "number" ? countRows[0].total : 0);
 
-      // Main query: query Organization nodes (legacy firms), with optional ServiceFirm results
-      // Neo4j Aura doesn't support WITH after CALL{UNION}, so we query separately
-      const query = search
-        ? `
-          MATCH (o:Organization)
-          WHERE o.name =~ $nameRegex
-          OPTIONAL MATCH (o)-[:IN_CATEGORY]->(c:Category)
-          OPTIONAL MATCH (o)-[:OPERATES_IN_INDUSTRY]->(i:Industry)
-          OPTIONAL MATCH (o)-[:LOCATED_IN]->(m:Market)
-          RETURN coalesce(o.legacyId, o.name) AS id,
-                 o.name AS name,
-                 o.website AS website,
-                 o.about AS description,
-                 o.employees AS employeeCount,
-                 null AS foundedYear,
-                 COLLECT(DISTINCT c.name) AS categories,
-                 COLLECT(DISTINCT i.name) AS industries,
-                 COLLECT(DISTINCT m.name) AS markets,
-                 null AS firmType,
-                 'legacy' AS source,
-                 o.isLegacy AS isLegacy,
-                 o.isCollectiveOSCustomer AS isCustomer
-          ORDER BY o.name ASC
-          SKIP $skip LIMIT $lim
-        `
-        : `
-          MATCH (o:Organization)
-          OPTIONAL MATCH (o)-[:IN_CATEGORY]->(c:Category)
-          OPTIONAL MATCH (o)-[:OPERATES_IN_INDUSTRY]->(i:Industry)
-          OPTIONAL MATCH (o)-[:LOCATED_IN]->(m:Market)
-          RETURN coalesce(o.legacyId, o.name) AS id,
-                 o.name AS name,
-                 o.website AS website,
-                 o.about AS description,
-                 o.employees AS employeeCount,
-                 null AS foundedYear,
-                 COLLECT(DISTINCT c.name) AS categories,
-                 COLLECT(DISTINCT i.name) AS industries,
-                 COLLECT(DISTINCT m.name) AS markets,
-                 null AS firmType,
-                 'legacy' AS source,
-                 o.isLegacy AS isLegacy,
-                 o.isCollectiveOSCustomer AS isCustomer
-          ORDER BY o.name ASC
-          SKIP $skip LIMIT $lim
-        `;
+      // Main query: Organization nodes with association counts
+      // Neo4j Aura doesn't support WITH after CALL{UNION}, so we query directly
+      const searchWhere = search ? `WHERE o.name =~ $nameRegex` : "";
+      const query = `
+        MATCH (o:Organization)
+        ${searchWhere}
+        OPTIONAL MATCH (o)-[:IN_CATEGORY]->(c:Category)
+        OPTIONAL MATCH (o)-[:OPERATES_IN_INDUSTRY]->(i:Industry)
+        OPTIONAL MATCH (o)-[:LOCATED_IN]->(m:Market)
+        WITH o,
+             COLLECT(DISTINCT c.name) AS categories,
+             COLLECT(DISTINCT i.name) AS industries,
+             COLLECT(DISTINCT m.name) AS markets
+        OPTIONAL MATCH (o)<-[:WORKED_AT]-(expert:User)
+        WITH o, categories, industries, markets,
+             count(DISTINCT expert) AS expertCount
+        OPTIONAL MATCH (o)<-[:BY_FIRM]-(cs:CaseStudy)
+        WITH o, categories, industries, markets, expertCount,
+             count(DISTINCT cs) AS caseStudyCount
+        OPTIONAL MATCH (o)-[:WORKED_WITH]->(client:Company)
+        RETURN coalesce(o.legacyId, o.name) AS id,
+               o.name AS name,
+               o.website AS website,
+               o.about AS description,
+               o.employees AS employeeCount,
+               null AS foundedYear,
+               categories,
+               industries,
+               markets,
+               null AS firmType,
+               'legacy' AS source,
+               o.isLegacy AS isLegacy,
+               o.isCollectiveOSCustomer AS isCustomer,
+               expertCount,
+               caseStudyCount,
+               count(DISTINCT client) AS clientCount
+        ORDER BY o.name ASC
+        SKIP $skip LIMIT $lim
+      `;
 
       const graphFirms = await neo4jRead<Neo4jFirm>(query, params);
 
@@ -269,6 +265,9 @@ export async function GET(req: NextRequest) {
             source: "platform",
             isLegacy: false,
             isCustomer: true,
+            expertCount: 0,
+            caseStudyCount: 0,
+            clientCount: 0,
             onPlatform: true,
             platformData: pf,
           });
@@ -317,6 +316,9 @@ function normalizeFirm(gf: Neo4jFirm) {
     source: gf.source ?? "enriched",
     isLegacy: gf.isLegacy ?? false,
     isCustomer: gf.isCustomer ?? false,
+    expertCount: neo4jToNum(gf.expertCount),
+    caseStudyCount: neo4jToNum(gf.caseStudyCount),
+    clientCount: neo4jToNum(gf.clientCount),
   };
 }
 
@@ -326,4 +328,10 @@ function escapeRegex(s: string): string {
 
 function neo4jInt(n: number) {
   return neo4j.int(n);
+}
+
+function neo4jToNum(val: number | { low: number } | null | undefined): number {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === "number") return val;
+  return val.low ?? 0;
 }
