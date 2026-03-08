@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { neo4jRead } from "@/lib/neo4j";
+import neo4j from "neo4j-driver";
 
 export const dynamic = "force-dynamic";
 
@@ -181,32 +182,32 @@ export async function GET(req: NextRequest) {
       const countRows = await neo4jRead<{ total: { low: number } }>(countQuery, params);
       const totalGraph = countRows[0]?.total?.low ?? (typeof countRows[0]?.total === "number" ? countRows[0].total : 0);
 
-      // Main query: UNION all three node types into a unified result set
-      const query = `
-        CALL {
-          MATCH (f:ServiceFirm)
-          OPTIONAL MATCH (f)-[:IN_CATEGORY]->(c:Category)
-          OPTIONAL MATCH (f)-[:SERVES_INDUSTRY]->(i:Industry)
-          OPTIONAL MATCH (f)-[:OPERATES_IN]->(m:Market)
-          OPTIONAL MATCH (f)-[:IS_FIRM_TYPE]->(ft:FirmType)
-          RETURN f.id AS id,
-                 f.name AS name,
-                 f.website AS website,
-                 f.description AS description,
-                 f.employeeCount AS employeeCount,
-                 f.foundedYear AS foundedYear,
-                 f.location AS location,
-                 f.industry AS industry,
-                 f.sourceId AS sourceId,
-                 labels(f) AS labels,
+      // Main query: query Organization nodes (legacy firms), with optional ServiceFirm results
+      // Neo4j Aura doesn't support WITH after CALL{UNION}, so we query separately
+      const query = search
+        ? `
+          MATCH (o:Organization)
+          WHERE o.name =~ $nameRegex
+          OPTIONAL MATCH (o)-[:IN_CATEGORY]->(c:Category)
+          OPTIONAL MATCH (o)-[:OPERATES_IN_INDUSTRY]->(i:Industry)
+          OPTIONAL MATCH (o)-[:LOCATED_IN]->(m:Market)
+          RETURN coalesce(o.legacyId, o.name) AS id,
+                 o.name AS name,
+                 o.website AS website,
+                 o.about AS description,
+                 o.employees AS employeeCount,
+                 null AS foundedYear,
                  COLLECT(DISTINCT c.name) AS categories,
                  COLLECT(DISTINCT i.name) AS industries,
                  COLLECT(DISTINCT m.name) AS markets,
-                 ft.name AS firmType,
-                 'enriched' AS source,
-                 false AS isLegacy,
-                 true AS isCustomer
-          UNION ALL
+                 null AS firmType,
+                 'legacy' AS source,
+                 o.isLegacy AS isLegacy,
+                 o.isCollectiveOSCustomer AS isCustomer
+          ORDER BY o.name ASC
+          SKIP $skip LIMIT $lim
+        `
+        : `
           MATCH (o:Organization)
           OPTIONAL MATCH (o)-[:IN_CATEGORY]->(c:Category)
           OPTIONAL MATCH (o)-[:OPERATES_IN_INDUSTRY]->(i:Industry)
@@ -217,10 +218,6 @@ export async function GET(req: NextRequest) {
                  o.about AS description,
                  o.employees AS employeeCount,
                  null AS foundedYear,
-                 coalesce(o.city, '') + CASE WHEN o.countryCode IS NOT NULL THEN ', ' + o.countryCode ELSE '' END AS location,
-                 null AS industry,
-                 null AS sourceId,
-                 ['Organization'] AS labels,
                  COLLECT(DISTINCT c.name) AS categories,
                  COLLECT(DISTINCT i.name) AS industries,
                  COLLECT(DISTINCT m.name) AS markets,
@@ -228,14 +225,9 @@ export async function GET(req: NextRequest) {
                  'legacy' AS source,
                  o.isLegacy AS isLegacy,
                  o.isCollectiveOSCustomer AS isCustomer
-        }
-        WITH id, name, website, description, employeeCount, foundedYear,
-             location, industry, sourceId, labels, categories, industries,
-             markets, firmType, source, isLegacy, isCustomer
-        ${searchClause}
-        ORDER BY name ASC
-        SKIP $skip LIMIT $lim
-      `;
+          ORDER BY o.name ASC
+          SKIP $skip LIMIT $lim
+        `;
 
       const graphFirms = await neo4jRead<Neo4jFirm>(query, params);
 
@@ -379,6 +371,5 @@ function escapeRegex(s: string): string {
 }
 
 function neo4jInt(n: number) {
-  // Neo4j driver expects native integers for SKIP/LIMIT
-  return n;
+  return neo4j.int(n);
 }
