@@ -108,10 +108,11 @@ export async function POST(req: Request) {
       if (neo4jResults.length > 0) {
         const r = neo4jResults[0];
         // Count as a hit if we have meaningful data in any section
-        const hasCompanyInfo = !!(r.name || r.pdlIndustry || r.pdlLocation || r.employeeCount);
+        // For company info, require actual PDL fields (not just a name — every node has one)
+        const hasRealPdlData = !!(r.pdlIndustry || r.pdlLocation || r.employeeCount || r.pdlSize || r.pdlRevenue);
         const hasClassification = r.categories.length > 0 || r.skills.length > 0;
         const hasExtracted = r.services.length > 0 || r.clients.length > 0;
-        const hasData = hasCompanyInfo || hasClassification || hasExtracted;
+        const hasData = hasRealPdlData || hasClassification || hasExtracted;
 
         if (hasData) {
           console.log(`[Enrich/Lookup] Cache HIT (Neo4j) for ${domain}: ${r.name}`);
@@ -124,14 +125,14 @@ export async function POST(req: Request) {
           };
 
           // Reconstruct an EnrichmentResult-compatible shape
-          // Always build companyData if we have any company info (not just employeeCount)
+          // Only build companyData if we have real PDL fields (not just a name)
           const data = {
             url: r.website || `https://${domain}`,
             domain,
             logoUrl: r.logoUrl || `https://logo.clearbit.com/${domain}`,
             success: true,
             companyCard: null,
-            companyData: hasCompanyInfo
+            companyData: hasRealPdlData
               ? {
                   name: r.name,
                   industry: r.pdlIndustry || "",

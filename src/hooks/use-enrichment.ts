@@ -336,11 +336,19 @@ export function EnrichmentProvider({
             setContextForOssy(buildContextForOssy(cached));
 
             // Check what we already have vs what's missing
-            if (cached.companyData) {
+            // companyData must have REAL PDL content — not just a name from the graph
+            const cd = cached.companyData;
+            const hasRealPdlData = cd && (
+              cd.employeeCount > 0 || cd.size || cd.location || cd.inferredRevenue || cd.founded
+            );
+            if (hasRealPdlData) {
               needsPdl = false;
-              stageData.pdlCompanyData = cached.companyData;
+              stageData.pdlCompanyData = cd;
               stageData.pdlCompanyCard = cached.companyCard;
               setStages((prev) => ({ ...prev, pdl: "done" }));
+              console.log("[Enrichment] Using cached PDL data:", cd.name, cd.size, cd.location, cd.employeeCount);
+            } else {
+              console.log("[Enrichment] Cached companyData is incomplete, will call PDL:", JSON.stringify(cd));
             }
             if (cached.extracted || cached.groundTruth) {
               needsScrape = false;
@@ -403,8 +411,9 @@ export function EnrichmentProvider({
           })
             .then(async (res) => {
               if (thisRun !== runIdRef.current) return;
-              if (!res.ok) throw new Error("PDL failed");
+              if (!res.ok) throw new Error(`PDL failed: ${res.status}`);
               const data = await res.json();
+              console.log("[Enrichment] PDL response companyData:", JSON.stringify(data.companyData));
 
               stageData.pdlCompanyData = data.companyData;
               stageData.pdlCompanyCard = data.companyCard;
