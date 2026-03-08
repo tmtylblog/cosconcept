@@ -13,16 +13,7 @@ import {
   ExternalLink,
   Loader2,
 } from "lucide-react";
-
-interface Client {
-  id: string;
-  name: string;
-  industry: string | null;
-  website: string | null;
-  location: string | null;
-  serviceFirmCount: number;
-  caseStudyCount: number;
-}
+import type { ImportedClient } from "@/components/admin/types";
 
 interface AssociationItem {
   id: string;
@@ -33,8 +24,8 @@ interface AssociationItem {
   email?: string;
 }
 
-export default function AdminClientsPage() {
-  const [clients, setClients] = useState<Client[]>([]);
+export default function ClientsTab() {
+  const [clients, setClients] = useState<ImportedClient[]>([]);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [loading, setLoading] = useState(true);
@@ -82,24 +73,6 @@ export default function AdminClientsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Redirect banner */}
-      <a
-        href="/admin/knowledge-graph?tab=clients"
-        className="flex items-center gap-3 rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-5 py-3 text-sm text-cos-electric hover:bg-cos-electric/10 transition-colors"
-      >
-        <span className="font-medium">This data is now part of the Knowledge Graph</span>
-        <span className="text-xs opacity-70">→ View in Knowledge Graph</span>
-      </a>
-
-      <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
-          Client Companies
-        </h1>
-        <p className="mt-1 text-sm text-cos-slate">
-          Companies that service firms have worked with &mdash; sourced from the knowledge graph.
-        </p>
-      </div>
-
       {/* Search */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
@@ -121,7 +94,10 @@ export default function AdminClientsPage() {
         {search && (
           <button
             type="button"
-            onClick={() => { setSearch(""); setSearchInput(""); }}
+            onClick={() => {
+              setSearch("");
+              setSearchInput("");
+            }}
             className="rounded-cos-xl border border-cos-border px-4 py-3 text-sm text-cos-slate transition-colors hover:bg-cos-cloud"
           >
             Clear
@@ -132,7 +108,9 @@ export default function AdminClientsPage() {
       {/* Stats bar */}
       <div className="flex items-center justify-between text-xs text-cos-slate">
         <span>
-          {loading ? "Loading..." : `${total.toLocaleString()} client${total !== 1 ? "s" : ""} found`}
+          {loading
+            ? "Loading..."
+            : `${total.toLocaleString()} client${total !== 1 ? "s" : ""} found`}
           {search && (
             <span className="ml-1.5 rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-cos-electric">
               &quot;{search}&quot;
@@ -165,19 +143,16 @@ export default function AdminClientsPage() {
       {/* Client list */}
       <div className="space-y-2">
         {loading ? (
-          <div className="space-y-2 animate-pulse">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-16 rounded-cos-xl bg-cos-border/30" />
-            ))}
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
           </div>
         ) : clients.length === 0 ? (
           <div className="rounded-cos-xl border border-dashed border-cos-border py-16 text-center">
             <Building2 className="mx-auto h-10 w-10 text-cos-slate-light mb-3" />
-            <p className="text-sm font-medium text-cos-midnight">
-              No client companies found
-            </p>
+            <p className="text-sm font-medium text-cos-midnight">No client companies found</p>
             <p className="mt-1 text-xs text-cos-slate max-w-sm mx-auto">
-              Client companies are populated from case studies and work history in the knowledge graph.
+              Client companies are populated from case studies and work history in the knowledge
+              graph.
             </p>
           </div>
         ) : (
@@ -186,7 +161,9 @@ export default function AdminClientsPage() {
               key={client.id}
               client={client}
               expanded={expandedClient === client.id}
-              onToggle={() => setExpandedClient(expandedClient === client.id ? null : client.id)}
+              onToggle={() =>
+                setExpandedClient(expandedClient === client.id ? null : client.id)
+              }
             />
           ))
         )}
@@ -195,12 +172,14 @@ export default function AdminClientsPage() {
   );
 }
 
+/* -- Client Card --------------------------------------------------------- */
+
 function ClientCard({
   client,
   expanded,
   onToggle,
 }: {
-  client: Client;
+  client: ImportedClient;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -278,7 +257,9 @@ function ClientCard({
                   <span className="text-sm text-cos-midnight">{item.name}</span>
                   {item.website && (
                     <a
-                      href={item.website.startsWith("http") ? item.website : `https://${item.website}`}
+                      href={
+                        item.website.startsWith("http") ? item.website : `https://${item.website}`
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-xs text-cos-electric hover:underline"
@@ -316,6 +297,8 @@ function ClientCard({
     </div>
   );
 }
+
+/* -- Association Section -------------------------------------------------- */
 
 function AssociationSection({
   nodeId,
@@ -386,10 +369,7 @@ function AssociationSection({
             </div>
           ) : items && items.length > 0 ? (
             items.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-cos-md bg-cos-cloud px-3 py-2"
-              >
+              <div key={item.id} className="rounded-cos-md bg-cos-cloud px-3 py-2">
                 {renderItem(item)}
               </div>
             ))

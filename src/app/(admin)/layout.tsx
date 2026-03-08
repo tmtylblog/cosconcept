@@ -5,14 +5,15 @@ import {
   LayoutDashboard,
   Users,
   Building2,
-  Briefcase,
   CreditCard,
   Cpu,
   Handshake,
   Database,
   Globe,
   ArrowLeft,
-  UserCheck,
+  Share2,
+  FileUp,
+  Sparkles,
 } from "lucide-react";
 
 /**
@@ -67,26 +68,31 @@ export default async function AdminLayout({
         <div className="h-px bg-gradient-to-r from-transparent via-cos-border to-transparent" />
 
         {/* Main nav */}
-        <nav className="flex-1 px-3 pt-4 space-y-0.5">
-          <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-cos-slate-light">
-            Platform
-          </p>
+        <nav className="flex-1 px-3 pt-4 space-y-0.5 overflow-y-auto">
           <AdminNavLink href="/admin" icon={<LayoutDashboard className="h-4 w-4" />} label="Overview" />
+
+          <SectionHeader label="Knowledge Graph" />
+          <AdminNavLink
+            href="/admin/knowledge-graph"
+            icon={<Share2 className="h-4 w-4" />}
+            label="Knowledge Graph"
+            accent
+          />
+
+          <SectionHeader label="Platform" />
+          <AdminNavLink href="/admin/organizations" icon={<Building2 className="h-4 w-4" />} label="Organizations" />
           <AdminNavLink href="/admin/users" icon={<Users className="h-4 w-4" />} label="Users" />
-          <AdminNavLink href="/admin/organizations" icon={<Building2 className="h-4 w-4" />} label="Firm Directory" />
-          <AdminNavLink href="/admin/experts" icon={<UserCheck className="h-4 w-4" />} label="Experts" />
-          <AdminNavLink href="/admin/clients" icon={<Briefcase className="h-4 w-4" />} label="Clients" />
+
+          <SectionHeader label="Operations" />
           <AdminNavLink href="/admin/subscriptions" icon={<CreditCard className="h-4 w-4" />} label="Subscriptions" />
           <AdminNavLink href="/admin/finance" icon={<Cpu className="h-4 w-4" />} label="AI Costs" />
           <AdminNavLink href="/admin/partnerships" icon={<Handshake className="h-4 w-4" />} label="Partnerships" />
 
-          <div className="!mt-5">
-            <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-cos-slate-light">
-              Tools
-            </p>
-            <AdminNavLink href="/admin/neo4j" icon={<Database className="h-4 w-4" />} label="Neo4j" />
-            <AdminNavLink href="/admin/apis" icon={<Globe className="h-4 w-4" />} label="APIs" />
-          </div>
+          <SectionHeader label="Tools" />
+          <AdminNavLink href="/admin/neo4j" icon={<Database className="h-4 w-4" />} label="Neo4j" />
+          <AdminNavLink href="/admin/apis" icon={<Globe className="h-4 w-4" />} label="APIs" />
+          <AdminNavLink href="/admin/migration" icon={<FileUp className="h-4 w-4" />} label="Data Import" />
+          <AdminNavLink href="/admin/enrichment" icon={<Sparkles className="h-4 w-4" />} label="Enrichment" />
         </nav>
 
         <div className="h-px bg-gradient-to-r from-transparent via-cos-border to-transparent" />
@@ -111,21 +117,41 @@ export default async function AdminLayout({
   );
 }
 
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <p className="!mt-5 px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-cos-slate-light">
+      {label}
+    </p>
+  );
+}
+
 function AdminNavLink({
   href,
   icon,
   label,
+  accent,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
+  accent?: boolean;
 }) {
   return (
     <a
       href={href}
-      className="group flex items-center gap-2.5 rounded-cos-md px-3 py-2 text-sm text-cos-slate-dim transition-all hover:bg-cos-electric/5 hover:text-cos-electric"
+      className={`group flex items-center gap-2.5 rounded-cos-md px-3 py-2 text-sm transition-all ${
+        accent
+          ? "text-cos-electric font-semibold hover:bg-cos-electric/10"
+          : "text-cos-slate-dim hover:bg-cos-electric/5 hover:text-cos-electric"
+      }`}
     >
-      <span className="text-cos-slate transition-colors group-hover:text-cos-electric">
+      <span
+        className={`transition-colors ${
+          accent
+            ? "text-cos-electric"
+            : "text-cos-slate group-hover:text-cos-electric"
+        }`}
+      >
         {icon}
       </span>
       <span className="font-medium">{label}</span>

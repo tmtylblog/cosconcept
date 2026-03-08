@@ -10,6 +10,7 @@ import {
   ArrowUpRight,
   UserCheck,
   Briefcase,
+  Share2,
 } from "lucide-react";
 
 interface Metrics {
@@ -180,12 +181,12 @@ export default function AdminOverviewPage() {
 
       {/* Quick links */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <QuickLink href="/admin/knowledge-graph" label="Knowledge Graph" icon={<Share2 className="h-4 w-4" />} />
+        <QuickLink href="/admin/organizations" label="Organizations" icon={<Building2 className="h-4 w-4" />} />
         <QuickLink href="/admin/users" label="Manage Users" icon={<Users className="h-4 w-4" />} />
-        <QuickLink href="/admin/organizations" label="Firm Directory" icon={<Building2 className="h-4 w-4" />} />
-        <QuickLink href="/admin/experts" label="Expert Profiles" icon={<UserCheck className="h-4 w-4" />} />
-        <QuickLink href="/admin/clients" label="Client Database" icon={<Briefcase className="h-4 w-4" />} />
+        <QuickLink href="/admin/knowledge-graph?tab=experts" label="Expert Profiles" icon={<UserCheck className="h-4 w-4" />} />
+        <QuickLink href="/admin/knowledge-graph?tab=clients" label="Client Database" icon={<Briefcase className="h-4 w-4" />} />
         <QuickLink href="/admin/finance" label="AI Costs" icon={<TrendingUp className="h-4 w-4" />} />
-        <QuickLink href="/admin/partnerships" label="Partnerships" icon={<CreditCard className="h-4 w-4" />} />
       </div>
     </div>
   );

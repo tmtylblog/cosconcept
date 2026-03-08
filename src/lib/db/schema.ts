@@ -244,6 +244,39 @@ export const abstractionProfiles = pgTable("abstraction_profiles", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ─── Solution Partners (tech platforms in the knowledge graph) ───
+
+export const solutionPartnerCategoryEnum = pgEnum("solution_partner_category", [
+  "crm",
+  "marketing_automation",
+  "ecommerce",
+  "analytics",
+  "project_management",
+  "developer_tools",
+  "cloud_infrastructure",
+  "communication",
+  "design",
+  "payments",
+  "customer_support",
+  "data_integration",
+  "other",
+]);
+
+export const solutionPartners = pgTable("solution_partners", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  domain: text("domain").notNull().unique(),
+  category: solutionPartnerCategoryEnum("category"),
+  description: text("description"),
+  logoUrl: text("logo_url"),
+  websiteUrl: text("website_url"),
+  graphNodeId: text("graph_node_id"),
+  isVerified: boolean("is_verified").notNull().default(false),
+  meta: jsonb("meta"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // ─── Chat tables ────────────────────────────────────────
 
 export const conversations = pgTable("conversations", {

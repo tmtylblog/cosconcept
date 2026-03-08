@@ -266,14 +266,22 @@ export default function AdminOrganizationsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Knowledge Graph redirect banner */}
+      <a
+        href="/admin/knowledge-graph?tab=service-providers"
+        className="flex items-center gap-3 rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-5 py-3 text-sm text-cos-electric hover:bg-cos-electric/10 transition-colors"
+      >
+        <span className="font-medium">Service firms are now in the Knowledge Graph</span>
+        <span className="text-xs opacity-70">→ View in Knowledge Graph</span>
+      </a>
+
       {/* Header */}
       <div>
         <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
-          Firm Directory
+          Organizations
         </h1>
         <p className="mt-1 text-sm text-cos-slate">
-          {orgs.length} platform organization{orgs.length !== 1 ? "s" : ""} &middot;{" "}
-          Browse all professional services firms across the knowledge graph.
+          {orgs.length} platform organization{orgs.length !== 1 ? "s" : ""} registered on the platform.
         </p>
       </div>
 

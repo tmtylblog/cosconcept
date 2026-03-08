@@ -14,43 +14,12 @@ import {
   Users as UsersIcon,
   HelpCircle,
 } from "lucide-react";
-
-interface ExpertContact {
-  id: string;
-  sourceId: string;
-  firstName: string | null;
-  lastName: string | null;
-  name: string | null;
-  email: string | null;
-  title: string | null;
-  expertClassification: string | null;
-  photoUrl: string | null;
-  linkedinUrl: string | null;
-  headline: string | null;
-  shortBio: string | null;
-  city: string | null;
-  state: string | null;
-  country: string | null;
-  isPartner: boolean | null;
-  isIcp: boolean | null;
-  reviewTags: string[];
-  createdAt: string;
-  company: {
-    id: string;
-    name: string;
-    domain: string | null;
-  } | null;
-}
+import type { ExpertContact } from "@/components/admin/types";
+import { CLASSIFICATION_COLORS } from "@/components/admin/constants";
 
 type ClassificationFilter = "all" | "expert" | "internal" | "ambiguous";
 
-const CLASSIFICATION_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  expert: { bg: "bg-cos-signal/10", text: "text-cos-signal", label: "Expert" },
-  internal: { bg: "bg-cos-slate/10", text: "text-cos-slate", label: "Internal" },
-  ambiguous: { bg: "bg-cos-warm/10", text: "text-cos-warm", label: "Ambiguous" },
-};
-
-export default function AdminExpertsPage() {
+export default function ExpertsTab() {
   const [contacts, setContacts] = useState<ExpertContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -102,34 +71,35 @@ export default function AdminExpertsPage() {
 
   const totalPages = Math.ceil(total / limit);
 
-  const filterTabs: { key: ClassificationFilter; label: string; count: number; icon: React.ReactNode }[] = [
+  const filterTabs: {
+    key: ClassificationFilter;
+    label: string;
+    count: number;
+    icon: React.ReactNode;
+  }[] = [
     { key: "all", label: "All", count: counts.total, icon: <UsersIcon className="h-3.5 w-3.5" /> },
-    { key: "expert", label: "Experts", count: counts.expert, icon: <UserCheck className="h-3.5 w-3.5" /> },
-    { key: "internal", label: "Internal", count: counts.internal, icon: <Building2 className="h-3.5 w-3.5" /> },
-    { key: "ambiguous", label: "Ambiguous", count: counts.ambiguous, icon: <HelpCircle className="h-3.5 w-3.5" /> },
+    {
+      key: "expert",
+      label: "Experts",
+      count: counts.expert,
+      icon: <UserCheck className="h-3.5 w-3.5" />,
+    },
+    {
+      key: "internal",
+      label: "Internal",
+      count: counts.internal,
+      icon: <Building2 className="h-3.5 w-3.5" />,
+    },
+    {
+      key: "ambiguous",
+      label: "Ambiguous",
+      count: counts.ambiguous,
+      icon: <HelpCircle className="h-3.5 w-3.5" />,
+    },
   ];
 
   return (
     <div className="space-y-6">
-      {/* Redirect banner */}
-      <a
-        href="/admin/knowledge-graph?tab=experts"
-        className="flex items-center gap-3 rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-5 py-3 text-sm text-cos-electric hover:bg-cos-electric/10 transition-colors"
-      >
-        <span className="font-medium">This data is now part of the Knowledge Graph</span>
-        <span className="text-xs opacity-70">→ View in Knowledge Graph</span>
-      </a>
-
-      {/* Header */}
-      <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
-          Experts & Contacts
-        </h1>
-        <p className="mt-1 text-sm text-cos-slate">
-          {counts.total.toLocaleString()} imported contacts across all classifications.
-        </p>
-      </div>
-
       {/* Classification tabs */}
       <div className="flex gap-2">
         {filterTabs.map((tab) => (
@@ -177,7 +147,7 @@ export default function AdminExpertsPage() {
             }}
             className="absolute right-4 top-1/2 -translate-y-1/2 rounded-cos-pill bg-cos-electric/10 px-2.5 py-0.5 text-xs font-medium text-cos-electric hover:bg-cos-electric/20"
           >
-            {total} result{total !== 1 ? "s" : ""} ✕
+            {total} result{total !== 1 ? "s" : ""} &times;
           </button>
         )}
       </form>
@@ -192,9 +162,8 @@ export default function AdminExpertsPage() {
           {/* Stats bar */}
           <div className="flex items-center justify-between text-xs text-cos-slate">
             <span>
-              Showing {((page - 1) * limit + 1).toLocaleString()}–
-              {Math.min(page * limit, total).toLocaleString()} of{" "}
-              {total.toLocaleString()}
+              Showing {((page - 1) * limit + 1).toLocaleString()}&ndash;
+              {Math.min(page * limit, total).toLocaleString()} of {total.toLocaleString()}
             </span>
             {totalPages > 1 && (
               <span>
@@ -207,7 +176,7 @@ export default function AdminExpertsPage() {
           <div className="space-y-2">
             {contacts.map((contact) => {
               const isExpanded = expandedId === contact.id;
-              const classification =
+              const cls =
                 CLASSIFICATION_COLORS[contact.expertClassification || "ambiguous"] ||
                 CLASSIFICATION_COLORS.ambiguous;
               const location = [contact.city, contact.state, contact.country]
@@ -238,9 +207,9 @@ export default function AdminExpertsPage() {
                           {contact.name || `${contact.firstName} ${contact.lastName}`}
                         </span>
                         <span
-                          className={`inline-flex items-center rounded-cos-pill px-2 py-0.5 text-[10px] font-semibold ${classification.bg} ${classification.text}`}
+                          className={`inline-flex items-center rounded-cos-pill px-2 py-0.5 text-[10px] font-semibold ${cls.bg} ${cls.text}`}
                         >
-                          {classification.label}
+                          {cls.label}
                         </span>
                         {contact.isPartner && (
                           <span className="inline-flex items-center rounded-cos-pill px-2 py-0.5 text-[10px] font-semibold bg-cos-electric/10 text-cos-electric">
