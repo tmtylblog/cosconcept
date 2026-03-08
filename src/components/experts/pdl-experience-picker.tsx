@@ -1,0 +1,127 @@
+"use client";
+
+import { useState } from "react";
+import { X, Briefcase, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+interface PdlExperience {
+  company: { name: string; website?: string | null; industry?: string | null };
+  title: { name: string };
+  startDate?: string | null;
+  endDate?: string | null;
+  isCurrent?: boolean;
+  summary?: string;
+}
+
+interface PdlExperiencePickerProps {
+  experiences: PdlExperience[];
+  onSelect: (ex: PdlExperience, index: number) => void;
+  onClose: () => void;
+}
+
+export function PdlExperiencePicker({
+  experiences,
+  onSelect,
+  onClose,
+}: PdlExperiencePickerProps) {
+  const [selected, setSelected] = useState<number | null>(null);
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      {/* Backdrop */}
+      <div
+        className="flex-1 bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Slide-over panel */}
+      <div className="w-full max-w-sm bg-cos-cloud border-l border-cos-border shadow-xl flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-cos-border px-4 py-3">
+          <div>
+            <h3 className="text-sm font-semibold text-cos-midnight">
+              Pull from Work History
+            </h3>
+            <p className="text-[10px] text-cos-slate-dim mt-0.5">
+              Select a role to pre-fill your example
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-cos-md p-1.5 text-cos-slate-light hover:bg-cos-border/30 hover:text-cos-midnight transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto cos-scrollbar p-3 space-y-2">
+          {experiences.length === 0 ? (
+            <p className="py-8 text-center text-xs text-cos-slate-dim">
+              No PDL work history available
+            </p>
+          ) : (
+            experiences.map((ex, i) => (
+              <button
+                key={i}
+                onClick={() => setSelected(i)}
+                className={cn(
+                  "w-full rounded-cos-lg border p-3 text-left transition-colors",
+                  selected === i
+                    ? "border-cos-electric bg-cos-electric/8"
+                    : "border-cos-border bg-white hover:border-cos-electric/40 hover:bg-cos-electric/3"
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-cos-md bg-cos-midnight/8 text-cos-midnight">
+                    <Briefcase className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-semibold text-cos-midnight truncate">
+                      {ex.title.name}
+                    </p>
+                    <p className="text-[10px] text-cos-slate-dim truncate">
+                      {ex.company.name}
+                      {ex.company.industry ? ` · ${ex.company.industry}` : ""}
+                    </p>
+                    <p className="mt-0.5 text-[9px] text-cos-slate-light">
+                      {ex.startDate ?? "?"}
+                      {ex.isCurrent ? " · Present" : ex.endDate ? ` – ${ex.endDate}` : ""}
+                    </p>
+                    {ex.summary && (
+                      <p className="mt-1 text-[10px] leading-relaxed text-cos-slate-dim line-clamp-2 italic">
+                        {ex.summary}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-cos-border p-3">
+          <button
+            disabled={selected === null}
+            onClick={() => {
+              if (selected !== null) {
+                onSelect(experiences[selected], selected);
+                onClose();
+              }
+            }}
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-cos-lg py-2.5 text-sm font-medium transition-colors",
+              selected !== null
+                ? "bg-cos-electric text-white hover:bg-cos-electric/90"
+                : "bg-cos-border/30 text-cos-slate-light cursor-not-allowed"
+            )}
+          >
+            Use this role
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

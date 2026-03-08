@@ -19,13 +19,15 @@ import {
   X,
   Plus,
   ChevronRight,
+  Star,
+  Mail,
 } from "lucide-react";
 import Link from "next/link";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useLegacyData } from "@/hooks/use-legacy-data";
 import { cn } from "@/lib/utils";
-import type { Expert, ExpertSpecialistProfile } from "@/types/cos-data";
+import type { Expert } from "@/types/cos-data";
 
 /** Local edit overrides — user edits take precedence over enrichment data */
 interface FirmEdits {
@@ -595,6 +597,25 @@ function EmptyHint({ text }: { text: string }) {
 function ExpertCard({ expert }: { expert: Expert }) {
   const [expanded, setExpanded] = useState(false);
 
+  // Determine best specialist profile title and quality summary
+  const sps = expert.specialistProfiles ?? [];
+  const strongProfiles = sps.filter((sp) => sp.qualityStatus === "strong");
+  const partialProfiles = sps.filter((sp) => sp.qualityStatus === "partial");
+  const primarySp = sps.find((sp) => sp.isPrimary) ?? strongProfiles[0];
+  const bestTitle = primarySp?.qualityStatus === "strong" ? primarySp.title : null;
+
+  const qualitySummary =
+    sps.length === 0
+      ? null
+      : strongProfiles.length > 0 || partialProfiles.length > 0
+        ? [
+            strongProfiles.length > 0 ? `${strongProfiles.length} Strong` : null,
+            partialProfiles.length > 0 ? `${partialProfiles.length} Partial` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : null;
+
   return (
     <div className="rounded-cos-lg border border-cos-border/60 bg-cos-surface-raised p-3">
       <button
@@ -616,7 +637,22 @@ function ExpertCard({ expert }: { expert: Expert }) {
               {expert.division}
             </span>
           </div>
-          <p className="text-[10px] text-cos-slate-dim truncate">{expert.role}</p>
+          {/* Show best specialist title as primary label, fallback to role */}
+          <p className="text-[10px] text-cos-slate-dim truncate">
+            {bestTitle ?? expert.role}
+          </p>
+          {/* Quality badge */}
+          {qualitySummary && (
+            <p className="mt-0.5 flex items-center gap-1 text-[9px] text-cos-signal">
+              <Star className="h-2.5 w-2.5" />
+              {qualitySummary}
+            </p>
+          )}
+          {sps.length === 0 && (
+            <p className="mt-0.5 text-[9px] italic text-cos-slate-light">
+              No specialist profiles yet
+            </p>
+          )}
         </div>
 
         {/* Availability dot */}
@@ -675,49 +711,47 @@ function ExpertCard({ expert }: { expert: Expert }) {
             </div>
           )}
 
-          {/* Specialist Sub-Profiles */}
-          {expert.specialistProfiles && expert.specialistProfiles.length > 0 && (
+          {/* Specialist Profiles (compact view) */}
+          {sps.length > 0 && (
             <div className="border-t border-cos-border/30 pt-2">
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-cos-electric">
-                Specialist Profiles ({expert.specialistProfiles.length})
+                Specialist Profiles ({sps.length})
               </p>
-              <div className="space-y-1.5">
-                {expert.specialistProfiles.map((sp) => (
-                  <SpecialistProfileCard key={sp.id} profile={sp} />
+              <div className="space-y-1">
+                {sps.slice(0, 3).map((sp) => (
+                  <div key={sp.id} className="flex items-center gap-1.5 rounded-cos-md border border-cos-electric/20 bg-cos-electric/3 px-2 py-1">
+                    {sp.qualityStatus === "strong" && (
+                      <Star className="h-2.5 w-2.5 shrink-0 text-cos-signal" />
+                    )}
+                    <p className="flex-1 truncate text-[10px] font-medium text-cos-electric">
+                      {sp.title || "Untitled"}
+                    </p>
+                    <span className="shrink-0 text-[9px] text-cos-slate-dim">
+                      {Math.round(sp.qualityScore ?? 0)}/100
+                    </span>
+                  </div>
                 ))}
               </div>
             </div>
           )}
-        </div>
-      )}
-    </div>
-  );
-}
 
-function SpecialistProfileCard({ profile }: { profile: ExpertSpecialistProfile }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className="rounded-cos-md border border-cos-electric/20 bg-cos-electric/3 p-2">
-      <button onClick={() => setExpanded(!expanded)} className="w-full text-left">
-        <p className="text-[11px] font-semibold text-cos-electric">{profile.title}</p>
-      </button>
-      {expanded && (
-        <div className="mt-1.5 space-y-1.5">
-          <p className="text-[10px] leading-relaxed text-cos-slate-dim">{profile.summary}</p>
-          <div className="flex flex-wrap gap-1">
-            {profile.services.map((s) => (
-              <span key={s} className="rounded-cos-pill bg-cos-electric/10 px-1.5 py-0.5 text-[9px] font-medium text-cos-electric">
-                {s}
-              </span>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {profile.skills.map((s) => (
-              <span key={s} className="rounded-cos-pill bg-cos-midnight/5 px-1.5 py-0.5 text-[9px] text-cos-slate">
-                {s}
-              </span>
-            ))}
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 pt-1">
+            {expert.profileUrl && (
+              <Link
+                href={expert.profileUrl}
+                className="flex items-center gap-1 rounded-cos-md border border-cos-border px-2.5 py-1 text-[10px] font-medium text-cos-slate-dim hover:border-cos-electric/40 hover:text-cos-electric transition-colors"
+              >
+                <Pencil className="h-2.5 w-2.5" />
+                Edit Profile
+              </Link>
+            )}
+            {expert.email && (
+              <button className="flex items-center gap-1 rounded-cos-md border border-cos-border px-2.5 py-1 text-[10px] font-medium text-cos-slate-dim hover:border-cos-electric/40 hover:text-cos-electric transition-colors">
+                <Mail className="h-2.5 w-2.5" />
+                Invite to edit
+              </button>
+            )}
           </div>
         </div>
       )}

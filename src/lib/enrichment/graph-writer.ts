@@ -358,6 +358,81 @@ export async function writeExpertToGraph(
   }
 }
 
+// ─── Specialist Profile Graph Writer ─────────────────────
+
+export interface GraphSpecialistProfileData {
+  profileId: string;
+  expertId: string;
+  firmId: string;
+  title?: string | null;
+  skills?: string[];
+  industries?: string[];
+}
+
+/**
+ * Write a strong specialist profile to Neo4j.
+ * Creates a SpecialistProfile node linked from the Expert node.
+ * Only call for profiles with qualityScore >= 80.
+ */
+export async function writeSpecialistProfileToGraph(
+  data: GraphSpecialistProfileData
+): Promise<{ skills: number; industries: number; errors: string[] }> {
+  const errors: string[] = [];
+
+  try {
+    // Create/update SpecialistProfile node and link to Expert
+    await neo4jWrite(
+      `MERGE (sp:SpecialistProfile {id: $id})
+       SET sp.title = $title,
+           sp.firmId = $firmId,
+           sp.expertId = $expertId,
+           sp.updatedAt = datetime()
+       WITH sp
+       MERGE (e:Expert {id: $expertId})
+       MERGE (e)-[:HAS_SPECIALIST_PROFILE]->(sp)`,
+      {
+        id: data.profileId,
+        title: data.title ?? null,
+        firmId: data.firmId,
+        expertId: data.expertId,
+      }
+    );
+
+    // Link skills from specialist profile
+    if (data.skills?.length) {
+      await neo4jWrite(
+        `MATCH (sp:SpecialistProfile {id: $id})
+         UNWIND $skills AS skillName
+         MERGE (s:Skill {name: skillName})
+         ON CREATE SET s.level = "L2"
+         MERGE (sp)-[:HAS_EXPERTISE]->(s)`,
+        { id: data.profileId, skills: data.skills }
+      );
+    }
+
+    // Link industries
+    if (data.industries?.length) {
+      await neo4jWrite(
+        `MATCH (sp:SpecialistProfile {id: $id})
+         UNWIND $industries AS indName
+         MERGE (i:Industry {name: indName})
+         MERGE (sp)-[:SERVES_INDUSTRY]->(i)`,
+        { id: data.profileId, industries: data.industries }
+      );
+    }
+
+    return {
+      skills: data.skills?.length ?? 0,
+      industries: data.industries?.length ?? 0,
+      errors,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(msg);
+    return { skills: 0, industries: 0, errors };
+  }
+}
+
 // ─── Case Study Graph Writer ──────────────────────────────
 
 export interface GraphCaseStudyData {

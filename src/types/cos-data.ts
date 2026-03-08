@@ -137,12 +137,35 @@ export interface ExpertSpecialistProfile {
   title: string;
   /** Focused bio for this specialty */
   summary: string;
+  /** 150–500 word description for this specialty (new field) */
+  bodyDescription?: string;
   /** Skills specific to this specialty */
   skills: string[];
   /** Industries specific to this specialty */
   industries: string[];
   /** Services this specialist profile covers */
   services: string[];
+  /** Quality score 0–100 (new field) */
+  qualityScore?: number;
+  /** Quality status bucket (new field) */
+  qualityStatus?: "strong" | "partial" | "weak" | "incomplete";
+  /** Whether this profile appears in search results (new field) */
+  isSearchable?: boolean;
+  /** Whether this is the primary face for search (new field) */
+  isPrimary?: boolean;
+  /** Source of the profile (new field) */
+  source?: "ai_generated" | "user_created" | "ai_suggested_user_confirmed";
+  /** Work examples proving the expertise (new field) */
+  examples?: Array<{
+    id?: string;
+    title?: string;
+    subject?: string;
+    companyName?: string;
+    companyIndustry?: string;
+    startDate?: string;
+    endDate?: string;
+    isCurrent?: boolean;
+  }>;
   /** Case study IDs that demonstrate this specialty */
   relevantCaseStudyIds?: string[];
   /** SEO / search keywords for this specialty */

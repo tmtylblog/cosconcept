@@ -908,6 +908,164 @@ export const callTranscripts = pgTable("call_transcripts", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ─── Expert Profiles ──────────────────────────────────────
+
+export const expertDivisionEnum = pgEnum("expert_division", [
+  "collective_member",
+  "expert",
+  "trusted_expert",
+]);
+
+export const specialistProfileSourceEnum = pgEnum("specialist_profile_source", [
+  "ai_generated",
+  "user_created",
+  "ai_suggested_user_confirmed",
+]);
+
+export const specialistProfileStatusEnum = pgEnum("specialist_profile_status", [
+  "draft",
+  "published",
+  "archived",
+]);
+
+export const qualityStatusEnum = pgEnum("quality_status", [
+  "strong",
+  "partial",
+  "weak",
+  "incomplete",
+]);
+
+export const exampleTypeEnum = pgEnum("example_type", [
+  "project",
+  "role",
+]);
+
+/**
+ * expertProfiles — canonical expert entity (replaces importedContacts as the
+ * primary profile record once a firm's roster is enriched via PDL).
+ */
+export const expertProfiles = pgTable("expert_profiles", {
+  id: text("id").primaryKey(),
+  firmId: text("firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  importedContactId: text("imported_contact_id").references(
+    () => importedContacts.id,
+    { onDelete: "set null" }
+  ),
+
+  // Identity
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  fullName: text("full_name"),
+  email: text("email"),
+  title: text("title"),
+  headline: text("headline"),
+  photoUrl: text("photo_url"),
+  linkedinUrl: text("linkedin_url"),
+  location: text("location"),
+  bio: text("bio"),
+
+  // PDL source
+  pdlId: text("pdl_id"),
+  pdlData: jsonb("pdl_data").$type<{
+    id?: string;
+    experience?: {
+      company: { name: string; website: string | null; industry: string | null };
+      title: { name: string };
+      startDate: string | null;
+      endDate: string | null;
+      isCurrent: boolean;
+      summary?: string;
+    }[];
+    skills?: string[];
+    education?: {
+      school: { name: string };
+      degrees?: string[];
+      startDate?: string;
+      endDate?: string;
+    }[];
+    summary?: string;
+  }>(),
+  pdlEnrichedAt: timestamp("pdl_enriched_at"),
+
+  // Computed / denormalized from specialist profiles
+  topSkills: jsonb("top_skills").$type<string[]>(),
+  topIndustries: jsonb("top_industries").$type<string[]>(),
+  division: expertDivisionEnum("division"),
+
+  // Meta
+  isPublic: boolean("is_public").notNull().default(true),
+  profileCompleteness: real("profile_completeness").default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * specialistProfiles — user-curated niche profiles (e.g. "Fractional CMO for B2B SaaS").
+ * These are the primary search-facing "face" of an expert when quality is high enough.
+ */
+export const specialistProfiles = pgTable("specialist_profiles", {
+  id: text("id").primaryKey(),
+  expertProfileId: text("expert_profile_id")
+    .notNull()
+    .references(() => expertProfiles.id, { onDelete: "cascade" }),
+  firmId: text("firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+
+  // Core content (quality-scored)
+  title: text("title"),
+  bodyDescription: text("body_description"),
+
+  // Taxonomy (L2 COS skills, industries, services)
+  skills: jsonb("skills").$type<string[]>(),
+  industries: jsonb("industries").$type<string[]>(),
+  services: jsonb("services").$type<string[]>(),
+
+  // Quality
+  qualityScore: real("quality_score").default(0),
+  qualityStatus: qualityStatusEnum("quality_status").default("incomplete"),
+
+  // Flags
+  source: specialistProfileSourceEnum("source").notNull().default("user_created"),
+  isSearchable: boolean("is_searchable").notNull().default(false),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  status: specialistProfileStatusEnum("status").notNull().default("draft"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * specialistProfileExamples — up to 3 proof-point work examples per specialist profile.
+ */
+export const specialistProfileExamples = pgTable("specialist_profile_examples", {
+  id: text("id").primaryKey(),
+  specialistProfileId: text("specialist_profile_id")
+    .notNull()
+    .references(() => specialistProfiles.id, { onDelete: "cascade" }),
+
+  exampleType: exampleTypeEnum("example_type").notNull().default("project"),
+  title: text("title"),
+  subject: text("subject"),
+
+  // Context (optional but encouraged)
+  companyName: text("company_name"),
+  companyIndustry: text("company_industry"),
+  startDate: text("start_date"),
+  endDate: text("end_date"),
+  isCurrent: boolean("is_current").notNull().default(false),
+
+  // PDL source link
+  isPdlSource: boolean("is_pdl_source").notNull().default(false),
+  pdlExperienceIndex: integer("pdl_experience_index"),
+
+  position: integer("position").notNull().default(1),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ─── Coaching Reports ─────────────────────────────────
 
 export const coachingReports = pgTable("coaching_reports", {
