@@ -352,7 +352,9 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
               placeholder={
                 atGuestLimit
                   ? "Sign in to keep chatting..."
-                  : "Ask Ossy anything..."
+                  : enrichmentStatus === "idle"
+                    ? "Enter your firm's website to start..."
+                    : "Ask Ossy anything..."
               }
               disabled={isLoading || atGuestLimit}
               className="flex-1 bg-transparent py-2.5 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:outline-none disabled:opacity-50"
