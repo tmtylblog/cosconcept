@@ -22,6 +22,9 @@ interface Neo4jFirm {
   location?: string | null;
   industry?: string | null;
   sourceId?: string | null;
+  source?: string;
+  isLegacy?: boolean;
+  isCustomer?: boolean;
 }
 
 /**
@@ -126,8 +129,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Neo4j knowledge graph firms (ServiceFirm + Company nodes)
+    // Neo4j knowledge graph firms (ServiceFirm + Company + Organization nodes)
     if (source === "graph" || source === "all") {
+      const searchClause = search
+        ? `WHERE name =~ $nameRegex`
+        : "";
       const params: Record<string, unknown> = {
         skip: neo4jInt(offset),
         lim: neo4jInt(limit),
@@ -136,38 +142,108 @@ export async function GET(req: NextRequest) {
         params.nameRegex = `(?i).*${escapeRegex(search)}.*`;
       }
 
-      const countQuery = `
-        MATCH (f)
-        WHERE (f:ServiceFirm OR f:Company)
-        ${search ? "AND f.name =~ $nameRegex" : ""}
-        RETURN count(f) AS total
-      `;
+      // Count across all three node types
+      const countQuery = search
+        ? `
+          CALL {
+            MATCH (f:ServiceFirm) WHERE f.name =~ $nameRegex RETURN f AS n
+            UNION ALL
+            MATCH (c:Company) WHERE c.name =~ $nameRegex RETURN c AS n
+            UNION ALL
+            MATCH (o:Organization) WHERE o.name =~ $nameRegex RETURN o AS n
+          }
+          RETURN count(n) AS total
+        `
+        : `
+          CALL {
+            MATCH (f:ServiceFirm) RETURN count(f) AS c
+            UNION ALL
+            MATCH (c:Company) RETURN count(c) AS c
+            UNION ALL
+            MATCH (o:Organization) RETURN count(o) AS c
+          }
+          RETURN sum(c) AS total
+        `;
       const countRows = await neo4jRead<{ total: { low: number } }>(countQuery, params);
       const totalGraph = countRows[0]?.total?.low ?? (typeof countRows[0]?.total === "number" ? countRows[0].total : 0);
 
+      // Main query: UNION all three node types into a unified result set
       const query = `
-        MATCH (f)
-        WHERE (f:ServiceFirm OR f:Company)
-        ${search ? "AND f.name =~ $nameRegex" : ""}
-        OPTIONAL MATCH (f)-[:IN_CATEGORY]->(c:Category)
-        OPTIONAL MATCH (f)-[:SERVES_INDUSTRY]->(i:Industry)
-        OPTIONAL MATCH (f)-[:OPERATES_IN]->(m:Market)
-        OPTIONAL MATCH (f)-[:IS_FIRM_TYPE]->(ft:FirmType)
-        RETURN f.id AS id,
-               f.name AS name,
-               f.website AS website,
-               f.description AS description,
-               f.employeeCount AS employeeCount,
-               f.foundedYear AS foundedYear,
-               f.location AS location,
-               f.industry AS industry,
-               f.sourceId AS sourceId,
-               labels(f) AS labels,
-               COLLECT(DISTINCT c.name) AS categories,
-               COLLECT(DISTINCT i.name) AS industries,
-               COLLECT(DISTINCT m.name) AS markets,
-               ft.name AS firmType
-        ORDER BY f.name ASC
+        CALL {
+          MATCH (f:ServiceFirm)
+          OPTIONAL MATCH (f)-[:IN_CATEGORY]->(c:Category)
+          OPTIONAL MATCH (f)-[:SERVES_INDUSTRY]->(i:Industry)
+          OPTIONAL MATCH (f)-[:OPERATES_IN]->(m:Market)
+          OPTIONAL MATCH (f)-[:IS_FIRM_TYPE]->(ft:FirmType)
+          RETURN f.id AS id,
+                 f.name AS name,
+                 f.website AS website,
+                 f.description AS description,
+                 f.employeeCount AS employeeCount,
+                 f.foundedYear AS foundedYear,
+                 f.location AS location,
+                 f.industry AS industry,
+                 f.sourceId AS sourceId,
+                 labels(f) AS labels,
+                 COLLECT(DISTINCT c.name) AS categories,
+                 COLLECT(DISTINCT i.name) AS industries,
+                 COLLECT(DISTINCT m.name) AS markets,
+                 ft.name AS firmType,
+                 'enriched' AS source,
+                 false AS isLegacy,
+                 true AS isCustomer
+          UNION ALL
+          MATCH (co:Company)
+          WHERE NOT co:Organization
+          OPTIONAL MATCH (co)-[:IN_CATEGORY]->(c:Category)
+          OPTIONAL MATCH (co)-[:SERVES_INDUSTRY]->(i:Industry)
+          OPTIONAL MATCH (co)-[:OPERATES_IN]->(m:Market)
+          OPTIONAL MATCH (co)-[:IS_FIRM_TYPE]->(ft:FirmType)
+          RETURN co.id AS id,
+                 co.name AS name,
+                 co.website AS website,
+                 co.description AS description,
+                 co.employeeCount AS employeeCount,
+                 co.foundedYear AS foundedYear,
+                 co.location AS location,
+                 co.industry AS industry,
+                 co.sourceId AS sourceId,
+                 labels(co) AS labels,
+                 COLLECT(DISTINCT c.name) AS categories,
+                 COLLECT(DISTINCT i.name) AS industries,
+                 COLLECT(DISTINCT m.name) AS markets,
+                 ft.name AS firmType,
+                 'company' AS source,
+                 false AS isLegacy,
+                 false AS isCustomer
+          UNION ALL
+          MATCH (o:Organization)
+          OPTIONAL MATCH (o)-[:IN_CATEGORY]->(c:Category)
+          OPTIONAL MATCH (o)-[:OPERATES_IN_INDUSTRY]->(i:Industry)
+          OPTIONAL MATCH (o)-[:LOCATED_IN]->(m:Market)
+          RETURN coalesce(o.legacyId, o.name) AS id,
+                 o.name AS name,
+                 o.website AS website,
+                 o.about AS description,
+                 o.employees AS employeeCount,
+                 null AS foundedYear,
+                 coalesce(o.city, '') + CASE WHEN o.countryCode IS NOT NULL THEN ', ' + o.countryCode ELSE '' END AS location,
+                 null AS industry,
+                 null AS sourceId,
+                 ['Organization'] AS labels,
+                 COLLECT(DISTINCT c.name) AS categories,
+                 COLLECT(DISTINCT i.name) AS industries,
+                 COLLECT(DISTINCT m.name) AS markets,
+                 null AS firmType,
+                 'legacy' AS source,
+                 o.isLegacy AS isLegacy,
+                 o.isCollectiveOSCustomer AS isCustomer
+        }
+        WITH id, name, website, description, employeeCount, foundedYear,
+             location, industry, sourceId, labels, categories, industries,
+             markets, firmType, source, isLegacy, isCustomer
+        ${searchClause}
+        ORDER BY name ASC
         SKIP $skip LIMIT $lim
       `;
 
@@ -249,6 +325,9 @@ export async function GET(req: NextRequest) {
             firmType: pf.firmType as string | null,
             location: null,
             labels: [],
+            source: "platform",
+            isLegacy: false,
+            isCustomer: true,
             onPlatform: true,
             platformData: pf,
           });
@@ -293,6 +372,9 @@ function normalizeFirm(gf: Neo4jFirm) {
     firmType: gf.firmType,
     location: gf.location ?? null,
     labels: gf.labels ?? [],
+    source: gf.source ?? "enriched",
+    isLegacy: gf.isLegacy ?? false,
+    isCustomer: gf.isCustomer ?? false,
   };
 }
 
