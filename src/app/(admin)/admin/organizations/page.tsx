@@ -14,7 +14,6 @@ import {
   Clock,
   Search,
   MapPin,
-  Briefcase,
   Tag,
 } from "lucide-react";
 
@@ -224,7 +223,7 @@ export default function AdminOrganizationsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-2xl font-bold text-cos-midnight">
+        <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
           Firm Directory
         </h1>
         <p className="mt-1 text-sm text-cos-slate">
@@ -234,12 +233,12 @@ export default function AdminOrganizationsPage() {
       </div>
 
       {/* Source Tabs */}
-      <div className="flex gap-1 rounded-cos-lg bg-cos-cloud p-1">
+      <div className="flex gap-0.5 rounded-cos-lg bg-cos-cloud-dim p-1">
         {SOURCE_TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setSource(tab.key)}
-            className={`flex-1 rounded-cos-md px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 rounded-cos-md px-3 py-2 text-sm font-medium transition-all ${
               source === tab.key
                 ? "bg-cos-surface text-cos-midnight shadow-sm"
                 : "text-cos-slate hover:text-cos-midnight"
@@ -254,18 +253,18 @@ export default function AdminOrganizationsPage() {
       {/* Search */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate" />
+          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate" />
           <input
             type="text"
             placeholder="Search firms by name or website..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full rounded-cos-lg border border-cos-border bg-cos-surface py-2 pl-10 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
+            className="w-full rounded-cos-xl border border-cos-border bg-cos-surface py-3 pl-11 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light transition-colors focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
           />
         </div>
         <button
           type="submit"
-          className="rounded-cos-lg bg-cos-electric px-4 py-2 text-sm font-medium text-white hover:bg-cos-electric-hover"
+          className="rounded-cos-xl bg-cos-electric px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-cos-electric-hover"
         >
           Search
         </button>
@@ -273,7 +272,7 @@ export default function AdminOrganizationsPage() {
           <button
             type="button"
             onClick={() => { setSearch(""); setSearchInput(""); }}
-            className="rounded-cos-lg border border-cos-border px-3 py-2 text-sm text-cos-slate hover:bg-cos-cloud"
+            className="rounded-cos-xl border border-cos-border px-4 py-3 text-sm text-cos-slate transition-colors hover:bg-cos-cloud"
           >
             Clear
           </button>
@@ -284,24 +283,28 @@ export default function AdminOrganizationsPage() {
       <div className="flex items-center justify-between text-xs text-cos-slate">
         <span>
           {loading ? "Loading..." : `${totalFirms} firm${totalFirms !== 1 ? "s" : ""} found`}
-          {search && ` matching "${search}"`}
+          {search && (
+            <span className="ml-1.5 rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-cos-electric">
+              &quot;{search}&quot;
+            </span>
+          )}
         </span>
         {totalPages > 1 && (
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="rounded-cos-md border border-cos-border px-2 py-1 disabled:opacity-30"
+              className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium transition-colors hover:border-cos-electric/30 disabled:opacity-30"
             >
               Prev
             </button>
-            <span>
-              Page {page} of {totalPages}
+            <span className="font-mono text-xs">
+              {page} / {totalPages}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="rounded-cos-md border border-cos-border px-2 py-1 disabled:opacity-30"
+              className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium transition-colors hover:border-cos-electric/30 disabled:opacity-30"
             >
               Next
             </button>
@@ -432,16 +435,21 @@ export default function AdminOrganizationsPage() {
       {source !== "platform" && (
         <div className="space-y-2">
           {loading ? (
-            <div className="rounded-cos-xl border border-dashed border-cos-border py-12 text-center text-sm text-cos-slate">
-              Loading firms from {source === "graph" ? "knowledge graph" : "all sources"}...
+            <div className="space-y-2 animate-pulse">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-16 rounded-cos-xl bg-cos-border/30" />
+              ))}
             </div>
           ) : firms.length === 0 ? (
-            <div className="rounded-cos-xl border border-dashed border-cos-border py-12 text-center">
-              <Database className="mx-auto h-8 w-8 text-cos-slate-light" />
-              <p className="mt-2 text-sm text-cos-slate">
+            <div className="rounded-cos-xl border border-dashed border-cos-border py-16 text-center">
+              <Database className="mx-auto h-10 w-10 text-cos-slate-light mb-3" />
+              <p className="text-sm font-medium text-cos-midnight">
+                {source === "graph" ? "Knowledge graph is empty" : "No firms found"}
+              </p>
+              <p className="mt-1 text-xs text-cos-slate max-w-sm mx-auto">
                 {source === "graph"
-                  ? "No firms in the knowledge graph yet. Run the legacy migration or enrichment pipeline to populate Neo4j."
-                  : "No firms found."}
+                  ? "Run the legacy migration or enrichment pipeline from the Neo4j admin page to populate the knowledge graph."
+                  : "Try a different search or filter."}
               </p>
             </div>
           ) : (

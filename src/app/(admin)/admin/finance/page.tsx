@@ -8,6 +8,7 @@ import {
   TrendingUp,
   RefreshCw,
   BarChart3,
+  Zap,
 } from "lucide-react";
 
 interface Totals {
@@ -40,6 +41,14 @@ interface FinanceData {
 
 type Period = "7d" | "30d" | "90d" | "all";
 type Breakdown = "feature" | "model" | "org" | "user";
+
+const BREAKDOWN_COLORS = [
+  "bg-cos-electric",
+  "bg-cos-signal",
+  "bg-cos-warm",
+  "bg-cos-ember",
+  "bg-cos-slate",
+];
 
 export default function AdminFinancePage() {
   const [data, setData] = useState<FinanceData | null>(null);
@@ -80,7 +89,7 @@ export default function AdminFinancePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold text-cos-midnight">
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
             AI Costs & Usage
           </h1>
           <p className="mt-1 text-sm text-cos-slate">
@@ -90,7 +99,7 @@ export default function AdminFinancePage() {
         <button
           onClick={fetchData}
           disabled={loading}
-          className="flex items-center gap-1.5 rounded-cos-md border border-cos-border bg-cos-surface px-3 py-1.5 text-xs text-cos-slate hover:bg-cos-cloud"
+          className="flex items-center gap-1.5 rounded-cos-lg border border-cos-border bg-cos-surface px-3.5 py-2 text-xs font-medium text-cos-slate transition-all hover:border-cos-electric/30 hover:text-cos-electric hover:shadow-sm disabled:opacity-50"
         >
           <RefreshCw
             className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
@@ -100,15 +109,15 @@ export default function AdminFinancePage() {
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-1 rounded-cos-lg border border-cos-border bg-cos-surface p-0.5">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-0.5 rounded-cos-lg bg-cos-cloud-dim p-1">
           {(["7d", "30d", "90d", "all"] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`rounded-cos-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`rounded-cos-md px-3.5 py-1.5 text-xs font-medium transition-all ${
                 period === p
-                  ? "bg-cos-electric text-white"
+                  ? "bg-cos-surface text-cos-midnight shadow-sm"
                   : "text-cos-slate hover:text-cos-midnight"
               }`}
             >
@@ -117,14 +126,16 @@ export default function AdminFinancePage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-1 rounded-cos-lg border border-cos-border bg-cos-surface p-0.5">
+        <div className="h-5 w-px bg-cos-border" />
+
+        <div className="flex items-center gap-0.5 rounded-cos-lg bg-cos-cloud-dim p-1">
           {(["feature", "model", "org", "user"] as Breakdown[]).map((b) => (
             <button
               key={b}
               onClick={() => setBreakdown(b)}
-              className={`rounded-cos-md px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+              className={`rounded-cos-md px-3.5 py-1.5 text-xs font-medium capitalize transition-all ${
                 breakdown === b
-                  ? "bg-cos-electric text-white"
+                  ? "bg-cos-surface text-cos-midnight shadow-sm"
                   : "text-cos-slate hover:text-cos-midnight"
               }`}
             >
@@ -135,126 +146,158 @@ export default function AdminFinancePage() {
       </div>
 
       {loading && !data ? (
-        <div className="text-sm text-cos-slate">Loading finance data...</div>
+        <div className="space-y-4 animate-pulse">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-28 rounded-cos-xl bg-cos-border/50" />
+            ))}
+          </div>
+        </div>
       ) : !data ? (
-        <div className="text-sm text-cos-ember">Failed to load data.</div>
+        <div className="rounded-cos-xl border border-cos-ember/20 bg-cos-ember/5 px-5 py-4 text-sm text-cos-ember">
+          Failed to load data.
+        </div>
       ) : (
         <>
           {/* Stat cards */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <StatCard
-              icon={<DollarSign className="h-4 w-4 text-cos-electric" />}
+              icon={<DollarSign className="h-4 w-4" />}
+              iconColor="text-cos-electric"
+              iconBg="bg-cos-electric/10"
               label="Total Cost"
               value={`$${data.totals.cost.toFixed(4)}`}
             />
             <StatCard
-              icon={<Cpu className="h-4 w-4 text-cos-signal" />}
+              icon={<Cpu className="h-4 w-4" />}
+              iconColor="text-cos-signal"
+              iconBg="bg-cos-signal/10"
               label="Total Calls"
               value={data.totals.calls.toLocaleString()}
             />
             <StatCard
-              icon={<TrendingUp className="h-4 w-4 text-cos-warm" />}
+              icon={<TrendingUp className="h-4 w-4" />}
+              iconColor="text-cos-warm"
+              iconBg="bg-cos-warm/10"
               label="Avg Cost/Call"
               value={`$${data.totals.avgCostPerCall.toFixed(6)}`}
             />
             <StatCard
-              icon={<Clock className="h-4 w-4 text-cos-slate" />}
+              icon={<Clock className="h-4 w-4" />}
+              iconColor="text-cos-slate-dim"
+              iconBg="bg-cos-slate/10"
               label="Avg Duration"
               value={`${Math.round(data.totals.avgDurationMs)}ms`}
             />
           </div>
 
           {/* Token summary */}
-          <div className="flex items-center gap-6 rounded-cos-xl border border-cos-border bg-cos-surface p-4 text-sm">
-            <span className="text-cos-slate">Tokens:</span>
-            <span className="font-medium text-cos-midnight">
-              {data.totals.inputTokens.toLocaleString()} input
-            </span>
-            <span className="font-medium text-cos-midnight">
-              {data.totals.outputTokens.toLocaleString()} output
-            </span>
-            <span className="text-cos-slate">
-              {(
-                data.totals.inputTokens + data.totals.outputTokens
-              ).toLocaleString()}{" "}
-              total
+          <div className="flex items-center gap-6 rounded-cos-xl border border-cos-border bg-cos-surface px-5 py-4">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-cos-warm" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
+                Tokens
+              </span>
+            </div>
+            <div className="h-4 w-px bg-cos-border" />
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-sm font-semibold text-cos-midnight">
+                {data.totals.inputTokens.toLocaleString()}
+              </span>
+              <span className="text-xs text-cos-slate">input</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-sm font-semibold text-cos-midnight">
+                {data.totals.outputTokens.toLocaleString()}
+              </span>
+              <span className="text-xs text-cos-slate">output</span>
+            </div>
+            <div className="h-4 w-px bg-cos-border" />
+            <span className="font-mono text-xs text-cos-slate-light">
+              {(data.totals.inputTokens + data.totals.outputTokens).toLocaleString()} total
             </span>
           </div>
 
           {/* Breakdown */}
-          <div>
-            <h2 className="font-heading text-lg font-semibold text-cos-midnight">
+          <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-6">
+            <h2 className="font-heading text-base font-semibold text-cos-midnight mb-4">
               Cost by {breakdown}
             </h2>
-            <div className="mt-3 space-y-2">
+            <div className="space-y-3">
               {data.breakdown?.length ? (
-                data.breakdown.map((item) => {
+                data.breakdown.map((item, idx) => {
                   const pct =
                     maxCost > 0 ? Math.round((item.cost / maxCost) * 100) : 0;
+                  const barColor = BREAKDOWN_COLORS[idx % BREAKDOWN_COLORS.length];
                   return (
-                    <div key={item.key} className="flex items-center gap-3">
-                      <span className="w-40 truncate text-sm text-cos-midnight">
-                        {item.key || "(unknown)"}
-                      </span>
-                      <div className="flex-1 rounded-full bg-cos-slate/10">
+                    <div key={item.key} className="group">
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="w-36 truncate text-sm font-medium text-cos-midnight">
+                          {item.key || "(unknown)"}
+                        </span>
+                        <div className="flex-1" />
+                        <span className="font-mono text-xs font-semibold text-cos-midnight">
+                          ${item.cost.toFixed(4)}
+                        </span>
+                        <span className="w-20 text-right text-[11px] text-cos-slate-light">
+                          {item.calls} calls
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-cos-cloud-dim overflow-hidden">
                         <div
-                          className="h-3 rounded-full bg-cos-electric transition-all"
+                          className={`h-full rounded-full ${barColor} transition-all duration-500 ease-out`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <span className="w-24 text-right font-mono text-xs text-cos-slate">
-                        ${item.cost.toFixed(4)}
-                      </span>
-                      <span className="w-16 text-right text-xs text-cos-slate-light">
-                        {item.calls} calls
-                      </span>
                     </div>
                   );
                 })
               ) : (
-                <p className="text-sm text-cos-slate">
-                  No AI usage data for this period.
-                </p>
+                <div className="py-8 text-center">
+                  <Cpu className="mx-auto h-8 w-8 text-cos-slate-light mb-2" />
+                  <p className="text-sm text-cos-slate">
+                    No AI usage data for this period.
+                  </p>
+                </div>
               )}
             </div>
           </div>
 
           {/* Daily trend */}
           {data.dailyTrend?.length > 0 && (
-            <div>
-              <h2 className="font-heading text-lg font-semibold text-cos-midnight">
-                Daily Trend
-              </h2>
-              <div className="mt-3 rounded-cos-xl border border-cos-border bg-cos-surface p-4">
-                <div className="flex items-end gap-1" style={{ height: 120 }}>
-                  {data.dailyTrend.map((day) => {
-                    const height =
-                      maxDailyCost > 0
-                        ? Math.max((day.cost / maxDailyCost) * 100, 2)
-                        : 2;
-                    return (
+            <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-heading text-base font-semibold text-cos-midnight">
+                  Daily Trend
+                </h2>
+                <div className="flex items-center gap-1.5 text-xs text-cos-slate">
+                  <BarChart3 className="h-3.5 w-3.5" />
+                  Cost over time
+                </div>
+              </div>
+              <div className="flex items-end gap-[2px]" style={{ height: 140 }}>
+                {data.dailyTrend.map((day) => {
+                  const height =
+                    maxDailyCost > 0
+                      ? Math.max((day.cost / maxDailyCost) * 100, 2)
+                      : 2;
+                  return (
+                    <div
+                      key={day.date}
+                      className="group relative flex-1"
+                      title={`${day.date}: $${day.cost.toFixed(4)} (${day.calls} calls)`}
+                    >
                       <div
-                        key={day.date}
-                        className="group relative flex-1"
-                        title={`${day.date}: $${day.cost.toFixed(4)} (${day.calls} calls)`}
-                      >
-                        <div
-                          className="w-full rounded-t-sm bg-cos-electric/60 transition-colors hover:bg-cos-electric"
-                          style={{ height: `${height}%` }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-2 flex justify-between text-[10px] text-cos-slate-light">
-                  <span>{data.dailyTrend[0]?.date}</span>
-                  <span>
-                    <BarChart3 className="inline h-3 w-3" /> Cost over time
-                  </span>
-                  <span>
-                    {data.dailyTrend[data.dailyTrend.length - 1]?.date}
-                  </span>
-                </div>
+                        className="w-full rounded-t bg-cos-electric/40 transition-colors hover:bg-cos-electric"
+                        style={{ height: `${height}%` }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex justify-between text-[10px] text-cos-slate-light">
+                <span>{data.dailyTrend[0]?.date}</span>
+                <span>{data.dailyTrend[data.dailyTrend.length - 1]?.date}</span>
               </div>
             </div>
           )}
@@ -266,22 +309,26 @@ export default function AdminFinancePage() {
 
 function StatCard({
   icon,
+  iconColor,
+  iconBg,
   label,
   value,
 }: {
   icon: React.ReactNode;
+  iconColor: string;
+  iconBg: string;
   label: string;
   value: string | number;
 }) {
   return (
-    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4">
-      <div className="flex items-center gap-2">
+    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-5 transition-shadow hover:shadow-sm">
+      <div className={`inline-flex h-9 w-9 items-center justify-center rounded-cos-lg ${iconBg} ${iconColor} mb-3`}>
         {icon}
-        <p className="text-xs uppercase tracking-wider text-cos-slate">
-          {label}
-        </p>
       </div>
-      <p className="mt-2 font-heading text-2xl font-bold text-cos-midnight">
+      <p className="text-xs font-medium uppercase tracking-wider text-cos-slate">
+        {label}
+      </p>
+      <p className="mt-1 font-heading text-2xl font-bold tracking-tight text-cos-midnight">
         {value}
       </p>
     </div>
