@@ -19,9 +19,9 @@ export async function GET() {
         o.slug,
         COALESCE(s.plan, 'free') AS plan,
         COALESCE(s.status, 'active') AS status,
-        (SELECT COUNT(*) FROM "member" m WHERE m."organization_id" = o.id)::int AS members,
+        (SELECT COUNT(*) FROM "members" m WHERE m."organization_id" = o.id)::int AS members,
         o."created_at" AS "createdAt"
-      FROM "organization" o
+      FROM "organizations" o
       LEFT JOIN "subscriptions" s ON s."organization_id" = o.id
       ORDER BY o."created_at" DESC
     `);

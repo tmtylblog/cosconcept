@@ -33,7 +33,7 @@ export async function GET(
         u.name AS "userName",
         u.email AS "userEmail",
         m.role
-      FROM "member" m
+      FROM "members" m
       JOIN users u ON u.id = m.user_id
       WHERE m.organization_id = ${orgId}
       ORDER BY m.created_at ASC

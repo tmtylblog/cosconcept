@@ -15,13 +15,13 @@ export async function GET() {
   try {
     // Total orgs
     const orgCount = await db.execute(
-      sql`SELECT COUNT(*)::int AS count FROM "organization"`
+      sql`SELECT COUNT(*)::int AS count FROM "organizations"`
     );
     const totalOrgs = Number(orgCount.rows[0]?.count ?? 0);
 
     // Total users
     const userCount = await db.execute(
-      sql`SELECT COUNT(*)::int AS count FROM "user"`
+      sql`SELECT COUNT(*)::int AS count FROM "users"`
     );
     const totalUsers = Number(userCount.rows[0]?.count ?? 0);
 

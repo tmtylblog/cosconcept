@@ -43,7 +43,6 @@ export default async function AdminLayout({
           <AdminNavLink href="/admin/organizations" label="Organizations" />
           <AdminNavLink href="/admin/subscriptions" label="Subscriptions" />
           <AdminNavLink href="/admin/finance" label="AI Costs" />
-          <AdminNavLink href="/admin/enrichment" label="Enrichment" />
           <AdminNavLink href="/admin/partnerships" label="Partnerships" />
         </nav>
         <div className="mt-6 border-t border-cos-border pt-4">
