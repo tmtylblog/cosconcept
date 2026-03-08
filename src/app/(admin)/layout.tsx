@@ -14,6 +14,7 @@ import {
   Share2,
   FileUp,
   Sparkles,
+  Activity,
 } from "lucide-react";
 
 /**
@@ -86,6 +87,7 @@ export default async function AdminLayout({
           <SectionHeader label="Operations" />
           <AdminNavLink href="/admin/subscriptions" icon={<CreditCard className="h-4 w-4" />} label="Subscriptions" />
           <AdminNavLink href="/admin/finance" icon={<Cpu className="h-4 w-4" />} label="AI Costs" />
+          <AdminNavLink href="/admin/api-health" icon={<Activity className="h-4 w-4" />} label="API Health" />
           <AdminNavLink href="/admin/partnerships" icon={<Handshake className="h-4 w-4" />} label="Partnerships" />
 
           <SectionHeader label="Tools" />
