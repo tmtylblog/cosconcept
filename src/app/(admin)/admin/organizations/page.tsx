@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Building2,
   Users,
@@ -12,7 +12,15 @@ import {
   Database,
   DollarSign,
   Clock,
+  Search,
+  MapPin,
+  Briefcase,
+  Tag,
 } from "lucide-react";
+
+/* ── Types ────────────────────────────────────────────────────────── */
+
+type Source = "platform" | "graph" | "all";
 
 interface OrgRow {
   id: string;
@@ -55,6 +63,31 @@ interface OrgDetails {
   enrichmentStats: Record<string, EnrichmentStat>;
 }
 
+// Unified firm from the /api/admin/firms endpoint
+interface DirectoryFirm {
+  id: string;
+  name: string;
+  website: string | null;
+  description: string | null;
+  employeeCount: number | null;
+  foundedYear: number | null;
+  categories: string[];
+  industries: string[];
+  markets: string[];
+  firmType: string | null;
+  // Platform-specific fields (present when source includes platform)
+  sizeBand?: string | null;
+  profileCompleteness?: number | null;
+  isPlatformMember?: boolean | null;
+  organizationId?: string | null;
+  createdAt?: string;
+  orgName?: string | null;
+  orgSlug?: string | null;
+  // Merged view fields
+  onPlatform?: boolean;
+  platformData?: Record<string, unknown> | null;
+}
+
 const PHASE_COLORS: Record<string, string> = {
   jina: "bg-cos-electric/10 text-cos-electric",
   classifier: "bg-cos-signal/10 text-cos-signal",
@@ -66,22 +99,74 @@ const PHASE_COLORS: Record<string, string> = {
   deep_crawl: "bg-orange-100 text-orange-700",
 };
 
+const SOURCE_TABS: { key: Source; label: string; desc: string }[] = [
+  { key: "platform", label: "Platform Customers", desc: "Firms on the COS platform" },
+  { key: "graph", label: "Knowledge Graph", desc: "All firms in Neo4j" },
+  { key: "all", label: "All Firms", desc: "Combined view" },
+];
+
+/* ── Component ────────────────────────────────────────────────────── */
+
 export default function AdminOrganizationsPage() {
+  // Platform orgs (original view)
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [expandedOrg, setExpandedOrg] = useState<string | null>(null);
   const [orgDetails, setOrgDetails] = useState<Record<string, OrgDetails>>({});
   const [editingPlan, setEditingPlan] = useState<string | null>(null);
   const [pendingPlan, setPendingPlan] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
+  // Directory view
+  const [source, setSource] = useState<Source>("platform");
+  const [firms, setFirms] = useState<DirectoryFirm[]>([]);
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [totalFirms, setTotalFirms] = useState(0);
+  const [page, setPage] = useState(1);
+  const [expandedFirm, setExpandedFirm] = useState<string | null>(null);
+  const limit = 50;
+
+  // Load platform orgs for the "Platform Customers" tab header stats
   useEffect(() => {
     fetch("/api/admin/organizations")
       .then((r) => r.json())
       .then((data) => setOrgs(data.organizations ?? []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .catch(console.error);
   }, []);
+
+  // Load firms from the universal directory API
+  const loadFirms = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        source,
+        page: String(page),
+        limit: String(limit),
+      });
+      if (search) params.set("q", search);
+
+      const res = await fetch(`/api/admin/firms?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFirms(data.firms ?? []);
+        setTotalFirms(data.total ?? data.totalGraph ?? data.firms?.length ?? 0);
+      }
+    } catch (err) {
+      console.error("Failed to load firms:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [source, page, search]);
+
+  useEffect(() => {
+    loadFirms();
+  }, [loadFirms]);
+
+  // Reset page when source or search changes
+  useEffect(() => {
+    setPage(1);
+  }, [source, search]);
 
   async function loadDetails(orgId: string) {
     if (orgDetails[orgId]) return;
@@ -96,7 +181,7 @@ export default function AdminOrganizationsPage() {
     }
   }
 
-  function handleExpand(orgId: string) {
+  function handleExpandOrg(orgId: string) {
     if (expandedOrg === orgId) {
       setExpandedOrg(null);
     } else {
@@ -128,274 +213,600 @@ export default function AdminOrganizationsPage() {
     }
   }
 
-  if (loading) {
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    setSearch(searchInput);
+  }
+
+  const totalPages = Math.ceil(totalFirms / limit);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="font-heading text-2xl font-bold text-cos-midnight">
+          Firm Directory
+        </h1>
+        <p className="mt-1 text-sm text-cos-slate">
+          {orgs.length} platform organization{orgs.length !== 1 ? "s" : ""} &middot;{" "}
+          Browse all professional services firms across the knowledge graph.
+        </p>
+      </div>
+
+      {/* Source Tabs */}
+      <div className="flex gap-1 rounded-cos-lg bg-cos-cloud p-1">
+        {SOURCE_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setSource(tab.key)}
+            className={`flex-1 rounded-cos-md px-3 py-2 text-sm font-medium transition-colors ${
+              source === tab.key
+                ? "bg-cos-surface text-cos-midnight shadow-sm"
+                : "text-cos-slate hover:text-cos-midnight"
+            }`}
+            title={tab.desc}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Search */}
+      <form onSubmit={handleSearch} className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate" />
+          <input
+            type="text"
+            placeholder="Search firms by name or website..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="w-full rounded-cos-lg border border-cos-border bg-cos-surface py-2 pl-10 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
+          />
+        </div>
+        <button
+          type="submit"
+          className="rounded-cos-lg bg-cos-electric px-4 py-2 text-sm font-medium text-white hover:bg-cos-electric-hover"
+        >
+          Search
+        </button>
+        {search && (
+          <button
+            type="button"
+            onClick={() => { setSearch(""); setSearchInput(""); }}
+            className="rounded-cos-lg border border-cos-border px-3 py-2 text-sm text-cos-slate hover:bg-cos-cloud"
+          >
+            Clear
+          </button>
+        )}
+      </form>
+
+      {/* Stats bar */}
+      <div className="flex items-center justify-between text-xs text-cos-slate">
+        <span>
+          {loading ? "Loading..." : `${totalFirms} firm${totalFirms !== 1 ? "s" : ""} found`}
+          {search && ` matching "${search}"`}
+        </span>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-cos-md border border-cos-border px-2 py-1 disabled:opacity-30"
+            >
+              Prev
+            </button>
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-cos-md border border-cos-border px-2 py-1 disabled:opacity-30"
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Platform Customers view: shows orgs with expandable details */}
+      {source === "platform" && (
+        <div className="space-y-2">
+          {/* Organization cards (the original view) */}
+          {orgs.map((org) => (
+            <div
+              key={org.id}
+              className="rounded-cos-xl border border-cos-border bg-cos-surface"
+            >
+              <button
+                onClick={() => handleExpandOrg(org.id)}
+                className="flex w-full items-center gap-3 p-4 text-left hover:bg-cos-electric/5"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-cos-lg bg-cos-electric/10">
+                  <Building2 className="h-4 w-4 text-cos-electric" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-cos-midnight">{org.name}</p>
+                  <p className="font-mono text-xs text-cos-slate-light">{org.slug}</p>
+                </div>
+
+                {editingPlan === org.id ? (
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <select
+                      value={pendingPlan}
+                      onChange={(e) => setPendingPlan(e.target.value)}
+                      className="rounded-cos-md border border-cos-border bg-cos-cloud px-2 py-1 text-xs"
+                    >
+                      <option value="free">Free</option>
+                      <option value="pro">Pro</option>
+                      <option value="enterprise">Enterprise</option>
+                    </select>
+                    <button
+                      onClick={() => handlePlanChange(org.id)}
+                      disabled={saving}
+                      className="rounded-cos-md bg-cos-electric p-1 text-white hover:bg-cos-electric-hover"
+                    >
+                      <Save className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => setEditingPlan(null)}
+                      className="rounded-cos-md p-1 text-cos-slate hover:bg-cos-cloud"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingPlan(org.id);
+                      setPendingPlan(org.plan);
+                    }}
+                    className={`rounded-cos-pill px-2.5 py-0.5 text-xs font-medium ${
+                      org.plan === "enterprise"
+                        ? "bg-cos-electric/10 text-cos-electric"
+                        : org.plan === "pro"
+                          ? "bg-cos-signal/10 text-cos-signal"
+                          : "bg-cos-slate/10 text-cos-slate"
+                    }`}
+                    title="Click to change plan"
+                  >
+                    {org.plan}
+                  </button>
+                )}
+
+                <span className="text-xs text-cos-slate">{org.status}</span>
+
+                <div className="flex items-center gap-1 text-xs text-cos-slate">
+                  <Users className="h-3.5 w-3.5" />
+                  {org.members}
+                </div>
+
+                <span className="text-xs text-cos-slate-light">{org.createdAt}</span>
+
+                {expandedOrg === org.id ? (
+                  <ChevronDown className="h-4 w-4 text-cos-slate" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-cos-slate" />
+                )}
+              </button>
+
+              {expandedOrg === org.id && (
+                <OrgExpandedDetails
+                  orgId={org.id}
+                  details={orgDetails[org.id]}
+                />
+              )}
+            </div>
+          ))}
+
+          {orgs.length === 0 && !loading && (
+            <div className="rounded-cos-xl border border-dashed border-cos-border py-12 text-center text-sm text-cos-slate">
+              No platform organizations yet.
+            </div>
+          )}
+
+          {/* Also show platform service_firms below orgs */}
+          {firms.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-cos-slate">
+                Service Firms ({totalFirms})
+              </p>
+              <div className="space-y-2">
+                {firms.map((firm) => (
+                  <FirmCard
+                    key={firm.id}
+                    firm={firm}
+                    expanded={expandedFirm === firm.id}
+                    onToggle={() => setExpandedFirm(expandedFirm === firm.id ? null : firm.id)}
+                    showPlatformBadge={false}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Knowledge Graph / All Firms view */}
+      {source !== "platform" && (
+        <div className="space-y-2">
+          {loading ? (
+            <div className="rounded-cos-xl border border-dashed border-cos-border py-12 text-center text-sm text-cos-slate">
+              Loading firms from {source === "graph" ? "knowledge graph" : "all sources"}...
+            </div>
+          ) : firms.length === 0 ? (
+            <div className="rounded-cos-xl border border-dashed border-cos-border py-12 text-center">
+              <Database className="mx-auto h-8 w-8 text-cos-slate-light" />
+              <p className="mt-2 text-sm text-cos-slate">
+                {source === "graph"
+                  ? "No firms in the knowledge graph yet. Run the legacy migration or enrichment pipeline to populate Neo4j."
+                  : "No firms found."}
+              </p>
+            </div>
+          ) : (
+            firms.map((firm) => (
+              <FirmCard
+                key={firm.id}
+                firm={firm}
+                expanded={expandedFirm === firm.id}
+                onToggle={() => setExpandedFirm(expandedFirm === firm.id ? null : firm.id)}
+                showPlatformBadge={source === "all"}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Firm Card ────────────────────────────────────────────────────── */
+
+function FirmCard({
+  firm,
+  expanded,
+  onToggle,
+  showPlatformBadge,
+}: {
+  firm: DirectoryFirm;
+  expanded: boolean;
+  onToggle: () => void;
+  showPlatformBadge: boolean;
+}) {
+  return (
+    <div className="rounded-cos-xl border border-cos-border bg-cos-surface">
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 p-4 text-left hover:bg-cos-electric/5"
+      >
+        <div className="flex h-9 w-9 items-center justify-center rounded-cos-lg bg-cos-electric/10">
+          <Building2 className="h-4 w-4 text-cos-electric" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-cos-midnight">{firm.name}</p>
+            {showPlatformBadge && firm.onPlatform && (
+              <span className="rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-medium text-cos-signal">
+                On Platform
+              </span>
+            )}
+          </div>
+          {firm.website && (
+            <p className="flex items-center gap-1 text-xs text-cos-slate-light">
+              <Globe className="h-3 w-3" />
+              {firm.website}
+            </p>
+          )}
+        </div>
+
+        {firm.firmType && (
+          <span className="rounded-cos-pill bg-cos-slate/10 px-2 py-0.5 text-xs text-cos-slate">
+            {firm.firmType.replace(/_/g, " ")}
+          </span>
+        )}
+
+        {firm.categories && firm.categories.length > 0 && (
+          <div className="flex items-center gap-1">
+            <Tag className="h-3 w-3 text-cos-electric" />
+            <span className="text-xs text-cos-slate">
+              {firm.categories.length}
+            </span>
+          </div>
+        )}
+
+        {(firm.profileCompleteness != null && firm.profileCompleteness > 0) && (
+          <span className={`font-mono text-xs font-medium ${
+            firm.profileCompleteness >= 0.7
+              ? "text-cos-signal"
+              : firm.profileCompleteness >= 0.4
+                ? "text-cos-warm"
+                : "text-cos-ember"
+          }`}>
+            {Math.round(firm.profileCompleteness * 100)}%
+          </span>
+        )}
+
+        {expanded ? (
+          <ChevronDown className="h-4 w-4 text-cos-slate" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-cos-slate" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-cos-border p-4">
+          <div className="grid grid-cols-2 gap-4">
+            {/* Left: basic info */}
+            <div className="space-y-3">
+              {firm.description && (
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Description
+                  </p>
+                  <p className="text-sm text-cos-midnight line-clamp-4">
+                    {firm.description}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-4 text-xs text-cos-slate">
+                {firm.foundedYear && (
+                  <span>Founded {firm.foundedYear}</span>
+                )}
+                {firm.employeeCount && (
+                  <span className="flex items-center gap-1">
+                    <Users className="h-3 w-3" />
+                    {firm.employeeCount} employees
+                  </span>
+                )}
+                {firm.sizeBand && (
+                  <span>{firm.sizeBand.replace(/_/g, " ")}</span>
+                )}
+              </div>
+
+              <p className="font-mono text-[10px] text-cos-slate-light">
+                ID: {firm.id}
+              </p>
+            </div>
+
+            {/* Right: graph relationships */}
+            <div className="space-y-3">
+              {firm.categories && firm.categories.length > 0 && (
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Categories
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {firm.categories.map((cat) => (
+                      <span
+                        key={cat}
+                        className="rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[10px] font-medium text-cos-electric"
+                      >
+                        {cat}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {firm.industries && firm.industries.length > 0 && (
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Industries
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {firm.industries.map((ind) => (
+                      <span
+                        key={ind}
+                        className="rounded-cos-pill bg-cos-warm/10 px-2 py-0.5 text-[10px] font-medium text-cos-warm"
+                      >
+                        {ind}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {firm.markets && firm.markets.length > 0 && (
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Markets
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {firm.markets.slice(0, 10).map((mkt) => (
+                      <span
+                        key={mkt}
+                        className="flex items-center gap-0.5 rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-medium text-cos-signal"
+                      >
+                        <MapPin className="h-2.5 w-2.5" />
+                        {mkt}
+                      </span>
+                    ))}
+                    {firm.markets.length > 10 && (
+                      <span className="text-[10px] text-cos-slate">
+                        +{firm.markets.length - 10} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* No graph data at all */}
+              {(!firm.categories || firm.categories.length === 0) &&
+                (!firm.industries || firm.industries.length === 0) &&
+                (!firm.markets || firm.markets.length === 0) && (
+                  <p className="text-xs text-cos-slate-light">
+                    No knowledge graph data for this firm yet.
+                  </p>
+                )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Org Expanded Details (for platform view) ─────────────────────── */
+
+function OrgExpandedDetails({
+  orgId,
+  details,
+}: {
+  orgId: string;
+  details: OrgDetails | undefined;
+}) {
+  if (!details) {
     return (
-      <div className="text-sm text-cos-slate">Loading organizations...</div>
+      <div className="border-t border-cos-border p-4 text-xs text-cos-slate">
+        Loading details...
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-cos-midnight">
-          Organizations
-        </h1>
-        <p className="mt-1 text-sm text-cos-slate">
-          {orgs.length} organization{orgs.length !== 1 ? "s" : ""} on the platform.
+    <div className="border-t border-cos-border divide-y divide-cos-border">
+      {/* Members */}
+      <div className="p-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-cos-slate">
+          Members ({details.members.length})
         </p>
-      </div>
-
-      {orgs.length === 0 && (
-        <div className="rounded-cos-xl border border-dashed border-cos-border py-12 text-center text-sm text-cos-slate">
-          No organizations yet.
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {orgs.map((org) => (
-          <div
-            key={org.id}
-            className="rounded-cos-xl border border-cos-border bg-cos-surface"
-          >
-            {/* Org row */}
-            <button
-              onClick={() => handleExpand(org.id)}
-              className="flex w-full items-center gap-3 p-4 text-left hover:bg-cos-electric/5"
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-cos-lg bg-cos-electric/10">
-                <Building2 className="h-4 w-4 text-cos-electric" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-cos-midnight">{org.name}</p>
-                <p className="font-mono text-xs text-cos-slate-light">
-                  {org.slug}
-                </p>
-              </div>
-
-              {/* Plan badge */}
-              {editingPlan === org.id ? (
-                <div
-                  className="flex items-center gap-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <select
-                    value={pendingPlan}
-                    onChange={(e) => setPendingPlan(e.target.value)}
-                    className="rounded-cos-md border border-cos-border bg-cos-cloud px-2 py-1 text-xs"
-                  >
-                    <option value="free">Free</option>
-                    <option value="pro">Pro</option>
-                    <option value="enterprise">Enterprise</option>
-                  </select>
-                  <button
-                    onClick={() => handlePlanChange(org.id)}
-                    disabled={saving}
-                    className="rounded-cos-md bg-cos-electric p-1 text-white hover:bg-cos-electric-hover"
-                  >
-                    <Save className="h-3 w-3" />
-                  </button>
-                  <button
-                    onClick={() => setEditingPlan(null)}
-                    className="rounded-cos-md p-1 text-cos-slate hover:bg-cos-cloud"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+        {details.members.length > 0 ? (
+          <div className="space-y-1">
+            {details.members.map((m) => (
+              <div
+                key={m.id}
+                className="flex items-center gap-3 rounded-cos-md bg-cos-cloud px-3 py-2"
+              >
+                <div className="flex h-6 w-6 items-center justify-center rounded-cos-full bg-cos-electric/10 text-[10px] font-medium text-cos-electric">
+                  {m.userName?.charAt(0)?.toUpperCase() || "?"}
                 </div>
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingPlan(org.id);
-                    setPendingPlan(org.plan);
-                  }}
-                  className={`rounded-cos-pill px-2.5 py-0.5 text-xs font-medium ${
-                    org.plan === "enterprise"
+                <span className="flex-1 text-sm text-cos-midnight">
+                  {m.userName}
+                </span>
+                <span className="text-xs text-cos-slate">{m.userEmail}</span>
+                <span
+                  className={`rounded-cos-pill px-2 py-0.5 text-xs font-medium ${
+                    m.role === "owner"
                       ? "bg-cos-electric/10 text-cos-electric"
-                      : org.plan === "pro"
-                        ? "bg-cos-signal/10 text-cos-signal"
+                      : m.role === "admin"
+                        ? "bg-cos-warm/10 text-cos-warm"
                         : "bg-cos-slate/10 text-cos-slate"
                   }`}
-                  title="Click to change plan"
                 >
-                  {org.plan}
-                </button>
-              )}
-
-              <span className="text-xs text-cos-slate">{org.status}</span>
-
-              <div className="flex items-center gap-1 text-xs text-cos-slate">
-                <Users className="h-3.5 w-3.5" />
-                {org.members}
+                  {m.role}
+                </span>
               </div>
-
-              <span className="text-xs text-cos-slate-light">
-                {org.createdAt}
-              </span>
-
-              {expandedOrg === org.id ? (
-                <ChevronDown className="h-4 w-4 text-cos-slate" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-cos-slate" />
-              )}
-            </button>
-
-            {/* Expanded details */}
-            {expandedOrg === org.id && (
-              <div className="border-t border-cos-border">
-                {orgDetails[org.id] ? (
-                  <div className="divide-y divide-cos-border">
-                    {/* Members */}
-                    <div className="p-4">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-cos-slate">
-                        Members ({orgDetails[org.id].members.length})
-                      </p>
-                      {orgDetails[org.id].members.length > 0 ? (
-                        <div className="space-y-1">
-                          {orgDetails[org.id].members.map((m) => (
-                            <div
-                              key={m.id}
-                              className="flex items-center gap-3 rounded-cos-md bg-cos-cloud px-3 py-2"
-                            >
-                              <div className="flex h-6 w-6 items-center justify-center rounded-cos-full bg-cos-electric/10 text-[10px] font-medium text-cos-electric">
-                                {m.userName?.charAt(0)?.toUpperCase() || "?"}
-                              </div>
-                              <span className="flex-1 text-sm text-cos-midnight">
-                                {m.userName}
-                              </span>
-                              <span className="text-xs text-cos-slate">
-                                {m.userEmail}
-                              </span>
-                              <span
-                                className={`rounded-cos-pill px-2 py-0.5 text-xs font-medium ${
-                                  m.role === "owner"
-                                    ? "bg-cos-electric/10 text-cos-electric"
-                                    : m.role === "admin"
-                                      ? "bg-cos-warm/10 text-cos-warm"
-                                      : "bg-cos-slate/10 text-cos-slate"
-                                }`}
-                              >
-                                {m.role}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-cos-slate">No members.</p>
-                      )}
-                    </div>
-
-                    {/* Service Firms + Enrichment */}
-                    <div className="p-4">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-cos-slate">
-                        Service Firms ({orgDetails[org.id].firms.length})
-                      </p>
-                      {orgDetails[org.id].firms.length > 0 ? (
-                        <div className="space-y-3">
-                          {orgDetails[org.id].firms.map((firm) => {
-                            const enrichment = orgDetails[org.id].enrichmentStats[firm.id];
-                            return (
-                              <div
-                                key={firm.id}
-                                className="rounded-cos-lg border border-cos-border bg-cos-cloud p-3"
-                              >
-                                <div className="flex items-start justify-between">
-                                  <div>
-                                    <p className="font-medium text-cos-midnight">
-                                      {firm.name}
-                                    </p>
-                                    <div className="mt-0.5 flex items-center gap-3 text-xs text-cos-slate">
-                                      {firm.website && (
-                                        <span className="flex items-center gap-1">
-                                          <Globe className="h-3 w-3" />
-                                          {firm.website}
-                                        </span>
-                                      )}
-                                      {firm.firmType && (
-                                        <span>{firm.firmType.replace(/_/g, " ")}</span>
-                                      )}
-                                      {firm.sizeBand && (
-                                        <span>{firm.sizeBand.replace(/_/g, " ")}</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  {firm.profileCompleteness != null && (
-                                    <div className="text-right">
-                                      <span className="text-xs text-cos-slate">Profile</span>
-                                      <p className={`font-mono text-sm font-medium ${
-                                        firm.profileCompleteness >= 0.7
-                                          ? "text-cos-signal"
-                                          : firm.profileCompleteness >= 0.4
-                                            ? "text-cos-warm"
-                                            : "text-cos-ember"
-                                      }`}>
-                                        {Math.round(firm.profileCompleteness * 100)}%
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Enrichment stats */}
-                                {enrichment ? (
-                                  <div className="mt-2 rounded-cos-md bg-cos-surface p-2">
-                                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
-                                      Enrichment
-                                    </p>
-                                    <div className="flex items-center gap-4 text-xs">
-                                      <span className="flex items-center gap-1 text-cos-slate">
-                                        <Database className="h-3 w-3 text-cos-electric" />
-                                        {enrichment.entries} entries
-                                      </span>
-                                      <span className="flex items-center gap-1 text-cos-slate">
-                                        <DollarSign className="h-3 w-3 text-cos-warm" />
-                                        ${enrichment.cost.toFixed(4)}
-                                      </span>
-                                      {enrichment.lastEnriched && (
-                                        <span className="flex items-center gap-1 text-cos-slate">
-                                          <Clock className="h-3 w-3 text-cos-signal" />
-                                          {new Date(enrichment.lastEnriched).toLocaleDateString()}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="mt-1.5 flex flex-wrap gap-1">
-                                      {enrichment.phases.map((phase) => (
-                                        <span
-                                          key={phase}
-                                          className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
-                                            PHASE_COLORS[phase] || "bg-cos-slate/10 text-cos-slate"
-                                          }`}
-                                        >
-                                          {phase}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <p className="mt-2 text-xs text-cos-slate-light">
-                                    No enrichment data yet.
-                                  </p>
-                                )}
-
-                                <p className="mt-1 font-mono text-[10px] text-cos-slate-light">
-                                  ID: {firm.id}
-                                </p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-cos-slate">
-                          No service firms linked to this organization.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4 text-xs text-cos-slate">Loading details...</div>
-                )}
-              </div>
-            )}
+            ))}
           </div>
-        ))}
+        ) : (
+          <p className="text-xs text-cos-slate">No members.</p>
+        )}
+      </div>
+
+      {/* Service Firms + Enrichment */}
+      <div className="p-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-cos-slate">
+          Service Firms ({details.firms.length})
+        </p>
+        {details.firms.length > 0 ? (
+          <div className="space-y-3">
+            {details.firms.map((firm) => {
+              const enrichment = details.enrichmentStats[firm.id];
+              return (
+                <div
+                  key={firm.id}
+                  className="rounded-cos-lg border border-cos-border bg-cos-cloud p-3"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-cos-midnight">{firm.name}</p>
+                      <div className="mt-0.5 flex items-center gap-3 text-xs text-cos-slate">
+                        {firm.website && (
+                          <span className="flex items-center gap-1">
+                            <Globe className="h-3 w-3" />
+                            {firm.website}
+                          </span>
+                        )}
+                        {firm.firmType && (
+                          <span>{firm.firmType.replace(/_/g, " ")}</span>
+                        )}
+                        {firm.sizeBand && (
+                          <span>{firm.sizeBand.replace(/_/g, " ")}</span>
+                        )}
+                      </div>
+                    </div>
+                    {firm.profileCompleteness != null && (
+                      <div className="text-right">
+                        <span className="text-xs text-cos-slate">Profile</span>
+                        <p
+                          className={`font-mono text-sm font-medium ${
+                            firm.profileCompleteness >= 0.7
+                              ? "text-cos-signal"
+                              : firm.profileCompleteness >= 0.4
+                                ? "text-cos-warm"
+                                : "text-cos-ember"
+                          }`}
+                        >
+                          {Math.round(firm.profileCompleteness * 100)}%
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {enrichment ? (
+                    <div className="mt-2 rounded-cos-md bg-cos-surface p-2">
+                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
+                        Enrichment
+                      </p>
+                      <div className="flex items-center gap-4 text-xs">
+                        <span className="flex items-center gap-1 text-cos-slate">
+                          <Database className="h-3 w-3 text-cos-electric" />
+                          {enrichment.entries} entries
+                        </span>
+                        <span className="flex items-center gap-1 text-cos-slate">
+                          <DollarSign className="h-3 w-3 text-cos-warm" />
+                          ${enrichment.cost.toFixed(4)}
+                        </span>
+                        {enrichment.lastEnriched && (
+                          <span className="flex items-center gap-1 text-cos-slate">
+                            <Clock className="h-3 w-3 text-cos-signal" />
+                            {new Date(enrichment.lastEnriched).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {enrichment.phases.map((phase) => (
+                          <span
+                            key={phase}
+                            className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
+                              PHASE_COLORS[phase] || "bg-cos-slate/10 text-cos-slate"
+                            }`}
+                          >
+                            {phase}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-cos-slate-light">
+                      No enrichment data yet.
+                    </p>
+                  )}
+
+                  <p className="mt-1 font-mono text-[10px] text-cos-slate-light">
+                    ID: {firm.id}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-cos-slate">
+            No service firms linked to this organization.
+          </p>
+        )}
       </div>
     </div>
   );
