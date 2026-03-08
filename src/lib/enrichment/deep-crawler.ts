@@ -17,6 +17,7 @@ import { classifyPageType, type PageType } from "./page-classifier";
 import { extractCaseStudyDeep } from "./extractors/case-study-extractor";
 import { extractTeamMembers } from "./extractors/team-extractor";
 import { extractServicesDeep } from "./extractors/service-extractor";
+import { extractClientsWithConfidence } from "./client-extractor";
 import { logEnrichmentStep } from "./audit-logger";
 
 // ─── Types ─────────────────────────────────────────────────
@@ -238,10 +239,22 @@ export async function deepCrawlWebsite(params: {
     services.push(...extracted);
   }
 
-  // Extract clients (simple regex from client pages or homepage)
-  const clientContent =
-    clientPages.map((p) => p.scraped.content).join("\n") || homepage.content;
-  const clients = extractClientNames(clientContent);
+  // Extract clients with multi-signal confidence scoring
+  const clientResult = await extractClientsWithConfidence({
+    homepageContent: homepage.content,
+    evidencePages: pages.map((p) => ({
+      category: p.pageType,
+      content: p.scraped.content,
+      url: p.url,
+      title: p.scraped.title,
+    })),
+    caseStudyPages: caseStudyPages.map((p) => ({
+      content: p.scraped.content,
+      url: p.url,
+      title: p.scraped.title,
+    })),
+  });
+  const clients = clientResult.clients;
 
   // Extract about pitch
   const aboutContent =
@@ -410,31 +423,7 @@ function prioritizeUrls(
     .map((s) => [s.url, s.source]);
 }
 
-function extractClientNames(content: string): string[] {
-  if (!content) return [];
-  const clients = new Set<string>();
-  const patterns = [
-    /\*\*([A-Z][A-Za-z0-9\s&'.,-]{2,40})\*\*/g,
-    /^[-*]\s+([A-Z][A-Za-z0-9\s&'.,-]{2,40})$/gm,
-    /!\[([A-Z][A-Za-z0-9\s&'.,-]{2,40})\]/g,
-  ];
-  for (const pattern of patterns) {
-    let match;
-    while ((match = pattern.exec(content)) !== null) {
-      const name = match[1].trim();
-      if (
-        name.length > 2 &&
-        name.length < 50 &&
-        !name.match(
-          /^(Read|Learn|View|See|Get|Our|The|About|Click|Download|Home|Menu|Contact|Blog|Login|Sign)/i
-        )
-      ) {
-        clients.add(name);
-      }
-    }
-  }
-  return [...clients].slice(0, 50);
-}
+// Client extraction moved to client-extractor.ts (multi-signal confidence scoring)
 
 function extractAboutPitch(content: string): string {
   if (!content) return "";

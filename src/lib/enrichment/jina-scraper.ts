@@ -15,6 +15,8 @@
  * Ground Truth Principle: what firms have DONE > what they SAY they can do.
  */
 
+import { extractClientsWithConfidence } from "./client-extractor";
+
 const JINA_READER_BASE = "https://r.jina.ai";
 
 export interface JinaScrapeResult {
@@ -260,7 +262,35 @@ export async function scrapeFirmWebsite(
     }
   }
 
-  // 5. Combine all content for the AI Classifier
+  // 5. Scrape top 3 case study URLs for smart client extraction
+  const caseStudyPages: { content: string; url: string; title: string }[] = [];
+  const csUrlsToScrape = [...new Set(caseStudyUrls)].slice(0, 3);
+  if (csUrlsToScrape.length > 0) {
+    const csResults = await Promise.allSettled(
+      csUrlsToScrape.map((csUrl) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        return scrapeUrl(csUrl, { signal: controller.signal }).finally(() =>
+          clearTimeout(timeout)
+        );
+      })
+    );
+    for (let i = 0; i < csResults.length; i++) {
+      const result = csResults[i];
+      if (
+        result.status === "fulfilled" &&
+        result.value.content.length > 100
+      ) {
+        caseStudyPages.push({
+          content: result.value.content,
+          url: csUrlsToScrape[i],
+          title: result.value.title,
+        });
+      }
+    }
+  }
+
+  // 6. Combine all content for the AI Classifier
   const allContent = [
     homepage.content,
     ...evidence.map((e) => e.page.content),
@@ -270,14 +300,21 @@ export async function scrapeFirmWebsite(
   const rawContent =
     allContent.length > 15000 ? allContent.slice(0, 15000) : allContent;
 
-  // 6. Extract structured data (non-taxonomy)
+  // 7. Extract structured data (non-taxonomy)
+  // Client extraction uses multi-signal confidence scoring
+  const clientResult = await extractClientsWithConfidence({
+    homepageContent: homepage.content,
+    evidencePages: evidence.map((e) => ({
+      category: e.category,
+      content: e.page.content,
+      url: e.page.url,
+      title: e.page.title,
+    })),
+    caseStudyPages,
+  });
+
   const extracted: FirmGroundTruth["extracted"] = {
-    clients: extractClients(
-      evidence
-        .filter((e) => e.category === "clients")
-        .map((e) => e.page.content)
-        .join("\n") || homepage.content
-    ),
+    clients: clientResult.clients,
     caseStudyUrls: [...new Set(caseStudyUrls)].slice(0, 50),
     services: extractListItems(
       evidence
@@ -312,43 +349,8 @@ export async function scrapeFirmWebsite(
 // ─── Extraction helpers ───────────────────────────────────
 // These extract STRUCTURED data from page content.
 // NO taxonomy matching — that's handled by the AI Classifier.
+// Client extraction moved to client-extractor.ts (multi-signal confidence scoring).
 
-function extractClients(content: string): string[] {
-  if (!content) return [];
-  const clients = new Set<string>();
-  const patterns = [
-    // Bold company names (must be 2+ words to avoid nav items)
-    /\*\*([A-Z][A-Za-z0-9\s&'.,-]{4,40})\*\*/g,
-    // List items that look like company names (2+ capitalized words)
-    /^[-*]\s+([A-Z][a-z]+(?:\s+[A-Z&][A-Za-z0-9'.,-]*){1,5})$/gm,
-  ];
-  for (const pattern of patterns) {
-    let match;
-    while ((match = pattern.exec(content)) !== null) {
-      const name = match[1].trim();
-      if (
-        name.length > 4 &&
-        name.length < 50 &&
-        // Must contain at least one space — real company names are multi-word
-        // Single words like "Brand", "Marketing", "Commerce" are divisions, not clients
-        name.includes(" ") &&
-        // Filter out navigation, UI, and generic web elements
-        !name.match(
-          /^(Read|Learn|View|See|Get|Our|The|About|Click|Download|Home|Menu|Contact|Blog|Login|Sign|Back|Next|Previous|Footer|Header|Navigation|Skip|Search|Close|Open|Show|Hide|Toggle|Submit|Cancel|Accept|Reject|Dismiss|Loading|Chapter|Section|Page|Slide)/i
-        ) &&
-        // Filter out generic section/category/business words
-        !name.match(
-          /^(Solutions?|Services?|Products?|Industries?|Resources?|Company|Capabilities|Insights?|Platform|Overview|Features?|Pricing|Careers?|News|Events?|Partners?|Support|Documentation|FAQ|Help|Legal|Privacy|Terms|Sitemap|Copyright|Descriptions?|Brand|Marketing|Experience|Commerce|Sales|Technology|Digital|Strategy|Creative|Design|Analytics|Consulting|Advisory|Management|Operations|Engineering|Data|Media|Content|Growth|Innovation|Transformation|Performance|Leadership|Culture|Talent|People|Finance|Sustainability|Healthcare|Education|Retail|Automotive|Energy|Real Estate|Government|Nonprofit)\b/i
-        ) &&
-        // Filter out image references
-        !name.match(/^Image\b/i)
-      ) {
-        clients.add(name);
-      }
-    }
-  }
-  return [...clients].slice(0, 50);
-}
 
 function extractListItems(content: string): string[] {
   if (!content) return [];
