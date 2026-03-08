@@ -4,8 +4,14 @@
  * Wraps the email sending provider (Resend).
  * All outbound emails from ossy@joincollectiveos.com route through here.
  *
- * Test Mode Safeguard: when email_test_mode=true in settings, all emails
- * are redirected to the whitelist and prefixed with [TEST] banner.
+ * DEV SAFEGUARD (env-level, always applied first):
+ *   Set RESEND_DEV_OVERRIDE=your@email.com in Vercel env vars.
+ *   When set, ALL emails are redirected to that address — no exceptions.
+ *   No code path can bypass this. Use this while the app is in development.
+ *
+ * Test Mode Safeguard (DB-level, applied when dev override is not set):
+ *   When email_test_mode=true in settings, all emails are redirected to
+ *   the whitelist and prefixed with [TEST] banner.
  */
 
 import { db } from "@/lib/db";
@@ -51,8 +57,25 @@ async function getSetting(key: string): Promise<string | null> {
 export async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
   let { to, cc, bcc, subject, html, text, replyTo, tags } = options;
 
-  // ── Test mode intercept ───────────────────────────────────────────────────
-  const testMode = (await getSetting("email_test_mode")) === "true";
+  // ── DEV OVERRIDE (env-level, checked first, cannot be bypassed) ───────────
+  const devOverride = process.env.RESEND_DEV_OVERRIDE?.trim();
+  if (devOverride) {
+    const originalTo = [to].flat().join(", ");
+    to = devOverride;
+    cc = [];
+    bcc = [];
+    subject = `[DEV → ${originalTo}] ${subject}`;
+    html =
+      `<div style="background:#fef3c7;padding:12px;margin-bottom:16px;border-left:4px solid #f59e0b;font-family:sans-serif;font-size:13px;">` +
+      `<strong>🔒 DEV MODE</strong> — Original recipient: <strong>${originalTo}</strong>` +
+      `</div>` +
+      (html ?? "");
+    console.log(`[Email] DEV OVERRIDE active — redirecting to ${devOverride} (was: ${originalTo})`);
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Test mode intercept (DB-level, only runs when no dev override) ────────
+  const testMode = !devOverride && (await getSetting("email_test_mode")) === "true";
   if (testMode) {
     const whitelistRaw = (await getSetting("email_test_whitelist")) ?? "";
     const whitelist = whitelistRaw.split(",").map((s) => s.trim()).filter(Boolean);
