@@ -151,19 +151,33 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
   }, [messages, isGuest]);
 
   // Watch user messages for URLs and trigger shared enrichment
+  // After a failed enrichment, allow the user to provide a new URL
   useEffect(() => {
-    if (enrichedUrlRef.current) return; // Already processing
     const userMessages = messages.filter((m) => m.role === "user");
-    for (const msg of userMessages) {
-      const text = getMessageText(msg);
-      const url = extractUrl(text);
-      if (url) {
-        enrichedUrlRef.current = url;
-        triggerEnrichment(url);
-        break;
+    if (enrichmentStatus === "failed") {
+      // Look for a NEW url (different from the one that failed) in the latest messages
+      for (let i = userMessages.length - 1; i >= 0; i--) {
+        const text = getMessageText(userMessages[i]);
+        const url = extractUrl(text);
+        if (url && url !== enrichedUrlRef.current) {
+          enrichedUrlRef.current = url;
+          triggerEnrichment(url);
+          break;
+        }
+      }
+    } else {
+      if (enrichedUrlRef.current) return; // Already processing or done
+      for (const msg of userMessages) {
+        const text = getMessageText(msg);
+        const url = extractUrl(text);
+        if (url) {
+          enrichedUrlRef.current = url;
+          triggerEnrichment(url);
+          break;
+        }
       }
     }
-  }, [messages, triggerEnrichment]);
+  }, [messages, triggerEnrichment, enrichmentStatus]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,6 +227,14 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
             <Globe className="h-3 w-3 text-cos-signal" />
             <span className="text-[10px] font-medium text-cos-signal">
               Analyzed
+            </span>
+          </div>
+        )}
+        {enrichmentStatus === "failed" && (
+          <div className="flex items-center gap-1 rounded-cos-pill bg-cos-ember/10 px-2 py-0.5">
+            <Globe className="h-3 w-3 text-cos-ember" />
+            <span className="text-[10px] font-medium text-cos-ember">
+              Not found
             </span>
           </div>
         )}

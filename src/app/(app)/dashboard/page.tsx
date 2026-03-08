@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Sparkles,
   CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   const classification = result?.classification;
   const isEnriching = enrichmentStatus === "loading";
   const isDone = enrichmentStatus === "done";
+  const isFailed = enrichmentStatus === "failed";
   const hasData = isDone && (company || extracted || classification);
 
   // Profile completeness calculation
@@ -72,12 +74,26 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {isDone && (
+      {isDone && hasData && (
         <div className="flex items-center gap-3 rounded-cos-xl border border-cos-signal/20 bg-cos-signal/5 px-5 py-3">
           <CheckCircle2 className="h-5 w-5 text-cos-signal" />
           <p className="text-sm font-medium text-cos-signal">
             Research complete — your firm profile is ready
           </p>
+        </div>
+      )}
+
+      {isFailed && (
+        <div className="flex items-center gap-3 rounded-cos-xl border border-cos-ember/20 bg-cos-ember/5 px-5 py-3">
+          <AlertCircle className="h-5 w-5 text-cos-ember" />
+          <div>
+            <p className="text-sm font-medium text-cos-ember">
+              We couldn&apos;t reach that website
+            </p>
+            <p className="text-xs text-cos-slate mt-0.5">
+              Share a working website URL with Ossy to continue as a firm, or proceed as an individual expert.
+            </p>
+          </div>
         </div>
       )}
 

@@ -36,6 +36,7 @@ export interface EnrichmentClassification {
 export interface EnrichmentResult {
   url: string;
   domain: string;
+  success: boolean;
   companyCard: string | null;
   companyData: EnrichmentCompanyData | null;
   groundTruth: string | null;
@@ -45,7 +46,7 @@ export interface EnrichmentResult {
   classification: EnrichmentClassification | null;
 }
 
-export type EnrichmentStatus = "idle" | "loading" | "done" | "error";
+export type EnrichmentStatus = "idle" | "loading" | "done" | "failed" | "error";
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -153,7 +154,7 @@ export function EnrichmentProvider({
 
   const triggerEnrichment = useCallback(
     async (url: string) => {
-      if (enrichedUrl === url) return; // Already enriched
+      if (enrichedUrl === url && status !== "failed") return; // Already enriched (allow retry on failure)
       setEnrichedUrl(url);
       setStatus("loading");
 
@@ -168,20 +169,33 @@ export function EnrichmentProvider({
 
         const data: EnrichmentResult = await res.json();
         setResult(data);
-        setContextForOssy(buildContextForOssy(data));
-        setStatus("done");
 
-        console.log(
-          `[Enrichment] Done: PDL ${data.companyCard ? "found" : "miss"}, ` +
-            `${data.pagesScraped} pages scraped, ` +
-            `${data.classification?.categories.length ?? 0} categories classified`
-        );
+        if (data.success) {
+          setContextForOssy(buildContextForOssy(data));
+          setStatus("done");
+          console.log(
+            `[Enrichment] Done: PDL ${data.companyCard ? "found" : "miss"}, ` +
+              `${data.pagesScraped} pages scraped, ` +
+              `${data.classification?.categories.length ?? 0} categories classified`
+          );
+        } else {
+          // Enrichment returned no useful data — tell Ossy the URL was bad
+          setContextForOssy(
+            `[ENRICHMENT FAILED for ${data.domain || data.url}]\n` +
+            `The website could not be reached or returned no usable content. ` +
+            `PDL lookup found nothing. Jina scrape found nothing meaningful.\n` +
+            `The user needs to provide a working website URL, or they can only continue as an individual expert (not a firm).`
+          );
+          setStatus("failed");
+          console.warn(`[Enrichment] Failed — no data found for ${data.domain}`);
+        }
       } catch (err) {
         console.error("[Enrichment] Failed:", err);
+        setEnrichedUrl(null); // Allow retry with a new URL
         setStatus("error");
       }
     },
-    [enrichedUrl, organizationId]
+    [enrichedUrl, organizationId, status]
   );
 
   const value: EnrichmentContextValue = {

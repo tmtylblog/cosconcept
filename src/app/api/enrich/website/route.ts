@@ -213,9 +213,17 @@ export async function POST(req: Request) {
         `${groundTruth?.extracted.teamMembers.length ?? 0} team names extracted`
     );
 
+    // ─── Detect empty enrichment (bad URL / unreachable site) ──
+    const hasAnyData = !!(
+      companyData ||
+      (groundTruth && (groundTruth.rawContent?.length ?? 0) > 100) ||
+      classification
+    );
+
     const responseData = {
       url: normalized,
       domain,
+      success: hasAnyData,
 
       // PDL firmographic data
       companyCard: companyCardSummary || null,
@@ -283,7 +291,7 @@ export async function POST(req: Request) {
               description: groundTruth?.extracted.aboutPitch || null,
               foundedYear: companyData?.founded || null,
               enrichmentData: responseData,
-              enrichmentStatus: "enriched",
+              enrichmentStatus: hasAnyData ? "enriched" : "failed",
               classificationConfidence: classification?.confidence || null,
               profileCompleteness: calculateProfileCompleteness(responseData),
             })
@@ -295,7 +303,7 @@ export async function POST(req: Request) {
                 description: groundTruth?.extracted.aboutPitch || null,
                 foundedYear: companyData?.founded || null,
                 enrichmentData: responseData,
-                enrichmentStatus: "enriched",
+                enrichmentStatus: hasAnyData ? "enriched" : "failed",
                 classificationConfidence: classification?.confidence || null,
                 profileCompleteness: calculateProfileCompleteness(responseData),
                 updatedAt: new Date(),
