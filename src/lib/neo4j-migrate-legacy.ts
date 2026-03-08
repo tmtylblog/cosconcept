@@ -638,7 +638,7 @@ async function migrateServices(): Promise<number> {
 
   await batchWrite(
     `UNWIND $items AS item
-     MERGE (s:Service {legacyId: item.id})
+     MERGE (s:OrgService {legacyId: item.id})
      SET s.name = item.name,
          s.description = item.description,
          s.tags = item.tags,
@@ -650,7 +650,7 @@ async function migrateServices(): Promise<number> {
   const withOrg = nodes.filter((n) => n.orgId);
   await batchWrite(
     `UNWIND $items AS item
-     MATCH (s:Service {legacyId: item.id})
+     MATCH (s:OrgService {legacyId: item.id})
      MATCH (o:Organization {legacyId: item.orgId})
      MERGE (s)-[:OWNED_BY]->(o)`,
     withOrg
