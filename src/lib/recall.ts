@@ -9,7 +9,7 @@
  *   RECALL_WEBHOOK_SECRET — for authenticating incoming webhook POSTs
  */
 
-const RECALL_API = "https://api.recall.ai/api/v1";
+const RECALL_API = "https://us-west-2.recall.ai/api/v1";
 
 interface RecallBot {
   id: string;
@@ -38,8 +38,16 @@ export async function createBot(
     body: JSON.stringify({
       meeting_url: meetingUrl,
       bot_name: "Ossy",
-      transcription_options: { provider: "deepgram" },
-      real_time_transcription: { partial_results: false },
+      recording_config: {
+        transcript: {
+          provider: {
+            recallai_streaming: {
+              mode: "prioritize_low_latency",
+              language_code: "en",
+            },
+          },
+        },
+      },
       metadata: { call_name: callName },
     }),
   });

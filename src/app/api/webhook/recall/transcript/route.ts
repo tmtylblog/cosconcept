@@ -15,6 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { Webhook } from "svix";
 import { db } from "@/lib/db";
 import {
   scheduledCalls,
@@ -60,18 +61,36 @@ function assembleTranscript(segments: RecallSegment[]): {
 }
 
 export async function POST(req: NextRequest) {
-  // Validate Recall.ai Authorization header
-  const authHeader = req.headers.get("authorization") ?? "";
+  // Validate Recall.ai webhook signature (Svix HMAC signing)
   const webhookSecret = process.env.RECALL_WEBHOOK_SECRET ?? "";
+  const body = await req.text();
 
-  if (webhookSecret && authHeader !== `Token ${webhookSecret}`) {
-    console.warn("[RecallWebhook] Invalid authorization header");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (webhookSecret) {
+    const svixId = req.headers.get("svix-id") ?? "";
+    const svixTimestamp = req.headers.get("svix-timestamp") ?? "";
+    const svixSignature = req.headers.get("svix-signature") ?? "";
+
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      console.warn("[RecallWebhook] Missing Svix signature headers");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+      const wh = new Webhook(webhookSecret);
+      wh.verify(body, {
+        "svix-id": svixId,
+        "svix-timestamp": svixTimestamp,
+        "svix-signature": svixSignature,
+      });
+    } catch {
+      console.warn("[RecallWebhook] Svix signature verification failed");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   let payload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    payload = JSON.parse(body);
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
