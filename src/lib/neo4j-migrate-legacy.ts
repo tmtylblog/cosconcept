@@ -313,11 +313,81 @@ interface LegacyOrg {
   };
 }
 
+/**
+ * Build the set of org IDs that are confirmed Collective OS customers.
+ * Signal 1: Orgs that have at least one user account (from user-basic.json)
+ * Signal 2: Orgs that appear in match recommendations or activity (from Step 5 data)
+ */
+function buildCustomerOrgIds(): Set<string> {
+  const customerIds = new Set<string>();
+
+  // Signal 1: Orgs with user accounts
+  try {
+    const userData = loadJson<{ data: { user_meta: {
+      organisation?: { id: string };
+    }[] } }>("Step 3_ Organization Content Data", "user-basic.json");
+    for (const user of userData.data.user_meta) {
+      if (user.organisation?.id) customerIds.add(user.organisation.id);
+    }
+    console.log(`[Migration] Customer signal 1 (users): ${customerIds.size} orgs with user accounts`);
+  } catch (err) {
+    console.error("[Migration] Failed to load user-basic.json for customer detection:", err);
+  }
+
+  // Signal 2: Orgs in match recommendations
+  try {
+    const matchData = loadJson<{ data: { org_matchmaking_recommendations: {
+      matchmaking_recommendation_organisations?: {
+        organisation: { id: string };
+      }[];
+    }[] } }>("Step 5_ Network Data", "perfect-match.json");
+    const beforeCount = customerIds.size;
+    for (const rec of matchData.data.org_matchmaking_recommendations) {
+      for (const mo of rec.matchmaking_recommendation_organisations ?? []) {
+        if (mo.organisation?.id) customerIds.add(mo.organisation.id);
+      }
+    }
+    console.log(`[Migration] Customer signal 2a (match recs): +${customerIds.size - beforeCount} orgs`);
+  } catch (err) {
+    console.error("[Migration] Failed to load perfect-match.json for customer detection:", err);
+  }
+
+  // Signal 2b: Orgs in match activity
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const actData = loadJson<{ data: { match_activity: any[] } }>(
+      "Step 5_ Network Data", "match-activity.json"
+    );
+    const beforeCount = customerIds.size;
+    for (const ma of actData.data.match_activity) {
+      const nested = ma.org_matchmaking_recommendation;
+      // Org IDs from activity responses
+      for (const act of nested?.match_activities ?? []) {
+        if (act.orgId) customerIds.add(act.orgId);
+      }
+      // Org IDs from matched organisations (id is inside organisation_detail here)
+      for (const mo of nested?.matchmaking_recommendation_organisations ?? []) {
+        const id = mo?.organisation?.organisation_detail?.id ?? mo?.organisation?.id;
+        if (id) customerIds.add(id);
+      }
+    }
+    console.log(`[Migration] Customer signal 2b (match activity): +${customerIds.size - beforeCount} orgs`);
+  } catch (err) {
+    console.error("[Migration] Failed to load match-activity.json for customer detection:", err);
+  }
+
+  console.log(`[Migration] Total confirmed customer orgs: ${customerIds.size}`);
+  return customerIds;
+}
+
 async function migrateOrganizations(): Promise<number> {
   const data = loadJson<{ data: { organisation: LegacyOrg[] } }>(
     "Step 2_ Organization Basic Data", "organization.json"
   );
   const orgs = data.data.organisation;
+
+  // Pre-compute which orgs are confirmed platform customers
+  const customerOrgIds = buildCustomerOrgIds();
 
   // Create Organization nodes (maps to our ServiceFirm concept in the new system)
   const orgNodes = orgs
@@ -336,7 +406,11 @@ async function migrateOrganizations(): Promise<number> {
       industryId: o.organisation_detail.industry_id ?? null,
       serviceId: o.organisation_detail.professional_service_id ?? null,
       categoryId: o.organisation_detail.professional_service_category_id ?? null,
+      isCustomer: customerOrgIds.has(o.id),
     }));
+
+  const customerCount = orgNodes.filter((o) => o.isCustomer).length;
+  console.log(`[Migration] ${customerCount}/${orgNodes.length} orgs flagged as customers`);
 
   await batchWrite(
     `UNWIND $items AS item
@@ -351,7 +425,7 @@ async function migrateOrganizations(): Promise<number> {
          o.state = item.state,
          o.countryCode = item.country,
          o.isLegacy = true,
-         o.isCollectiveOSCustomer = true`,
+         o.isCollectiveOSCustomer = item.isCustomer`,
     orgNodes
   );
 
