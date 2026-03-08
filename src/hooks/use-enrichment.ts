@@ -143,16 +143,53 @@ export function EnrichmentProvider({
 
   // Ref to track current enrichment run — allows aborting stale runs
   const runIdRef = useRef(0);
+  // Track whether we've persisted the current result to DB
+  const persistedRef = useRef(false);
 
-  // Hydrate from DB on mount — if enrichment was done previously, load it
+  // ─── SessionStorage: save enrichment result so it survives page reloads ───
+  const STORAGE_KEY = "cos_enrichment_result";
+
+  // Save result to sessionStorage whenever it changes
   useEffect(() => {
-    if (!organizationId || result) return;
+    if (!result) return;
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result));
+    } catch {
+      // quota exceeded or SSR — ignore
+    }
+  }, [result]);
+
+  // Hydrate from DB on mount, or fall back to sessionStorage
+  useEffect(() => {
+    if (result) return; // Already have data in memory
     let cancelled = false;
 
     async function hydrate() {
+      // Try sessionStorage first (instant, survives guest→auth reload)
+      try {
+        const cached = sessionStorage.getItem(STORAGE_KEY);
+        if (cached && !cancelled) {
+          const enrichmentData = JSON.parse(cached) as EnrichmentResult;
+          if (enrichmentData.domain) {
+            setResult(enrichmentData);
+            setEnrichedUrl(enrichmentData.url);
+            setContextForOssy(buildContextForOssy(enrichmentData));
+            setStatus(enrichmentData.success ? "done" : "loading");
+            if (enrichmentData.success) {
+              setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
+            }
+            // Don't return — still try DB hydration to get latest data
+          }
+        }
+      } catch {
+        // sessionStorage unavailable
+      }
+
+      // Then try DB if we have an orgId
+      if (!organizationId) return;
       try {
         const res = await fetch(`/api/enrich/firm?organizationId=${organizationId}`);
-        if (!res.ok) return;
+        if (!res.ok || cancelled) return;
         const data = await res.json();
         if (cancelled || !data.enrichmentData) return;
 
@@ -162,6 +199,7 @@ export function EnrichmentProvider({
         setContextForOssy(buildContextForOssy(enrichmentData));
         setStatus("done");
         setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
+        persistedRef.current = true; // DB data is already persisted
       } catch {
         // Silently ignore hydration failures
       }
@@ -169,15 +207,46 @@ export function EnrichmentProvider({
 
     hydrate();
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organizationId]);
+
+  // ─── Deferred persist: when organizationId arrives after enrichment completed ───
+  useEffect(() => {
+    if (!organizationId || !result || !result.success || persistedRef.current) return;
+
+    // organizationId just became available and we have un-persisted enrichment data
+    persistedRef.current = true;
+    console.log("[Enrichment] Deferred persist — orgId arrived after enrichment");
+    fetch("/api/enrich/persist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: result.url,
+        domain: result.domain,
+        organizationId,
+        companyData: result.companyData,
+        companyCard: result.companyCard,
+        groundTruth: result.groundTruth,
+        extracted: result.extracted,
+        classification: result.classification,
+        pagesScraped: result.pagesScraped,
+        evidenceCategories: result.evidenceCategories,
+      }),
+    }).catch((err) => {
+      console.warn("[Enrichment] Deferred persist failed:", err);
+      persistedRef.current = false; // Allow retry
+    });
   }, [organizationId, result]);
 
   const reset = useCallback(() => {
     runIdRef.current++;
+    persistedRef.current = false;
     setStatus("idle");
     setStages(INITIAL_STAGES);
     setResult(null);
     setContextForOssy(null);
     setEnrichedUrl(null);
+    try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   }, []);
 
   const triggerEnrichment = useCallback(
@@ -186,6 +255,7 @@ export function EnrichmentProvider({
 
       // New enrichment run
       const thisRun = ++runIdRef.current;
+      persistedRef.current = false;
       setEnrichedUrl(url);
       setStatus("loading");
       // NOTE: Do NOT setResult(null) here — that causes the firm card to vanish
@@ -383,7 +453,10 @@ export function EnrichmentProvider({
       }
 
       // ─── Stage 4: Persist to DB (background, best-effort) ──
+      // If organizationId isn't available yet, the deferred persist useEffect
+      // will handle it when orgId arrives.
       if (organizationId && hasAnyData) {
+        persistedRef.current = true;
         fetch("/api/enrich/persist", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -401,6 +474,7 @@ export function EnrichmentProvider({
           }),
         }).catch((err) => {
           console.warn("[Enrichment] Persist failed (best-effort):", err);
+          persistedRef.current = false; // Allow deferred retry
         });
       }
     },
