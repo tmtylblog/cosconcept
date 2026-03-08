@@ -99,12 +99,23 @@ drizzle.config.ts                   # Drizzle Kit config
 5. **Bidirectional Matching:** Both parties must want what the other offers
 6. **Progressive Disclosure:** Get basic info first, enrich over time
 
+## STRICT: Pre-Push Sync Rule
+
+**Before EVERY push to remote, you MUST:**
+
+1. `git pull --rebase origin main` — pull the latest changes first
+2. Read any files that were changed by other devs (check `git log origin/main..HEAD~1` before the pull to see incoming commits)
+3. Review the diff for conflicts with your work — especially shared files like API routes, schema, and layout
+4. Only then `git push origin main`
+
+This is non-negotiable. Other developers are actively pushing to main. Skipping this step causes merge conflicts, broken deploys, and lost work. If a rebase conflict occurs, resolve it carefully — understand what the other dev changed before choosing which version to keep.
+
 ## Multi-Dev Coordination Rules
 
 These rules apply to **all Claude Code instances** working on this repo:
 
-1. **Never push directly to main.** All work happens on feature branches, merged via PR only.
-2. **One branch per task, one dev per branch.** Never have two devs on the same branch.
+1. **Pull before every push.** Always `git pull --rebase origin main` before pushing. Read changed files from other devs to avoid conflicts.
+2. **One branch per task, one dev per branch.** Never have two devs on the same branch. Use branches when conflict risk is high.
 3. **Branch naming:** `<dev-id>/<type>/<short-description>` (e.g., `dev-1/feat/ossy-chat`). Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`.
 4. **Always branch from latest main.** Pull before you branch.
 5. **Assign area ownership.** Each dev owns specific directories/features. Stay in your lane. If you need to edit outside your area, coordinate first.
