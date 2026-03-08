@@ -39,6 +39,7 @@ export interface EnrichmentClassification {
 export interface EnrichmentResult {
   url: string;
   domain: string;
+  logoUrl?: string;
   success: boolean;
   companyCard: string | null;
   companyData: EnrichmentCompanyData | null;
@@ -281,6 +282,7 @@ export function EnrichmentProvider({
       const resultShell: EnrichmentResult = {
         url: normalized,
         domain,
+        logoUrl: `https://logo.clearbit.com/${domain}`,
         success: false,
         companyCard: null,
         companyData: null,
@@ -291,6 +293,42 @@ export function EnrichmentProvider({
         classification: null,
       };
       setResult(resultShell);
+
+      // ─── Stage 0: Check our own data first (saves paid API credits) ───
+      try {
+        const lookupRes = await fetch("/api/enrich/lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain }),
+        });
+
+        if (thisRun !== runIdRef.current) return; // stale
+
+        if (lookupRes.ok) {
+          const lookupData = await lookupRes.json();
+          if (lookupData.found && lookupData.data) {
+            console.log(`[Enrichment] Cache HIT (${lookupData.source}) for ${domain} — skipping paid APIs`);
+            const cachedResult = lookupData.data as EnrichmentResult;
+            // Ensure domain/url are set
+            cachedResult.domain = cachedResult.domain || domain;
+            cachedResult.url = cachedResult.url || normalized;
+            cachedResult.logoUrl = cachedResult.logoUrl || `https://logo.clearbit.com/${domain}`;
+
+            setResult(cachedResult);
+            setContextForOssy(buildContextForOssy(cachedResult));
+            setStatus("done");
+            setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
+            persistedRef.current = true; // Already in DB
+            return; // Skip all paid API calls
+          }
+        }
+      } catch (lookupErr) {
+        // Lookup failed — proceed with normal enrichment
+        console.warn("[Enrichment] Lookup check failed, proceeding with paid APIs:", lookupErr);
+      }
+
+      if (thisRun !== runIdRef.current) return; // stale
+      console.log(`[Enrichment] Cache MISS for ${domain} — starting paid API enrichment`);
 
       // Track data across stages — using `any` wrapper to avoid TS narrowing issues in async closures
       const stageData = {
