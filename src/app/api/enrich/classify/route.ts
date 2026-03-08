@@ -1,5 +1,7 @@
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { classifyFirm } from "@/lib/enrichment/ai-classifier";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -18,6 +20,11 @@ export const maxDuration = 30;
  * Can be called standalone or as part of the enrichment pipeline.
  */
 export async function POST(req: Request) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = (await req.json()) as {
       rawContent: string;

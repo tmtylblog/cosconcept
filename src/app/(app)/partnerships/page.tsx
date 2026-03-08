@@ -157,7 +157,7 @@ export default function PartnershipsPage() {
           <StatCard
             label="Revenue Generated"
             value={`$${(referralStats.actualValueConverted / 1000).toFixed(0)}K`}
-            icon={<TrendingUp className="h-4 w-4 text-cos-accent-warm" />}
+            icon={<TrendingUp className="h-4 w-4 text-cos-warm" />}
           />
         </div>
       )}
@@ -333,7 +333,7 @@ function PendingCard({
             </p>
           </div>
         </div>
-        <span className="rounded-cos-full bg-cos-accent-warm/10 px-2 py-0.5 text-xs font-medium text-cos-accent-warm">
+        <span className="rounded-cos-full bg-cos-warm/10 px-2 py-0.5 text-xs font-medium text-cos-warm">
           {partnership.status}
         </span>
       </div>

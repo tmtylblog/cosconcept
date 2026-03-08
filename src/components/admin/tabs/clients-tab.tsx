@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import {
   Building2,
   Search,
@@ -12,6 +13,13 @@ import {
   FileText,
   ExternalLink,
   Loader2,
+  Users,
+  DollarSign,
+  Calendar,
+  Linkedin,
+  Tag,
+  Cpu,
+  Sparkles,
 } from "lucide-react";
 import type { ImportedClient } from "@/components/admin/types";
 
@@ -172,6 +180,36 @@ export default function ClientsTab() {
   );
 }
 
+/* -- Client Logo --------------------------------------------------------- */
+
+function ClientLogo({ client }: { client: ImportedClient }) {
+  const [imgError, setImgError] = useState(false);
+
+  if (client.logoUrl && !imgError) {
+    return (
+      <div className="flex h-9 w-9 items-center justify-center rounded-cos-lg bg-white border border-cos-border/50 overflow-hidden">
+        <Image
+          src={client.logoUrl}
+          alt={client.name}
+          width={28}
+          height={28}
+          className="object-contain"
+          onError={() => setImgError(true)}
+          unoptimized // Clearbit logos are already small
+        />
+      </div>
+    );
+  }
+
+  // Fallback: letter avatar with brand color
+  const initial = client.name?.charAt(0)?.toUpperCase() || "?";
+  return (
+    <div className="flex h-9 w-9 items-center justify-center rounded-cos-lg bg-purple-100">
+      <span className="text-sm font-semibold text-purple-700">{initial}</span>
+    </div>
+  );
+}
+
 /* -- Client Card --------------------------------------------------------- */
 
 function ClientCard({
@@ -184,66 +222,208 @@ function ClientCard({
   onToggle: () => void;
 }) {
   const hasAssociations = client.serviceFirmCount > 0 || client.caseStudyCount > 0;
+  const hasEnrichedData = !!(
+    client.description ||
+    client.employeeCountExact ||
+    client.employeeRange ||
+    client.city ||
+    client.tags?.length ||
+    client.techStack?.length ||
+    client.fundingRaised ||
+    client.linkedinUrl
+  );
+
+  // Build location string
+  const locationParts = [client.city, client.state, client.country].filter(Boolean);
+  const locationStr = locationParts.length > 0 ? locationParts.join(", ") : client.location;
 
   return (
     <div className="rounded-cos-xl border border-cos-border bg-cos-surface">
+      {/* Header row */}
       <button
         onClick={onToggle}
-        className="flex w-full items-center gap-3 p-4 text-left hover:bg-cos-electric/5"
+        className="flex w-full items-center gap-3 p-4 text-left hover:bg-cos-electric/5 transition-colors"
       >
-        <div className="flex h-9 w-9 items-center justify-center rounded-cos-lg bg-purple-100">
-          <Building2 className="h-4 w-4 text-purple-700" />
-        </div>
+        <ClientLogo client={client} />
+
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-cos-midnight">{client.name}</p>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-cos-midnight truncate">{client.name}</p>
+            {client.enrichedAt && (
+              <span title="PDL Enriched">
+                <Sparkles className="h-3 w-3 text-cos-warm flex-shrink-0" />
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
             {client.industry && (
-              <p className="text-xs text-cos-slate-light">{client.industry}</p>
+              <span className="text-xs text-cos-slate-light">{client.industry}</span>
             )}
-            {client.website && (
-              <p className="flex items-center gap-1 text-xs text-cos-slate-light">
+            {client.domain && (
+              <span className="flex items-center gap-1 text-xs text-cos-slate-light">
                 <Globe className="h-3 w-3" />
-                {client.website}
-              </p>
+                {client.domain}
+              </span>
             )}
-            {client.location && (
-              <p className="flex items-center gap-1 text-xs text-cos-slate-light">
+            {locationStr && (
+              <span className="flex items-center gap-1 text-xs text-cos-slate-light">
                 <MapPin className="h-3 w-3" />
-                {client.location}
-              </p>
+                {locationStr}
+              </span>
+            )}
+            {(client.employeeCountExact || client.employeeRange) && (
+              <span className="flex items-center gap-1 text-xs text-cos-slate-light">
+                <Users className="h-3 w-3" />
+                {client.employeeCountExact
+                  ? client.employeeCountExact.toLocaleString()
+                  : client.employeeRange}
+              </span>
             )}
           </div>
         </div>
 
         {/* Association count badges */}
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-3 text-xs flex-shrink-0">
           {client.serviceFirmCount > 0 && (
-            <span className="flex items-center gap-1 text-cos-electric">
+            <span className="flex items-center gap-1 text-cos-electric" title="Service firms">
               <Briefcase className="h-3 w-3" />
               {client.serviceFirmCount}
             </span>
           )}
           {client.caseStudyCount > 0 && (
-            <span className="flex items-center gap-1 text-cos-warm">
+            <span className="flex items-center gap-1 text-cos-warm" title="Case studies">
               <FileText className="h-3 w-3" />
               {client.caseStudyCount}
             </span>
           )}
         </div>
 
-        {hasAssociations ? (
+        {hasAssociations || hasEnrichedData ? (
           expanded ? (
-            <ChevronDown className="h-4 w-4 text-cos-slate" />
+            <ChevronDown className="h-4 w-4 text-cos-slate flex-shrink-0" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-cos-slate" />
+            <ChevronRight className="h-4 w-4 text-cos-slate flex-shrink-0" />
           )
         ) : (
-          <div className="w-4" />
+          <div className="w-4 flex-shrink-0" />
         )}
       </button>
 
-      {expanded && hasAssociations && (
-        <div className="border-t border-cos-border p-4 space-y-3">
+      {/* Expanded details */}
+      {expanded && (hasAssociations || hasEnrichedData) && (
+        <div className="border-t border-cos-border p-4 space-y-4">
+          {/* Enriched company details */}
+          {hasEnrichedData && (
+            <div className="space-y-3">
+              {/* Description */}
+              {client.description && (
+                <p className="text-sm text-cos-slate leading-relaxed">
+                  {client.description}
+                </p>
+              )}
+
+              {/* Info grid */}
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
+                {client.sector && (
+                  <InfoItem icon={<Tag className="h-3 w-3" />} label="Sector" value={client.sector} />
+                )}
+                {client.subIndustry && (
+                  <InfoItem icon={<Tag className="h-3 w-3" />} label="Sub-Industry" value={client.subIndustry} />
+                )}
+                {client.companyType && (
+                  <InfoItem icon={<Building2 className="h-3 w-3" />} label="Type" value={client.companyType} />
+                )}
+                {client.foundedYear ? (
+                  <InfoItem icon={<Calendar className="h-3 w-3" />} label="Founded" value={String(client.foundedYear)} />
+                ) : null}
+                {client.estimatedRevenue && (
+                  <InfoItem icon={<DollarSign className="h-3 w-3" />} label="Revenue" value={client.estimatedRevenue} />
+                )}
+                {client.fundingRaised && (
+                  <InfoItem icon={<DollarSign className="h-3 w-3" />} label="Funding" value={client.fundingRaised} />
+                )}
+                {client.employeeCountExact ? (
+                  <InfoItem icon={<Users className="h-3 w-3" />} label="Employees" value={`${client.employeeCountExact.toLocaleString()} (${client.employeeRange || ""})`} />
+                ) : client.employeeRange ? (
+                  <InfoItem icon={<Users className="h-3 w-3" />} label="Employees" value={client.employeeRange} />
+                ) : null}
+                {client.linkedinUrl && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Linkedin className="h-3 w-3 text-cos-slate-light" />
+                    <a
+                      href={client.linkedinUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-cos-electric hover:underline truncate"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      LinkedIn
+                    </a>
+                  </div>
+                )}
+                {client.website && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Globe className="h-3 w-3 text-cos-slate-light" />
+                    <a
+                      href={client.website.startsWith("http") ? client.website : `https://${client.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-cos-electric hover:underline truncate"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {client.domain || client.website}
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Tags */}
+              {client.tags && client.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  <Tag className="h-3 w-3 text-cos-slate-light mt-0.5" />
+                  {client.tags.slice(0, 12).map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-cos-pill bg-cos-electric/8 px-2 py-0.5 text-[10px] font-medium text-cos-electric"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                  {client.tags.length > 12 && (
+                    <span className="text-[10px] text-cos-slate-light self-center">
+                      +{client.tags.length - 12} more
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Tech Stack */}
+              {client.techStack && client.techStack.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  <Cpu className="h-3 w-3 text-cos-slate-light mt-0.5" />
+                  {client.techStack.slice(0, 10).map((tech) => (
+                    <span
+                      key={tech}
+                      className="rounded-cos-pill bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-700"
+                    >
+                      {tech}
+                    </span>
+                  ))}
+                  {client.techStack.length > 10 && (
+                    <span className="text-[10px] text-cos-slate-light self-center">
+                      +{client.techStack.length - 10} more
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Associations (existing feature) */}
+          {hasAssociations && hasEnrichedData && (
+            <div className="border-t border-cos-border/50 pt-3" />
+          )}
+
           {client.serviceFirmCount > 0 && (
             <AssociationSection
               nodeId={client.id}
@@ -294,6 +474,28 @@ function ClientCard({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* -- Info Item ----------------------------------------------------------- */
+
+function InfoItem({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-start gap-1.5 text-xs">
+      <span className="text-cos-slate-light mt-0.5">{icon}</span>
+      <div className="min-w-0">
+        <span className="text-cos-slate-light">{label}: </span>
+        <span className="text-cos-midnight">{value}</span>
+      </div>
     </div>
   );
 }

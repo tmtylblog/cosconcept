@@ -175,7 +175,7 @@ export default function AdminApisPage() {
       <div className="rounded-cos-xl border border-cos-electric/15 bg-cos-electric/5 p-5">
         <div className="flex items-start gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-cos-lg bg-cos-electric/10">
-            <Shield className="h-4.5 w-4.5 text-cos-electric" />
+            <Shield className="h-4 w-4 text-cos-electric" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-cos-midnight">

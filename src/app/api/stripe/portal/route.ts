@@ -1,8 +1,10 @@
+import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
 import { subscriptions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +14,11 @@ export const dynamic = "force-dynamic";
  * Body: { organizationId }
  */
 export async function POST(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { organizationId } = (await req.json()) as {
       organizationId: string;

@@ -12,6 +12,7 @@ import { useEnrichment } from "@/hooks/use-enrichment";
 import { useProfile } from "@/hooks/use-profile";
 import { isPersonalEmail, CORPORATE_EMAIL_ERROR } from "@/lib/email-validation";
 import { cn } from "@/lib/utils";
+import { ToolResultRenderer } from "@/components/chat/tool-result-renderer";
 
 const GUEST_MESSAGE_LIMIT = 5;
 
@@ -72,7 +73,7 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>(defaultWelcomeMessages);
   const [historyLoaded, setHistoryLoaded] = useState(isGuest ? true : false);
   const enrichedUrlRef = useRef<string | null>(null);
-  const conversationIdRef = useRef<string | null>(null);
+  const conversationIdRef = useRef<string>(crypto.randomUUID());
 
   const chatEndpoint = isGuest ? "/api/chat/guest" : "/api/chat";
 
@@ -309,9 +310,37 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
                     : "ml-auto rounded-tr-cos-sm bg-cos-electric text-white"
                 )}
               >
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {text}
-                </p>
+                {message.parts.map((part, partIdx) => {
+                  if (part.type === "text" && part.text) {
+                    return (
+                      <p
+                        key={partIdx}
+                        className="whitespace-pre-wrap text-sm leading-relaxed"
+                      >
+                        {part.text}
+                      </p>
+                    );
+                  }
+                  if (part.type === "tool-invocation") {
+                    return (
+                      <div key={partIdx} className="my-2">
+                        <ToolResultRenderer
+                          toolInvocation={
+                            part as unknown as {
+                              type: "tool-invocation";
+                              toolInvocationId: string;
+                              toolName: string;
+                              args: Record<string, unknown>;
+                              state: "call" | "partial-call" | "result";
+                              result?: unknown;
+                            }
+                          }
+                        />
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
               </div>
             </div>
           );

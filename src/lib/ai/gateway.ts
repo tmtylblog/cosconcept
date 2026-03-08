@@ -27,6 +27,7 @@ export type AIFeature =
   | "enrichment"
   | "matching"
   | "chat"
+  | "chat_tool"
   | "voice"
   | "classification"
   | "memory"

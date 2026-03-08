@@ -5,11 +5,18 @@
  * Queues an Inngest job for background processing.
  */
 
+import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { inngest } from "@/inngest/client";
 import { extractTextFromPdf } from "@/lib/enrichment/case-study-ingestor";
+import { auth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const contentType = req.headers.get("content-type") ?? "";
 

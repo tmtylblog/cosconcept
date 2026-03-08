@@ -8,8 +8,10 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/admin/clients?q=&page=1&limit=50
+ *
  * Lists Company nodes from Neo4j (client companies like Coca-Cola, ESPN).
- * These are NOT service firms — they're companies that service firms have worked with.
+ * Now returns enriched properties (logo, description, employees, revenue, etc.)
+ * that were synced from PDL/Clearbit enrichment.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -33,9 +35,37 @@ export async function GET(req: NextRequest) {
       lim: neo4j.int(limit),
     };
 
-    // Count query
     let countCypher: string;
     let listCypher: string;
+
+    const returnClause = `
+      RETURN c.name AS name,
+             coalesce(c.legacyId, c.name) AS id,
+             c.industry AS industry,
+             c.website AS website,
+             c.domain AS domain,
+             c.logoUrl AS logoUrl,
+             c.description AS description,
+             c.sector AS sector,
+             c.subIndustry AS subIndustry,
+             c.employeeCount AS employeeCount,
+             c.employeeCountExact AS employeeCountExact,
+             c.employeeRange AS employeeRange,
+             c.estimatedRevenue AS estimatedRevenue,
+             c.location AS location,
+             c.city AS city,
+             c.state AS state,
+             c.country AS country,
+             c.companyType AS companyType,
+             c.foundedYear AS foundedYear,
+             c.linkedinUrl AS linkedinUrl,
+             c.tags AS tags,
+             c.techStack AS techStack,
+             c.fundingRaised AS fundingRaised,
+             c.enrichedAt AS enrichedAt,
+             count(DISTINCT o) AS serviceFirmCount,
+             count(DISTINCT cs) AS caseStudyCount
+    `;
 
     if (search) {
       params.nameRegex = `(?i).*${escapeRegex(search)}.*`;
@@ -45,13 +75,7 @@ export async function GET(req: NextRequest) {
         WHERE c.name =~ $nameRegex
         OPTIONAL MATCH (c)<-[:WORKED_WITH]-(o:Organization)
         OPTIONAL MATCH (c)<-[:FOR_CLIENT]-(cs:CaseStudy)
-        RETURN c.name AS name,
-               coalesce(c.legacyId, c.name) AS id,
-               c.industry AS industry,
-               c.website AS website,
-               c.location AS location,
-               count(DISTINCT o) AS serviceFirmCount,
-               count(DISTINCT cs) AS caseStudyCount
+        ${returnClause}
         ORDER BY c.name ASC
         SKIP $skip LIMIT $lim
       `;
@@ -61,13 +85,7 @@ export async function GET(req: NextRequest) {
         MATCH (c:Company)
         OPTIONAL MATCH (c)<-[:WORKED_WITH]-(o:Organization)
         OPTIONAL MATCH (c)<-[:FOR_CLIENT]-(cs:CaseStudy)
-        RETURN c.name AS name,
-               coalesce(c.legacyId, c.name) AS id,
-               c.industry AS industry,
-               c.website AS website,
-               c.location AS location,
-               count(DISTINCT o) AS serviceFirmCount,
-               count(DISTINCT cs) AS caseStudyCount
+        ${returnClause}
         ORDER BY c.name ASC
         SKIP $skip LIMIT $lim
       `;
@@ -81,7 +99,26 @@ export async function GET(req: NextRequest) {
       id: string;
       industry: string | null;
       website: string | null;
+      domain: string | null;
+      logoUrl: string | null;
+      description: string | null;
+      sector: string | null;
+      subIndustry: string | null;
+      employeeCount: string | null;
+      employeeCountExact: { low: number } | number | null;
+      employeeRange: string | null;
+      estimatedRevenue: string | null;
       location: string | null;
+      city: string | null;
+      state: string | null;
+      country: string | null;
+      companyType: string | null;
+      foundedYear: { low: number } | number | null;
+      linkedinUrl: string | null;
+      tags: string[] | null;
+      techStack: string[] | null;
+      fundingRaised: string | null;
+      enrichedAt: string | null;
       serviceFirmCount: { low: number } | number;
       caseStudyCount: { low: number } | number;
     }>(listCypher, params);
@@ -89,10 +126,30 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       clients: clients.map((c) => ({
         id: c.id,
-        name: c.name,
+        name: c.name?.trim(),
+        domain: c.domain,
+        logoUrl: c.logoUrl,
+        description: c.description,
         industry: c.industry,
+        sector: c.sector,
+        subIndustry: c.subIndustry,
         website: c.website,
+        employeeCount: c.employeeCount,
+        employeeCountExact: toNum(c.employeeCountExact),
+        employeeRange: c.employeeRange,
+        estimatedRevenue: c.estimatedRevenue,
         location: c.location,
+        city: c.city,
+        state: c.state,
+        country: c.country,
+        companyType: c.companyType,
+        foundedYear: toNum(c.foundedYear),
+        linkedinUrl: c.linkedinUrl,
+        tags: c.tags,
+        techStack: c.techStack,
+        fundingRaised: c.fundingRaised,
+        enrichedAt: c.enrichedAt,
+        serviceFirmName: null, // Could be computed from relationships
         serviceFirmCount: toNum(c.serviceFirmCount),
         caseStudyCount: toNum(c.caseStudyCount),
       })),
@@ -110,7 +167,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-function toNum(val: { low: number } | number | null): number {
+function toNum(val: { low: number } | number | null | undefined): number {
   if (val === null || val === undefined) return 0;
   if (typeof val === "number") return val;
   return val.low ?? 0;

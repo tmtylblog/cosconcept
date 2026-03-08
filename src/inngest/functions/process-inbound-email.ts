@@ -218,7 +218,7 @@ export const processInboundEmail = inngest.createFunction(
         .map((m) => `[${m.direction === "inbound" ? "From" : "Ossy"}]: ${m.bodyText?.slice(0, 400) ?? ""}`)
         .join("\n\n");
 
-      let systemPrompt =
+      const systemPrompt =
         "You are Ossy, Collective OS's AI partnership consultant. Reply in Ossy's voice — knowledgeable, warm, concise. " +
         "Keep replies under 150 words. Do not use bullet points. Sign off naturally.";
 
@@ -241,7 +241,7 @@ export const processInboundEmail = inngest.createFunction(
         model: openrouter.chat("anthropic/claude-sonnet-4-5"),
         system: systemPrompt,
         prompt: userPrompt,
-        maxTokens: 400,
+        maxOutputTokens: 400,
       });
 
       return text;
@@ -268,8 +268,6 @@ export const processInboundEmail = inngest.createFunction(
         subject: replySubject,
         bodyHtml: buildOssyReplyHtml(draftResult),
         bodyText: draftResult,
-        confidence: classification.confidence,
-        inReplyToThreadId: threadId,
         context: { reason: classification.intent },
         status: queueStatus,
       });

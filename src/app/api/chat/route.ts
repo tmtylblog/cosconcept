@@ -3,6 +3,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { streamText, convertToModelMessages, type UIMessage } from "ai";
 import { eq, and, desc } from "drizzle-orm";
 import { getOssyPrompt } from "@/lib/ai/ossy-prompt";
+import { createOssyTools } from "@/lib/ai/ossy-tools";
 import { FeatureGateError } from "@/lib/billing/gate";
 import { getOrgPlan } from "@/lib/billing/usage-checker";
 import { PLAN_LIMITS } from "@/lib/billing/plan-limits";
@@ -12,7 +13,6 @@ import { conversations, messages as messagesTable, serviceFirms } from "@/lib/db
 import { logUsage } from "@/lib/ai/gateway";
 import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
 import { extractMemoriesFromConversation } from "@/lib/ai/memory-extractor";
-import { createOssyTools } from "@/lib/ai/ossy-tools";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -60,6 +60,21 @@ export async function POST(req: Request) {
       }
     }
 
+    // ─── Resolve firm ID for tool context ──────────────────
+    let firmId: string | undefined;
+    if (organizationId) {
+      try {
+        const firmRow = await db
+          .select({ id: serviceFirms.id })
+          .from(serviceFirms)
+          .where(eq(serviceFirms.organizationId, organizationId))
+          .limit(1);
+        firmId = firmRow[0]?.id;
+      } catch {
+        // Non-critical — tools will work without firmId
+      }
+    }
+
     // ─── Memory retrieval (authenticated users only) ────────
     let memoryBlock: string | undefined;
     if (userId) {
@@ -76,29 +91,20 @@ export async function POST(req: Request) {
       }
     }
 
+    const hasCompletedOnboarding = !!memoryBlock;
+    // Tools are available for any authenticated user with a firm — not gated behind onboarding
+    const hasToolAccess = !!firmId;
+
     const systemPrompt = getOssyPrompt({
       userName: userName ?? undefined,
-      isOnboarding: messages.length <= 2,
+      isOnboarding: !memoryBlock && messages.length <= 2,
+      hasCompletedOnboarding,
+      hasToolAccess,
       websiteContext: websiteContext ?? undefined,
       memoryContext: memoryBlock,
     });
 
     const modelMessages = await convertToModelMessages(messages);
-
-    // ─── Resolve firm ID for tool access ─────────────────────
-    let firmId: string | null = null;
-    if (organizationId) {
-      try {
-        const [firm] = await db
-          .select({ id: serviceFirms.id })
-          .from(serviceFirms)
-          .where(eq(serviceFirms.organizationId, organizationId))
-          .limit(1);
-        firmId = firm?.id ?? null;
-      } catch (err) {
-        console.error("[Ossy] Failed to look up firm:", err);
-      }
-    }
 
     // ─── Persistence setup ─────────────────────────────────
     // Resolve or create conversation ID (only for authenticated users)
@@ -132,7 +138,7 @@ export async function POST(req: Request) {
               userId,
               organizationId: organizationId || null,
               title: getMessageText(lastUserMsg).slice(0, 100) || "New conversation",
-              mode: messages.length <= 2 ? "onboarding" : "general",
+              mode: !memoryBlock && messages.length <= 2 ? "onboarding" : "general",
             });
           }
         }
@@ -165,7 +171,9 @@ export async function POST(req: Request) {
     const startTime = Date.now();
     const capturedConvId = conversationId; // Capture for closure
 
-    const ossyTools = organizationId && firmId
+    // Tools available for any authenticated user with a firm profile
+    // (not gated behind onboarding — users can skip onboarding and ask directly)
+    const tools = hasToolAccess && organizationId && firmId
       ? createOssyTools(organizationId, firmId)
       : undefined;
 
@@ -173,9 +181,9 @@ export async function POST(req: Request) {
       model: openrouter.chat("anthropic/claude-sonnet-4"),
       system: systemPrompt,
       messages: modelMessages,
-      maxOutputTokens: 1024,
-      ...(ossyTools ? { tools: ossyTools, maxSteps: 2 } : {}),
-      onFinish: async ({ text, usage }) => {
+      ...(tools ? { tools, maxSteps: 3 } : {}),
+      maxOutputTokens: 2048,
+      onFinish: async ({ text, usage, toolCalls }) => {
         // ─── Persist assistant message ───────────────────────
         if (userId && capturedConvId && text) {
           try {
@@ -210,8 +218,23 @@ export async function POST(req: Request) {
 
         if (process.env.NODE_ENV === "development" && usage) {
           console.log(
-            `[Ossy] ${usage.inputTokens}in / ${usage.outputTokens}out | conv=${capturedConvId}`
+            `[Ossy] ${usage.inputTokens}in / ${usage.outputTokens}out | conv=${capturedConvId}${toolCalls?.length ? ` | tools: ${toolCalls.map((t) => t.toolName).join(", ")}` : ""}`
           );
+        }
+
+        // ─── Log tool call usage ──────────────────────────────
+        if (toolCalls?.length) {
+          for (const tc of toolCalls) {
+            logUsage({
+              organizationId,
+              userId: userId ?? undefined,
+              model: `tool:${tc.toolName}`,
+              feature: "chat_tool",
+              inputTokens: 0,
+              outputTokens: 0,
+              durationMs: 0,
+            }).catch(() => {});
+          }
         }
 
         // ─── Extract memories (fire-and-forget) ─────────────

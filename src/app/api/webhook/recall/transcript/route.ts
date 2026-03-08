@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
 
   // Recall.ai webhook payload: { bot_id, transcript: RecallSegment[], status, ... }
   const botId = (payload.bot_id ?? payload.id) as string | undefined;
-  const rawSegments = (payload.transcript ?? payload.data?.transcript ?? []) as RecallSegment[];
+  const rawSegments = (payload.transcript ?? (payload.data as Record<string, unknown> | undefined)?.transcript ?? []) as RecallSegment[];
   const durationSeconds = (payload.duration_seconds ?? payload.duration) as number | undefined;
 
   if (!botId) {

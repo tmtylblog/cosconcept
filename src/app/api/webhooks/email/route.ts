@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const webhookSecret = process.env.EMAIL_WEBHOOK_SECRET;
 
-  if (webhookSecret && authHeader !== `Bearer ${webhookSecret}`) {
+  if (!webhookSecret || authHeader !== `Bearer ${webhookSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

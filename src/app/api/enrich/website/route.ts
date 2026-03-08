@@ -50,6 +50,11 @@ function calculateProfileCompleteness(data: Record<string, unknown>): number {
 }
 
 export async function POST(req: Request) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const { url, organizationId: bodyOrgId } = body as {

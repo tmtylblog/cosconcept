@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { scheduledCalls, coachingReports, callRecordings } from "@/lib/db/schema";
+import { scheduledCalls, coachingReports } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { getActiveOrganization } from "@/lib/auth-helpers";
 
 export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });

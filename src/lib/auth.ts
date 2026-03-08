@@ -33,9 +33,8 @@ export const auth = betterAuth({
     process.env.BETTER_AUTH_URL!,
   ],
 
-  // Disable rate limiting during development/testing
   rateLimit: {
-    enabled: false,
+    enabled: true,
   },
 
   emailAndPassword: {

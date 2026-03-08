@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   // Verify admin secret for remote/CLI invocation
   const secret = req.headers.get("x-admin-secret");
   const expectedSecret = process.env.ADMIN_SECRET;
-  if (expectedSecret && secret !== expectedSecret) {
+  if (!expectedSecret || secret !== expectedSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {

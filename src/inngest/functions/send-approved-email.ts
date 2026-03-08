@@ -95,11 +95,12 @@ export const sendApprovedEmail = inngest.createFunction(
         })
         .where(eq(emailApprovalQueue.id, queueId));
 
-      // Store as outbound email message if we have a thread
-      if (queueEntry.inReplyToThreadId) {
+      // Store as outbound email message if we have a thread context
+      const ctx = queueEntry.context as { reason?: string; threadId?: string } | null;
+      if (ctx?.threadId) {
         await db.insert(emailMessages).values({
           id: generateId("emsg"),
-          threadId: queueEntry.inReplyToThreadId,
+          threadId: ctx.threadId,
           externalMessageId: result.messageId,
           direction: "outbound",
           fromEmail: "ossy@joincollectiveos.com",

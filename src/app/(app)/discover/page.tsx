@@ -312,7 +312,7 @@ function MatchCard({
         {match.preview.industries.slice(0, 3).map((industry) => (
           <span
             key={industry}
-            className="rounded-cos-full bg-cos-accent-warm/10 px-2 py-0.5 text-xs text-cos-accent-warm"
+            className="rounded-cos-full bg-cos-warm/10 px-2 py-0.5 text-xs text-cos-warm"
           >
             {industry}
           </span>

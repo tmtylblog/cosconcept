@@ -55,7 +55,8 @@ async function getSetting(key: string): Promise<string | null> {
  * In test mode, redirects all recipients to the whitelist and adds a banner.
  */
 export async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
-  let { to, cc, bcc, subject, html, text, replyTo, tags } = options;
+  let { to, cc, bcc, subject, html } = options;
+  const { text, replyTo, tags } = options;
 
   // ── DEV OVERRIDE (env-level, checked first, cannot be bypassed) ───────────
   const devOverride = process.env.RESEND_DEV_OVERRIDE?.trim();

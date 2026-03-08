@@ -43,9 +43,29 @@ export interface ExpertContact {
 export interface ImportedClient {
   id: string;
   name: string;
+  domain: string | null;
+  logoUrl: string | null;
+  description: string | null;
   industry: string | null;
+  sector: string | null;
+  subIndustry: string | null;
   website: string | null;
+  employeeCount: string | null;
+  employeeCountExact: number | null;
+  employeeRange: string | null;
+  estimatedRevenue: string | null;
   location: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  companyType: string | null;
+  foundedYear: number | null;
+  linkedinUrl: string | null;
+  tags: string[] | null;
+  techStack: string[] | null;
+  fundingRaised: string | null;
+  enrichedAt: string | null;
+  serviceFirmName: string | null;
   serviceFirmCount: number;
   caseStudyCount: number;
 }

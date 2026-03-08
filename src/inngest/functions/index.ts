@@ -17,3 +17,4 @@ export { scheduleFollowUp, checkStalePartnerships } from "./follow-up-reminders"
 export { weeklyDigest } from "./weekly-digest";
 export { sendApprovedEmail } from "./send-approved-email";
 export { joinMeeting } from "./join-meeting";
+export { firmCaseStudyIngest } from "./firm-case-study-ingest";

@@ -27,13 +27,15 @@ export type DeepCrawlEvent = {
   };
 };
 
-/** Ingest a single case study from URL */
+/** Ingest a single case study from URL, raw text, or file */
 export type CaseStudyIngestEvent = {
   name: "enrich/case-study-ingest";
   data: {
     firmId: string;
     caseStudyUrl: string;
     sourceType: "url" | "pdf" | "slides";
+    rawText?: string;
+    filename?: string;
   };
 };
 
@@ -92,8 +94,10 @@ export type PostCallAnalysisEvent = {
   data: {
     callId: string;
     firmId: string;
+    userId: string;
     transcript: string;
     callType: string;
+    platform?: string;
     participants?: string[];
     duration?: number;
   };
@@ -136,6 +140,18 @@ export type JoinMeetingEvent = {
   data: { scheduledCallId: string };
 };
 
+/** User-managed case study ingestion + analysis pipeline */
+export type FirmCaseStudyIngestEvent = {
+  name: "enrich/firm-case-study-ingest";
+  data: {
+    caseStudyId: string; // firmCaseStudies.id
+    firmId: string;
+    organizationId: string;
+    sourceUrl: string;
+    sourceType: "url" | "pdf_url";
+  };
+};
+
 // Union type for all events
 export type CosEvent =
   | DeepCrawlEvent
@@ -149,4 +165,5 @@ export type CosEvent =
   | ProcessInboundEmailEvent
   | ScheduleFollowUpEvent
   | SendApprovedEmailEvent
-  | JoinMeetingEvent;
+  | JoinMeetingEvent
+  | FirmCaseStudyIngestEvent;

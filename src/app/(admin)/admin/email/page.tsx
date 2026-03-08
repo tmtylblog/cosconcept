@@ -118,7 +118,7 @@ export default function AdminEmailPage() {
           Email Queue
         </h1>
         <p className="mt-1 text-sm text-cos-slate">
-          Review, approve, or reject Ossy's outgoing emails.
+          Review, approve, or reject Ossy&apos;s outgoing emails.
         </p>
       </div>
 
@@ -126,10 +126,10 @@ export default function AdminEmailPage() {
       <div className="flex gap-1 rounded-cos-lg border border-cos-border bg-cos-cloud p-1">
         {(
           [
-            { key: "pending", label: "Pending", icon: <Clock className="h-4 w-4" />, count: pendingItems.length },
-            { key: "sent", label: "Sent", icon: <Send className="h-4 w-4" /> },
-            { key: "received", label: "Received", icon: <Inbox className="h-4 w-4" /> },
-          ] as const
+            { key: "pending" as const, label: "Pending", icon: <Clock className="h-4 w-4" />, count: pendingItems.length },
+            { key: "sent" as const, label: "Sent", icon: <Send className="h-4 w-4" />, count: undefined },
+            { key: "received" as const, label: "Received", icon: <Inbox className="h-4 w-4" />, count: undefined },
+          ]
         ).map(({ key, label, icon, count }) => (
           <button
             key={key}
@@ -208,7 +208,7 @@ function PendingList({
     return (
       <div className="rounded-cos-xl border border-cos-border bg-cos-surface px-6 py-12 text-center">
         <Mail className="mx-auto h-8 w-8 text-cos-slate-light" />
-        <p className="mt-3 text-sm text-cos-slate">No pending emails — Ossy's queue is clear.</p>
+        <p className="mt-3 text-sm text-cos-slate">No pending emails — Ossy&apos;s queue is clear.</p>
       </div>
     );
   }
@@ -386,7 +386,7 @@ function Drawer({
           <div className="flex flex-1 flex-col overflow-hidden">
             <div className="border-b border-cos-border px-4 py-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
-                Ossy's Draft
+                Ossy&apos;s Draft
               </p>
             </div>
             <textarea

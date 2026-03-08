@@ -235,6 +235,15 @@ export const abstractionProfiles = pgTable("abstraction_profiles", {
   entityType: text("entity_type").notNull(), // firm | expert | case_study
   entityId: text("entity_id").notNull(),
   hiddenNarrative: text("hidden_narrative"),
+  topServices: jsonb("top_services").$type<string[]>(),
+  topSkills: jsonb("top_skills").$type<string[]>(),
+  topIndustries: jsonb("top_industries").$type<string[]>(),
+  typicalClientProfile: text("typical_client_profile"),
+  partnershipReadiness: jsonb("partnership_readiness").$type<{
+    openToPartnerships: boolean;
+    preferredPartnerTypes: string[];
+    partnershipGoals: string[];
+  }>(),
   confidenceScores: jsonb("confidence_scores"),
   evidenceSources: jsonb("evidence_sources"),
   // embedding: vector(1536) — added when pgvector extension is enabled
@@ -444,6 +453,15 @@ export const opportunityStatusEnum = pgEnum("opportunity_status", [
   "expired",
 ]);
 
+export const caseStudyStatusEnum = pgEnum("case_study_status", [
+  "pending",
+  "ingesting",
+  "active",
+  "blocked",
+  "failed",
+  "deleted",
+]);
+
 export const opportunities = pgTable("opportunities", {
   id: text("id").primaryKey(),
   firmId: text("firm_id")
@@ -594,31 +612,67 @@ export const importedCompanies = pgTable("imported_companies", {
   sourceId: text("source_id").notNull(), // original n8n companies.id
   source: text("source").notNull().default("n8n"), // "n8n" | "manual" | etc.
 
-  // Primary fields (COS enrichment fills these over time)
+  // ── Core identity ──
   name: text("name").notNull(),
   domain: text("domain"),
+  logoUrl: text("logo_url"), // Clearbit logo
   description: text("description"),
-  industry: text("industry"),
-  location: text("location"),
-  country: text("country"),
-  size: text("size"),
-  foundedYear: integer("founded_year"),
-  linkedinUrl: text("linkedin_url"),
-  websiteUrl: text("website_url"),
-  revenue: text("revenue"),
 
-  // Classification
+  // ── Industry classification ──
+  industry: text("industry"), // Legacy / PDL industry
+  sector: text("sector"), // Clearbit category.sector
+  industryGroup: text("industry_group"), // Clearbit category.industryGroup
+  subIndustry: text("sub_industry"), // Clearbit category.subIndustry
+
+  // ── Size & revenue ──
+  size: text("size"), // Legacy text size band
+  employeeCountExact: integer("employee_count_exact"), // PDL/Clearbit exact count
+  employeeRange: text("employee_range"), // "51-200", "201-500", etc.
+  revenue: text("revenue"), // Legacy revenue text
+  estimatedRevenue: text("estimated_revenue"), // Revenue range from enrichment
+
+  // ── Location ──
+  location: text("location"),
+  city: text("city"),
+  state: text("state"),
+  country: text("country"),
+  countryCode: text("country_code"),
+
+  // ── Company info ──
+  foundedYear: integer("founded_year"),
+  companyType: text("company_type"), // public / private / subsidiary
+  parentDomain: text("parent_domain"), // Corporate parent domain
+
+  // ── Online presence ──
+  websiteUrl: text("website_url"),
+  linkedinUrl: text("linkedin_url"),
+  twitterUrl: text("twitter_url"),
+  facebookUrl: text("facebook_url"),
+
+  // ── Technology & tags ──
+  techStack: jsonb("tech_stack").$type<string[]>(), // From Clearbit
+  tags: jsonb("tags").$type<string[]>(), // Descriptive keywords
+
+  // ── Funding (from PDL) ──
+  fundingRaised: text("funding_raised"),
+  latestFundingStage: text("latest_funding_stage"),
+
+  // ── Classification ──
   isIcp: boolean("is_icp"), // true = professional services firm, false = potential client
   icpClassification: text("icp_classification"), // "professional_services" | "saas" | "investor" | etc.
   classificationConfidence: real("classification_confidence"),
 
-  // Graph sync
+  // ── Graph sync ──
   graphNodeId: text("graph_node_id"), // Neo4j node ID once synced
   serviceFirmId: text("service_firm_id").references(() => serviceFirms.id, {
     onDelete: "set null",
   }),
 
-  // Provenance
+  // ── Enrichment tracking ──
+  enrichedAt: timestamp("enriched_at"),
+  enrichmentSources: jsonb("enrichment_sources").$type<Record<string, string>>(),
+
+  // ── Provenance ──
   reviewTags: jsonb("review_tags").$type<string[]>().default([]),
   meta: jsonb("meta").$type<{
     source: string;
@@ -718,23 +772,64 @@ export const importedClients = pgTable("imported_clients", {
   sourceId: text("source_id").notNull(), // Legacy client company UUID
   source: text("source").notNull().default("legacy"),
 
-  // Primary fields
+  // ── Core identity ──
   name: text("name").notNull(),
-  industry: text("industry"),
-  website: text("website"),
-  employeeCount: text("employee_count"),
+  domain: text("domain"), // Normalized domain (e.g., "att.com")
+  logoUrl: text("logo_url"), // Clearbit logo
+  description: text("description"), // Company summary
 
-  // Link to the service firm that listed this client
+  // ── Industry classification ──
+  industry: text("industry"), // Legacy or PDL industry
+  sector: text("sector"), // Clearbit category.sector
+  industryGroup: text("industry_group"), // Clearbit category.industryGroup
+  subIndustry: text("sub_industry"), // Clearbit category.subIndustry
+
+  // ── Size & revenue ──
+  employeeCount: text("employee_count"), // Legacy text value
+  employeeCountExact: integer("employee_count_exact"), // PDL/Clearbit exact count
+  employeeRange: text("employee_range"), // "51-200", "201-500", etc.
+  estimatedRevenue: text("estimated_revenue"), // Revenue range string
+  annualRevenue: text("annual_revenue"), // More precise if available
+
+  // ── Location ──
+  location: text("location"), // Full formatted location
+  city: text("city"),
+  state: text("state"),
+  country: text("country"),
+  countryCode: text("country_code"),
+
+  // ── Company info ──
+  website: text("website"), // Original website value (may be messy)
+  foundedYear: integer("founded_year"),
+  companyType: text("company_type"), // public / private / subsidiary
+  parentDomain: text("parent_domain"), // Corporate parent domain
+
+  // ── Online presence ──
+  linkedinUrl: text("linkedin_url"),
+  twitterUrl: text("twitter_url"),
+  facebookUrl: text("facebook_url"),
+
+  // ── Technology & tags ──
+  techStack: jsonb("tech_stack").$type<string[]>(), // From Clearbit
+  tags: jsonb("tags").$type<string[]>(), // Descriptive keywords
+
+  // ── Funding (from PDL) ──
+  fundingRaised: text("funding_raised"), // Total raised USD
+  latestFundingStage: text("latest_funding_stage"),
+
+  // ── Relationships ──
   serviceFirmSourceId: text("service_firm_source_id"), // Legacy organisation.id
   serviceFirmName: text("service_firm_name"), // Denormalized for display
-
-  // Resolved FK to imported_companies
   importedCompanyId: text("imported_company_id").references(
     () => importedCompanies.id,
     { onDelete: "set null" }
   ),
 
-  // Provenance
+  // ── Enrichment tracking ──
+  enrichedAt: timestamp("enriched_at"), // When last enriched
+  enrichmentSources: jsonb("enrichment_sources").$type<Record<string, string>>(), // { pdl: "2024-01-15", clearbit: "2024-01-15" }
+
+  // ── Provenance ──
   legacyData: jsonb("legacy_data"),
   meta: jsonb("meta"),
 
@@ -778,6 +873,48 @@ export const importedCaseStudies = pgTable("imported_case_studies", {
   meta: jsonb("meta"),
 
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Firm Case Studies (user-managed) ─────────────────
+
+export const firmCaseStudies = pgTable("firm_case_studies", {
+  id: text("id").primaryKey(),
+  firmId: text("firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").notNull(),
+
+  // Source — what the user provided
+  sourceUrl: text("source_url").notNull(),
+  sourceType: text("source_type").notNull().default("url"), // "url" | "pdf_url"
+  userNotes: text("user_notes"),
+
+  // Status
+  status: caseStudyStatusEnum("status").notNull().default("pending"),
+  statusMessage: text("status_message"),
+
+  // Visible layer (system-generated, user can't edit)
+  title: text("title"),
+  summary: text("summary"), // AI-generated 2-sentence summary
+  autoTags: jsonb("auto_tags").$type<{
+    skills: string[];
+    industries: string[];
+    services: string[];
+    clientName: string | null;
+  }>(),
+
+  // Full AI analysis (not editable by user)
+  cosAnalysis: jsonb("cos_analysis"),
+
+  // Graph + abstraction linkage
+  graphNodeId: text("graph_node_id"),
+  abstractionProfileId: text("abstraction_profile_id"),
+
+  // Timestamps
+  ingestedAt: timestamp("ingested_at"),
+  lastIngestedAt: timestamp("last_ingested_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 // ─── Migration Batches (tracking) ─────────────────────

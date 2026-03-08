@@ -94,42 +94,42 @@ export default function AdminOverviewPage() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StatCard
-          icon={<Building2 className="h-4.5 w-4.5" />}
+          icon={<Building2 className="h-4 w-4" />}
           iconColor="text-cos-electric"
           iconBg="bg-cos-electric/10"
           label="Organizations"
           value={metrics.totalOrgs}
         />
         <StatCard
-          icon={<Users className="h-4.5 w-4.5" />}
+          icon={<Users className="h-4 w-4" />}
           iconColor="text-cos-signal"
           iconBg="bg-cos-signal/10"
           label="Users"
           value={metrics.totalUsers}
         />
         <StatCard
-          icon={<UserCheck className="h-4.5 w-4.5" />}
+          icon={<UserCheck className="h-4 w-4" />}
           iconColor="text-cos-warm"
           iconBg="bg-cos-warm/10"
           label="Expert Profiles"
           value={metrics.totalExperts.toLocaleString()}
         />
         <StatCard
-          icon={<Briefcase className="h-4.5 w-4.5" />}
+          icon={<Briefcase className="h-4 w-4" />}
           iconColor="text-cos-ember"
           iconBg="bg-cos-ember/10"
           label="Clients"
           value={metrics.totalClients.toLocaleString()}
         />
         <StatCard
-          icon={<CreditCard className="h-4.5 w-4.5" />}
+          icon={<CreditCard className="h-4 w-4" />}
           iconColor="text-cos-signal"
           iconBg="bg-cos-signal/10"
           label="Subscriptions"
           value={metrics.activeSubscriptions}
         />
         <StatCard
-          icon={<DollarSign className="h-4.5 w-4.5" />}
+          icon={<DollarSign className="h-4 w-4" />}
           iconColor="text-cos-electric"
           iconBg="bg-cos-electric/10"
           label="MRR"

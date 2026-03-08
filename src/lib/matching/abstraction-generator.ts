@@ -198,7 +198,7 @@ Be specific and factual. Avoid generic language.`,
     },
   };
 
-  // Persist to database
+  // Persist to database (all AI-generated fields)
   await db
     .insert(abstractionProfiles)
     .values({
@@ -206,6 +206,11 @@ Be specific and factual. Avoid generic language.`,
       entityType: profile.entityType,
       entityId: profile.entityId,
       hiddenNarrative: profile.hiddenNarrative,
+      topServices: profile.topServices,
+      topSkills: profile.topSkills,
+      topIndustries: profile.topIndustries,
+      typicalClientProfile: profile.typicalClientProfile,
+      partnershipReadiness: profile.partnershipReadiness,
       confidenceScores: profile.confidenceScores,
       evidenceSources: profile.evidenceSources,
       lastEnrichedAt: new Date(),
@@ -215,6 +220,11 @@ Be specific and factual. Avoid generic language.`,
       target: abstractionProfiles.id,
       set: {
         hiddenNarrative: profile.hiddenNarrative,
+        topServices: profile.topServices,
+        topSkills: profile.topSkills,
+        topIndustries: profile.topIndustries,
+        typicalClientProfile: profile.typicalClientProfile,
+        partnershipReadiness: profile.partnershipReadiness,
         confidenceScores: profile.confidenceScores,
         evidenceSources: profile.evidenceSources,
         lastEnrichedAt: new Date(),
@@ -251,11 +261,11 @@ export async function loadAbstractionProfile(
     entityType: entityType,
     entityId: row.entityId,
     hiddenNarrative: row.hiddenNarrative ?? "",
-    topServices: [],
-    topSkills: [],
-    topIndustries: [],
-    typicalClientProfile: "",
-    partnershipReadiness: {
+    topServices: (row.topServices as string[]) ?? [],
+    topSkills: (row.topSkills as string[]) ?? [],
+    topIndustries: (row.topIndustries as string[]) ?? [],
+    typicalClientProfile: row.typicalClientProfile ?? "",
+    partnershipReadiness: (row.partnershipReadiness as AbstractionProfile["partnershipReadiness"]) ?? {
       openToPartnerships: true,
       preferredPartnerTypes: [],
       partnershipGoals: [],
