@@ -52,71 +52,88 @@ export async function GET(req: NextRequest) {
   const offset = (page - 1) * limit;
 
   try {
-    // Platform firms from PostgreSQL (service_firms + imported_companies)
+    // Platform firms from PostgreSQL (service_firms + optional imported_companies)
     if (source === "platform" || source === "all") {
       const searchFilter = search
-        ? sql` AND (name ILIKE ${"%" + search + "%"} OR website ILIKE ${"%" + search + "%"})`
+        ? sql` AND (sf.name ILIKE ${"%" + search + "%"} OR sf.website ILIKE ${"%" + search + "%"})`
         : sql``;
 
-      // Union service_firms and imported_companies into a single result set
-      const countResult = await db.execute(sql`
-        SELECT COUNT(*)::int AS total FROM (
-          SELECT sf.id FROM service_firms sf WHERE 1=1 ${searchFilter}
-          UNION ALL
-          SELECT ic.id FROM imported_companies ic
-          WHERE 1=1 ${search ? sql` AND (ic.name ILIKE ${"%" + search + "%"} OR ic.domain ILIKE ${"%" + search + "%"})` : sql``}
-        ) combined
-      `);
-      const totalPlatform = Number(countResult.rows[0]?.total ?? 0);
+      // Check if imported_companies table exists
+      let hasImportedCompanies = false;
+      try {
+        await db.execute(sql`SELECT 1 FROM imported_companies LIMIT 0`);
+        hasImportedCompanies = true;
+      } catch {
+        // Table doesn't exist yet
+      }
 
-      const platformResult = await db.execute(sql`
-        SELECT * FROM (
+      let totalPlatform: number;
+      let platformResult: { rows: Record<string, unknown>[] };
+
+      if (hasImportedCompanies) {
+        const countResult = await db.execute(sql`
+          SELECT COUNT(*)::int AS total FROM (
+            SELECT sf.id FROM service_firms sf WHERE 1=1 ${searchFilter}
+            UNION ALL
+            SELECT ic.id FROM imported_companies ic
+            WHERE 1=1 ${search ? sql` AND (ic.name ILIKE ${"%" + search + "%"} OR ic.domain ILIKE ${"%" + search + "%"})` : sql``}
+          ) combined
+        `);
+        totalPlatform = Number(countResult.rows[0]?.total ?? 0);
+
+        platformResult = await db.execute(sql`
+          SELECT * FROM (
+            SELECT
+              sf.id, sf.name, sf.website, sf.description,
+              sf.firm_type AS "firmType", sf.size_band AS "sizeBand",
+              sf.profile_completeness AS "profileCompleteness",
+              sf.is_platform_member AS "isPlatformMember",
+              sf.organization_id AS "organizationId",
+              sf.created_at AS "createdAt",
+              o.name AS "orgName", o.slug AS "orgSlug",
+              NULL AS "location", NULL AS "industry",
+              NULL AS "employeeCount", 'service_firm' AS "dataSource"
+            FROM service_firms sf
+            LEFT JOIN organizations o ON o.id = sf.organization_id
+            WHERE 1=1 ${searchFilter}
+            UNION ALL
+            SELECT
+              ic.id, ic.name, ic.domain AS website, ic.description,
+              ic.icp_classification AS "firmType", ic.size AS "sizeBand",
+              NULL::real AS "profileCompleteness", false AS "isPlatformMember",
+              NULL AS "organizationId", ic.created_at AS "createdAt",
+              NULL AS "orgName", NULL AS "orgSlug",
+              ic.location, ic.industry, ic.size AS "employeeCount",
+              'imported' AS "dataSource"
+            FROM imported_companies ic
+            WHERE 1=1 ${search ? sql` AND (ic.name ILIKE ${"%" + search + "%"} OR ic.domain ILIKE ${"%" + search + "%"})` : sql``}
+          ) combined
+          ORDER BY "createdAt" DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `);
+      } else {
+        const countResult = await db.execute(sql`
+          SELECT COUNT(*)::int AS total FROM service_firms sf WHERE 1=1 ${searchFilter}
+        `);
+        totalPlatform = Number(countResult.rows[0]?.total ?? 0);
+
+        platformResult = await db.execute(sql`
           SELECT
-            sf.id,
-            sf.name,
-            sf.website,
-            sf.description,
-            sf.firm_type AS "firmType",
-            sf.size_band AS "sizeBand",
+            sf.id, sf.name, sf.website, sf.description,
+            sf.firm_type AS "firmType", sf.size_band AS "sizeBand",
             sf.profile_completeness AS "profileCompleteness",
             sf.is_platform_member AS "isPlatformMember",
             sf.organization_id AS "organizationId",
             sf.created_at AS "createdAt",
-            o.name AS "orgName",
-            o.slug AS "orgSlug",
-            NULL AS "location",
-            NULL AS "industry",
-            NULL AS "employeeCount",
+            o.name AS "orgName", o.slug AS "orgSlug",
             'service_firm' AS "dataSource"
           FROM service_firms sf
           LEFT JOIN organizations o ON o.id = sf.organization_id
           WHERE 1=1 ${searchFilter}
-
-          UNION ALL
-
-          SELECT
-            ic.id,
-            ic.name,
-            ic.domain AS website,
-            ic.description,
-            ic.icp_classification AS "firmType",
-            ic.size AS "sizeBand",
-            NULL::real AS "profileCompleteness",
-            false AS "isPlatformMember",
-            NULL AS "organizationId",
-            ic.created_at AS "createdAt",
-            NULL AS "orgName",
-            NULL AS "orgSlug",
-            ic.location,
-            ic.industry,
-            ic.size AS "employeeCount",
-            'imported' AS "dataSource"
-          FROM imported_companies ic
-          WHERE 1=1 ${search ? sql` AND (ic.name ILIKE ${"%" + search + "%"} OR ic.domain ILIKE ${"%" + search + "%"})` : sql``}
-        ) combined
-        ORDER BY "createdAt" DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `);
+          ORDER BY sf.created_at DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `);
+      }
 
       if (source === "platform") {
         return NextResponse.json({
@@ -259,46 +276,52 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // source === "all": merge both
-      const platformResult = await db.execute(sql`
-        SELECT * FROM (
+      // source === "all": merge both — reuse hasImportedCompanies from above if available
+      let allPlatformResult: { rows: Record<string, unknown>[] };
+      try {
+        allPlatformResult = await db.execute(sql`
+          SELECT * FROM (
+            SELECT
+              sf.id, sf.name, sf.website, sf.description,
+              sf.firm_type AS "firmType", sf.size_band AS "sizeBand",
+              sf.profile_completeness AS "profileCompleteness",
+              sf.is_platform_member AS "isPlatformMember",
+              sf.organization_id AS "organizationId",
+              sf.created_at AS "createdAt",
+              o.name AS "orgName", o.slug AS "orgSlug",
+              'service_firm' AS "dataSource"
+            FROM service_firms sf
+            LEFT JOIN organizations o ON o.id = sf.organization_id
+            UNION ALL
+            SELECT
+              ic.id, ic.name, ic.domain AS website, ic.description,
+              ic.icp_classification AS "firmType", ic.size AS "sizeBand",
+              NULL::real AS "profileCompleteness", false AS "isPlatformMember",
+              NULL AS "organizationId", ic.created_at AS "createdAt",
+              NULL AS "orgName", NULL AS "orgSlug",
+              'imported' AS "dataSource"
+            FROM imported_companies ic
+          ) combined
+          ORDER BY "createdAt" DESC
+        `);
+      } catch {
+        // imported_companies table may not exist yet — fall back to service_firms only
+        allPlatformResult = await db.execute(sql`
           SELECT
-            sf.id,
-            sf.name,
-            sf.website,
-            sf.description,
-            sf.firm_type AS "firmType",
-            sf.size_band AS "sizeBand",
+            sf.id, sf.name, sf.website, sf.description,
+            sf.firm_type AS "firmType", sf.size_band AS "sizeBand",
             sf.profile_completeness AS "profileCompleteness",
             sf.is_platform_member AS "isPlatformMember",
             sf.organization_id AS "organizationId",
             sf.created_at AS "createdAt",
-            o.name AS "orgName",
-            o.slug AS "orgSlug",
+            o.name AS "orgName", o.slug AS "orgSlug",
             'service_firm' AS "dataSource"
           FROM service_firms sf
           LEFT JOIN organizations o ON o.id = sf.organization_id
-
-          UNION ALL
-
-          SELECT
-            ic.id,
-            ic.name,
-            ic.domain AS website,
-            ic.description,
-            ic.icp_classification AS "firmType",
-            ic.size AS "sizeBand",
-            NULL::real AS "profileCompleteness",
-            false AS "isPlatformMember",
-            NULL AS "organizationId",
-            ic.created_at AS "createdAt",
-            NULL AS "orgName",
-            NULL AS "orgSlug",
-            'imported' AS "dataSource"
-          FROM imported_companies ic
-        ) combined
-        ORDER BY "createdAt" DESC
-      `);
+          ORDER BY sf.created_at DESC
+        `);
+      }
+      const platformResult = allPlatformResult;
 
       // Cross-reference: mark graph firms that are also platform members
       const platformIds = new Set(platformResult.rows.map((r) => r.id));
