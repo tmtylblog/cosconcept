@@ -553,3 +553,145 @@ export const emailApprovalQueue = pgTable("email_approval_queue", {
   externalMessageId: text("external_message_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// ─── Imported Companies (from n8n migration) ───────────
+
+export const importedCompanies = pgTable("imported_companies", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull(), // original n8n companies.id
+  source: text("source").notNull().default("n8n"), // "n8n" | "manual" | etc.
+
+  // Primary fields (COS enrichment fills these over time)
+  name: text("name").notNull(),
+  domain: text("domain"),
+  description: text("description"),
+  industry: text("industry"),
+  location: text("location"),
+  country: text("country"),
+  size: text("size"),
+  foundedYear: integer("founded_year"),
+  linkedinUrl: text("linkedin_url"),
+  websiteUrl: text("website_url"),
+  revenue: text("revenue"),
+
+  // Classification
+  isIcp: boolean("is_icp"), // true = professional services firm, false = potential client
+  icpClassification: text("icp_classification"), // "professional_services" | "saas" | "investor" | etc.
+  classificationConfidence: real("classification_confidence"),
+
+  // Graph sync
+  graphNodeId: text("graph_node_id"), // Neo4j node ID once synced
+  serviceFirmId: text("service_firm_id").references(() => serviceFirms.id, {
+    onDelete: "set null",
+  }),
+
+  // Provenance
+  reviewTags: jsonb("review_tags").$type<string[]>().default([]),
+  meta: jsonb("meta").$type<{
+    source: string;
+    migratedAt: string;
+    originalCreatedAt?: string;
+    lastResearchedAt?: string;
+    researchFlags?: Record<string, boolean>;
+    confidence?: number;
+  }>(),
+  legacyData: jsonb("legacy_data"), // Full raw n8n row preserved
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─── Imported Contacts (from n8n migration) ────────────
+
+export const importedContacts = pgTable("imported_contacts", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull(), // n8n contacts.id
+  source: text("source").notNull().default("n8n"),
+  companyId: text("company_id").references(() => importedCompanies.id, {
+    onDelete: "set null",
+  }),
+
+  // Primary fields
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  name: text("name"),
+  email: text("email"),
+  title: text("title"),
+  linkedinUrl: text("linkedin_url"),
+  photoUrl: text("photo_url"),
+  headline: text("headline"),
+  shortBio: text("short_bio"),
+  city: text("city"),
+  state: text("state"),
+  country: text("country"),
+
+  // Classification
+  isPartner: boolean("is_partner"),
+  isIcp: boolean("is_icp"),
+  profileMatch: text("profile_match"),
+  profileMatchJustification: text("profile_match_justification"),
+  expertClassification: text("expert_classification"), // "expert" | "internal" | "ambiguous"
+
+  // Graph sync
+  graphNodeId: text("graph_node_id"),
+
+  // Provenance
+  reviewTags: jsonb("review_tags").$type<string[]>().default([]),
+  meta: jsonb("meta").$type<{
+    source: string;
+    migratedAt: string;
+    originalCreatedAt?: string;
+    lastResearchedAt?: string;
+    confidence?: number;
+  }>(),
+  legacyData: jsonb("legacy_data"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─── Imported Outreach (from n8n fact.messages) ────────
+
+export const importedOutreach = pgTable("imported_outreach", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull(), // n8n message_id
+  source: text("source").notNull().default("n8n"),
+  companyId: text("company_id").references(() => importedCompanies.id, {
+    onDelete: "set null",
+  }),
+  contactId: text("contact_id").references(() => importedContacts.id, {
+    onDelete: "set null",
+  }),
+
+  messageType: text("message_type"), // from n8n message_type
+  messageModule: text("message_module"), // from n8n message_module
+  message: text("message"),
+  direction: text("direction"), // "outbound" | "inbound"
+  senderOrgId: text("sender_org_id"),
+  recipientOrgId: text("recipient_org_id"),
+  opportunityTitle: text("opportunity_title"),
+  sentAt: timestamp("sent_at"),
+
+  meta: jsonb("meta"),
+  legacyData: jsonb("legacy_data"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Migration Batches (tracking) ─────────────────────
+
+export const migrationBatches = pgTable("migration_batches", {
+  id: text("id").primaryKey(),
+  source: text("source").notNull().default("n8n"),
+  entityType: text("entity_type").notNull(), // "companies" | "contacts" | "outreach" | "research"
+  batchNumber: integer("batch_number").notNull(),
+  totalInBatch: integer("total_in_batch").notNull(),
+  imported: integer("imported").notNull().default(0),
+  skipped: integer("skipped").notNull().default(0),
+  errors: integer("errors").notNull().default(0),
+  errorDetails: jsonb("error_details"),
+  status: text("status").notNull().default("pending"), // pending | processing | complete | failed
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

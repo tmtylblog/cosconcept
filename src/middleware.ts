@@ -21,6 +21,7 @@ const PUBLIC_EXCEPTIONS = [
   "/api/chat/migrate",       // conversation migration
   "/api/admin/neo4j/seed",     // neo4j seed (protected by ADMIN_SECRET header)
   "/api/admin/neo4j/migrate",  // legacy migration (protected by ADMIN_SECRET header)
+  "/api/admin/import",         // n8n import endpoints (protected by ADMIN_SECRET header)
 ];
 
 function isProtectedPath(pathname: string): boolean {

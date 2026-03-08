@@ -168,7 +168,7 @@ export interface ClassificationResult {
 /**
  * Classify a single title as expert, internal, or ambiguous.
  */
-function classifyTitle(title: string): "expert" | "internal" | "ambiguous" {
+export function classifyTitle(title: string): "expert" | "internal" | "ambiguous" {
   const normalized = ` ${title.toLowerCase()} `;
 
   // Check internal first (more specific patterns)

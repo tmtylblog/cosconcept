@@ -1,0 +1,155 @@
+{
+  "name": "COS Migration — Export Companies",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            { "name": "batchSize", "value": 500 },
+            { "name": "offset", "value": 0 },
+            { "name": "batchNumber", "value": 1 }
+          ],
+          "string": [
+            { "name": "apiUrl", "value": "https://cos-concept.vercel.app/api/admin/import/companies" },
+            { "name": "adminSecret", "value": "YOUR_ADMIN_SECRET_HERE" }
+          ]
+        }
+      },
+      "id": "set-vars-1",
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.*, cr.exec_summary, cr.investment_thesis_insight, cr.activity_insight, cr.portfolio_support_insight, cr.key_markets, cr.key_leadership, cr.is_eu, cr.is_icp_investor, cs.research_company, cs.research_team, cs.research_news, cs.research_team_enrich, cs.research_linkedin, cs.research_basic_info, cs.investor_profiling, cs.general_profiling, cs.basic_info FROM public.companies c LEFT JOIN public.company_research cr ON cr.fk_companies = c.id LEFT JOIN public.company_status cs ON cs.fk_companies = c.id ORDER BY c.id LIMIT {{ $json.batchSize }} OFFSET {{ $json.offset }}"
+      },
+      "id": "postgres-1",
+      "name": "Fetch Companies",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [680, 300],
+      "credentials": {
+        "postgres": {
+          "id": "USE_YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres (n8n DB)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enrich companies with services, selling points, and prior work\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const companyId = item.json.id;\n  \n  // These would ideally be separate sub-queries\n  // For simplicity, we'll attach empty arrays and let a follow-up node enrich\n  results.push({\n    json: {\n      ...item.json,\n      services: [],\n      selling_points: [],\n      prior_work: []\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "code-enrich-1",
+      "name": "Prepare Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Bundle all items into a single batch payload\nconst items = $input.all();\nconst batchNumber = items[0]?.json?.batchNumber || $('Set Variables').first().json.batchNumber;\n\nconst batch = items.map(item => item.json);\n\nreturn [{\n  json: {\n    batch: batch,\n    batchNumber: batchNumber,\n    totalBatches: -1\n  }\n}];"
+      },
+      "id": "code-bundle-1",
+      "name": "Bundle as Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Set Variables').first().json.apiUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-admin-secret", "value": "={{ $('Set Variables').first().json.adminSecret }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "batch", "value": "={{ $json.batch }}" },
+            { "name": "batchNumber", "value": "={{ $json.batchNumber }}" },
+            { "name": "totalBatches", "value": "={{ $json.totalBatches }}" }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "http-post-1",
+      "name": "POST to COS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Fetch Companies').all().length }}",
+              "rightValue": "={{ $('Set Variables').first().json.batchSize }}",
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ]
+        }
+      },
+      "id": "if-more-1",
+      "name": "More Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            { "name": "offset", "value": "={{ $('Set Variables').first().json.offset + $('Set Variables').first().json.batchSize }}" },
+            { "name": "batchNumber", "value": "={{ $('Set Variables').first().json.batchNumber + 1 }}" },
+            { "name": "batchSize", "value": "={{ $('Set Variables').first().json.batchSize }}" }
+          ],
+          "string": [
+            { "name": "apiUrl", "value": "={{ $('Set Variables').first().json.apiUrl }}" },
+            { "name": "adminSecret", "value": "={{ $('Set Variables').first().json.adminSecret }}" }
+          ]
+        }
+      },
+      "id": "set-next-1",
+      "name": "Next Page",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1780, 200]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": { "main": [[{ "node": "Set Variables", "type": "main", "index": 0 }]] },
+    "Set Variables": { "main": [[{ "node": "Fetch Companies", "type": "main", "index": 0 }]] },
+    "Fetch Companies": { "main": [[{ "node": "Prepare Batch", "type": "main", "index": 0 }]] },
+    "Prepare Batch": { "main": [[{ "node": "Bundle as Batch", "type": "main", "index": 0 }]] },
+    "Bundle as Batch": { "main": [[{ "node": "POST to COS", "type": "main", "index": 0 }]] },
+    "POST to COS": { "main": [[{ "node": "More Data?", "type": "main", "index": 0 }]] },
+    "More Data?": { "main": [
+      [{ "node": "Next Page", "type": "main", "index": 0 }],
+      []
+    ]},
+    "Next Page": { "main": [[{ "node": "Fetch Companies", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "instanceId": "cos-migration"
+  }
+}
