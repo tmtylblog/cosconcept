@@ -1,0 +1,98 @@
+"use client";
+
+import { createContext, useContext, useCallback, useState, useEffect } from "react";
+import type { ReactNode } from "react";
+import React from "react";
+
+// ─── Types ───────────────────────────────────────────────
+
+export interface ProfileData {
+  // Firm fields (from serviceFirms.enrichmentData.confirmed)
+  firmCategory?: string;
+  services?: string[];
+  clients?: string[];
+  skills?: string[];
+  markets?: string[];
+  languages?: string[];
+  industries?: string[];
+  // Partner preference fields (from partnerPreferences table)
+  preferredPartnerTypes?: string[];
+  partnershipModels?: string[];
+  dealBreakers?: string[];
+  growthGoals?: string;
+}
+
+interface ProfileContextValue {
+  data: ProfileData;
+  /** Update a single field — instant local state update */
+  updateField: (field: string, value: string | string[]) => void;
+  /** Whether initial hydration is complete */
+  hydrated: boolean;
+}
+
+// ─── Context ─────────────────────────────────────────────
+
+const ProfileContext = createContext<ProfileContextValue>({
+  data: {},
+  updateField: () => {},
+  hydrated: false,
+});
+
+export function useProfile() {
+  return useContext(ProfileContext);
+}
+
+// ─── Provider ────────────────────────────────────────────
+
+export function ProfileProvider({
+  children,
+  organizationId,
+}: {
+  children: ReactNode;
+  organizationId?: string;
+}) {
+  const [data, setData] = useState<ProfileData>({});
+  const [hydrated, setHydrated] = useState(false);
+
+  // Hydrate from DB on mount
+  useEffect(() => {
+    if (!organizationId) {
+      setHydrated(true);
+      return;
+    }
+    let cancelled = false;
+
+    async function hydrate() {
+      try {
+        const res = await fetch(`/api/profile?organizationId=${organizationId}`);
+        if (!res.ok) return;
+        const profile = await res.json();
+        if (cancelled) return;
+        setData(profile);
+      } catch {
+        // Silently ignore hydration failures
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    }
+
+    hydrate();
+    return () => { cancelled = true; };
+  }, [organizationId]);
+
+  const updateField = useCallback((field: string, value: string | string[]) => {
+    setData((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
+  const contextValue: ProfileContextValue = {
+    data,
+    updateField,
+    hydrated,
+  };
+
+  return React.createElement(
+    ProfileContext.Provider,
+    { value: contextValue },
+    children
+  );
+}

@@ -11,8 +11,13 @@ import {
   Wrench,
   Globe,
   Languages,
+  Handshake,
+  Target,
+  ShieldAlert,
+  TrendingUp,
 } from "lucide-react";
 import { useEnrichment } from "@/hooks/use-enrichment";
+import { useProfile } from "@/hooks/use-profile";
 import { cn } from "@/lib/utils";
 
 /** A single data card that slides in from the bottom when it has content */
@@ -43,14 +48,49 @@ function RevealCard({
   );
 }
 
+/** Render an array of strings as pills inside a RevealCard */
+function PillList({
+  items,
+  pillClass,
+  max,
+}: {
+  items: string[];
+  pillClass: string;
+  max?: number;
+}) {
+  const display = max ? items.slice(0, max) : items;
+  const overflow = max && items.length > max ? items.length - max : 0;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {display.map((item) => (
+        <span
+          key={item}
+          className={cn(
+            "rounded-cos-pill px-2.5 py-1 text-xs font-medium",
+            pillClass
+          )}
+        >
+          {item}
+        </span>
+      ))}
+      {overflow > 0 && (
+        <span className="rounded-cos-pill bg-cos-cloud px-2.5 py-1 text-xs text-cos-slate">
+          +{overflow} more
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { status: enrichmentStatus, result } = useEnrichment();
+  const { data: profile } = useProfile();
 
   const isEnriching = enrichmentStatus === "loading";
   const isFailed = enrichmentStatus === "failed";
   const isDone = enrichmentStatus === "done";
 
-  // Extract data sections (only show cards with actual data)
+  // Extract data sections
   const companyData = result?.companyData;
   const extracted = result?.extracted;
   const classification = result?.classification;
@@ -60,11 +100,52 @@ export default function DashboardPage() {
   const firmLocation = companyData?.location;
   const firmSize = companyData?.size;
 
-  const services = extracted?.services?.length ? extracted.services : null;
-  const clients = extracted?.clients?.length ? extracted.clients : null;
-  const skills = classification?.skills?.length ? classification.skills : null;
-  const markets = classification?.markets?.length ? classification.markets : null;
-  const languages = classification?.languages?.length ? classification.languages : null;
+  // Merge: confirmed profile data takes precedence over enrichment
+  const services = profile.services?.length
+    ? profile.services
+    : extracted?.services?.length
+      ? extracted.services
+      : null;
+  const clients = profile.clients?.length
+    ? profile.clients
+    : extracted?.clients?.length
+      ? extracted.clients
+      : null;
+  const skills = profile.skills?.length
+    ? profile.skills
+    : classification?.skills?.length
+      ? classification.skills
+      : null;
+  const markets = profile.markets?.length
+    ? profile.markets
+    : classification?.markets?.length
+      ? classification.markets
+      : null;
+  const languages = profile.languages?.length
+    ? profile.languages
+    : classification?.languages?.length
+      ? classification.languages
+      : null;
+  const industries = profile.industries?.length
+    ? profile.industries
+    : classification?.industries?.length
+      ? classification.industries
+      : null;
+  const categories = profile.firmCategory
+    ? [profile.firmCategory]
+    : classification?.categories?.length
+      ? classification.categories
+      : null;
+
+  // Partner preference data (only from profile/chat confirmations)
+  const partnerTypes = profile.preferredPartnerTypes ?? [];
+  const partnerModels = profile.partnershipModels ?? [];
+  const dealBreakers = profile.dealBreakers ?? [];
+  const growthGoals = profile.growthGoals;
+
+  const hasEnrichment = isDone && (companyData || extracted || classification);
+  const hasProfile = Object.keys(profile).length > 0;
+  const hasAnyData = hasEnrichment || hasProfile;
 
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center px-6 py-10">
@@ -98,8 +179,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Welcome prompt — only when idle (no enrichment yet) */}
-      {enrichmentStatus === "idle" && (
+      {/* Welcome prompt — only when idle (no enrichment or profile yet) */}
+      {enrichmentStatus === "idle" && !hasAnyData && (
         <div className="text-center py-6">
           <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-cos-2xl bg-gradient-to-br from-cos-electric/15 to-cos-signal/15">
             <MessageCircle className="h-8 w-8 text-cos-electric" />
@@ -120,7 +201,7 @@ export default function DashboardPage() {
       )}
 
       {/* Progressive reveal cards — only appear when data exists */}
-      {isDone && (
+      {hasAnyData && (
         <div className={cn("flex w-full flex-col gap-3", isDone && "mt-2")}>
           {/* Firm identity */}
           {firmName && (
@@ -134,66 +215,56 @@ export default function DashboardPage() {
             </RevealCard>
           )}
 
+          {/* Firm Category (from chat confirmation) */}
+          {categories && (
+            <RevealCard icon={Building2} label="Firm Category" delay={50}>
+              <PillList
+                items={categories}
+                pillClass="bg-cos-electric/8 px-2.5 py-1 text-xs font-medium text-cos-electric"
+              />
+            </RevealCard>
+          )}
+
           {/* Services */}
           {services && (
             <RevealCard icon={Briefcase} label="Services" delay={100}>
-              <div className="flex flex-wrap gap-1.5">
-                {services.slice(0, 8).map((s) => (
-                  <span
-                    key={s}
-                    className="rounded-cos-pill bg-cos-electric/8 px-2.5 py-1 text-xs font-medium text-cos-electric"
-                  >
-                    {s}
-                  </span>
-                ))}
-                {services.length > 8 && (
-                  <span className="rounded-cos-pill bg-cos-cloud px-2.5 py-1 text-xs text-cos-slate">
-                    +{services.length - 8} more
-                  </span>
-                )}
-              </div>
+              <PillList
+                items={services}
+                pillClass="bg-cos-electric/8 text-cos-electric"
+                max={8}
+              />
             </RevealCard>
           )}
 
           {/* Clients */}
           {clients && (
             <RevealCard icon={Users} label="Clients Identified" delay={200}>
-              <div className="flex flex-wrap gap-1.5">
-                {clients.slice(0, 10).map((c) => (
-                  <span
-                    key={c}
-                    className="rounded-cos-pill bg-cos-signal/8 px-2.5 py-1 text-xs font-medium text-cos-signal"
-                  >
-                    {c}
-                  </span>
-                ))}
-                {clients.length > 10 && (
-                  <span className="rounded-cos-pill bg-cos-cloud px-2.5 py-1 text-xs text-cos-slate">
-                    +{clients.length - 10} more
-                  </span>
-                )}
-              </div>
+              <PillList
+                items={clients}
+                pillClass="bg-cos-signal/8 text-cos-signal"
+                max={10}
+              />
             </RevealCard>
           )}
 
           {/* Skills */}
           {skills && (
             <RevealCard icon={Wrench} label="Skills" delay={300}>
-              <div className="flex flex-wrap gap-1.5">
-                {skills.slice(0, 10).map((s) => (
-                  <span
-                    key={s}
-                    className="rounded-cos-pill bg-cos-midnight/6 px-2.5 py-1 text-xs font-medium text-cos-midnight"
-                  >
-                    {s}
-                  </span>
-                ))}
-                {skills.length > 10 && (
-                  <span className="rounded-cos-pill bg-cos-cloud px-2.5 py-1 text-xs text-cos-slate">
-                    +{skills.length - 10} more
-                  </span>
-                )}
-              </div>
+              <PillList
+                items={skills}
+                pillClass="bg-cos-midnight/6 text-cos-midnight"
+                max={10}
+              />
+            </RevealCard>
+          )}
+
+          {/* Industries */}
+          {industries && (
+            <RevealCard icon={Globe} label="Industries" delay={350}>
+              <PillList
+                items={industries}
+                pillClass="bg-cos-signal/8 text-cos-signal"
+              />
             </RevealCard>
           )}
 
@@ -208,6 +279,40 @@ export default function DashboardPage() {
           {languages && (
             <RevealCard icon={Languages} label="Languages" delay={500}>
               <p>{languages.join(", ")}</p>
+            </RevealCard>
+          )}
+
+          {/* ─── Partner Preferences (from chat confirmations) ── */}
+          {partnerTypes.length > 0 && (
+            <RevealCard icon={Handshake} label="Preferred Partner Types" delay={600}>
+              <PillList
+                items={partnerTypes}
+                pillClass="bg-cos-signal/10 text-cos-signal"
+              />
+            </RevealCard>
+          )}
+
+          {partnerModels.length > 0 && (
+            <RevealCard icon={Target} label="Partnership Models" delay={650}>
+              <PillList
+                items={partnerModels}
+                pillClass="bg-cos-electric/10 text-cos-electric"
+              />
+            </RevealCard>
+          )}
+
+          {dealBreakers.length > 0 && (
+            <RevealCard icon={ShieldAlert} label="Deal Breakers" delay={700}>
+              <PillList
+                items={dealBreakers}
+                pillClass="bg-cos-ember/10 text-cos-ember"
+              />
+            </RevealCard>
+          )}
+
+          {growthGoals && (
+            <RevealCard icon={TrendingUp} label="Growth Goals" delay={750}>
+              <p>{growthGoals}</p>
             </RevealCard>
           )}
         </div>

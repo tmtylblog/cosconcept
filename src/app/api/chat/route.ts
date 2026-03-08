@@ -8,10 +8,11 @@ import { getOrgPlan } from "@/lib/billing/usage-checker";
 import { PLAN_LIMITS } from "@/lib/billing/plan-limits";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { conversations, messages as messagesTable } from "@/lib/db/schema";
+import { conversations, messages as messagesTable, serviceFirms } from "@/lib/db/schema";
 import { logUsage } from "@/lib/ai/gateway";
 import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
 import { extractMemoriesFromConversation } from "@/lib/ai/memory-extractor";
+import { createOssyTools } from "@/lib/ai/ossy-tools";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -84,6 +85,21 @@ export async function POST(req: Request) {
 
     const modelMessages = await convertToModelMessages(messages);
 
+    // ─── Resolve firm ID for tool access ─────────────────────
+    let firmId: string | null = null;
+    if (organizationId) {
+      try {
+        const [firm] = await db
+          .select({ id: serviceFirms.id })
+          .from(serviceFirms)
+          .where(eq(serviceFirms.organizationId, organizationId))
+          .limit(1);
+        firmId = firm?.id ?? null;
+      } catch (err) {
+        console.error("[Ossy] Failed to look up firm:", err);
+      }
+    }
+
     // ─── Persistence setup ─────────────────────────────────
     // Resolve or create conversation ID (only for authenticated users)
     let conversationId = clientConvId || null;
@@ -149,11 +165,16 @@ export async function POST(req: Request) {
     const startTime = Date.now();
     const capturedConvId = conversationId; // Capture for closure
 
+    const ossyTools = organizationId && firmId
+      ? createOssyTools(organizationId, firmId)
+      : undefined;
+
     const result = streamText({
       model: openrouter.chat("anthropic/claude-sonnet-4"),
       system: systemPrompt,
       messages: modelMessages,
       maxOutputTokens: 1024,
+      ...(ossyTools ? { tools: ossyTools, maxSteps: 2 } : {}),
       onFinish: async ({ text, usage }) => {
         // ─── Persist assistant message ───────────────────────
         if (userId && capturedConvId && text) {

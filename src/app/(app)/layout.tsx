@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { NavBar } from "@/components/nav-bar";
 import { ChatPanel } from "@/components/chat-panel";
 import { LoginPanel } from "@/components/login-panel";
 import { EnrichmentProvider, useEnrichment } from "@/hooks/use-enrichment";
+import { ProfileProvider } from "@/hooks/use-profile";
 import { useSession, useActiveOrganization } from "@/lib/auth-client";
 import { MessageCircle, X } from "lucide-react";
 
@@ -27,7 +28,9 @@ function AppLayoutOuter({
 
   return (
     <EnrichmentProvider organizationId={activeOrg?.id}>
-      <AppLayoutInner>{children}</AppLayoutInner>
+      <ProfileProvider organizationId={activeOrg?.id}>
+        <AppLayoutInner>{children}</AppLayoutInner>
+      </ProfileProvider>
     </EnrichmentProvider>
   );
 }
@@ -40,20 +43,13 @@ function AppLayoutInner({
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = useSession();
-  const { status: enrichmentStatus, reset: resetEnrichment } = useEnrichment();
+  const { reset: resetEnrichment } = useEnrichment();
   const isGuest = !session?.user;
 
   const [navCollapsed, setNavCollapsed] = useState(true);
   const [loginPanelOpen, setLoginPanelOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0);
   const [mobileChat, setMobileChat] = useState(false);
-
-  // Auto-navigate to /firm when enrichment completes
-  useEffect(() => {
-    if (enrichmentStatus === "done" && pathname === "/dashboard") {
-      router.push("/firm");
-    }
-  }, [enrichmentStatus, pathname, router]);
 
   const handleRequestLogin = () => {
     setLoginPanelOpen(true);

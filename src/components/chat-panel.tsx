@@ -9,6 +9,7 @@ import { Send, Mic, Loader2, Globe, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useActiveOrganization, signIn, signUp } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
+import { useProfile } from "@/hooks/use-profile";
 import { isPersonalEmail, CORPORATE_EMAIL_ERROR } from "@/lib/email-validation";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +66,7 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
     contextForOssy,
     triggerEnrichment,
   } = useEnrichment();
+  const { updateField: updateProfileField } = useProfile();
   const [input, setInput] = useState("");
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>(defaultWelcomeMessages);
@@ -179,6 +181,34 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
     }
   }, [messages, triggerEnrichment, enrichmentStatus]);
 
+  // Watch for tool results and push to ProfileProvider
+  // In AI SDK v6, tool parts have type "tool-{name}" and state "output-available"
+  const processedToolCallsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const msg of messages) {
+      if (msg.role !== "assistant") continue;
+      for (const part of msg.parts) {
+        if (
+          part.type === "tool-update_profile" &&
+          "state" in part &&
+          part.state === "output-available" &&
+          "toolCallId" in part
+        ) {
+          const callId = part.toolCallId as string;
+          if (processedToolCallsRef.current.has(callId)) continue;
+          processedToolCallsRef.current.add(callId);
+
+          const output = (part as { output?: unknown }).output as
+            | { success: boolean; field: string; value: string | string[] }
+            | undefined;
+          if (output?.success && output.field && output.value != null) {
+            updateProfileField(output.field, output.value);
+          }
+        }
+      }
+    }
+  }, [messages, updateProfileField]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -246,6 +276,10 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
         className="cos-scrollbar relative flex-1 space-y-2 overflow-y-auto px-4 py-4"
       >
         {messages.map((message, idx) => {
+          const text = getMessageText(message);
+          // Skip messages with no text content (e.g. tool-only responses)
+          if (!text) return null;
+
           const prevMessage = idx > 0 ? messages[idx - 1] : null;
           const isNewSpeaker = !prevMessage || prevMessage.role !== message.role;
 
@@ -284,7 +318,7 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
                 )}
               >
                 <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {getMessageText(message)}
+                  {text}
                 </p>
               </div>
             </div>
