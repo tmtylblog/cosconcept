@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serviceFirms } from "@/lib/db/schema";
+import { writeFirmToGraph } from "@/lib/enrichment/graph-writer";
 
 export const dynamic = "force-dynamic";
 
@@ -73,9 +74,12 @@ export async function POST(req: Request) {
 
     const hasAnyData = !!(companyData || extracted || classification);
 
+    const logoUrl = domain ? `https://logo.clearbit.com/${domain}` : null;
+
     const responseData = {
       url,
       domain,
+      logoUrl,
       success: hasAnyData,
       companyCard: companyCard || null,
       companyData: companyData || null,
@@ -123,6 +127,67 @@ export async function POST(req: Request) {
       });
 
     console.log(`[Enrich/Persist] Saved enrichment for org ${organizationId}`);
+
+    // ─── Write to Neo4j Knowledge Graph (best-effort) ───
+    try {
+      const graphResult = await writeFirmToGraph({
+        firmId,
+        organizationId,
+        name: firmName,
+        website: url,
+        logoUrl: domain ? `https://logo.clearbit.com/${domain}` : undefined,
+        description: extracted?.aboutPitch || null,
+        foundedYear: companyData?.founded || null,
+        employeeCount: companyData?.employeeCount || null,
+        pdl: companyData
+          ? {
+              ...companyData,
+              displayName: companyData.name || firmName,
+              headline: "",
+              summary: "",
+              website: url,
+              employeeCountByCountry: {},
+              linkedinSlug: null,
+              facebookUrl: null,
+              twitterUrl: null,
+              totalFundingRaised: null,
+              latestFundingStage: null,
+              lastFundingDate: null,
+              numberOfFundingRounds: null,
+              type: null,
+              likelihood: 0,
+              id: firmId,
+              location: companyData.location
+                ? { name: companyData.location, locality: "", region: "", country: "", continent: "" }
+                : null,
+            }
+          : null,
+        groundTruth: extracted
+          ? {
+              homepage: { url: url || "", title: "", content: "", scrapedAt: new Date().toISOString() },
+              evidence: [],
+              extracted: {
+                clients: extracted.clients || [],
+                caseStudyUrls: extracted.caseStudyUrls || [],
+                services: extracted.services || [],
+                aboutPitch: extracted.aboutPitch || "",
+                teamMembers: extracted.teamMembers || [],
+              },
+              rawContent: "",
+              pageTitles: [],
+            }
+          : null,
+        classification: classification || null,
+      });
+      console.log(
+        `[Enrich/Persist] Graph write: ${graphResult.categories} categories, ` +
+        `${graphResult.skills} skills, ${graphResult.clients} clients, ` +
+        `${graphResult.services} services` +
+        (graphResult.errors.length ? ` (${graphResult.errors.length} errors)` : "")
+      );
+    } catch (graphErr) {
+      console.warn("[Enrich/Persist] Graph write failed (non-blocking):", graphErr);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

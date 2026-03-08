@@ -33,6 +33,8 @@ export interface GraphFirmData {
   name: string;
   /** Website URL */
   website?: string;
+  /** Logo URL (e.g. Clearbit) */
+  logoUrl?: string;
   /** Description/about */
   description?: string;
   /** Founded year */
@@ -107,6 +109,7 @@ export async function writeFirmToGraph(
            f.pdlIndustry = $pdlIndustry,
            f.pdlHeadline = $pdlHeadline,
            f.pdlLocation = $pdlLocation,
+           f.logoUrl = $logoUrl,
            f.classifierConfidence = $confidence,
            f.updatedAt = datetime()`,
       {
@@ -114,6 +117,7 @@ export async function writeFirmToGraph(
         name: data.name,
         orgId: data.organizationId,
         website: data.website ?? null,
+        logoUrl: data.logoUrl ?? null,
         description: data.description ?? data.groundTruth?.extracted.aboutPitch ?? null,
         foundedYear: data.foundedYear ?? data.pdl?.founded ?? null,
         employeeCount: data.employeeCount ?? data.pdl?.employeeCount ?? null,
