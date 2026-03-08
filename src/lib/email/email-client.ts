@@ -3,7 +3,14 @@
  *
  * Wraps the email sending provider (Resend).
  * All outbound emails from ossy@joincollectiveos.com route through here.
+ *
+ * Test Mode Safeguard: when email_test_mode=true in settings, all emails
+ * are redirected to the whitelist and prefixed with [TEST] banner.
  */
+
+import { db } from "@/lib/db";
+import { settings } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 interface SendEmailOptions {
   to: string | string[];
@@ -20,26 +27,64 @@ interface EmailResult {
   success: boolean;
   messageId?: string;
   error?: string;
+  testMode?: boolean;
 }
 
 const FROM_EMAIL = "ossy@joincollectiveos.com";
 const FROM_NAME = "Ossy from Collective OS";
 
+async function getSetting(key: string): Promise<string | null> {
+  try {
+    const row = await db.query.settings.findFirst({ where: eq(settings.key, key) });
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Send an email via Resend API.
  *
  * Falls back to console logging in development if RESEND_API_KEY is not set.
+ * In test mode, redirects all recipients to the whitelist and adds a banner.
  */
 export async function sendEmail(options: SendEmailOptions): Promise<EmailResult> {
+  let { to, cc, bcc, subject, html, text, replyTo, tags } = options;
+
+  // ── Test mode intercept ───────────────────────────────────────────────────
+  const testMode = (await getSetting("email_test_mode")) === "true";
+  if (testMode) {
+    const whitelistRaw = (await getSetting("email_test_whitelist")) ?? "";
+    const whitelist = whitelistRaw.split(",").map((s) => s.trim()).filter(Boolean);
+
+    if (whitelist.length === 0) {
+      console.warn("[Email] Test mode ON but whitelist is empty — email suppressed.");
+      return { success: true, messageId: `suppressed_${Date.now()}`, testMode: true };
+    }
+
+    const originalTo = [to].flat().join(", ");
+    to = whitelist;
+    cc = [];
+    bcc = [];
+    subject = `[TEST → ${originalTo}] ${subject}`;
+    html =
+      `<div style="background:#fff3cd;padding:12px;margin-bottom:16px;border-left:4px solid #f59e0b;font-family:sans-serif;font-size:13px;">` +
+      `<strong>⚠️ TEST MODE</strong> — This email was originally addressed to: <strong>${originalTo}</strong>` +
+      `</div>` +
+      (html ?? "");
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) {
     console.log("[Email] No RESEND_API_KEY set. Would send:", {
       from: `${FROM_NAME} <${FROM_EMAIL}>`,
-      to: options.to,
-      subject: options.subject,
+      to,
+      subject,
+      testMode,
     });
-    return { success: true, messageId: `dev_${Date.now()}` };
+    return { success: true, messageId: `dev_${Date.now()}`, testMode };
   }
 
   try {
@@ -51,36 +96,36 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
       },
       body: JSON.stringify({
         from: `${FROM_NAME} <${FROM_EMAIL}>`,
-        to: Array.isArray(options.to) ? options.to : [options.to],
-        cc: options.cc
-          ? Array.isArray(options.cc)
-            ? options.cc
-            : [options.cc]
+        to: Array.isArray(to) ? to : [to],
+        cc: cc
+          ? Array.isArray(cc)
+            ? cc
+            : [cc]
           : undefined,
-        bcc: options.bcc
-          ? Array.isArray(options.bcc)
-            ? options.bcc
-            : [options.bcc]
+        bcc: bcc
+          ? Array.isArray(bcc)
+            ? bcc
+            : [bcc]
           : undefined,
-        subject: options.subject,
-        html: options.html,
-        text: options.text,
-        reply_to: options.replyTo,
-        tags: options.tags,
+        subject,
+        html,
+        text,
+        reply_to: replyTo,
+        tags,
       }),
     });
 
     if (!res.ok) {
       const err = await res.text();
       console.error("[Email] Send failed:", err);
-      return { success: false, error: err };
+      return { success: false, error: err, testMode };
     }
 
     const data = await res.json();
-    return { success: true, messageId: data.id };
+    return { success: true, messageId: data.id, testMode };
   } catch (err) {
     console.error("[Email] Send error:", err);
-    return { success: false, error: String(err) };
+    return { success: false, error: String(err), testMode };
   }
 }
 

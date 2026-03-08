@@ -15,3 +15,5 @@ export { postCallAnalysis } from "./post-call-analysis";
 export { processInboundEmail } from "./process-inbound-email";
 export { scheduleFollowUp, checkStalePartnerships } from "./follow-up-reminders";
 export { weeklyDigest } from "./weekly-digest";
+export { sendApprovedEmail } from "./send-approved-email";
+export { joinMeeting } from "./join-meeting";

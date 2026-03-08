@@ -12,6 +12,8 @@ import {
   scheduleFollowUp,
   checkStalePartnerships,
   weeklyDigest,
+  sendApprovedEmail,
+  joinMeeting,
 } from "@/inngest/functions";
 
 /**
@@ -32,5 +34,7 @@ export const { GET, POST, PUT } = serve({
     scheduleFollowUp,
     checkStalePartnerships,
     weeklyDigest,
+    sendApprovedEmail,
+    joinMeeting,
   ],
 });

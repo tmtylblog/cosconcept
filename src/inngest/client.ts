@@ -124,6 +124,18 @@ export type ScheduleFollowUpEvent = {
   };
 };
 
+/** Send an approved email from the approval queue */
+export type SendApprovedEmailEvent = {
+  name: "email/send-now";
+  data: { queueId: string };
+};
+
+/** Join a scheduled meeting via Recall.ai bot */
+export type JoinMeetingEvent = {
+  name: "calls/join-meeting";
+  data: { scheduledCallId: string };
+};
+
 // Union type for all events
 export type CosEvent =
   | DeepCrawlEvent
@@ -135,4 +147,6 @@ export type CosEvent =
   | WeeklyRecrawlEvent
   | PostCallAnalysisEvent
   | ProcessInboundEmailEvent
-  | ScheduleFollowUpEvent;
+  | ScheduleFollowUpEvent
+  | SendApprovedEmailEvent
+  | JoinMeetingEvent;

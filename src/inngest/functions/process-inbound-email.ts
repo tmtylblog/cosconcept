@@ -2,7 +2,8 @@
  * Process Inbound Email — Inngest Function
  *
  * Triggered when an email is received at ossy@joincollectiveos.com.
- * Classifies intent, extracts entities, and takes appropriate action.
+ * Classifies intent, extracts entities, generates a response draft,
+ * and routes to the approval queue (or auto-sends if high confidence).
  */
 
 import { inngest } from "../client";
@@ -10,25 +11,31 @@ import { db } from "@/lib/db";
 import {
   emailMessages,
   emailThreads,
+  emailApprovalQueue,
   opportunities,
   memoryEntries,
   members,
   users,
+  settings,
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { classifyEmail, extractEmailContext } from "@/lib/ai/email-intent-classifier";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { generateText } from "ai";
 
-/**
- * Resolve the owner user ID for a firm (org).
- * Falls back to null if no owner is found.
- */
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
+
+const AUTO_SEND_THRESHOLD = 0.92;
+const AUTO_SEND_INTENTS = new Set(["follow_up", "question"]);
+
 async function getFirmOwnerUserId(firmId: string): Promise<string | null> {
   try {
     const member = await db.query.members.findFirst({
       where: and(eq(members.organizationId, firmId), eq(members.role, "owner")),
     });
     if (!member) return null;
-
     const user = await db.query.users.findFirst({
       where: eq(users.id, member.userId),
       columns: { id: true },
@@ -39,8 +46,36 @@ async function getFirmOwnerUserId(firmId: string): Promise<string | null> {
   }
 }
 
+async function getSetting(key: string): Promise<string | null> {
+  try {
+    const row = await db.query.settings.findFirst({ where: eq(settings.key, key) });
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function buildOssyReplyHtml(text: string): string {
+  const paragraphs = text
+    .split("\n\n")
+    .map((p) => `<p style="margin:0 0 16px;line-height:1.6;color:#1a1a2e;">${p.trim()}</p>`)
+    .join("");
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f7;">
+  <div style="max-width:600px;margin:0 auto;padding:24px;">
+    <div style="background:#fff;border-radius:12px;padding:32px;border:1px solid #e2e8f0;">
+      ${paragraphs}
+      <p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e2e8f0;font-size:13px;color:#94a3b8;">
+        — Ossy, Collective OS<br>
+        <a href="https://joincollectiveos.com" style="color:#1f86a1;text-decoration:none;">joincollectiveos.com</a>
+      </p>
+    </div>
+  </div>
+</body></html>`;
 }
 
 export const processInboundEmail = inngest.createFunction(
@@ -51,14 +86,10 @@ export const processInboundEmail = inngest.createFunction(
 
     // Step 1: Classify the email
     const classification = await step.run("classify-email", async () => {
-      return classifyEmail({
-        from,
-        subject,
-        bodyText,
-      });
+      return classifyEmail({ from, subject, bodyText });
     });
 
-    // Step 2: Update the message with classification results
+    // Step 2: Update message + thread with classification
     await step.run("update-message-classification", async () => {
       await db
         .update(emailMessages)
@@ -70,31 +101,21 @@ export const processInboundEmail = inngest.createFunction(
         })
         .where(eq(emailMessages.id, messageId));
 
-      // Update thread intent
       await db
         .update(emailThreads)
-        .set({
-          intent: classification.intent,
-          updatedAt: new Date(),
-        })
+        .set({ intent: classification.intent, updatedAt: new Date() })
         .where(eq(emailThreads.id, threadId));
     });
 
-    // Step 3: Take action based on intent
+    // Step 3: Create opportunity if detected
     if (classification.intent === "opportunity" && classification.opportunitySignals) {
       await step.run("create-opportunity-from-email", async () => {
         if (!firmId || firmId === "unknown") return;
-
-        // Resolve the firm owner's user ID to avoid FK violation
         const ownerUserId = await getFirmOwnerUserId(firmId);
-        if (!ownerUserId) {
-          console.warn(`[ProcessEmail] No owner found for firm ${firmId}, skipping opportunity creation`);
-          return;
-        }
+        if (!ownerUserId) return;
 
         const signals = classification.opportunitySignals!;
         const oppId = generateId("opp");
-
         await db.insert(opportunities).values({
           id: oppId,
           firmId,
@@ -113,7 +134,6 @@ export const processInboundEmail = inngest.createFunction(
           status: "open",
         });
 
-        // Link opportunity to thread
         await db
           .update(emailThreads)
           .set({ opportunityId: oppId, updatedAt: new Date() })
@@ -126,21 +146,11 @@ export const processInboundEmail = inngest.createFunction(
     // Step 4: Extract context for memory
     if (classification.intent !== "unrelated" && firmId && firmId !== "unknown") {
       await step.run("extract-email-context", async () => {
-        // Resolve the firm owner's user ID to avoid FK violation on memoryEntries.userId
         const ownerUserId = await getFirmOwnerUserId(firmId);
-        if (!ownerUserId) {
-          console.warn(`[ProcessEmail] No owner found for firm ${firmId}, skipping memory extraction`);
-          return { themes: [], keyFacts: [] };
-        }
+        if (!ownerUserId) return { themes: [], keyFacts: [] };
 
-        const context = await extractEmailContext({
-          from,
-          subject,
-          bodyText,
-          classification,
-        });
+        const context = await extractEmailContext({ from, subject, bodyText, classification });
 
-        // Store key facts as memory entries
         for (const fact of context.keyFacts) {
           await db.insert(memoryEntries).values({
             id: generateId("mem"),
@@ -161,7 +171,6 @@ export const processInboundEmail = inngest.createFunction(
     // Step 5: Queue follow-up if needed
     if (classification.followUpNeeded) {
       await step.run("queue-follow-up", async () => {
-        // Send a follow-up event to be processed later
         await inngest.send({
           name: "email/schedule-follow-up",
           data: {
@@ -175,12 +184,113 @@ export const processInboundEmail = inngest.createFunction(
       });
     }
 
+    // Step 6: Generate Ossy response draft
+    // Skip for intro_response (no reply needed) and unrelated
+    const shouldRespond = !["unrelated", "intro_response"].includes(classification.intent);
+    if (!shouldRespond || !firmId || firmId === "unknown") {
+      return {
+        messageId,
+        intent: classification.intent,
+        confidence: classification.confidence,
+        summary: classification.summary,
+      };
+    }
+
+    const ownerUserId = await getFirmOwnerUserId(firmId);
+    if (!ownerUserId) {
+      return {
+        messageId,
+        intent: classification.intent,
+        confidence: classification.confidence,
+        summary: classification.summary,
+      };
+    }
+
+    const draftResult = await step.run("generate-ossy-reply", async () => {
+      // Fetch thread history for context
+      const threadMessages = await db.query.emailMessages.findMany({
+        where: eq(emailMessages.threadId, threadId),
+        columns: { direction: true, bodyText: true, fromEmail: true },
+        limit: 5,
+      });
+
+      const threadContext = threadMessages
+        .map((m) => `[${m.direction === "inbound" ? "From" : "Ossy"}]: ${m.bodyText?.slice(0, 400) ?? ""}`)
+        .join("\n\n");
+
+      let systemPrompt =
+        "You are Ossy, Collective OS's AI partnership consultant. Reply in Ossy's voice — knowledgeable, warm, concise. " +
+        "Keep replies under 150 words. Do not use bullet points. Sign off naturally.";
+
+      let userPrompt: string;
+      switch (classification.intent) {
+        case "question":
+          userPrompt = `A firm has sent a question to Ossy. Draft a helpful, concise reply.\n\nEmail from: ${from}\nSubject: ${subject}\n\nMessage:\n${bodyText.slice(0, 2000)}\n\nThread context:\n${threadContext}`;
+          break;
+        case "context":
+          userPrompt = `A firm has shared context with Ossy. Draft a brief acknowledgement showing you understood and value the update.\n\nEmail from: ${from}\nSubject: ${subject}\n\nMessage:\n${bodyText.slice(0, 2000)}`;
+          break;
+        case "opportunity":
+          userPrompt = `A firm has shared an opportunity. Acknowledge it warmly, ask 1-2 clarifying questions about scope and timeline.\n\nEmail from: ${from}\nSubject: ${subject}\n\nMessage:\n${bodyText.slice(0, 2000)}`;
+          break;
+        default: // follow_up
+          userPrompt = `A firm has followed up with Ossy. Draft a warm acknowledgement.\n\nEmail from: ${from}\nSubject: ${subject}\n\nMessage:\n${bodyText.slice(0, 2000)}\n\nThread context:\n${threadContext}`;
+      }
+
+      const { text } = await generateText({
+        model: openrouter.chat("anthropic/claude-sonnet-4-5"),
+        system: systemPrompt,
+        prompt: userPrompt,
+        maxTokens: 400,
+      });
+
+      return text;
+    });
+
+    // Step 7: Store in approval queue + route by confidence
+    const queueResult = await step.run("queue-response", async () => {
+      const isTestMode = (await getSetting("email_test_mode")) === "true";
+      const isAutoApprovalEligible =
+        !isTestMode &&
+        classification.confidence >= AUTO_SEND_THRESHOLD &&
+        AUTO_SEND_INTENTS.has(classification.intent);
+
+      const queueStatus = isAutoApprovalEligible ? "auto_approved" : "pending";
+      const queueId = generateId("eq");
+      const replySubject = subject.startsWith("Re:") ? subject : `Re: ${subject}`;
+
+      await db.insert(emailApprovalQueue).values({
+        id: queueId,
+        firmId,
+        userId: ownerUserId,
+        emailType: "reply",
+        toEmails: [from],
+        subject: replySubject,
+        bodyHtml: buildOssyReplyHtml(draftResult),
+        bodyText: draftResult,
+        confidence: classification.confidence,
+        inReplyToThreadId: threadId,
+        context: { reason: classification.intent },
+        status: queueStatus,
+      });
+
+      // Auto-send immediately for high-confidence replies
+      if (queueStatus === "auto_approved") {
+        await inngest.send({
+          name: "email/send-now",
+          data: { queueId },
+        });
+      }
+
+      return { queueId, status: queueStatus };
+    });
+
     return {
       messageId,
       intent: classification.intent,
       confidence: classification.confidence,
       summary: classification.summary,
-      actionsToken: classification.intent === "opportunity" ? "opportunity_created" : "classified",
+      response: draftResult ? { queued: true, ...queueResult } : null,
     };
   }
 );

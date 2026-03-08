@@ -7,6 +7,7 @@ import {
   TrendingUp,
   Users,
   DollarSign,
+  Mail,
 } from "lucide-react";
 
 interface Partnership {
@@ -45,6 +46,29 @@ export default function AdminPartnershipsPage() {
   const [stats, setStats] = useState<PartnershipStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [introSending, setIntroSending] = useState<string | null>(null);
+  const [introFeedback, setIntroFeedback] = useState<Record<string, string>>({});
+
+  async function sendIntro(partnershipId: string) {
+    setIntroSending(partnershipId);
+    try {
+      const res = await fetch("/api/admin/partnerships/intro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ partnershipId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setIntroFeedback((prev) => ({ ...prev, [partnershipId]: "Queued!" }));
+      } else {
+        setIntroFeedback((prev) => ({ ...prev, [partnershipId]: data.error ?? "Error" }));
+      }
+    } catch {
+      setIntroFeedback((prev) => ({ ...prev, [partnershipId]: "Failed" }));
+    } finally {
+      setIntroSending(null);
+    }
+  }
 
   useEffect(() => {
     Promise.all([
@@ -186,6 +210,9 @@ export default function AdminPartnershipsPage() {
               <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                 Created
               </th>
+              <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-cos-border/60">
@@ -236,13 +263,29 @@ export default function AdminPartnershipsPage() {
                   <td className="px-5 py-3.5 text-xs text-cos-slate">
                     {new Date(p.createdAt).toLocaleDateString()}
                   </td>
+                  <td className="px-5 py-3.5">
+                    {["requested", "accepted"].includes(p.status) && (
+                      introFeedback[p.id] ? (
+                        <span className="text-xs text-cos-signal">{introFeedback[p.id]}</span>
+                      ) : (
+                        <button
+                          onClick={() => sendIntro(p.id)}
+                          disabled={introSending === p.id}
+                          className="flex items-center gap-1.5 rounded-cos-md bg-cos-electric/10 px-3 py-1.5 text-xs font-semibold text-cos-electric transition-colors hover:bg-cos-electric hover:text-white disabled:opacity-50"
+                        >
+                          <Mail className="h-3.5 w-3.5" />
+                          {introSending === p.id ? "Generating…" : "Send Intro"}
+                        </button>
+                      )
+                    )}
+                  </td>
                 </tr>
               );
             })}
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-5 py-12 text-center text-sm text-cos-slate"
                 >
                   No partnerships found.

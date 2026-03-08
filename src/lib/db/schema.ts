@@ -797,3 +797,159 @@ export const migrationBatches = pgTable("migration_batches", {
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// ─── Settings (key-value store) ───────────────────────
+
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─── Scheduled Calls (from calendar invites) ──────────
+
+export const scheduledCallStatusEnum = pgEnum("scheduled_call_status", [
+  "pending",
+  "recording",
+  "done",
+  "failed",
+  "cancelled",
+]);
+
+export const meetingPlatformEnum = pgEnum("meeting_platform", [
+  "google_meet",
+  "zoom",
+  "teams",
+  "other",
+]);
+
+export const callTypeEnum = pgEnum("call_type", [
+  "partnership",
+  "client",
+  "unknown",
+]);
+
+export const scheduledCalls = pgTable("scheduled_calls", {
+  id: text("id").primaryKey(),
+  firmId: text("firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  meetingTitle: text("meeting_title"),
+  meetingTime: timestamp("meeting_time"),
+  meetingLink: text("meeting_link"),
+  platform: meetingPlatformEnum("platform").default("other"),
+  participants: jsonb("participants").$type<string[]>(),
+  partnershipId: text("partnership_id").references(() => partnerships.id, {
+    onDelete: "set null",
+  }),
+  callType: callTypeEnum("call_type").default("unknown"),
+  sourceEmailThreadId: text("source_email_thread_id").references(
+    () => emailThreads.id,
+    { onDelete: "set null" }
+  ),
+  transcriptId: text("transcript_id"), // FK to callTranscripts, set after call
+  recallBotId: text("recall_bot_id"),
+  status: scheduledCallStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─── Call Recordings ──────────────────────────────────
+
+export const callRecordings = pgTable("call_recordings", {
+  id: text("id").primaryKey(),
+  firmId: text("firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  scheduledCallId: text("scheduled_call_id").references(
+    () => scheduledCalls.id,
+    { onDelete: "set null" }
+  ),
+  callType: callTypeEnum("call_type").default("unknown"),
+  partnerFirmId: text("partner_firm_id").references(() => serviceFirms.id, {
+    onDelete: "set null",
+  }),
+  platform: meetingPlatformEnum("platform").default("other"),
+  durationSeconds: integer("duration_seconds"),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Call Transcripts ─────────────────────────────────
+
+export const transcriptStatusEnum = pgEnum("transcript_status", [
+  "pending",
+  "processing",
+  "done",
+  "failed",
+]);
+
+export const callTranscripts = pgTable("call_transcripts", {
+  id: text("id").primaryKey(),
+  callRecordingId: text("call_recording_id").references(
+    () => callRecordings.id,
+    { onDelete: "cascade" }
+  ),
+  scheduledCallId: text("scheduled_call_id").references(
+    () => scheduledCalls.id,
+    { onDelete: "set null" }
+  ),
+  fullText: text("full_text"),
+  segments: jsonb("segments").$type<
+    { speaker: string; startMs: number; endMs: number; text: string }[]
+  >(),
+  processingStatus: transcriptStatusEnum("processing_status")
+    .notNull()
+    .default("pending"),
+  deepgramJobId: text("deepgram_job_id"),
+  coachingReportId: text("coaching_report_id"), // FK set after coaching runs
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Coaching Reports ─────────────────────────────────
+
+export const coachingReports = pgTable("coaching_reports", {
+  id: text("id").primaryKey(),
+  callRecordingId: text("call_recording_id").references(
+    () => callRecordings.id,
+    { onDelete: "cascade" }
+  ),
+  scheduledCallId: text("scheduled_call_id").references(
+    () => scheduledCalls.id,
+    { onDelete: "set null" }
+  ),
+  talkingTimeRatio: jsonb("talking_time_ratio").$type<{
+    userPercent: number;
+    otherPercent: number;
+    assessment: string;
+  }>(),
+  valueProposition: jsonb("value_proposition").$type<{
+    clarity: number;
+    mentioned: boolean;
+    feedback: string;
+  }>(),
+  questionQuality: jsonb("question_quality").$type<{
+    discoveryQuestions: number;
+    closedQuestions: number;
+    score: number;
+    feedback: string;
+  }>(),
+  topicsCovered: jsonb("topics_covered").$type<string[]>(),
+  nextSteps: jsonb("next_steps").$type<{ established: boolean; items: string[] }>(),
+  actionItems: jsonb("action_items").$type<
+    { description: string; assignee: string; deadline?: string }[]
+  >(),
+  overallScore: integer("overall_score"),
+  topRecommendation: text("top_recommendation"),
+  recommendedExperts: jsonb("recommended_experts").$type<
+    { name: string; firm: string; reason: string; profileUrl?: string }[]
+  >(),
+  recommendedCaseStudies: jsonb("recommended_case_studies").$type<
+    { title: string; firm: string; relevance: string; url?: string }[]
+  >(),
+  sentToFirmAAt: timestamp("sent_to_firm_a_at"),
+  sentToFirmBAt: timestamp("sent_to_firm_b_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
