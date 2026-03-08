@@ -100,13 +100,20 @@ export default function DashboardPage() {
   const extracted = result?.extracted;
   const classification = result?.classification;
 
-  const firmName = companyData?.name;
+  // Firm identity — PDL data with fallbacks from enrichment result
+  const firmDomain = result?.domain;
+  const firmName =
+    companyData?.name ||
+    (firmDomain
+      ? firmDomain.split(".")[0].charAt(0).toUpperCase() +
+        firmDomain.split(".")[0].slice(1)
+      : null);
   const firmLocation = companyData?.location;
   const firmSize = companyData?.size;
   const firmEmployeeCount = companyData?.employeeCount;
   const firmFounded = companyData?.founded;
   const firmRevenue = companyData?.inferredRevenue;
-  const firmWebsite = companyData?.website;
+  const firmWebsite = companyData?.website || result?.url;
 
   // Merge: confirmed profile data takes precedence over enrichment
   const services = profile.services?.length
@@ -218,8 +225,8 @@ export default function DashboardPage() {
       {/* Progressive reveal cards — only appear when data exists */}
       {hasAnyData && (
         <div className={cn("flex w-full flex-col gap-3", isDone && "mt-2")}>
-          {/* Firm identity — PDL company data */}
-          {firmName && (
+          {/* Firm identity — PDL company data with domain fallback */}
+          {(firmName || isDone) && (
             <RevealCard icon={Building2} label="Your Firm" delay={0}>
               <div className="flex items-start gap-3">
                 {/* Company logo via Clearbit */}
