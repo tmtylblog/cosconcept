@@ -295,6 +295,23 @@ export function EnrichmentProvider({
       setResult(resultShell);
 
       // ─── Stage 0: Check our own data first (saves paid API credits) ───
+      // Seed from cache if available, then only call paid APIs for missing pieces
+      let needsPdl = true;
+      let needsScrape = true;
+      let needsClassify = true;
+
+      // Track data across stages
+      const stageData = {
+        pdlCompanyData: null as EnrichmentCompanyData | null,
+        pdlCompanyCard: null as string | null,
+        scrapeExtracted: null as EnrichmentExtracted | null,
+        scrapeGroundTruth: null as string | null,
+        scrapeRawContent: null as string | null,
+        scrapePagesScraped: 0,
+        scrapeEvidenceCategories: [] as string[],
+        classificationData: null as EnrichmentClassification | null,
+      };
+
       try {
         const lookupRes = await fetch("/api/enrich/lookup", {
           method: "POST",
@@ -307,167 +324,202 @@ export function EnrichmentProvider({
         if (lookupRes.ok) {
           const lookupData = await lookupRes.json();
           if (lookupData.found && lookupData.data) {
-            console.log(`[Enrichment] Cache HIT (${lookupData.source}) for ${domain} — skipping paid APIs`);
-            const cachedResult = lookupData.data as EnrichmentResult;
-            // Ensure domain/url are set
-            cachedResult.domain = cachedResult.domain || domain;
-            cachedResult.url = cachedResult.url || normalized;
-            cachedResult.logoUrl = cachedResult.logoUrl || `https://logo.clearbit.com/${domain}`;
+            const cached = lookupData.data as EnrichmentResult;
+            cached.domain = cached.domain || domain;
+            cached.url = cached.url || normalized;
+            cached.logoUrl = cached.logoUrl || `https://logo.clearbit.com/${domain}`;
 
-            setResult(cachedResult);
-            setContextForOssy(buildContextForOssy(cachedResult));
-            setStatus("done");
-            setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
-            persistedRef.current = true; // Already in DB
-            return; // Skip all paid API calls
+            // Seed result with cached data immediately so cards appear
+            setResult(cached);
+            setContextForOssy(buildContextForOssy(cached));
+
+            // Check what we already have vs what's missing
+            if (cached.companyData) {
+              needsPdl = false;
+              stageData.pdlCompanyData = cached.companyData;
+              stageData.pdlCompanyCard = cached.companyCard;
+              setStages((prev) => ({ ...prev, pdl: "done" }));
+            }
+            if (cached.extracted || cached.groundTruth) {
+              needsScrape = false;
+              stageData.scrapeExtracted = cached.extracted;
+              stageData.scrapeGroundTruth = cached.groundTruth as string | null;
+              stageData.scrapePagesScraped = cached.pagesScraped || 0;
+              stageData.scrapeEvidenceCategories = cached.evidenceCategories || [];
+              setStages((prev) => ({ ...prev, scrape: "done" }));
+            }
+            if (cached.classification && cached.classification.categories?.length > 0) {
+              needsClassify = false;
+              stageData.classificationData = cached.classification;
+              setStages((prev) => ({ ...prev, classify: "done" }));
+            }
+
+            // If everything is complete, return immediately
+            if (!needsPdl && !needsScrape && !needsClassify) {
+              console.log(`[Enrichment] Full cache HIT (${lookupData.source}) for ${domain}`);
+              setStatus("done");
+              setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
+              persistedRef.current = true;
+              return;
+            }
+
+            console.log(
+              `[Enrichment] Partial cache HIT (${lookupData.source}) for ${domain} — ` +
+              `gaps: ${[needsPdl && "PDL", needsScrape && "Scrape", needsClassify && "Classify"].filter(Boolean).join(", ")}`
+            );
           }
         }
       } catch (lookupErr) {
-        // Lookup failed — proceed with normal enrichment
         console.warn("[Enrichment] Lookup check failed, proceeding with paid APIs:", lookupErr);
       }
 
       if (thisRun !== runIdRef.current) return; // stale
-      console.log(`[Enrichment] Cache MISS for ${domain} — starting paid API enrichment`);
 
-      // Track data across stages — using `any` wrapper to avoid TS narrowing issues in async closures
-      const stageData = {
-        pdlCompanyData: null as EnrichmentCompanyData | null,
-        pdlCompanyCard: null as string | null,
-        scrapeExtracted: null as EnrichmentExtracted | null,
-        scrapeGroundTruth: null as string | null,
-        scrapeRawContent: null as string | null,
-        scrapePagesScraped: 0,
-        scrapeEvidenceCategories: [] as string[],
-        classificationData: null as EnrichmentClassification | null,
-      };
+      // Update stage indicators for stages we'll skip vs run
+      setStages((prev) => ({
+        ...prev,
+        pdl: needsPdl ? "loading" : prev.pdl,
+        scrape: needsScrape ? "loading" : prev.scrape,
+        classify: needsClassify ? "idle" : prev.classify,
+      }));
 
-      // ─── Stage 1 & 2: PDL + Scrape in parallel ──────────
-      const pdlPromise = fetch("/api/enrich/pdl", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain }),
-      })
-        .then(async (res) => {
-          if (thisRun !== runIdRef.current) return; // stale
-          if (!res.ok) throw new Error("PDL failed");
-          const data = await res.json();
+      // ─── Stage 1 & 2: PDL + Scrape in parallel (only if needed) ──
+      const parallelPromises: Promise<void>[] = [];
 
-          stageData.pdlCompanyData = data.companyData;
-          stageData.pdlCompanyCard = data.companyCard;
-
-          // Merge PDL data into result
-          setResult((prev) => {
-            const updated = {
-              ...prev!,
-              companyData: data.companyData,
-              companyCard: data.companyCard,
-              success: prev!.success || !!data.companyData,
-            };
-            setContextForOssy(buildContextForOssy(updated));
-            return updated;
-          });
-          setStages((prev) => ({ ...prev, pdl: "done" }));
-          console.log(`[Enrichment] PDL done: ${data.companyData?.name || "no match"}`);
-        })
-        .catch((err) => {
-          if (thisRun !== runIdRef.current) return;
-          console.warn("[Enrichment] PDL stage failed:", err);
-          setStages((prev) => ({ ...prev, pdl: "failed" }));
-        });
-
-      const scrapePromise = fetch("/api/enrich/scrape", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: normalized, domain }),
-      })
-        .then(async (res) => {
-          if (thisRun !== runIdRef.current) return;
-          if (!res.ok) throw new Error("Scrape failed");
-          const data = await res.json();
-
-          stageData.scrapeExtracted = data.extracted;
-          stageData.scrapeGroundTruth = data.groundTruth;
-          stageData.scrapeRawContent = data.rawContent;
-          stageData.scrapePagesScraped = data.pagesScraped;
-          stageData.scrapeEvidenceCategories = data.evidenceCategories;
-
-          // Merge scrape data into result
-          setResult((prev) => {
-            const updated = {
-              ...prev!,
-              extracted: data.extracted,
-              groundTruth: data.groundTruth,
-              pagesScraped: data.pagesScraped,
-              evidenceCategories: data.evidenceCategories,
-              success: prev!.success || !!(data.extracted || data.groundTruth),
-            };
-            setContextForOssy(buildContextForOssy(updated));
-            return updated;
-          });
-          setStages((prev) => ({ ...prev, scrape: "done" }));
-          console.log(
-            `[Enrichment] Scrape done: ${data.pagesScraped} pages, ` +
-              `${data.extracted?.clients?.length ?? 0} clients`
-          );
-        })
-        .catch((err) => {
-          if (thisRun !== runIdRef.current) return;
-          console.warn("[Enrichment] Scrape stage failed:", err);
-          setStages((prev) => ({ ...prev, scrape: "failed" }));
-        });
-
-      // Wait for both PDL + Scrape
-      await Promise.allSettled([pdlPromise, scrapePromise]);
-      if (thisRun !== runIdRef.current) return; // stale
-
-      // ─── Stage 3: AI Classification ─────────────────────
-      // Needs rawContent from scrape and optionally pdlSummary
-      if (stageData.scrapeRawContent || stageData.pdlCompanyCard) {
-        setStages((prev) => ({ ...prev, classify: "loading" }));
-
-        try {
-          const classifyRes = await fetch("/api/enrich/classify", {
+      if (needsPdl) {
+        parallelPromises.push(
+          fetch("/api/enrich/pdl", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              rawContent: stageData.scrapeRawContent || "",
-              pdlSummary: stageData.pdlCompanyCard || undefined,
-              services: stageData.scrapeExtracted?.services,
-              aboutPitch: stageData.scrapeExtracted?.aboutPitch,
-            }),
-          });
+            body: JSON.stringify({ domain }),
+          })
+            .then(async (res) => {
+              if (thisRun !== runIdRef.current) return;
+              if (!res.ok) throw new Error("PDL failed");
+              const data = await res.json();
 
-          if (thisRun !== runIdRef.current) return;
+              stageData.pdlCompanyData = data.companyData;
+              stageData.pdlCompanyCard = data.companyCard;
 
-          if (classifyRes.ok) {
-            const data = await classifyRes.json();
-            stageData.classificationData = data.classification;
+              setResult((prev) => {
+                const updated = {
+                  ...prev!,
+                  companyData: data.companyData,
+                  companyCard: data.companyCard,
+                  success: prev!.success || !!data.companyData,
+                };
+                setContextForOssy(buildContextForOssy(updated));
+                return updated;
+              });
+              setStages((prev) => ({ ...prev, pdl: "done" }));
+              console.log(`[Enrichment] PDL done: ${data.companyData?.name || "no match"}`);
+            })
+            .catch((err) => {
+              if (thisRun !== runIdRef.current) return;
+              console.warn("[Enrichment] PDL stage failed:", err);
+              setStages((prev) => ({ ...prev, pdl: "failed" }));
+            })
+        );
+      }
 
-            setResult((prev) => {
-              const updated = {
-                ...prev!,
-                classification: data.classification,
-                success: true,
-              };
-              setContextForOssy(buildContextForOssy(updated));
-              return updated;
+      if (needsScrape) {
+        parallelPromises.push(
+          fetch("/api/enrich/scrape", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: normalized, domain }),
+          })
+            .then(async (res) => {
+              if (thisRun !== runIdRef.current) return;
+              if (!res.ok) throw new Error("Scrape failed");
+              const data = await res.json();
+
+              stageData.scrapeExtracted = data.extracted;
+              stageData.scrapeGroundTruth = data.groundTruth;
+              stageData.scrapeRawContent = data.rawContent;
+              stageData.scrapePagesScraped = data.pagesScraped;
+              stageData.scrapeEvidenceCategories = data.evidenceCategories;
+
+              setResult((prev) => {
+                const updated = {
+                  ...prev!,
+                  extracted: data.extracted,
+                  groundTruth: data.groundTruth,
+                  pagesScraped: data.pagesScraped,
+                  evidenceCategories: data.evidenceCategories,
+                  success: prev!.success || !!(data.extracted || data.groundTruth),
+                };
+                setContextForOssy(buildContextForOssy(updated));
+                return updated;
+              });
+              setStages((prev) => ({ ...prev, scrape: "done" }));
+              console.log(
+                `[Enrichment] Scrape done: ${data.pagesScraped} pages, ` +
+                  `${data.extracted?.clients?.length ?? 0} clients`
+              );
+            })
+            .catch((err) => {
+              if (thisRun !== runIdRef.current) return;
+              console.warn("[Enrichment] Scrape stage failed:", err);
+              setStages((prev) => ({ ...prev, scrape: "failed" }));
+            })
+        );
+      }
+
+      // Wait for parallel stages
+      if (parallelPromises.length > 0) {
+        await Promise.allSettled(parallelPromises);
+      }
+      if (thisRun !== runIdRef.current) return; // stale
+
+      // ─── Stage 3: AI Classification (only if needed) ──────
+      if (needsClassify) {
+        if (stageData.scrapeRawContent || stageData.pdlCompanyCard) {
+          setStages((prev) => ({ ...prev, classify: "loading" }));
+
+          try {
+            const classifyRes = await fetch("/api/enrich/classify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                rawContent: stageData.scrapeRawContent || "",
+                pdlSummary: stageData.pdlCompanyCard || undefined,
+                services: stageData.scrapeExtracted?.services,
+                aboutPitch: stageData.scrapeExtracted?.aboutPitch,
+              }),
             });
-            setStages((prev) => ({ ...prev, classify: "done" }));
-            console.log(
-              `[Enrichment] Classify done: ${data.classification?.categories?.length ?? 0} categories`
-            );
-          } else {
+
+            if (thisRun !== runIdRef.current) return;
+
+            if (classifyRes.ok) {
+              const data = await classifyRes.json();
+              stageData.classificationData = data.classification;
+
+              setResult((prev) => {
+                const updated = {
+                  ...prev!,
+                  classification: data.classification,
+                  success: true,
+                };
+                setContextForOssy(buildContextForOssy(updated));
+                return updated;
+              });
+              setStages((prev) => ({ ...prev, classify: "done" }));
+              console.log(
+                `[Enrichment] Classify done: ${data.classification?.categories?.length ?? 0} categories`
+              );
+            } else {
+              setStages((prev) => ({ ...prev, classify: "failed" }));
+            }
+          } catch (err) {
+            if (thisRun !== runIdRef.current) return;
+            console.warn("[Enrichment] Classify stage failed:", err);
             setStages((prev) => ({ ...prev, classify: "failed" }));
           }
-        } catch (err) {
-          if (thisRun !== runIdRef.current) return;
-          console.warn("[Enrichment] Classify stage failed:", err);
+        } else {
+          // No content to classify
           setStages((prev) => ({ ...prev, classify: "failed" }));
         }
-      } else {
-        // No content to classify
-        setStages((prev) => ({ ...prev, classify: "failed" }));
       }
 
       if (thisRun !== runIdRef.current) return;
@@ -479,7 +531,6 @@ export function EnrichmentProvider({
         setStatus("done");
         setStages((prev) => ({ ...prev, overall: "done" }));
       } else {
-        // Nothing found — tell Ossy the URL was bad
         setContextForOssy(
           `[ENRICHMENT FAILED for ${domain}]\n` +
           `The website could not be reached or returned no usable content. ` +
@@ -491,8 +542,7 @@ export function EnrichmentProvider({
       }
 
       // ─── Stage 4: Persist to DB (background, best-effort) ──
-      // If organizationId isn't available yet, the deferred persist useEffect
-      // will handle it when orgId arrives.
+      // Always re-persist so any newly-filled gaps are saved
       if (organizationId && hasAnyData) {
         persistedRef.current = true;
         fetch("/api/enrich/persist", {
@@ -512,7 +562,7 @@ export function EnrichmentProvider({
           }),
         }).catch((err) => {
           console.warn("[Enrichment] Persist failed (best-effort):", err);
-          persistedRef.current = false; // Allow deferred retry
+          persistedRef.current = false;
         });
       }
     },
