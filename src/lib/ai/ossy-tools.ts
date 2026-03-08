@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { serviceFirms, partnerPreferences } from "@/lib/db/schema";
+import { logOnboardingEvent } from "@/lib/onboarding/event-logger";
 
 /** Fields that map to serviceFirms.enrichmentData.confirmed */
 const FIRM_FIELDS = new Set([
@@ -33,6 +34,18 @@ const RAW_ONBOARDING_FIELDS = new Set([
   "idealProjectSize",
   "typicalHourlyRates",
 ]);
+
+/** Interview questions in order — used for funnel tracking */
+const INTERVIEW_FIELDS = [
+  "desiredPartnerServices",
+  "requiredPartnerIndustries",
+  "idealPartnerClientSize",
+  "preferredPartnerLocations",
+  "preferredPartnerTypes",
+  "preferredPartnerSize",
+  "idealProjectSize",
+  "typicalHourlyRates",
+];
 
 /** Generate a short unique ID */
 function uid(prefix: string): string {
@@ -86,9 +99,6 @@ type ToolInput = z.infer<typeof toolInputSchema>;
  * Tools execute server-side and persist confirmed data.
  */
 export function createOssyTools(organizationId: string, firmId: string) {
-  // Suppress unused var warning — organizationId is kept for future use (e.g. audit logging)
-  void organizationId;
-
   return {
     update_profile: tool({
       description:
@@ -163,6 +173,30 @@ export function createOssyTools(organizationId: string, firmId: string) {
                 firmId,
                 [dbColumn]: value,
               });
+            }
+          }
+
+          // Log interview question completion for funnel tracking
+          const questionIndex = INTERVIEW_FIELDS.indexOf(field);
+          if (questionIndex >= 0) {
+            logOnboardingEvent({
+              organizationId,
+              firmId,
+              stage: "interview_answer",
+              event: field,
+              metadata: { questionNumber: questionIndex + 1, value },
+            }).catch(() => {}); // fire-and-forget
+
+            // Check if all 8 interview questions are now answered
+            if (questionIndex === INTERVIEW_FIELDS.length - 1) {
+              // Last question — emit onboarding_complete
+              logOnboardingEvent({
+                organizationId,
+                firmId,
+                stage: "onboarding_complete",
+                event: "all_questions_done",
+                metadata: { questionsAnswered: INTERVIEW_FIELDS.length },
+              }).catch(() => {});
             }
           }
 

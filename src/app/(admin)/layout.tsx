@@ -15,6 +15,7 @@ import {
   FileUp,
   Sparkles,
   Activity,
+  BarChart3,
 } from "lucide-react";
 
 /**
@@ -95,6 +96,7 @@ export default async function AdminLayout({
           <AdminNavLink href="/admin/apis" icon={<Globe className="h-4 w-4" />} label="APIs" />
           <AdminNavLink href="/admin/migration" icon={<FileUp className="h-4 w-4" />} label="Data Import" />
           <AdminNavLink href="/admin/enrichment" icon={<Sparkles className="h-4 w-4" />} label="Enrichment" />
+          <AdminNavLink href="/admin/onboarding" icon={<BarChart3 className="h-4 w-4" />} label="Onboarding" />
         </nav>
 
         <div className="h-px bg-gradient-to-r from-transparent via-cos-border to-transparent" />

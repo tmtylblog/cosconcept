@@ -3,6 +3,7 @@
 import { createContext, useContext, useCallback, useState, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import React from "react";
+import { logOnboardingEventClient } from "@/lib/onboarding/log-client";
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -259,6 +260,7 @@ export function EnrichmentProvider({
       persistedRef.current = false;
       setEnrichedUrl(url);
       setStatus("loading");
+      logOnboardingEventClient({ stage: "domain_submitted", event: "domain_entered", domain: url, metadata: { isGuest: !organizationId } });
       // NOTE: Do NOT setResult(null) here — that causes the firm card to vanish
       // during re-enrichment. The resultShell below will overwrite immediately.
       setStages({
@@ -357,20 +359,26 @@ export function EnrichmentProvider({
             // If everything is complete, return immediately
             if (!needsPdl && !needsScrape && !needsClassify) {
               console.log(`[Enrichment] Full cache HIT (${lookupData.source}) for ${domain}`);
+              logOnboardingEventClient({ stage: "cache_lookup", event: "cache_hit_full", domain, metadata: { source: lookupData.source } });
               setStatus("done");
               setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
               persistedRef.current = true;
               return;
             }
 
+            const gaps = [needsPdl && "PDL", needsScrape && "Scrape", needsClassify && "Classify"].filter(Boolean) as string[];
+            logOnboardingEventClient({ stage: "cache_lookup", event: "cache_hit_partial", domain, metadata: { source: lookupData.source, gaps } });
             console.log(
-              `[Enrichment] Partial cache HIT (${lookupData.source}) for ${domain} — ` +
-              `gaps: ${[needsPdl && "PDL", needsScrape && "Scrape", needsClassify && "Classify"].filter(Boolean).join(", ")}`
+              `[Enrichment] Partial cache HIT (${lookupData.source}) for ${domain} — gaps: ${gaps.join(", ")}`
             );
           }
         }
       } catch (lookupErr) {
         console.warn("[Enrichment] Lookup check failed, proceeding with paid APIs:", lookupErr);
+      }
+      // Log cache miss if we still need everything
+      if (needsPdl && needsScrape && needsClassify) {
+        logOnboardingEventClient({ stage: "cache_lookup", event: "cache_miss", domain });
       }
 
       if (thisRun !== runIdRef.current) return; // stale
@@ -412,12 +420,14 @@ export function EnrichmentProvider({
                 return updated;
               });
               setStages((prev) => ({ ...prev, pdl: "done" }));
+              logOnboardingEventClient({ stage: "enrichment_stage_done", event: "pdl_done", domain, metadata: { status: "done" } });
               console.log(`[Enrichment] PDL done: ${data.companyData?.name || "no match"}`);
             })
             .catch((err) => {
               if (thisRun !== runIdRef.current) return;
               console.warn("[Enrichment] PDL stage failed:", err);
               setStages((prev) => ({ ...prev, pdl: "failed" }));
+              logOnboardingEventClient({ stage: "enrichment_stage_done", event: "pdl_failed", domain, metadata: { status: "failed" } });
             })
         );
       }
@@ -453,6 +463,7 @@ export function EnrichmentProvider({
                 return updated;
               });
               setStages((prev) => ({ ...prev, scrape: "done" }));
+              logOnboardingEventClient({ stage: "enrichment_stage_done", event: "scrape_done", domain, metadata: { status: "done" } });
               console.log(
                 `[Enrichment] Scrape done: ${data.pagesScraped} pages, ` +
                   `${data.extracted?.clients?.length ?? 0} clients`
@@ -462,6 +473,7 @@ export function EnrichmentProvider({
               if (thisRun !== runIdRef.current) return;
               console.warn("[Enrichment] Scrape stage failed:", err);
               setStages((prev) => ({ ...prev, scrape: "failed" }));
+              logOnboardingEventClient({ stage: "enrichment_stage_done", event: "scrape_failed", domain, metadata: { status: "failed" } });
             })
         );
       }
@@ -505,16 +517,19 @@ export function EnrichmentProvider({
                 return updated;
               });
               setStages((prev) => ({ ...prev, classify: "done" }));
+              logOnboardingEventClient({ stage: "enrichment_stage_done", event: "classify_done", domain, metadata: { status: "done" } });
               console.log(
                 `[Enrichment] Classify done: ${data.classification?.categories?.length ?? 0} categories`
               );
             } else {
               setStages((prev) => ({ ...prev, classify: "failed" }));
+              logOnboardingEventClient({ stage: "enrichment_stage_done", event: "classify_failed", domain, metadata: { status: "failed" } });
             }
           } catch (err) {
             if (thisRun !== runIdRef.current) return;
             console.warn("[Enrichment] Classify stage failed:", err);
             setStages((prev) => ({ ...prev, classify: "failed" }));
+            logOnboardingEventClient({ stage: "enrichment_stage_done", event: "classify_failed", domain, metadata: { status: "failed" } });
           }
         } else {
           // No content to classify
@@ -530,6 +545,16 @@ export function EnrichmentProvider({
       if (hasAnyData) {
         setStatus("done");
         setStages((prev) => ({ ...prev, overall: "done" }));
+        logOnboardingEventClient({
+          stage: "enrichment_complete", event: "enrichment_succeeded", domain,
+          metadata: {
+            stagesCompleted: [
+              stageData.pdlCompanyData && "pdl",
+              stageData.scrapeExtracted && "scrape",
+              stageData.classificationData && "classify",
+            ].filter(Boolean),
+          },
+        });
       } else {
         setContextForOssy(
           `[ENRICHMENT FAILED for ${domain}]\n` +
@@ -539,6 +564,7 @@ export function EnrichmentProvider({
         );
         setStatus("failed");
         setStages((prev) => ({ ...prev, overall: "failed" }));
+        logOnboardingEventClient({ stage: "enrichment_complete", event: "enrichment_failed", domain });
       }
 
       // ─── Stage 4: Persist to DB (background, best-effort) ──

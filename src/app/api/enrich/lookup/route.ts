@@ -62,6 +62,9 @@ export async function POST(req: Request) {
         employeeCount: number | null;
         pdlIndustry: string | null;
         pdlLocation: string | null;
+        pdlSize: string | null;
+        pdlRevenue: string | null;
+        linkedinUrl: string | null;
         logoUrl: string | null;
         categories: string[];
         skills: string[];
@@ -87,6 +90,9 @@ export async function POST(req: Request) {
                 f.employeeCount AS employeeCount,
                 f.pdlIndustry AS pdlIndustry,
                 f.pdlLocation AS pdlLocation,
+                f.pdlSize AS pdlSize,
+                f.pdlRevenue AS pdlRevenue,
+                f.linkedinUrl AS linkedinUrl,
                 f.logoUrl AS logoUrl,
                 collect(DISTINCT cat.name) AS categories,
                 collect(DISTINCT sk.name) AS skills,
@@ -101,52 +107,58 @@ export async function POST(req: Request) {
 
       if (neo4jResults.length > 0) {
         const r = neo4jResults[0];
-        // Only count as a hit if we have meaningful data
-        const hasData = r.categories.length > 0 || r.skills.length > 0 || r.employeeCount;
+        // Count as a hit if we have meaningful data in any section
+        const hasCompanyInfo = !!(r.name || r.pdlIndustry || r.pdlLocation || r.employeeCount);
+        const hasClassification = r.categories.length > 0 || r.skills.length > 0;
+        const hasExtracted = r.services.length > 0 || r.clients.length > 0;
+        const hasData = hasCompanyInfo || hasClassification || hasExtracted;
+
         if (hasData) {
           console.log(`[Enrich/Lookup] Cache HIT (Neo4j) for ${domain}: ${r.name}`);
 
+          // Helper to unwrap Neo4j integer objects (they have a .low property)
+          const unwrapInt = (val: number | null): number | null => {
+            if (val === null || val === undefined) return null;
+            if (typeof val === 'object') return (val as unknown as { low?: number }).low ?? null;
+            return val;
+          };
+
           // Reconstruct an EnrichmentResult-compatible shape
+          // Always build companyData if we have any company info (not just employeeCount)
           const data = {
             url: r.website || `https://${domain}`,
             domain,
             logoUrl: r.logoUrl || `https://logo.clearbit.com/${domain}`,
             success: true,
             companyCard: null,
-            companyData: r.employeeCount
+            companyData: hasCompanyInfo
               ? {
                   name: r.name,
                   industry: r.pdlIndustry || "",
-                  size: "",
-                  employeeCount: typeof r.employeeCount === 'object'
-                    ? (r.employeeCount as { low?: number }).low ?? 0
-                    : r.employeeCount ?? 0,
-                  founded: typeof r.foundedYear === 'object' && r.foundedYear !== null
-                    ? (r.foundedYear as unknown as { low?: number }).low ?? null
-                    : r.foundedYear ?? null,
+                  size: r.pdlSize || "",
+                  employeeCount: unwrapInt(r.employeeCount) ?? 0,
+                  founded: unwrapInt(r.foundedYear),
                   location: r.pdlLocation || "",
                   tags: [],
-                  inferredRevenue: null,
-                  linkedinUrl: null,
+                  inferredRevenue: r.pdlRevenue || null,
+                  linkedinUrl: r.linkedinUrl || null,
                   website: r.website,
                 }
               : null,
             groundTruth: null,
             pagesScraped: 0,
             evidenceCategories: [],
-            extracted:
-              r.services.length > 0 || r.clients.length > 0
-                ? {
+            extracted: hasExtracted
+              ? {
                     clients: r.clients,
                     caseStudyUrls: [],
                     services: r.services,
                     aboutPitch: r.description || "",
                     teamMembers: [],
                   }
-                : null,
-            classification:
-              r.categories.length > 0 || r.skills.length > 0
-                ? {
+              : null,
+            classification: hasClassification
+              ? {
                     categories: r.categories,
                     skills: r.skills,
                     industries: r.industries,
@@ -154,7 +166,7 @@ export async function POST(req: Request) {
                     languages: r.languages,
                     confidence: 0.8,
                   }
-                : null,
+              : null,
           };
 
           return NextResponse.json({

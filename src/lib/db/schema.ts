@@ -353,6 +353,24 @@ export const enrichmentAuditLog = pgTable("enrichment_audit_log", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ─── Onboarding Funnel Tracking ──────────────────────────
+
+export const onboardingEvents = pgTable("onboarding_events", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "set null",
+  }),
+  firmId: text("firm_id").references(() => serviceFirms.id, {
+    onDelete: "set null",
+  }),
+  domain: text("domain"), // The firm domain being onboarded
+  stage: text("stage").notNull(), // domain_submitted | cache_lookup | enrichment_stage_done | enrichment_complete | interview_answer | onboarding_complete
+  event: text("event").notNull(), // Specific event within stage (e.g. cache_hit_full, pdl_done, desiredPartnerServices)
+  metadata: jsonb("metadata"), // Stage-specific context (gaps[], source, questionNumber, etc.)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ─── Ossy Memory System ────────────────────────────────
 
 export const memoryEntries = pgTable("memory_entries", {
