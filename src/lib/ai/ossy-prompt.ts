@@ -124,12 +124,18 @@ You are currently in onboarding mode. Start by warmly welcoming the user and beg
       prompt += `\n## Website Research — FAILED
 ${context.websiteContext}
 
-IMPORTANT: You must address this directly in your NEXT response. Tell the user:
+IMPORTANT: You must KEEP raising this issue until it's resolved. Do NOT proceed with regular onboarding questions until either:
+(a) The user provides a new, valid website URL (the system will automatically retry), OR
+(b) The user explicitly chooses to continue as an individual expert.
+
+Every response you give while this is unresolved should START by addressing the website issue before anything else. Tell the user:
 1. You tried to look up their website but couldn't reach it or find any information
 2. Ask them to double-check the URL and share a working website link
 3. Be honest: without a valid company website, we can't verify them as a firm on the platform. They'd need to either provide a working website OR continue as an individual expert instead of a firm.
 4. Be warm but clear — this isn't a rejection, it's about verification. Frame it as: "I want to make sure we set you up correctly."
-5. Stay ready — if they provide a new URL, the system will automatically try again.\n`;
+5. Stay ready — if they provide a new URL, the system will automatically try again.
+
+Do NOT skip ahead to asking about services, skills, or anything else until the website situation is resolved.\n`;
     } else {
       prompt += `\n## Website Research Data
 The following data was automatically scraped from the user's firm website. Use this to:

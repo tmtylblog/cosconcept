@@ -83,3 +83,18 @@ html {
 .cos-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--color-cos-slate-light);
 }
+
+/* Slide-up reveal animation for dashboard cards */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-slide-up {
+  animation: slide-up 0.4s ease-out both;
+}
