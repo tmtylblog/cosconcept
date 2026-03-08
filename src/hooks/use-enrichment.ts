@@ -157,7 +157,7 @@ export function EnrichmentProvider({
 
   const triggerEnrichment = useCallback(
     async (url: string) => {
-      if (enrichedUrl === url && status !== "failed") return; // Already enriched (allow retry on failure)
+      if (enrichedUrl === url) return; // Same URL — skip (different URL always re-runs)
       setEnrichedUrl(url);
       setStatus("loading");
 

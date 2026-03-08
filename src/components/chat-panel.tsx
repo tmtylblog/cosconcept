@@ -152,34 +152,26 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
     }
   }, [messages, isGuest]);
 
-  // Watch user messages for URLs and trigger shared enrichment
-  // After a failed enrichment, allow the user to provide a new URL
+  // Watch user messages for URLs and trigger enrichment.
+  // Always check the LATEST user message for a new URL — if it differs from
+  // the previously enriched URL, re-run enrichment (user may have corrected a typo).
   useEffect(() => {
     const userMessages = messages.filter((m) => m.role === "user");
-    if (enrichmentStatus === "failed") {
-      // Look for a NEW url (different from the one that failed) in the latest messages
-      for (let i = userMessages.length - 1; i >= 0; i--) {
-        const text = getMessageText(userMessages[i]);
-        const url = extractUrl(text);
-        if (url && url !== enrichedUrlRef.current) {
+    if (userMessages.length === 0) return;
+
+    // Scan from newest to oldest — the latest URL wins
+    for (let i = userMessages.length - 1; i >= 0; i--) {
+      const text = getMessageText(userMessages[i]);
+      const url = extractUrl(text);
+      if (url) {
+        if (url !== enrichedUrlRef.current) {
           enrichedUrlRef.current = url;
           triggerEnrichment(url);
-          break;
         }
-      }
-    } else {
-      if (enrichedUrlRef.current) return; // Already processing or done
-      for (const msg of userMessages) {
-        const text = getMessageText(msg);
-        const url = extractUrl(text);
-        if (url) {
-          enrichedUrlRef.current = url;
-          triggerEnrichment(url);
-          break;
-        }
+        break;
       }
     }
-  }, [messages, triggerEnrichment, enrichmentStatus]);
+  }, [messages, triggerEnrichment]);
 
   // Watch for tool results and push to ProfileProvider
   // In AI SDK v6, tool parts have type "tool-{name}" and state "output-available"
