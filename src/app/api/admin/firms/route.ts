@@ -18,6 +18,10 @@ interface Neo4jFirm {
   industries: string[];
   markets: string[];
   firmType: string | null;
+  labels?: string[];
+  location?: string | null;
+  industry?: string | null;
+  sourceId?: string | null;
 }
 
 /**
@@ -45,37 +49,69 @@ export async function GET(req: NextRequest) {
   const offset = (page - 1) * limit;
 
   try {
-    // Platform firms from PostgreSQL
+    // Platform firms from PostgreSQL (service_firms + imported_companies)
     if (source === "platform" || source === "all") {
       const searchFilter = search
-        ? sql` AND (sf.name ILIKE ${"%" + search + "%"} OR sf.website ILIKE ${"%" + search + "%"})`
+        ? sql` AND (name ILIKE ${"%" + search + "%"} OR website ILIKE ${"%" + search + "%"})`
         : sql``;
 
+      // Union service_firms and imported_companies into a single result set
       const countResult = await db.execute(sql`
-        SELECT COUNT(*)::int AS total
-        FROM service_firms sf
-        WHERE 1=1 ${searchFilter}
+        SELECT COUNT(*)::int AS total FROM (
+          SELECT sf.id FROM service_firms sf WHERE 1=1 ${searchFilter}
+          UNION ALL
+          SELECT ic.id FROM imported_companies ic
+          WHERE 1=1 ${search ? sql` AND (ic.name ILIKE ${"%" + search + "%"} OR ic.domain ILIKE ${"%" + search + "%"})` : sql``}
+        ) combined
       `);
       const totalPlatform = Number(countResult.rows[0]?.total ?? 0);
 
       const platformResult = await db.execute(sql`
-        SELECT
-          sf.id,
-          sf.name,
-          sf.website,
-          sf.description,
-          sf.firm_type AS "firmType",
-          sf.size_band AS "sizeBand",
-          sf.profile_completeness AS "profileCompleteness",
-          sf.is_platform_member AS "isPlatformMember",
-          sf.organization_id AS "organizationId",
-          sf.created_at AS "createdAt",
-          o.name AS "orgName",
-          o.slug AS "orgSlug"
-        FROM service_firms sf
-        LEFT JOIN organizations o ON o.id = sf.organization_id
-        WHERE 1=1 ${searchFilter}
-        ORDER BY sf.created_at DESC
+        SELECT * FROM (
+          SELECT
+            sf.id,
+            sf.name,
+            sf.website,
+            sf.description,
+            sf.firm_type AS "firmType",
+            sf.size_band AS "sizeBand",
+            sf.profile_completeness AS "profileCompleteness",
+            sf.is_platform_member AS "isPlatformMember",
+            sf.organization_id AS "organizationId",
+            sf.created_at AS "createdAt",
+            o.name AS "orgName",
+            o.slug AS "orgSlug",
+            NULL AS "location",
+            NULL AS "industry",
+            NULL AS "employeeCount",
+            'service_firm' AS "dataSource"
+          FROM service_firms sf
+          LEFT JOIN organizations o ON o.id = sf.organization_id
+          WHERE 1=1 ${searchFilter}
+
+          UNION ALL
+
+          SELECT
+            ic.id,
+            ic.name,
+            ic.domain AS website,
+            ic.description,
+            ic.icp_classification AS "firmType",
+            ic.size AS "sizeBand",
+            NULL::real AS "profileCompleteness",
+            false AS "isPlatformMember",
+            NULL AS "organizationId",
+            ic.created_at AS "createdAt",
+            NULL AS "orgName",
+            NULL AS "orgSlug",
+            ic.location,
+            ic.industry,
+            ic.size AS "employeeCount",
+            'imported' AS "dataSource"
+          FROM imported_companies ic
+          WHERE 1=1 ${search ? sql` AND (ic.name ILIKE ${"%" + search + "%"} OR ic.domain ILIKE ${"%" + search + "%"})` : sql``}
+        ) combined
+        ORDER BY "createdAt" DESC
         LIMIT ${limit} OFFSET ${offset}
       `);
 
@@ -90,11 +126,8 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Neo4j knowledge graph firms
+    // Neo4j knowledge graph firms (ServiceFirm + Company nodes)
     if (source === "graph" || source === "all") {
-      const searchClause = search
-        ? `WHERE f.name =~ $nameRegex`
-        : "";
       const params: Record<string, unknown> = {
         skip: neo4jInt(offset),
         lim: neo4jInt(limit),
@@ -104,16 +137,18 @@ export async function GET(req: NextRequest) {
       }
 
       const countQuery = `
-        MATCH (f:ServiceFirm)
-        ${searchClause}
+        MATCH (f)
+        WHERE (f:ServiceFirm OR f:Company)
+        ${search ? "AND f.name =~ $nameRegex" : ""}
         RETURN count(f) AS total
       `;
       const countRows = await neo4jRead<{ total: { low: number } }>(countQuery, params);
       const totalGraph = countRows[0]?.total?.low ?? (typeof countRows[0]?.total === "number" ? countRows[0].total : 0);
 
       const query = `
-        MATCH (f:ServiceFirm)
-        ${searchClause}
+        MATCH (f)
+        WHERE (f:ServiceFirm OR f:Company)
+        ${search ? "AND f.name =~ $nameRegex" : ""}
         OPTIONAL MATCH (f)-[:IN_CATEGORY]->(c:Category)
         OPTIONAL MATCH (f)-[:SERVES_INDUSTRY]->(i:Industry)
         OPTIONAL MATCH (f)-[:OPERATES_IN]->(m:Market)
@@ -124,6 +159,10 @@ export async function GET(req: NextRequest) {
                f.description AS description,
                f.employeeCount AS employeeCount,
                f.foundedYear AS foundedYear,
+               f.location AS location,
+               f.industry AS industry,
+               f.sourceId AS sourceId,
+               labels(f) AS labels,
                COLLECT(DISTINCT c.name) AS categories,
                COLLECT(DISTINCT i.name) AS industries,
                COLLECT(DISTINCT m.name) AS markets,
@@ -146,22 +185,43 @@ export async function GET(req: NextRequest) {
 
       // source === "all": merge both
       const platformResult = await db.execute(sql`
-        SELECT
-          sf.id,
-          sf.name,
-          sf.website,
-          sf.description,
-          sf.firm_type AS "firmType",
-          sf.size_band AS "sizeBand",
-          sf.profile_completeness AS "profileCompleteness",
-          sf.is_platform_member AS "isPlatformMember",
-          sf.organization_id AS "organizationId",
-          sf.created_at AS "createdAt",
-          o.name AS "orgName",
-          o.slug AS "orgSlug"
-        FROM service_firms sf
-        LEFT JOIN organizations o ON o.id = sf.organization_id
-        ORDER BY sf.created_at DESC
+        SELECT * FROM (
+          SELECT
+            sf.id,
+            sf.name,
+            sf.website,
+            sf.description,
+            sf.firm_type AS "firmType",
+            sf.size_band AS "sizeBand",
+            sf.profile_completeness AS "profileCompleteness",
+            sf.is_platform_member AS "isPlatformMember",
+            sf.organization_id AS "organizationId",
+            sf.created_at AS "createdAt",
+            o.name AS "orgName",
+            o.slug AS "orgSlug",
+            'service_firm' AS "dataSource"
+          FROM service_firms sf
+          LEFT JOIN organizations o ON o.id = sf.organization_id
+
+          UNION ALL
+
+          SELECT
+            ic.id,
+            ic.name,
+            ic.domain AS website,
+            ic.description,
+            ic.icp_classification AS "firmType",
+            ic.size AS "sizeBand",
+            NULL::real AS "profileCompleteness",
+            false AS "isPlatformMember",
+            NULL AS "organizationId",
+            ic.created_at AS "createdAt",
+            NULL AS "orgName",
+            NULL AS "orgSlug",
+            'imported' AS "dataSource"
+          FROM imported_companies ic
+        ) combined
+        ORDER BY "createdAt" DESC
       `);
 
       // Cross-reference: mark graph firms that are also platform members
@@ -187,6 +247,8 @@ export async function GET(req: NextRequest) {
             industries: [],
             markets: [],
             firmType: pf.firmType as string | null,
+            location: null,
+            labels: [],
             onPlatform: true,
             platformData: pf,
           });
@@ -226,9 +288,11 @@ function normalizeFirm(gf: Neo4jFirm) {
       ? (gf.foundedYear as unknown as { low: number }).low
       : gf.foundedYear,
     categories: gf.categories ?? [],
-    industries: gf.industries ?? [],
+    industries: gf.industries ? [...(gf.industries), ...(gf.industry ? [gf.industry] : [])].filter((v, i, a) => a.indexOf(v) === i) : (gf.industry ? [gf.industry] : []),
     markets: gf.markets ?? [],
     firmType: gf.firmType,
+    location: gf.location ?? null,
+    labels: gf.labels ?? [],
   };
 }
 

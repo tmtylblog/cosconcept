@@ -82,6 +82,11 @@ interface DirectoryFirm {
   createdAt?: string;
   orgName?: string | null;
   orgSlug?: string | null;
+  // Imported company fields
+  location?: string | null;
+  industry?: string | null;
+  dataSource?: "service_firm" | "imported";
+  labels?: string[];
   // Merged view fields
   onPlatform?: boolean;
   platformData?: Record<string, unknown> | null;
@@ -499,18 +504,31 @@ function FirmCard({
                 On Platform
               </span>
             )}
+            {firm.dataSource === "imported" && (
+              <span className="rounded-cos-pill bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
+                Imported
+              </span>
+            )}
           </div>
-          {firm.website && (
-            <p className="flex items-center gap-1 text-xs text-cos-slate-light">
-              <Globe className="h-3 w-3" />
-              {firm.website}
-            </p>
-          )}
+          <div className="flex items-center gap-3">
+            {firm.website && (
+              <p className="flex items-center gap-1 text-xs text-cos-slate-light">
+                <Globe className="h-3 w-3" />
+                {firm.website}
+              </p>
+            )}
+            {firm.location && (
+              <p className="flex items-center gap-1 text-xs text-cos-slate-light">
+                <MapPin className="h-3 w-3" />
+                {firm.location}
+              </p>
+            )}
+          </div>
         </div>
 
-        {firm.firmType && (
+        {(firm.firmType || firm.industry) && (
           <span className="rounded-cos-pill bg-cos-slate/10 px-2 py-0.5 text-xs text-cos-slate">
-            {firm.firmType.replace(/_/g, " ")}
+            {(firm.firmType || firm.industry || "").replace(/_/g, " ")}
           </span>
         )}
 
@@ -558,7 +576,7 @@ function FirmCard({
                 </div>
               )}
 
-              <div className="flex gap-4 text-xs text-cos-slate">
+              <div className="flex flex-wrap gap-4 text-xs text-cos-slate">
                 {firm.foundedYear && (
                   <span>Founded {firm.foundedYear}</span>
                 )}
@@ -570,6 +588,18 @@ function FirmCard({
                 )}
                 {firm.sizeBand && (
                   <span>{firm.sizeBand.replace(/_/g, " ")}</span>
+                )}
+                {firm.location && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {firm.location}
+                  </span>
+                )}
+                {firm.industry && (
+                  <span className="flex items-center gap-1">
+                    <Tag className="h-3 w-3" />
+                    {firm.industry}
+                  </span>
                 )}
               </div>
 
