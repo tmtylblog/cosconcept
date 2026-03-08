@@ -236,6 +236,9 @@ export async function POST(req: Request) {
             founded: companyData.founded,
             location: companyData.location?.name,
             tags: companyData.tags,
+            inferredRevenue: companyData.inferredRevenue ?? null,
+            linkedinUrl: companyData.linkedinUrl ?? null,
+            website: normalized,
           }
         : null,
 

@@ -101,12 +101,12 @@ export default function DashboardPage() {
   const classification = result?.classification;
 
   const firmName = companyData?.name;
-  const firmIndustry = companyData?.industry;
   const firmLocation = companyData?.location;
   const firmSize = companyData?.size;
   const firmEmployeeCount = companyData?.employeeCount;
   const firmFounded = companyData?.founded;
-  const firmTags = companyData?.tags;
+  const firmRevenue = companyData?.inferredRevenue;
+  const firmWebsite = companyData?.website;
 
   // Merge: confirmed profile data takes precedence over enrichment
   const services = profile.services?.length
@@ -221,34 +221,28 @@ export default function DashboardPage() {
           {/* Firm identity — PDL company data */}
           {firmName && (
             <RevealCard icon={Building2} label="Your Firm" delay={0}>
-              <p className="text-base font-semibold">{firmName}</p>
-              {firmIndustry && (
-                <p className="mt-1 text-xs text-cos-slate">{firmIndustry}</p>
-              )}
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-cos-slate">
-                {firmSize && (
-                  <span>{firmSize}{firmEmployeeCount ? ` (${firmEmployeeCount.toLocaleString()} employees)` : ""}</span>
+              <div className="flex items-start gap-3">
+                {/* Company logo via Clearbit */}
+                {firmWebsite && (
+                  <img
+                    src={`https://logo.clearbit.com/${new URL(firmWebsite).hostname}`}
+                    alt=""
+                    className="h-10 w-10 rounded-cos-lg object-contain bg-white border border-cos-border/30"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
                 )}
-                {firmLocation && <span>{firmLocation}</span>}
-                {firmFounded && <span>Founded {firmFounded}</span>}
-              </div>
-              {firmTags && firmTags.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {firmTags.slice(0, 8).map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] text-cos-slate"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                  {firmTags.length > 8 && (
-                    <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] text-cos-slate">
-                      +{firmTags.length - 8} more
-                    </span>
-                  )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-base font-semibold text-cos-midnight">{firmName}</p>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-cos-slate">
+                    {firmSize && (
+                      <span>{firmSize}{firmEmployeeCount ? ` (${firmEmployeeCount.toLocaleString()})` : ""}</span>
+                    )}
+                    {firmRevenue && <span>{firmRevenue}</span>}
+                    {firmLocation && <span>{firmLocation}</span>}
+                    {firmFounded && <span>Est. {firmFounded}</span>}
+                  </div>
                 </div>
-              )}
+              </div>
             </RevealCard>
           )}
 

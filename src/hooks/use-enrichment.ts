@@ -14,6 +14,9 @@ export interface EnrichmentCompanyData {
   founded: number | null;
   location: string;
   tags: string[];
+  inferredRevenue: string | null;
+  linkedinUrl: string | null;
+  website: string | null;
 }
 
 export interface EnrichmentExtracted {
