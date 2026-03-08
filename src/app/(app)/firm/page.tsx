@@ -26,6 +26,7 @@ import Link from "next/link";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useLegacyData } from "@/hooks/use-legacy-data";
+import { useDbExperts } from "@/hooks/use-db-experts";
 import { cn } from "@/lib/utils";
 import type { Expert } from "@/types/cos-data";
 
@@ -46,11 +47,21 @@ export default function FirmPage() {
   const { status, result } = useEnrichment();
   const {
     experts: legacyExperts,
-    totalExperts,
+    totalExperts: legacyTotalExperts,
     totalCaseStudies,
     isLoading: legacyLoading,
     // hasLegacyData,
   } = useLegacyData(activeOrg?.name);
+  const {
+    experts: dbExperts,
+    total: dbTotalExperts,
+    isLoading: dbLoading,
+  } = useDbExperts(activeOrg?.id);
+
+  // Prefer DB experts (quality-scored) over legacy JSON experts
+  const experts = dbExperts.length > 0 ? dbExperts : legacyExperts;
+  const totalExperts = dbExperts.length > 0 ? dbTotalExperts : legacyTotalExperts;
+  const expertsLoading = dbLoading || legacyLoading;
   const [edits, setEdits] = useState<FirmEdits>({});
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [editInput, setEditInput] = useState("");
@@ -376,14 +387,14 @@ export default function FirmPage() {
         icon={<Users className="h-4 w-4" />}
         title="Experts"
         count={totalExperts || undefined}
-        loading={legacyLoading || status === "loading"}
+        loading={expertsLoading || status === "loading"}
       >
-        {legacyExperts.length > 0 ? (
+        {experts.length > 0 ? (
           <div className="space-y-2">
-            {(showAllExperts ? legacyExperts : legacyExperts.slice(0, 20)).map((expert) => (
+            {(showAllExperts ? experts : experts.slice(0, 20)).map((expert) => (
               <ExpertCard key={expert.id} expert={expert} />
             ))}
-            {legacyExperts.length > 20 && !showAllExperts && (
+            {experts.length > 20 && !showAllExperts && (
               <button
                 onClick={() => setShowAllExperts(true)}
                 className="w-full rounded-cos-md border border-cos-border/50 py-2 text-xs font-medium text-cos-electric transition-colors hover:bg-cos-electric/5"

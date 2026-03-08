@@ -1,6 +1,8 @@
 /**
  * GET /api/experts?firmId=...
+ * GET /api/experts?organizationId=...
  * List all expert profiles for a firm, with their best specialist profile.
+ * Accepts either firmId directly or organizationId (looks up firmId automatically).
  */
 
 import { headers } from "next/headers";
@@ -23,20 +25,32 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const firmId = searchParams.get("firmId");
+  const firmIdParam = searchParams.get("firmId");
+  const organizationId = searchParams.get("organizationId");
 
-  if (!firmId) {
-    return Response.json({ error: "firmId required" }, { status: 400 });
+  if (!firmIdParam && !organizationId) {
+    return Response.json({ error: "firmId or organizationId required" }, { status: 400 });
   }
 
-  // Verify the user belongs to the org that owns this firm
-  const [firm] = await db
-    .select({ id: serviceFirms.id, organizationId: serviceFirms.organizationId })
-    .from(serviceFirms)
-    .where(eq(serviceFirms.id, firmId))
-    .limit(1);
+  // Resolve firm — either by firmId directly or by organizationId
+  let firm: { id: string; organizationId: string } | undefined;
+  if (firmIdParam) {
+    const [row] = await db
+      .select({ id: serviceFirms.id, organizationId: serviceFirms.organizationId })
+      .from(serviceFirms)
+      .where(eq(serviceFirms.id, firmIdParam))
+      .limit(1);
+    firm = row;
+  } else {
+    const [row] = await db
+      .select({ id: serviceFirms.id, organizationId: serviceFirms.organizationId })
+      .from(serviceFirms)
+      .where(eq(serviceFirms.organizationId, organizationId!))
+      .limit(1);
+    firm = row;
+  }
 
-  if (!firm) return Response.json({ error: "Firm not found" }, { status: 404 });
+  if (!firm) return Response.json({ experts: [] }); // No firm yet — return empty
 
   const [membership] = await db
     .select({ id: members.id })
@@ -47,6 +61,8 @@ export async function GET(req: Request) {
   if (!membership) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const firmId = firm.id;
 
   // Load experts with their specialist profiles
   const experts = await db
