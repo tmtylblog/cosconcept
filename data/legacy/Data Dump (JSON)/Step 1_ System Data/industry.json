@@ -1,0 +1,118 @@
+{
+  "data": {
+    "industry": [
+      {
+        "id": "c54c5cc4-d39d-4541-8fd3-689fb00a2d36",
+        "name": "Professional Services"
+      },
+      {
+        "id": "b0c24e93-7a87-4257-a30f-7e754aa10ea2",
+        "name": "Financial Services"
+      },
+      {
+        "id": "106786ec-18f2-4217-a6f0-70be75e08015",
+        "name": "Telecommunications"
+      },
+      {
+        "id": "f03e81b1-301a-4788-8e6b-5c4dab8a770a",
+        "name": "Aerospace & Defense"
+      },
+      {
+        "id": "80c612fe-0ca5-4d9c-b044-60381de11638",
+        "name": "Agriculture & Natural Resources"
+      },
+      {
+        "id": "51c87fa2-a058-411d-8120-e9946047b998",
+        "name": "Automotive & Mobility"
+      },
+      {
+        "id": "e28b1ec2-5cd4-4079-ae47-0cc64b9092c4",
+        "name": "Chemicals & Materials"
+      },
+      {
+        "id": "3919506b-7e43-48f0-ad92-878b5215f1c9",
+        "name": "Construction & Infrastructure"
+      },
+      {
+        "id": "53c215ec-8b4c-4945-8d91-7359e148cbc3",
+        "name": "Consumer Goods (CPG)"
+      },
+      {
+        "id": "dc1b61ca-ea29-424d-b005-e13e765806b4",
+        "name": "Design & Creative Services"
+      },
+      {
+        "id": "2a5c3d2b-57f2-49ba-9d8d-9178b62cacfb",
+        "name": "Education & Training"
+      },
+      {
+        "id": "11916d26-3af1-40ce-953e-2c9c4d8a246c",
+        "name": "Energy & Utilities"
+      },
+      {
+        "id": "7916e4ef-659b-4e18-85b3-0e1c52fd1056",
+        "name": "Environmental & Sustainability"
+      },
+      {
+        "id": "1b24a0c8-ebfc-4c2c-8b32-dbc76b8c0522",
+        "name": "Food & Beverage"
+      },
+      {
+        "id": "acc5a5af-92e3-4f1a-99b0-24db6064ce3a",
+        "name": "Government & Public Sector"
+      },
+      {
+        "id": "8e8ebf8c-0d70-4376-b093-6cbd0ca6b7ba",
+        "name": "Healthcare & Life Sciences"
+      },
+      {
+        "id": "4c40435a-b2ec-4063-bf56-4c9eaef69ae3",
+        "name": "Human & Personal Services"
+      },
+      {
+        "id": "d3514fac-2e83-426d-b8d1-f25dafe28c9a",
+        "name": "Manufacturing & Industrial"
+      },
+      {
+        "id": "cf244a6e-5890-486b-af57-50bf6ba5cd24",
+        "name": "Marketing, Advertising & Communications"
+      },
+      {
+        "id": "7e5eeb67-da20-4802-9f8b-9ad655715c11",
+        "name": "Media, Entertainment & Sports"
+      },
+      {
+        "id": "8d81976d-97f9-4abb-8628-5f0b8a1bc77f",
+        "name": "Nonprofit & Social Impact"
+      },
+      {
+        "id": "6ba03b0d-f67f-4f0a-90ae-192ed9709b70",
+        "name": "Real Estate & Property"
+      },
+      {
+        "id": "152e9cde-84af-4b44-8e12-6e7006d76443",
+        "name": "Research & Innovation"
+      },
+      {
+        "id": "c3135a16-c69c-4c87-9c4c-954824e378ee",
+        "name": "Retail & eCommerce"
+      },
+      {
+        "id": "5aa9e889-ba1f-4258-bc07-f204e2dd94d6",
+        "name": "Technology & Software"
+      },
+      {
+        "id": "84958c4b-95ec-4f6f-a98d-a3ebea6d88f6",
+        "name": "Transportation & Logistics"
+      },
+      {
+        "id": "88ba729d-01bc-4b71-8968-fc7c8b4a8121",
+        "name": "Travel & Hospitality"
+      },
+      {
+        "id": "6198d498-f7aa-436c-abd6-567357390196",
+        "name": "Wholesale & Distribution"
+      }
+    ]
+  }
+}

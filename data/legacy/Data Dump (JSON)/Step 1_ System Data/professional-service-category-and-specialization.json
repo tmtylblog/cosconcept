@@ -1,0 +1,1392 @@
+{
+  "data": {
+    "professional_service": [
+      {
+        "level": 0,
+        "name": "Fractional & Embedded Leadership",
+        "categoryId": null,
+        "id": "d3b64c3c-9762-436f-a6ba-8b9940ee235a"
+      },
+      {
+        "level": 0,
+        "name": "Training, Enablement & Professional Coaching",
+        "categoryId": null,
+        "id": "b37b02c7-6f1d-465f-83d2-d191ae65b84c"
+      },
+      {
+        "level": 0,
+        "name": "Outsourcing & Managed Business Services",
+        "categoryId": null,
+        "id": "0b8ee5e0-8727-41c1-8f73-600f185b40b0"
+      },
+      {
+        "level": 0,
+        "name": "Brand Strategy & Positioning",
+        "categoryId": null,
+        "id": "b114d75d-4735-4daa-b279-bc4c02448116"
+      },
+      {
+        "level": 0,
+        "name": "Creative, Content & Production",
+        "categoryId": null,
+        "id": "5a67ce2a-167d-48e5-8999-8c08a8e25a3c"
+      },
+      {
+        "level": 0,
+        "name": "Customer Success & Retention",
+        "categoryId": null,
+        "id": "2e78e3f8-e357-4da7-a31b-0194fa1ea485"
+      },
+      {
+        "level": 0,
+        "name": "Data, Analytics & Business Intelligence",
+        "categoryId": null,
+        "id": "6695d43e-83ee-4249-abb8-07e6c54b836a"
+      },
+      {
+        "level": 0,
+        "name": "Market Research & Customer Intelligence",
+        "categoryId": null,
+        "id": "43466a1d-cc9c-49ed-aefa-4ee27aaf2a66"
+      },
+      {
+        "level": 0,
+        "name": "Finance, Accounting & Tax",
+        "categoryId": null,
+        "id": "9ecf4e40-06e7-414b-a4a5-edf2f7cc93d9"
+      },
+      {
+        "level": 0,
+        "name": "Human Capital & Talent",
+        "categoryId": null,
+        "id": "9fe4ebaa-322b-4dc8-b96f-dc81ef31885a"
+      },
+      {
+        "level": 0,
+        "name": "People Operations & HR",
+        "categoryId": null,
+        "id": "a948b3c0-f12d-4259-973c-e447f679c446"
+      },
+      {
+        "level": 0,
+        "name": "Privacy, Risk & Compliance",
+        "categoryId": null,
+        "id": "131b2491-70c0-4b64-90b6-a0da59e878e9"
+      },
+      {
+        "level": 0,
+        "name": "Legal",
+        "categoryId": null,
+        "id": "c8822c92-a8b8-4ecf-8a46-cc4a43b695bc"
+      },
+      {
+        "level": 0,
+        "name": "Growth Marketing & Demand Generation",
+        "categoryId": null,
+        "id": "e9895828-6f9e-413b-91e9-f8c3d765f3f7"
+      },
+      {
+        "level": 0,
+        "name": "Lifecycle, CRM & Marketing Operations",
+        "categoryId": null,
+        "id": "d8fc4a86-dce6-49ad-97c6-18b3e4eca5cf"
+      },
+      {
+        "level": 0,
+        "name": "Public Relations & Communications",
+        "categoryId": null,
+        "id": "c764ffac-f753-48be-8a4f-96f3a734a000"
+      },
+      {
+        "level": 0,
+        "name": "Operations & Process",
+        "categoryId": null,
+        "id": "07861a57-8502-42bd-a162-b4c4690733e9"
+      },
+      {
+        "level": 0,
+        "name": "Change, Transformation & Reengineering",
+        "categoryId": null,
+        "id": "efbb9915-098b-4767-be3f-edfa91a94d1d"
+      },
+      {
+        "level": 0,
+        "name": "Product Strategy & Innovation",
+        "categoryId": null,
+        "id": "214c9749-d282-4dcd-9997-1bc653f82a15"
+      },
+      {
+        "level": 0,
+        "name": "Product Management, UX & Design",
+        "categoryId": null,
+        "id": "b3bdb92c-57bc-441a-90a5-f02cecb61562"
+      },
+      {
+        "level": 0,
+        "name": "Sales Strategy & Enablement",
+        "categoryId": null,
+        "id": "1e891016-e719-45a9-bc0e-2f6d9b75ef9f"
+      },
+      {
+        "level": 0,
+        "name": "Revenue Operations & Go-To-Market",
+        "categoryId": null,
+        "id": "557c0fc7-1146-4a63-971c-3695d2ee0942"
+      },
+      {
+        "level": 0,
+        "name": "Strategy & Management Consulting",
+        "categoryId": null,
+        "id": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae"
+      },
+      {
+        "level": 0,
+        "name": "Technology Strategy & Digital Transformation",
+        "categoryId": null,
+        "id": "86903dec-94fd-47be-889b-70d42a161ad4"
+      },
+      {
+        "level": 0,
+        "name": "Systems Integration & Enterprise Platforms",
+        "categoryId": null,
+        "id": "95d1e376-7ea2-4828-bf8f-17276ab654ad"
+      },
+      {
+        "level": 0,
+        "name": "Software Engineering & Custom Development",
+        "categoryId": null,
+        "id": "f814fa8e-d0e5-4d89-bc98-d9b320c47f22"
+      },
+      {
+        "level": 0,
+        "name": "AI, Automation & Intelligent Systems",
+        "categoryId": null,
+        "id": "3cb12eec-0aeb-4f50-aa5e-72ccee3cede8"
+      },
+      {
+        "level": 0,
+        "name": "IT Infrastructure & Managed Services",
+        "categoryId": null,
+        "id": "8548ceb1-8a41-4afd-a02a-d0340e2e70c5"
+      },
+      {
+        "level": 0,
+        "name": "Cybersecurity & Information Security",
+        "categoryId": null,
+        "id": "b06a3c02-d84d-4059-9277-04a3edf15cfe"
+      },
+      {
+        "level": 0,
+        "name": "Industry & Applied Engineering",
+        "categoryId": null,
+        "id": "800441c1-0340-41a2-8659-e0fc9ccde9d9"
+      },
+      {
+        "level": 1,
+        "name": "Corporate & Enterprise Strategy",
+        "categoryId": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae",
+        "id": "3adf31ed-0914-47ca-8382-0c10c8088106"
+      },
+      {
+        "level": 1,
+        "name": "Business Model Strategy",
+        "categoryId": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae",
+        "id": "4036a0c0-e75e-4d12-af56-cc57a939eee7"
+      },
+      {
+        "level": 1,
+        "name": "Executive Decision Advisory",
+        "categoryId": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae",
+        "id": "1c1353ff-af80-4ecc-afc9-ca3f7a28f7a7"
+      },
+      {
+        "level": 1,
+        "name": "Portfolio & Resource Allocation Strategy",
+        "categoryId": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae",
+        "id": "8217e955-ccdd-46af-94ea-db49f65b0258"
+      },
+      {
+        "level": 1,
+        "name": "Organizational Strategy (Enterprise-Level)",
+        "categoryId": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae",
+        "id": "e9ed2530-a6e1-4c37-8429-3f762548c3a2"
+      },
+      {
+        "level": 1,
+        "name": "Competitive & Market Landscape Strategy",
+        "categoryId": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae",
+        "id": "b4ef6bca-4cbc-4ac8-ac1a-cd6e79b7c52f"
+      },
+      {
+        "level": 1,
+        "name": "Growth Strategy (Enterprise-Level)",
+        "categoryId": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae",
+        "id": "230b43b3-5533-4846-9fd3-c8b3579cc6d2"
+      },
+      {
+        "level": 1,
+        "name": "Turnaround & Special Situations Strategy",
+        "categoryId": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae",
+        "id": "2e06e6b7-2744-4a66-8c5e-51247b99a5b6"
+      },
+      {
+        "level": 1,
+        "name": "Founder & CEO Advisory",
+        "categoryId": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae",
+        "id": "5c7c57c5-71d1-474e-b922-9cb4d98ce31f"
+      },
+      {
+        "level": 1,
+        "name": "Board-Level & Governance Advisory",
+        "categoryId": "15ad0989-e5b4-43b5-b07d-01fd39dfdfae",
+        "id": "7affbd01-3105-4221-96fe-75c9f1e85b7a"
+      },
+      {
+        "level": 1,
+        "name": "Product Strategy & Roadmapping",
+        "categoryId": "214c9749-d282-4dcd-9997-1bc653f82a15",
+        "id": "2722dfef-9742-49d8-ae57-3687820b6338"
+      },
+      {
+        "level": 1,
+        "name": "Product-Market Fit & Validation Strategy",
+        "categoryId": "214c9749-d282-4dcd-9997-1bc653f82a15",
+        "id": "ec02d5db-e2b8-4ac2-ad00-dedda524e191"
+      },
+      {
+        "level": 1,
+        "name": "Innovation Strategy & Governance",
+        "categoryId": "214c9749-d282-4dcd-9997-1bc653f82a15",
+        "id": "932d7124-f61d-43a3-a1ee-eed8afc53ad3"
+      },
+      {
+        "level": 1,
+        "name": "New Venture & Incubation Strategy",
+        "categoryId": "214c9749-d282-4dcd-9997-1bc653f82a15",
+        "id": "146fb515-7af8-4623-a3a7-6c2a125df33d"
+      },
+      {
+        "level": 1,
+        "name": "Product Portfolio & Investment Strategy",
+        "categoryId": "214c9749-d282-4dcd-9997-1bc653f82a15",
+        "id": "cb3d1b30-bbf1-4f9d-b78a-a658865426d2"
+      },
+      {
+        "level": 1,
+        "name": "Emerging Product & Technology Strategy",
+        "categoryId": "214c9749-d282-4dcd-9997-1bc653f82a15",
+        "id": "65d04968-9c3f-4a2e-bfb2-8cee8f185e98"
+      },
+      {
+        "level": 1,
+        "name": "Operating Model Design",
+        "categoryId": "07861a57-8502-42bd-a162-b4c4690733e9",
+        "id": "00a68ef4-0580-42cf-bf67-7c1eef73ab0e"
+      },
+      {
+        "level": 1,
+        "name": "Business Process Optimization",
+        "categoryId": "07861a57-8502-42bd-a162-b4c4690733e9",
+        "id": "1c73de13-8c29-41ba-a9e6-ad1aaa7f34df"
+      },
+      {
+        "level": 1,
+        "name": "Service Delivery & Execution Models",
+        "categoryId": "07861a57-8502-42bd-a162-b4c4690733e9",
+        "id": "86165ea4-038d-4fdb-9ff1-cfb755cfaea1"
+      },
+      {
+        "level": 1,
+        "name": "Cost Structure & Operational Efficiency",
+        "categoryId": "07861a57-8502-42bd-a162-b4c4690733e9",
+        "id": "de4cfca7-9293-4c3a-b4de-c88fda165219"
+      },
+      {
+        "level": 1,
+        "name": "Workflow & Capability Design",
+        "categoryId": "07861a57-8502-42bd-a162-b4c4690733e9",
+        "id": "99ec9175-fa13-4b84-afb6-14045d7a0d56"
+      },
+      {
+        "level": 1,
+        "name": "Scalability & Operational Readiness",
+        "categoryId": "07861a57-8502-42bd-a162-b4c4690733e9",
+        "id": "7b1b7802-fa31-4dc4-9081-073d12f6e7bb"
+      },
+      {
+        "level": 1,
+        "name": "Enterprise Transformation Leadership",
+        "categoryId": "efbb9915-098b-4767-be3f-edfa91a94d1d",
+        "id": "49a8085f-b52f-45b5-9f6b-ef18948f143f"
+      },
+      {
+        "level": 1,
+        "name": "Organizational Change Management (OCM)",
+        "categoryId": "efbb9915-098b-4767-be3f-edfa91a94d1d",
+        "id": "13f68501-e189-4f5d-b92c-4b309506b040"
+      },
+      {
+        "level": 1,
+        "name": "Transformation Enablement & Training",
+        "categoryId": "efbb9915-098b-4767-be3f-edfa91a94d1d",
+        "id": "a98a09e0-5fb0-485a-a5f9-b010141e40a7"
+      },
+      {
+        "level": 1,
+        "name": "Post-Merger Integration (PMI) Enablement",
+        "categoryId": "efbb9915-098b-4767-be3f-edfa91a94d1d",
+        "id": "f2c67597-ae1e-4b86-a6fa-c97254e02b0f"
+      },
+      {
+        "level": 1,
+        "name": "Culture & Ways-of-Working Transformation",
+        "categoryId": "efbb9915-098b-4767-be3f-edfa91a94d1d",
+        "id": "e2c79c0d-f8fa-4f3d-835a-9b9b6f5279cd"
+      },
+      {
+        "level": 1,
+        "name": "Transformation Governance & Execution",
+        "categoryId": "efbb9915-098b-4767-be3f-edfa91a94d1d",
+        "id": "e973307a-9003-4fa3-a7d1-7f6e17cc9c98"
+      },
+      {
+        "level": 1,
+        "name": "Fractional C-Suite Leadership (CFO, CMO, CTO, COO, CRO)",
+        "categoryId": "d3b64c3c-9762-436f-a6ba-8b9940ee235a",
+        "id": "613ee2da-a424-485e-9b55-6f9ce6b74de7"
+      },
+      {
+        "level": 1,
+        "name": "Embedded Functional Leadership",
+        "categoryId": "d3b64c3c-9762-436f-a6ba-8b9940ee235a",
+        "id": "67380fcc-66a4-4a26-95e2-88a0fb547cdf"
+      },
+      {
+        "level": 1,
+        "name": "Interim Executive Leadership",
+        "categoryId": "d3b64c3c-9762-436f-a6ba-8b9940ee235a",
+        "id": "7b5cf40e-e89b-4ab8-84ac-8f851bcfdb46"
+      },
+      {
+        "level": 1,
+        "name": "Startup & Scale-Up Executive Placement",
+        "categoryId": "d3b64c3c-9762-436f-a6ba-8b9940ee235a",
+        "id": "82b24010-9519-4014-af15-cbfc0f1a1611"
+      },
+      {
+        "level": 1,
+        "name": "Executive-in-Residence Programs",
+        "categoryId": "d3b64c3c-9762-436f-a6ba-8b9940ee235a",
+        "id": "e6e499fb-99ac-4522-a7c0-ed06d5ef2046"
+      },
+      {
+        "level": 1,
+        "name": "Board & Strategic Leadership Advisory (Embedded)",
+        "categoryId": "d3b64c3c-9762-436f-a6ba-8b9940ee235a",
+        "id": "50f303fc-e509-4dd0-a3e3-e95582582a3f"
+      },
+      {
+        "level": 1,
+        "name": "Executive Search & Leadership Recruiting",
+        "categoryId": "9fe4ebaa-322b-4dc8-b96f-dc81ef31885a",
+        "id": "031951a1-88e9-4e99-abfb-77c5e60a3b6d"
+      },
+      {
+        "level": 1,
+        "name": "Permanent & Contract Staffing",
+        "categoryId": "9fe4ebaa-322b-4dc8-b96f-dc81ef31885a",
+        "id": "c19c20fd-2fe8-491b-85f6-07d3852e8719"
+      },
+      {
+        "level": 1,
+        "name": "Fractional Talent Placement",
+        "categoryId": "9fe4ebaa-322b-4dc8-b96f-dc81ef31885a",
+        "id": "c7a0d76b-00d4-45cb-bc63-52d4511484ad"
+      },
+      {
+        "level": 1,
+        "name": "Talent Networks & Marketplaces",
+        "categoryId": "9fe4ebaa-322b-4dc8-b96f-dc81ef31885a",
+        "id": "bf51b0d9-bf80-4da1-83aa-606e44549524"
+      },
+      {
+        "level": 1,
+        "name": "Technical & Specialized Recruiting",
+        "categoryId": "9fe4ebaa-322b-4dc8-b96f-dc81ef31885a",
+        "id": "c374dd78-dccc-4e66-b0fb-226bc2925ab9"
+      },
+      {
+        "level": 1,
+        "name": "Team Augmentation & Capacity Staffing",
+        "categoryId": "9fe4ebaa-322b-4dc8-b96f-dc81ef31885a",
+        "id": "acbf2534-5dab-4e22-989f-8b07290560cc"
+      },
+      {
+        "level": 1,
+        "name": "Managed IT & Infrastructure Services",
+        "categoryId": "0b8ee5e0-8727-41c1-8f73-600f185b40b0",
+        "id": "0868d504-c4b0-4146-9182-20a3df2d6a95"
+      },
+      {
+        "level": 1,
+        "name": "Managed Finance & Accounting Services",
+        "categoryId": "0b8ee5e0-8727-41c1-8f73-600f185b40b0",
+        "id": "8bec2387-e5a0-4b39-9048-a63c1fb0d3e1"
+      },
+      {
+        "level": 1,
+        "name": "Managed Marketing & Content Services",
+        "categoryId": "0b8ee5e0-8727-41c1-8f73-600f185b40b0",
+        "id": "b675b083-9c4c-41c3-818d-76608765e8b4"
+      },
+      {
+        "level": 1,
+        "name": "Managed Customer Support Services",
+        "categoryId": "0b8ee5e0-8727-41c1-8f73-600f185b40b0",
+        "id": "c3941a57-c0d3-4cb4-aa76-95a1aa102567"
+      },
+      {
+        "level": 1,
+        "name": "Business Process Outsourcing (BPO)",
+        "categoryId": "0b8ee5e0-8727-41c1-8f73-600f185b40b0",
+        "id": "639d7b40-2b96-4abb-b0dc-cefdf578084a"
+      },
+      {
+        "level": 1,
+        "name": "White-Label & Delivery Services",
+        "categoryId": "0b8ee5e0-8727-41c1-8f73-600f185b40b0",
+        "id": "ed1adfe0-c785-407c-b94d-5b93c7e54602"
+      },
+      {
+        "level": 1,
+        "name": "Back-Office & Operations Services",
+        "categoryId": "0b8ee5e0-8727-41c1-8f73-600f185b40b0",
+        "id": "22f6927a-cf80-4267-8204-297bf573ac90"
+      },
+      {
+        "level": 1,
+        "name": "Demand Generation Strategy",
+        "categoryId": "e9895828-6f9e-413b-91e9-f8c3d765f3f7",
+        "id": "bb06670b-d0d1-48c8-b905-17b8c1728811"
+      },
+      {
+        "level": 1,
+        "name": "Paid Media & Performance Marketing",
+        "categoryId": "e9895828-6f9e-413b-91e9-f8c3d765f3f7",
+        "id": "7adadae1-90e0-42d5-bc61-a69ff5f1d5be"
+      },
+      {
+        "level": 1,
+        "name": "SEO & Organic Acquisition",
+        "categoryId": "e9895828-6f9e-413b-91e9-f8c3d765f3f7",
+        "id": "7ff0ddca-da82-460e-a22b-2b872a7a941f"
+      },
+      {
+        "level": 1,
+        "name": "Account-Based Marketing (ABM)",
+        "categoryId": "e9895828-6f9e-413b-91e9-f8c3d765f3f7",
+        "id": "683ec097-f347-4055-9f68-5bafb584f14f"
+      },
+      {
+        "level": 1,
+        "name": "Affiliate, Partner & Referral Marketing",
+        "categoryId": "e9895828-6f9e-413b-91e9-f8c3d765f3f7",
+        "id": "97cb6629-5169-4e2d-a567-e922dd50fb13"
+      },
+      {
+        "level": 1,
+        "name": "Marketplace & Platform Growth",
+        "categoryId": "e9895828-6f9e-413b-91e9-f8c3d765f3f7",
+        "id": "1c2fc247-76fb-42f7-9aa3-c9f6254ef2d2"
+      },
+      {
+        "level": 1,
+        "name": "Local & Regional Demand Marketing",
+        "categoryId": "e9895828-6f9e-413b-91e9-f8c3d765f3f7",
+        "id": "1b56b3db-f5a3-4df8-a28a-8c1f71bf945c"
+      },
+      {
+        "level": 1,
+        "name": "Growth Experimentation & Optimization",
+        "categoryId": "e9895828-6f9e-413b-91e9-f8c3d765f3f7",
+        "id": "6fb6d6cf-0d1f-4213-85e1-287d089e19cf"
+      },
+      {
+        "level": 1,
+        "name": "Lifecycle & Retention Marketing",
+        "categoryId": "d8fc4a86-dce6-49ad-97c6-18b3e4eca5cf",
+        "id": "9a7adbf4-90dc-4de4-9283-00022e60dd20"
+      },
+      {
+        "level": 1,
+        "name": "CRM Strategy & Architecture",
+        "categoryId": "d8fc4a86-dce6-49ad-97c6-18b3e4eca5cf",
+        "id": "95073abd-77eb-46b3-bf82-e6597c49378e"
+      },
+      {
+        "level": 1,
+        "name": "Marketing Automation & Orchestration",
+        "categoryId": "d8fc4a86-dce6-49ad-97c6-18b3e4eca5cf",
+        "id": "831825bc-cd71-4bf2-880e-70e554ec0004"
+      },
+      {
+        "level": 1,
+        "name": "Customer Expansion & Monetization",
+        "categoryId": "d8fc4a86-dce6-49ad-97c6-18b3e4eca5cf",
+        "id": "e7f68acd-0e63-44bf-987a-22d3d6d28f9a"
+      },
+      {
+        "level": 1,
+        "name": "Marketing Operations & Analytics",
+        "categoryId": "d8fc4a86-dce6-49ad-97c6-18b3e4eca5cf",
+        "id": "ac7c1444-46ac-4f8b-81f3-6774504e102b"
+      },
+      {
+        "level": 1,
+        "name": "Customer Loyalty & Advocacy Programs",
+        "categoryId": "d8fc4a86-dce6-49ad-97c6-18b3e4eca5cf",
+        "id": "30987e6a-f3d6-4b75-87a4-0a14f281fcdd"
+      },
+      {
+        "level": 1,
+        "name": "Customer Journey & CX Optimization",
+        "categoryId": "d8fc4a86-dce6-49ad-97c6-18b3e4eca5cf",
+        "id": "a62539d3-93af-4737-8d67-f379912e136f"
+      },
+      {
+        "level": 1,
+        "name": "Brand Positioning & Differentiation",
+        "categoryId": "b114d75d-4735-4daa-b279-bc4c02448116",
+        "id": "9a003b87-60b1-47a1-a654-b426c1f8cfb1"
+      },
+      {
+        "level": 1,
+        "name": "Brand Architecture & Portfolio Strategy",
+        "categoryId": "b114d75d-4735-4daa-b279-bc4c02448116",
+        "id": "4fc2e36d-f5d6-4c1a-8c8a-d276229803e3"
+      },
+      {
+        "level": 1,
+        "name": "Brand Identity Strategy",
+        "categoryId": "b114d75d-4735-4daa-b279-bc4c02448116",
+        "id": "e4bbe8a9-d45a-4707-8f45-ed3d335d700b"
+      },
+      {
+        "level": 1,
+        "name": "Brand Narrative & Story Strategy",
+        "categoryId": "b114d75d-4735-4daa-b279-bc4c02448116",
+        "id": "6e53cf12-da52-4466-9b08-dba031229446"
+      },
+      {
+        "level": 1,
+        "name": "Audience & Cultural Insight Strategy",
+        "categoryId": "b114d75d-4735-4daa-b279-bc4c02448116",
+        "id": "9fd42305-8c7f-4363-81ef-a1a869451160"
+      },
+      {
+        "level": 1,
+        "name": "Brand Evolution & Repositioning",
+        "categoryId": "b114d75d-4735-4daa-b279-bc4c02448116",
+        "id": "65825978-cad3-46ac-ac25-fec13c1cbb68"
+      },
+      {
+        "level": 1,
+        "name": "Employer Brand & Talent Positioning",
+        "categoryId": "b114d75d-4735-4daa-b279-bc4c02448116",
+        "id": "8e4e761b-ca06-46b7-bce4-c4df040bd6d0"
+      },
+      {
+        "level": 1,
+        "name": "Category Creation & Thought Leadership Strategy",
+        "categoryId": "b114d75d-4735-4daa-b279-bc4c02448116",
+        "id": "33c9659d-7418-4ea3-beed-ea9ba9e4c3ec"
+      },
+      {
+        "level": 1,
+        "name": "Video & Film Production",
+        "categoryId": "5a67ce2a-167d-48e5-8999-8c08a8e25a3c",
+        "id": "2c5580fb-747d-415f-82bd-ced9bb26fd90"
+      },
+      {
+        "level": 1,
+        "name": "Animation & Motion Design",
+        "categoryId": "5a67ce2a-167d-48e5-8999-8c08a8e25a3c",
+        "id": "e9b095f5-4c2d-4b06-b03d-111bc56c3e64"
+      },
+      {
+        "level": 1,
+        "name": "Digital Content Production",
+        "categoryId": "5a67ce2a-167d-48e5-8999-8c08a8e25a3c",
+        "id": "fec32c8a-8520-4740-8acb-b559e7a0cd43"
+      },
+      {
+        "level": 1,
+        "name": "Photography & Visual Asset Production",
+        "categoryId": "5a67ce2a-167d-48e5-8999-8c08a8e25a3c",
+        "id": "8c82730d-2d8f-449b-b36e-53c6efaf8688"
+      },
+      {
+        "level": 1,
+        "name": "Copywriting & Content Writing",
+        "categoryId": "5a67ce2a-167d-48e5-8999-8c08a8e25a3c",
+        "id": "6995fddc-dd90-493a-b3ba-09acf7ccfa60"
+      },
+      {
+        "level": 1,
+        "name": "Creative Campaign Production",
+        "categoryId": "5a67ce2a-167d-48e5-8999-8c08a8e25a3c",
+        "id": "bd641ae0-99da-47d6-a37b-43c3e4a1e206"
+      },
+      {
+        "level": 1,
+        "name": "Audio & Podcast Production",
+        "categoryId": "5a67ce2a-167d-48e5-8999-8c08a8e25a3c",
+        "id": "104266a7-f375-4a1d-943e-3554dbe8189a"
+      },
+      {
+        "level": 1,
+        "name": "Post-Production & Editing Services",
+        "categoryId": "5a67ce2a-167d-48e5-8999-8c08a8e25a3c",
+        "id": "555b8af9-2a02-4f31-bd96-1e7f19e4e502"
+      },
+      {
+        "level": 1,
+        "name": "Media Relations & Earned Media",
+        "categoryId": "c764ffac-f753-48be-8a4f-96f3a734a000",
+        "id": "b4fba534-82b6-4f10-ad4c-614b04670eef"
+      },
+      {
+        "level": 1,
+        "name": "Brand Communications & Messaging",
+        "categoryId": "c764ffac-f753-48be-8a4f-96f3a734a000",
+        "id": "9e58f0b7-3edb-4926-9be2-2dd195dc06e4"
+      },
+      {
+        "level": 1,
+        "name": "Corporate & Executive Communications",
+        "categoryId": "c764ffac-f753-48be-8a4f-96f3a734a000",
+        "id": "f5e281f1-af43-410b-9bbf-472ed4f39d2f"
+      },
+      {
+        "level": 1,
+        "name": "Influencer & Creator Relations",
+        "categoryId": "c764ffac-f753-48be-8a4f-96f3a734a000",
+        "id": "88a2c449-2ad7-42b8-8dbe-8da46ecfaa0a"
+      },
+      {
+        "level": 1,
+        "name": "Product & Launch Communications",
+        "categoryId": "c764ffac-f753-48be-8a4f-96f3a734a000",
+        "id": "81c1994e-6679-4e3e-b23f-78f51375478e"
+      },
+      {
+        "level": 1,
+        "name": "Crisis & Reputation Management",
+        "categoryId": "c764ffac-f753-48be-8a4f-96f3a734a000",
+        "id": "13ab10f3-4422-472b-baa6-48b756f4c864"
+      },
+      {
+        "level": 1,
+        "name": "Internal & Stakeholder Communications",
+        "categoryId": "c764ffac-f753-48be-8a4f-96f3a734a000",
+        "id": "27bc342b-b2b7-4771-95da-c85f24233e5c"
+      },
+      {
+        "level": 1,
+        "name": "Sales Strategy & Motion Design",
+        "categoryId": "1e891016-e719-45a9-bc0e-2f6d9b75ef9f",
+        "id": "ee61ee68-0376-4f7e-96ba-a1ae0ef2651c"
+      },
+      {
+        "level": 1,
+        "name": "Sales Playbooks & Enablement Frameworks",
+        "categoryId": "1e891016-e719-45a9-bc0e-2f6d9b75ef9f",
+        "id": "5364d396-8ca6-4f57-9f59-9138342b40c6"
+      },
+      {
+        "level": 1,
+        "name": "Sales Training & Coaching",
+        "categoryId": "1e891016-e719-45a9-bc0e-2f6d9b75ef9f",
+        "id": "59501913-1d9e-4872-afdc-f5e0ebdf190c"
+      },
+      {
+        "level": 1,
+        "name": "Enterprise & Complex Deal Strategy",
+        "categoryId": "1e891016-e719-45a9-bc0e-2f6d9b75ef9f",
+        "id": "aa8dd7f5-d532-4ca1-9fb1-bb29d8552390"
+      },
+      {
+        "level": 1,
+        "name": "Sales Leadership Advisory",
+        "categoryId": "1e891016-e719-45a9-bc0e-2f6d9b75ef9f",
+        "id": "c003cc97-156a-45e8-a663-1e1f01908bff"
+      },
+      {
+        "level": 1,
+        "name": "Sales Messaging & Pitch Strategy",
+        "categoryId": "1e891016-e719-45a9-bc0e-2f6d9b75ef9f",
+        "id": "1f5d7d39-b762-4f11-b5b1-fbc91a53e956"
+      },
+      {
+        "level": 1,
+        "name": "Sales Onboarding & Ramp Programs",
+        "categoryId": "1e891016-e719-45a9-bc0e-2f6d9b75ef9f",
+        "id": "0273d7f7-8644-4464-9c3f-d6febb52db2e"
+      },
+      {
+        "level": 1,
+        "name": "Sales Performance Optimization",
+        "categoryId": "1e891016-e719-45a9-bc0e-2f6d9b75ef9f",
+        "id": "d563a911-7bc1-40ce-ad32-c581de856028"
+      },
+      {
+        "level": 1,
+        "name": "Go-To-Market System Design",
+        "categoryId": "557c0fc7-1146-4a63-971c-3695d2ee0942",
+        "id": "7862bcfb-0df3-4652-a94f-a6e4a9677943"
+      },
+      {
+        "level": 1,
+        "name": "Revenue Funnel Architecture",
+        "categoryId": "557c0fc7-1146-4a63-971c-3695d2ee0942",
+        "id": "342c906c-a501-4fe1-a2d5-77ee446bff6d"
+      },
+      {
+        "level": 1,
+        "name": "CRM Strategy & Revenue Architecture",
+        "categoryId": "557c0fc7-1146-4a63-971c-3695d2ee0942",
+        "id": "e6111249-7eb2-4c5b-8719-c02e355d5e63"
+      },
+      {
+        "level": 1,
+        "name": "Marketing–Sales Alignment Systems",
+        "categoryId": "557c0fc7-1146-4a63-971c-3695d2ee0942",
+        "id": "58ee6db4-79ec-4f53-8d32-4a7eb59d44ed"
+      },
+      {
+        "level": 1,
+        "name": "Revenue Forecasting & Performance Analytics",
+        "categoryId": "557c0fc7-1146-4a63-971c-3695d2ee0942",
+        "id": "aa780ebd-ac81-4b84-9077-0a4ae0da68d9"
+      },
+      {
+        "level": 1,
+        "name": "Revenue Process Optimization",
+        "categoryId": "557c0fc7-1146-4a63-971c-3695d2ee0942",
+        "id": "4858266e-f516-43d4-866f-63da1ca8448e"
+      },
+      {
+        "level": 1,
+        "name": "Compensation & Incentive Design",
+        "categoryId": "557c0fc7-1146-4a63-971c-3695d2ee0942",
+        "id": "4b1d7420-bb8f-42ab-9119-c3e4379f87b6"
+      },
+      {
+        "level": 1,
+        "name": "RevTech Stack Strategy",
+        "categoryId": "557c0fc7-1146-4a63-971c-3695d2ee0942",
+        "id": "ffe50a08-dd18-4745-a624-9a68819fbb2a"
+      },
+      {
+        "level": 1,
+        "name": "Customer Success Strategy",
+        "categoryId": "2e78e3f8-e357-4da7-a31b-0194fa1ea485",
+        "id": "aafc9cf1-2add-436a-b4d7-614da6812d37"
+      },
+      {
+        "level": 1,
+        "name": "Retention & Churn Reduction Advisory",
+        "categoryId": "2e78e3f8-e357-4da7-a31b-0194fa1ea485",
+        "id": "84cf5163-2f47-47ed-b779-9e9c8b6cbe8d"
+      },
+      {
+        "level": 1,
+        "name": "Customer Experience (CX) Strategy",
+        "categoryId": "2e78e3f8-e357-4da7-a31b-0194fa1ea485",
+        "id": "1385bb8c-0e09-43e8-8630-c77855a1b5b6"
+      },
+      {
+        "level": 1,
+        "name": "Customer Journey Mapping & Insights",
+        "categoryId": "2e78e3f8-e357-4da7-a31b-0194fa1ea485",
+        "id": "9ea8d0c5-0688-411e-ad70-620caed2aa91"
+      },
+      {
+        "level": 1,
+        "name": "Support & Service Transformation",
+        "categoryId": "2e78e3f8-e357-4da7-a31b-0194fa1ea485",
+        "id": "8dbf7dd9-9a51-4004-8c1b-5db561d5cef9"
+      },
+      {
+        "level": 1,
+        "name": "Customer Health & Value Modeling",
+        "categoryId": "2e78e3f8-e357-4da7-a31b-0194fa1ea485",
+        "id": "30f99e6a-55d0-445e-a74a-b9360bc56469"
+      },
+      {
+        "level": 1,
+        "name": "Expansion & Adoption Strategy",
+        "categoryId": "2e78e3f8-e357-4da7-a31b-0194fa1ea485",
+        "id": "c001d8cf-c924-47a0-8b66-9802379031d1"
+      },
+      {
+        "level": 1,
+        "name": "Voice of Customer (VoC) Strategy",
+        "categoryId": "2e78e3f8-e357-4da7-a31b-0194fa1ea485",
+        "id": "753e6349-e75b-4500-9d0c-137a42cc5112"
+      },
+      {
+        "level": 1,
+        "name": "Digital Transformation Strategy",
+        "categoryId": "86903dec-94fd-47be-889b-70d42a161ad4",
+        "id": "a672ba67-324e-4b44-858a-80748e330e68"
+      },
+      {
+        "level": 1,
+        "name": "Technology Roadmapping & Architecture Strategy",
+        "categoryId": "86903dec-94fd-47be-889b-70d42a161ad4",
+        "id": "9b2767f8-8a52-4559-86cd-6bf1df40029f"
+      },
+      {
+        "level": 1,
+        "name": "Platform & Ecosystem Strategy",
+        "categoryId": "86903dec-94fd-47be-889b-70d42a161ad4",
+        "id": "ec1cc0a3-3e10-4185-ba3c-ae8b7dfc625f"
+      },
+      {
+        "level": 1,
+        "name": "Legacy Modernization Strategy",
+        "categoryId": "86903dec-94fd-47be-889b-70d42a161ad4",
+        "id": "a26f0159-c63e-4483-ad83-4ca6e2b935ba"
+      },
+      {
+        "level": 1,
+        "name": "Innovation & Emerging Tech Strategy",
+        "categoryId": "86903dec-94fd-47be-889b-70d42a161ad4",
+        "id": "fbcb7896-cceb-4643-a683-8aaf6ea384d2"
+      },
+      {
+        "level": 1,
+        "name": "Enterprise Platform Implementation",
+        "categoryId": "95d1e376-7ea2-4828-bf8f-17276ab654ad",
+        "id": "ec2a3a71-3498-44c8-8b8f-5b6e449a57fb"
+      },
+      {
+        "level": 1,
+        "name": "System Integration & Data Connectivity",
+        "categoryId": "95d1e376-7ea2-4828-bf8f-17276ab654ad",
+        "id": "9d4f5b7f-557d-4498-be71-492715fe660e"
+      },
+      {
+        "level": 1,
+        "name": "Platform Migration & Upgrades",
+        "categoryId": "95d1e376-7ea2-4828-bf8f-17276ab654ad",
+        "id": "7b91aa10-dceb-46a9-af35-b3cc0258a39a"
+      },
+      {
+        "level": 1,
+        "name": "Platform Optimization & Enablement",
+        "categoryId": "95d1e376-7ea2-4828-bf8f-17276ab654ad",
+        "id": "965d6995-f8c0-4347-9e11-8342dab0d65e"
+      },
+      {
+        "level": 1,
+        "name": "Vendor-Specific Platform Services",
+        "categoryId": "95d1e376-7ea2-4828-bf8f-17276ab654ad",
+        "id": "606d1c24-7b17-4b77-8184-d1fa375356b9"
+      },
+      {
+        "level": 1,
+        "name": "Custom Application Development",
+        "categoryId": "f814fa8e-d0e5-4d89-bc98-d9b320c47f22",
+        "id": "f369f234-312d-481a-8c6e-779c0307a3e0"
+      },
+      {
+        "level": 1,
+        "name": "Web & Mobile Product Development",
+        "categoryId": "f814fa8e-d0e5-4d89-bc98-d9b320c47f22",
+        "id": "d5aef426-96eb-4e2e-b396-59f804950c35"
+      },
+      {
+        "level": 1,
+        "name": "API & Backend Engineering",
+        "categoryId": "f814fa8e-d0e5-4d89-bc98-d9b320c47f22",
+        "id": "809c0303-4059-4252-aa94-e17865cac904"
+      },
+      {
+        "level": 1,
+        "name": "Product Engineering Teams (Augmented)",
+        "categoryId": "f814fa8e-d0e5-4d89-bc98-d9b320c47f22",
+        "id": "8d5e10b1-0f6c-441d-b3fe-bc1f82fd0de1"
+      },
+      {
+        "level": 1,
+        "name": "Software Maintenance & Enhancement",
+        "categoryId": "f814fa8e-d0e5-4d89-bc98-d9b320c47f22",
+        "id": "caef63cc-0e10-4a56-a0cc-8cca3862bd99"
+      },
+      {
+        "level": 1,
+        "name": "Product Management & Delivery",
+        "categoryId": "b3bdb92c-57bc-441a-90a5-f02cecb61562",
+        "id": "e5bdf9b9-f3bc-4f34-bec2-5fd3265acacb"
+      },
+      {
+        "level": 1,
+        "name": "UX & Interaction Design",
+        "categoryId": "b3bdb92c-57bc-441a-90a5-f02cecb61562",
+        "id": "82fbf6d6-b131-4f28-ac45-ee6160a10791"
+      },
+      {
+        "level": 1,
+        "name": "UI & Visual Interface Design",
+        "categoryId": "b3bdb92c-57bc-441a-90a5-f02cecb61562",
+        "id": "032e3742-0eee-4209-bfae-50ea6f789313"
+      },
+      {
+        "level": 1,
+        "name": "Service Design & Experience Design",
+        "categoryId": "b3bdb92c-57bc-441a-90a5-f02cecb61562",
+        "id": "bba85ea5-16db-498d-a8e9-7d215e9f599f"
+      },
+      {
+        "level": 1,
+        "name": "Product Discovery & Validation",
+        "categoryId": "b3bdb92c-57bc-441a-90a5-f02cecb61562",
+        "id": "8a5fbec1-99c1-430d-8997-ffb5312fc236"
+      },
+      {
+        "level": 1,
+        "name": "Design Systems & Experience Governance",
+        "categoryId": "b3bdb92c-57bc-441a-90a5-f02cecb61562",
+        "id": "a21315a1-19ee-4eb0-bfa0-e44848a73af4"
+      },
+      {
+        "level": 1,
+        "name": "Accessibility & Inclusive Design",
+        "categoryId": "b3bdb92c-57bc-441a-90a5-f02cecb61562",
+        "id": "8b85bc4a-97a4-4990-91d8-a56512161f7f"
+      },
+      {
+        "level": 1,
+        "name": "UX Research (Applied)",
+        "categoryId": "b3bdb92c-57bc-441a-90a5-f02cecb61562",
+        "id": "4358958e-453a-4de5-9d08-16212f78eded"
+      },
+      {
+        "level": 1,
+        "name": "Business Intelligence & Reporting",
+        "categoryId": "6695d43e-83ee-4249-abb8-07e6c54b836a",
+        "id": "909887c9-0f22-4972-b596-0e9a578459ad"
+      },
+      {
+        "level": 1,
+        "name": "Data Strategy & Analytics Roadmapping",
+        "categoryId": "6695d43e-83ee-4249-abb8-07e6c54b836a",
+        "id": "195e5764-59c7-41de-9271-9b785f6759cf"
+      },
+      {
+        "level": 1,
+        "name": "Advanced Analytics & Modeling",
+        "categoryId": "6695d43e-83ee-4249-abb8-07e6c54b836a",
+        "id": "899ebe18-2406-491e-b84c-ee5fbcda1682"
+      },
+      {
+        "level": 1,
+        "name": "Customer & Behavioral Analytics",
+        "categoryId": "6695d43e-83ee-4249-abb8-07e6c54b836a",
+        "id": "03128484-a21c-4635-ab81-91491cb606e2"
+      },
+      {
+        "level": 1,
+        "name": "Attribution & Measurement Strategy",
+        "categoryId": "6695d43e-83ee-4249-abb8-07e6c54b836a",
+        "id": "b35d012a-23c7-4a47-9b41-5174cc5adff0"
+      },
+      {
+        "level": 1,
+        "name": "Data Quality & Analytics Governance",
+        "categoryId": "6695d43e-83ee-4249-abb8-07e6c54b836a",
+        "id": "67864439-106a-4e95-ae56-a68fe5ef79c4"
+      },
+      {
+        "level": 1,
+        "name": "Process Automation & Workflow Design",
+        "categoryId": "3cb12eec-0aeb-4f50-aa5e-72ccee3cede8",
+        "id": "05a78ce4-271a-4d6d-a6c1-a394810b894a"
+      },
+      {
+        "level": 1,
+        "name": "AI System Design & Deployment",
+        "categoryId": "3cb12eec-0aeb-4f50-aa5e-72ccee3cede8",
+        "id": "05ebb29c-6e7f-4304-a94e-71cb2f47da22"
+      },
+      {
+        "level": 1,
+        "name": "Machine Learning Application Services",
+        "categoryId": "3cb12eec-0aeb-4f50-aa5e-72ccee3cede8",
+        "id": "5504c3ef-300d-4648-bea9-ffa1119a670e"
+      },
+      {
+        "level": 1,
+        "name": "Intelligent Decision Systems",
+        "categoryId": "3cb12eec-0aeb-4f50-aa5e-72ccee3cede8",
+        "id": "cdfc4124-0b99-406a-b40b-a63e8a6c615a"
+      },
+      {
+        "level": 1,
+        "name": "AI Enablement & Adoption",
+        "categoryId": "3cb12eec-0aeb-4f50-aa5e-72ccee3cede8",
+        "id": "b1affb16-3d93-46de-9c53-51f5b169b732"
+      },
+      {
+        "level": 1,
+        "name": "IT Infrastructure Management",
+        "categoryId": "8548ceb1-8a41-4afd-a02a-d0340e2e70c5",
+        "id": "fa8e6324-b196-44ba-8825-c647c85c19ae"
+      },
+      {
+        "level": 1,
+        "name": "Cloud Infrastructure Services",
+        "categoryId": "8548ceb1-8a41-4afd-a02a-d0340e2e70c5",
+        "id": "dfd13994-d1e2-4f07-badb-4c839f3b5c8e"
+      },
+      {
+        "level": 1,
+        "name": "Managed IT Services",
+        "categoryId": "8548ceb1-8a41-4afd-a02a-d0340e2e70c5",
+        "id": "3d91bef6-6cf4-4249-8ab6-fbbff49d3907"
+      },
+      {
+        "level": 1,
+        "name": "Systems Monitoring & Reliability",
+        "categoryId": "8548ceb1-8a41-4afd-a02a-d0340e2e70c5",
+        "id": "a1ed33c9-c87c-4b45-93ac-5f19006d0887"
+      },
+      {
+        "level": 1,
+        "name": "IT Service Desk & Support",
+        "categoryId": "8548ceb1-8a41-4afd-a02a-d0340e2e70c5",
+        "id": "54df74d9-7ee0-412f-88d0-5b9978751637"
+      },
+      {
+        "level": 1,
+        "name": "Offensive Security & Penetration Testing",
+        "categoryId": "b06a3c02-d84d-4059-9277-04a3edf15cfe",
+        "id": "63bdeb89-8af9-48a2-8f94-00d92aea6c80"
+      },
+      {
+        "level": 1,
+        "name": "Defensive Security & Threat Monitoring",
+        "categoryId": "b06a3c02-d84d-4059-9277-04a3edf15cfe",
+        "id": "064608ac-9e04-4107-8e39-bd6285d94ef9"
+      },
+      {
+        "level": 1,
+        "name": "Incident Response & Recovery",
+        "categoryId": "b06a3c02-d84d-4059-9277-04a3edf15cfe",
+        "id": "3b914524-df4d-4e1f-94d9-12fed51058c0"
+      },
+      {
+        "level": 1,
+        "name": "Security Architecture & Hardening",
+        "categoryId": "b06a3c02-d84d-4059-9277-04a3edf15cfe",
+        "id": "eb9cb5fe-4b1f-4873-b303-c9a9e57a5a9f"
+      },
+      {
+        "level": 1,
+        "name": "Security Compliance & Risk Assessment",
+        "categoryId": "b06a3c02-d84d-4059-9277-04a3edf15cfe",
+        "id": "7cfed201-95ad-4f40-9be8-787c24092465"
+      },
+      {
+        "level": 1,
+        "name": "Privacy & Data Protection Advisory",
+        "categoryId": "131b2491-70c0-4b64-90b6-a0da59e878e9",
+        "id": "145e50d2-ea60-4144-ab55-bfda8f0c0078"
+      },
+      {
+        "level": 1,
+        "name": "Regulatory Compliance Advisory",
+        "categoryId": "131b2491-70c0-4b64-90b6-a0da59e878e9",
+        "id": "a7e4fdea-31f0-4ab9-af1c-e56149b0ae82"
+      },
+      {
+        "level": 1,
+        "name": "Risk Assessment & Management",
+        "categoryId": "131b2491-70c0-4b64-90b6-a0da59e878e9",
+        "id": "0fc6aa37-d6c4-4934-b72b-9275585a93a7"
+      },
+      {
+        "level": 1,
+        "name": "Audit & Compliance Readiness",
+        "categoryId": "131b2491-70c0-4b64-90b6-a0da59e878e9",
+        "id": "e045d808-9a42-4c5f-831c-7fbd4041915a"
+      },
+      {
+        "level": 1,
+        "name": "Third-Party & Vendor Risk",
+        "categoryId": "131b2491-70c0-4b64-90b6-a0da59e878e9",
+        "id": "543986b3-684c-4330-9120-abba970d7dc4"
+      },
+      {
+        "level": 1,
+        "name": "Policy & Control Design",
+        "categoryId": "131b2491-70c0-4b64-90b6-a0da59e878e9",
+        "id": "c93dc99d-2120-44ef-8dbe-66777ca6f148"
+      },
+      {
+        "level": 1,
+        "name": "Ethics & Governance Advisory",
+        "categoryId": "131b2491-70c0-4b64-90b6-a0da59e878e9",
+        "id": "777bbeef-3ad4-4a3f-95d9-d25186246eac"
+      },
+      {
+        "level": 1,
+        "name": "HR Strategy & Operating Model",
+        "categoryId": "a948b3c0-f12d-4259-973c-e447f679c446",
+        "id": "0c8f5679-5908-4eb3-898f-fd75f225fe47"
+      },
+      {
+        "level": 1,
+        "name": "Employee Relations & Compliance",
+        "categoryId": "a948b3c0-f12d-4259-973c-e447f679c446",
+        "id": "5734de00-3c31-4471-9542-855533460636"
+      },
+      {
+        "level": 1,
+        "name": "Compensation & Benefits Advisory",
+        "categoryId": "a948b3c0-f12d-4259-973c-e447f679c446",
+        "id": "dce3a6c4-cf1f-483c-878d-55d4005ed9aa"
+      },
+      {
+        "level": 1,
+        "name": "Performance Management Systems",
+        "categoryId": "a948b3c0-f12d-4259-973c-e447f679c446",
+        "id": "f0f95d7a-b0c2-4211-926c-c61ae50a887e"
+      },
+      {
+        "level": 1,
+        "name": "People Analytics & Workforce Planning",
+        "categoryId": "a948b3c0-f12d-4259-973c-e447f679c446",
+        "id": "35d59896-f294-4bf8-8e71-bc6671d4ef3e"
+      },
+      {
+        "level": 1,
+        "name": "Employee Engagement & Culture Programs",
+        "categoryId": "a948b3c0-f12d-4259-973c-e447f679c446",
+        "id": "55e06777-c91c-44db-979a-0e7b6dd74c20"
+      },
+      {
+        "level": 1,
+        "name": "Learning & Development Strategy",
+        "categoryId": "a948b3c0-f12d-4259-973c-e447f679c446",
+        "id": "27126ddf-5f3a-48fe-8665-29a8a268aca1"
+      },
+      {
+        "level": 1,
+        "name": "Accounting & Financial Reporting",
+        "categoryId": "9ecf4e40-06e7-414b-a4a5-edf2f7cc93d9",
+        "id": "32157003-fff4-4cd5-a153-108f7a10a9ef"
+      },
+      {
+        "level": 1,
+        "name": "Tax Planning & Compliance",
+        "categoryId": "9ecf4e40-06e7-414b-a4a5-edf2f7cc93d9",
+        "id": "336bcd6a-1618-49ee-a584-12946af59d24"
+      },
+      {
+        "level": 1,
+        "name": "Financial Planning & Analysis (FP&A)",
+        "categoryId": "9ecf4e40-06e7-414b-a4a5-edf2f7cc93d9",
+        "id": "00d1c676-b8ca-4462-be71-9d8af5864a5d"
+      },
+      {
+        "level": 1,
+        "name": "Audit & Assurance Services",
+        "categoryId": "9ecf4e40-06e7-414b-a4a5-edf2f7cc93d9",
+        "id": "c5846f08-7f47-4627-8dd4-00b14a814262"
+      },
+      {
+        "level": 1,
+        "name": "Valuation & Financial Forensics",
+        "categoryId": "9ecf4e40-06e7-414b-a4a5-edf2f7cc93d9",
+        "id": "16aab01c-9162-458a-b141-ac450bd1d63e"
+      },
+      {
+        "level": 1,
+        "name": "Treasury & Cash Management Advisory",
+        "categoryId": "9ecf4e40-06e7-414b-a4a5-edf2f7cc93d9",
+        "id": "317099e9-0bbd-4c4b-829c-8af12083a761"
+      },
+      {
+        "level": 1,
+        "name": "Interim & Fractional Finance Leadership",
+        "categoryId": "9ecf4e40-06e7-414b-a4a5-edf2f7cc93d9",
+        "id": "f301dbbf-ffc3-4a13-a8ee-13777250b968"
+      },
+      {
+        "level": 1,
+        "name": "Corporate & Commercial Law",
+        "categoryId": "c8822c92-a8b8-4ecf-8a46-cc4a43b695bc",
+        "id": "bd6813de-a43e-4106-943c-d9099cdccafe"
+      },
+      {
+        "level": 1,
+        "name": "Employment & Labor Law",
+        "categoryId": "c8822c92-a8b8-4ecf-8a46-cc4a43b695bc",
+        "id": "31af1064-f19c-40cb-aa4b-054d9d1216f8"
+      },
+      {
+        "level": 1,
+        "name": "Privacy & Data Protection Law",
+        "categoryId": "c8822c92-a8b8-4ecf-8a46-cc4a43b695bc",
+        "id": "1ca77914-ced1-4920-a107-a479c0b3422d"
+      },
+      {
+        "level": 1,
+        "name": "M&A & Transactional Law",
+        "categoryId": "c8822c92-a8b8-4ecf-8a46-cc4a43b695bc",
+        "id": "e237839c-3d2e-4838-bd57-7a53a63e5dc0"
+      },
+      {
+        "level": 1,
+        "name": "Intellectual Property Law",
+        "categoryId": "c8822c92-a8b8-4ecf-8a46-cc4a43b695bc",
+        "id": "009045f2-b581-48d3-8cf6-f84628170a95"
+      },
+      {
+        "level": 1,
+        "name": "Regulatory & Industry-Specific Law",
+        "categoryId": "c8822c92-a8b8-4ecf-8a46-cc4a43b695bc",
+        "id": "03ce59d0-e60b-4b02-a7b3-8f9284a9707e"
+      },
+      {
+        "level": 1,
+        "name": "Dispute Resolution & Litigation",
+        "categoryId": "c8822c92-a8b8-4ecf-8a46-cc4a43b695bc",
+        "id": "58e3c0d6-d1f1-4bba-b30b-760ab77f6eba"
+      },
+      {
+        "level": 1,
+        "name": "Qualitative Customer Research",
+        "categoryId": "43466a1d-cc9c-49ed-aefa-4ee27aaf2a66",
+        "id": "fd59f255-a536-4857-98af-b89f2cc80c98"
+      },
+      {
+        "level": 1,
+        "name": "Quantitative Market Research",
+        "categoryId": "43466a1d-cc9c-49ed-aefa-4ee27aaf2a66",
+        "id": "e190c13a-3412-495c-b3cb-b01b6c3db792"
+      },
+      {
+        "level": 1,
+        "name": "Customer Experience Research",
+        "categoryId": "43466a1d-cc9c-49ed-aefa-4ee27aaf2a66",
+        "id": "c4a31f32-7cf8-460a-be91-66662efb9f10"
+      },
+      {
+        "level": 1,
+        "name": "Mystery Shopping & Compliance Research",
+        "categoryId": "43466a1d-cc9c-49ed-aefa-4ee27aaf2a66",
+        "id": "08c2a651-a7c3-4091-954c-93ee0fc6aa21"
+      },
+      {
+        "level": 1,
+        "name": "Audience Segmentation & Personas",
+        "categoryId": "43466a1d-cc9c-49ed-aefa-4ee27aaf2a66",
+        "id": "96ba8ff5-73ee-4696-9e15-8dd84d053931"
+      },
+      {
+        "level": 1,
+        "name": "Concept & Message Testing Research",
+        "categoryId": "43466a1d-cc9c-49ed-aefa-4ee27aaf2a66",
+        "id": "20de5e2b-b84d-4029-8de8-6935b6297ab3"
+      },
+      {
+        "level": 1,
+        "name": "Leadership & Executive Coaching",
+        "categoryId": "b37b02c7-6f1d-465f-83d2-d191ae65b84c",
+        "id": "53eab77c-2ab6-4cfd-a375-8410c1a5639b"
+      },
+      {
+        "level": 1,
+        "name": "Sales, Marketing & Functional Training",
+        "categoryId": "b37b02c7-6f1d-465f-83d2-d191ae65b84c",
+        "id": "b904ea2f-e25a-472e-94cf-fffa75db67d3"
+      },
+      {
+        "level": 1,
+        "name": "Team Enablement & Capability Building",
+        "categoryId": "b37b02c7-6f1d-465f-83d2-d191ae65b84c",
+        "id": "94899276-9304-4a1e-96f4-ebae599ff26b"
+      },
+      {
+        "level": 1,
+        "name": "Professional Development Programs",
+        "categoryId": "b37b02c7-6f1d-465f-83d2-d191ae65b84c",
+        "id": "72aca49f-dc59-417c-8cd4-91daa45a76b9"
+      },
+      {
+        "level": 1,
+        "name": "Change Enablement & Adoption Training",
+        "categoryId": "b37b02c7-6f1d-465f-83d2-d191ae65b84c",
+        "id": "61fd1af1-c337-4099-9516-2d5f4e355516"
+      },
+      {
+        "level": 1,
+        "name": "Workshops & Facilitation",
+        "categoryId": "b37b02c7-6f1d-465f-83d2-d191ae65b84c",
+        "id": "4a835d65-6226-4f66-a851-2705b70483ad"
+      },
+      {
+        "level": 1,
+        "name": "Mechanical & Industrial Engineering",
+        "categoryId": "800441c1-0340-41a2-8659-e0fc9ccde9d9",
+        "id": "36f158ed-7754-4c63-b795-337545308550"
+      },
+      {
+        "level": 1,
+        "name": "Electrical & Controls Engineering",
+        "categoryId": "800441c1-0340-41a2-8659-e0fc9ccde9d9",
+        "id": "6c919da7-72b2-46f4-8b4d-0cc7be223e6a"
+      },
+      {
+        "level": 1,
+        "name": "Civil & Infrastructure Engineering",
+        "categoryId": "800441c1-0340-41a2-8659-e0fc9ccde9d9",
+        "id": "e75e7006-a47a-4682-9bb5-11f94bcb98d8"
+      },
+      {
+        "level": 1,
+        "name": "Hardware Engineering & Prototyping",
+        "categoryId": "800441c1-0340-41a2-8659-e0fc9ccde9d9",
+        "id": "5607497f-8d8a-451b-bef6-979a0bc879e5"
+      },
+      {
+        "level": 1,
+        "name": "Embedded Systems Engineering",
+        "categoryId": "800441c1-0340-41a2-8659-e0fc9ccde9d9",
+        "id": "f05836d5-cd6f-4ca8-9def-ba69d06c9a7d"
+      },
+      {
+        "level": 1,
+        "name": "Engineering Testing & Certification",
+        "categoryId": "800441c1-0340-41a2-8659-e0fc9ccde9d9",
+        "id": "09534b8a-2129-4475-9374-ca882c9d195d"
+      },
+      {
+        "level": 1,
+        "name": "Field Engineering & Commissioning",
+        "categoryId": "800441c1-0340-41a2-8659-e0fc9ccde9d9",
+        "id": "1a0f7a2c-6bbb-4a56-84e3-1e70906af36b"
+      },
+      {
+        "level": 1,
+        "name": "Reliability & Asset Engineering",
+        "categoryId": "800441c1-0340-41a2-8659-e0fc9ccde9d9",
+        "id": "4d58cda3-41ae-44e0-a9ad-8573fd15fda9"
+      }
+    ]
+  }
+}
