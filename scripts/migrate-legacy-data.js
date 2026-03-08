@@ -6,7 +6,7 @@
  * the COS import API endpoints in batches.
  *
  * Usage:
- *   node scripts/migrate-legacy-data.js [--companies] [--contacts] [--all]
+ *   node scripts/migrate-legacy-data.js [--companies] [--contacts] [--clients] [--case-studies] [--sync] [--all]
  *
  * Requires:
  *   COS_API_URL   - e.g. https://cos-concept.vercel.app
@@ -23,7 +23,7 @@ const http = require("http");
 const API_URL =
   process.env.COS_API_URL || "https://cos-concept.vercel.app";
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "cos-seed-admin-2026";
-const BATCH_SIZE = 200;
+const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || "50", 10);
 const DATA_DIR = path.join(
   __dirname,
   "..",
@@ -425,6 +425,136 @@ async function migrateContacts() {
   return { imported: totalImported, skipped: totalSkipped, filtered: totalFiltered, errors: totalErrors };
 }
 
+// ─── Migrate Clients ──────────────────────────────────
+
+async function migrateClients() {
+  console.log("\n═══════════════════════════════════════");
+  console.log("  MIGRATING CLIENTS");
+  console.log("═══════════════════════════════════════\n");
+
+  const clientData = loadJSON(
+    "Step 3_ Organization Content Data/clients.json"
+  );
+  const clients = clientData.data.company;
+  console.log(`Loaded ${clients.length} client records\n`);
+
+  // Send in batches
+  let totalImported = 0;
+  let totalSkipped = 0;
+  let totalErrors = 0;
+  const totalBatches = Math.ceil(clients.length / BATCH_SIZE);
+
+  for (let i = 0; i < clients.length; i += BATCH_SIZE) {
+    const batch = clients.slice(i, i + BATCH_SIZE);
+    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+
+    process.stdout.write(
+      `  Batch ${batchNum}/${totalBatches} (${batch.length} clients)... `
+    );
+
+    try {
+      const res = await postJSON(
+        `${API_URL}/api/admin/import/clients`,
+        {
+          batch,
+          batchNumber: batchNum,
+          totalBatches,
+        }
+      );
+
+      if (res.status === 200 && res.body.success) {
+        totalImported += res.body.imported;
+        totalSkipped += res.body.skipped;
+        console.log(
+          `✓ imported: ${res.body.imported}, skipped: ${res.body.skipped}`
+        );
+      } else {
+        totalErrors += batch.length;
+        console.log(`✗ HTTP ${res.status}: ${JSON.stringify(res.body).substring(0, 200)}`);
+      }
+    } catch (err) {
+      totalErrors += batch.length;
+      console.log(`✗ Network error: ${err.message}`);
+    }
+
+    // Small delay between batches to avoid rate limits
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  console.log(`\n  ── Client Migration Summary ──`);
+  console.log(`  Total:    ${clients.length}`);
+  console.log(`  Imported: ${totalImported}`);
+  console.log(`  Skipped:  ${totalSkipped}`);
+  console.log(`  Errors:   ${totalErrors}`);
+
+  return { imported: totalImported, skipped: totalSkipped, errors: totalErrors };
+}
+
+// ─── Migrate Case Studies ─────────────────────────────
+
+async function migrateCaseStudies() {
+  console.log("\n═══════════════════════════════════════");
+  console.log("  MIGRATING CASE STUDIES");
+  console.log("═══════════════════════════════════════\n");
+
+  const csData = loadJSON(
+    "Step 3_ Organization Content Data/case-studies.json"
+  );
+  const caseStudies = csData.data.case_study;
+  console.log(`Loaded ${caseStudies.length} case study records\n`);
+
+  // Send in batches
+  let totalImported = 0;
+  let totalSkipped = 0;
+  let totalErrors = 0;
+  const totalBatches = Math.ceil(caseStudies.length / BATCH_SIZE);
+
+  for (let i = 0; i < caseStudies.length; i += BATCH_SIZE) {
+    const batch = caseStudies.slice(i, i + BATCH_SIZE);
+    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+
+    process.stdout.write(
+      `  Batch ${batchNum}/${totalBatches} (${batch.length} case studies)... `
+    );
+
+    try {
+      const res = await postJSON(
+        `${API_URL}/api/admin/import/case-studies`,
+        {
+          batch,
+          batchNumber: batchNum,
+          totalBatches,
+        }
+      );
+
+      if (res.status === 200 && res.body.success) {
+        totalImported += res.body.imported;
+        totalSkipped += res.body.skipped;
+        console.log(
+          `✓ imported: ${res.body.imported}, skipped: ${res.body.skipped}`
+        );
+      } else {
+        totalErrors += batch.length;
+        console.log(`✗ HTTP ${res.status}: ${JSON.stringify(res.body).substring(0, 200)}`);
+      }
+    } catch (err) {
+      totalErrors += batch.length;
+      console.log(`✗ Network error: ${err.message}`);
+    }
+
+    // Small delay between batches to avoid rate limits
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  console.log(`\n  ── Case Study Migration Summary ──`);
+  console.log(`  Total:    ${caseStudies.length}`);
+  console.log(`  Imported: ${totalImported}`);
+  console.log(`  Skipped:  ${totalSkipped}`);
+  console.log(`  Errors:   ${totalErrors}`);
+
+  return { imported: totalImported, skipped: totalSkipped, errors: totalErrors };
+}
+
 // ─── Sync Graph ───────────────────────────────────────
 
 async function syncGraph(entityType) {
@@ -496,6 +626,8 @@ async function main() {
   const doAll = args.includes("--all") || args.length === 0;
   const doCompanies = doAll || args.includes("--companies");
   const doContacts = doAll || args.includes("--contacts");
+  const doClients = doAll || args.includes("--clients");
+  const doCaseStudies = doAll || args.includes("--case-studies");
   const doSync = doAll || args.includes("--sync");
 
   console.log("╔═══════════════════════════════════════╗");
@@ -504,12 +636,13 @@ async function main() {
   console.log();
   console.log(`API: ${API_URL}`);
   console.log(`Data: ${DATA_DIR}`);
+  console.log(`Flags: ${args.join(" ") || "--all (default)"}`);
   console.log();
 
   // First, clean up test data from earlier
   const preStats = await getStats();
   console.log(
-    `Pre-migration stats: ${preStats.companies?.total || 0} companies, ${preStats.contacts?.total || 0} contacts`
+    `Pre-migration stats: ${preStats.companies?.total || 0} companies, ${preStats.contacts?.total || 0} contacts, ${preStats.clients?.total || 0} clients, ${preStats.caseStudies?.total || 0} case studies`
   );
 
   if (doCompanies) {
@@ -518,6 +651,14 @@ async function main() {
 
   if (doContacts) {
     await migrateContacts();
+  }
+
+  if (doClients) {
+    await migrateClients();
+  }
+
+  if (doCaseStudies) {
+    await migrateCaseStudies();
   }
 
   if (doSync) {
@@ -535,18 +676,25 @@ async function main() {
   console.log("═══════════════════════════════════════\n");
 
   const stats = await getStats();
-  console.log(`  Companies:  ${stats.companies?.total || 0} total`);
-  console.log(`    → Graph:  ${stats.companies?.syncedToGraph || 0} synced`);
-  console.log(`    → ICP:    ${stats.companies?.isIcp || 0}`);
-  console.log(`    → Flagged: ${stats.companies?.flagged || 0}`);
+  console.log(`  Companies:    ${stats.companies?.total || 0} total`);
+  console.log(`    → Graph:    ${stats.companies?.syncedToGraph || 0} synced`);
+  console.log(`    → ICP:      ${stats.companies?.isIcp || 0}`);
+  console.log(`    → Flagged:  ${stats.companies?.flagged || 0}`);
   console.log();
-  console.log(`  Contacts:   ${stats.contacts?.total || 0} total`);
-  console.log(`    → Graph:  ${stats.contacts?.syncedToGraph || 0} synced`);
-  console.log(`    → Email:  ${stats.contacts?.withEmail || 0}`);
-  console.log(`    → Experts: ${stats.contacts?.experts || 0}`);
+  console.log(`  Contacts:     ${stats.contacts?.total || 0} total`);
+  console.log(`    → Graph:    ${stats.contacts?.syncedToGraph || 0} synced`);
+  console.log(`    → Email:    ${stats.contacts?.withEmail || 0}`);
+  console.log(`    → Experts:  ${stats.contacts?.experts || 0}`);
   console.log(`    → Internal: ${stats.contacts?.internal || 0}`);
   console.log();
-  console.log(`  Outreach:   ${stats.outreach?.total || 0} total`);
+  console.log(`  Clients:      ${stats.clients?.total || 0} total`);
+  console.log(`    → Linked:   ${stats.clients?.linkedToCompany || 0}`);
+  console.log();
+  console.log(`  Case Studies: ${stats.caseStudies?.total || 0} total`);
+  console.log(`    → Linked:   ${stats.caseStudies?.linkedToCompany || 0}`);
+  console.log(`    → Published: ${stats.caseStudies?.published || 0}`);
+  console.log();
+  console.log(`  Outreach:     ${stats.outreach?.total || 0} total`);
   console.log();
   console.log("  Migration complete! ✓");
 }

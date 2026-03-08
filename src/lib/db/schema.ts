@@ -678,6 +678,75 @@ export const importedOutreach = pgTable("imported_outreach", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ─── Imported Clients (from legacy platform) ──────────
+
+export const importedClients = pgTable("imported_clients", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull(), // Legacy client company UUID
+  source: text("source").notNull().default("legacy"),
+
+  // Primary fields
+  name: text("name").notNull(),
+  industry: text("industry"),
+  website: text("website"),
+  employeeCount: text("employee_count"),
+
+  // Link to the service firm that listed this client
+  serviceFirmSourceId: text("service_firm_source_id"), // Legacy organisation.id
+  serviceFirmName: text("service_firm_name"), // Denormalized for display
+
+  // Resolved FK to imported_companies
+  importedCompanyId: text("imported_company_id").references(
+    () => importedCompanies.id,
+    { onDelete: "set null" }
+  ),
+
+  // Provenance
+  legacyData: jsonb("legacy_data"),
+  meta: jsonb("meta"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─── Imported Case Studies (from legacy platform) ─────
+
+export const importedCaseStudies = pgTable("imported_case_studies", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id"), // Legacy authorId (not unique)
+  source: text("source").notNull().default("legacy"),
+
+  // Author firm info
+  authorOrgSourceId: text("author_org_source_id"), // Legacy organisation.id
+  authorOrgName: text("author_org_name"), // Denormalized
+
+  // Content
+  content: text("content"), // HTML content from "about" field
+  status: text("status").default("published"),
+
+  // Structured metadata (flattened from nested arrays)
+  clientCompanies: jsonb("client_companies").$type<
+    { id: string; name: string }[]
+  >(),
+  industries: jsonb("industries").$type<{ id: string; name: string }[]>(),
+  skills: jsonb("skills").$type<{ id: string; name: string }[]>(),
+  links: jsonb("links").$type<string[]>(),
+  markets: jsonb("markets").$type<string[]>(),
+  expertUsers: jsonb("expert_users").$type<{ id: string; name: string }[]>(),
+
+  // Resolved FK to imported_companies (author firm)
+  importedCompanyId: text("imported_company_id").references(
+    () => importedCompanies.id,
+    { onDelete: "set null" }
+  ),
+
+  // Provenance
+  legacyData: jsonb("legacy_data"),
+  meta: jsonb("meta"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ─── Migration Batches (tracking) ─────────────────────
 
 export const migrationBatches = pgTable("migration_batches", {

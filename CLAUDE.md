@@ -99,16 +99,18 @@ drizzle.config.ts                   # Drizzle Kit config
 5. **Bidirectional Matching:** Both parties must want what the other offers
 6. **Progressive Disclosure:** Get basic info first, enrich over time
 
-## STRICT: Pre-Push Sync Rule
+## STRICT: Pre-Push Sync Rule (MANDATORY)
 
-**Before EVERY push to remote, you MUST:**
+**Before EVERY commit or push to remote, you MUST:**
 
-1. `git pull --rebase origin main` — pull the latest changes first
-2. Read any files that were changed by other devs (check `git log origin/main..HEAD~1` before the pull to see incoming commits)
-3. Review the diff for conflicts with your work — especially shared files like API routes, schema, and layout
-4. Only then `git push origin main`
+1. `git fetch origin && git pull --rebase origin main` — pull the latest changes first.
+2. Read any files that were changed by other devs (`git log --oneline HEAD..origin/main` to see incoming commits).
+3. Review the diff for conflicts with your work — especially shared files like API routes, schema, and layout. Never blindly accept "ours" or "theirs".
+4. If other devs have modified files you also changed, review their changes before overwriting.
+5. Run `next build` after resolving any conflicts to ensure nothing is broken.
+6. Only then `git push origin main`.
 
-This is non-negotiable. Other developers are actively pushing to main. Skipping this step causes merge conflicts, broken deploys, and lost work. If a rebase conflict occurs, resolve it carefully — understand what the other dev changed before choosing which version to keep.
+**This is non-negotiable.** Other developers are actively pushing to main. Skipping this step causes merge conflicts, broken deploys, and lost work.
 
 ## Multi-Dev Coordination Rules
 
@@ -129,3 +131,4 @@ These rules apply to **all Claude Code instances** working on this repo:
 13. **Keep a STATUS.md** at project root listing each dev's current branch, task, and files being modified. Update it before starting and after finishing each task.
 14. **Don't make drive-by fixes.** If you spot something outside your task, make a separate branch/PR.
 15. **Don't let branches live for days.** Merge early and often to avoid drift.
+16. **Always pull before push.** See "Pre-Push Sync Rule" above — this is non-negotiable.

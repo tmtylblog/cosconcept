@@ -15,9 +15,11 @@ import {
   Search,
   MapPin,
   Tag,
+  UserCheck,
   Briefcase,
   FileText,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -90,14 +92,45 @@ interface DirectoryFirm {
   industry?: string | null;
   dataSource?: "service_firm" | "imported";
   labels?: string[];
-  // Association counts (from Neo4j)
-  expertCount?: number;
-  caseStudyCount?: number;
-  clientCount?: number;
   // Merged view fields
   onPlatform?: boolean;
   platformData?: Record<string, unknown> | null;
 }
+
+// Related data types for firm expansion tabs
+interface RelatedExpert {
+  id: string;
+  name: string;
+  title: string | null;
+  email: string | null;
+  classification: string | null;
+}
+
+interface RelatedClient {
+  id: string;
+  name: string;
+  industry: string | null;
+  employeeCount: string | null;
+}
+
+interface RelatedCaseStudy {
+  id: string;
+  contentPreview: string | null;
+  industries: Array<{ id: string; name: string }>;
+  skills: Array<{ id: string; name: string }>;
+  status: string | null;
+}
+
+interface FirmRelatedData {
+  experts: RelatedExpert[];
+  expertCount: number;
+  clients: RelatedClient[];
+  clientCount: number;
+  caseStudies: RelatedCaseStudy[];
+  caseStudyCount: number;
+}
+
+type FirmTab = "overview" | "experts" | "clients" | "caseStudies";
 
 const PHASE_COLORS: Record<string, string> = {
   jina: "bg-cos-electric/10 text-cos-electric",
@@ -494,6 +527,39 @@ function FirmCard({
   onToggle: () => void;
   showPlatformBadge: boolean;
 }) {
+  const [activeTab, setActiveTab] = useState<FirmTab>("overview");
+  const [relatedData, setRelatedData] = useState<FirmRelatedData | null>(null);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+
+  const loadRelatedData = useCallback(async () => {
+    if (relatedData || relatedLoading) return;
+    setRelatedLoading(true);
+    try {
+      const res = await fetch(`/api/admin/firms/${firm.id}/related`);
+      if (res.ok) {
+        const data = await res.json();
+        setRelatedData(data);
+      }
+    } catch (err) {
+      console.error("Failed to load related data:", err);
+    } finally {
+      setRelatedLoading(false);
+    }
+  }, [firm.id, relatedData, relatedLoading]);
+
+  function handleTabClick(tab: FirmTab) {
+    setActiveTab(tab);
+    if (tab !== "overview" && !relatedData) {
+      loadRelatedData();
+    }
+  }
+
+  const CLASSIFICATION_COLORS: Record<string, string> = {
+    expert: "bg-cos-signal/10 text-cos-signal",
+    internal: "bg-cos-slate/10 text-cos-slate",
+    ambiguous: "bg-cos-warm/10 text-cos-warm",
+  };
+
   return (
     <div className="rounded-cos-xl border border-cos-border bg-cos-surface">
       <button
@@ -568,143 +634,331 @@ function FirmCard({
       </button>
 
       {expanded && (
-        <div className="border-t border-cos-border p-4">
-          <div className="grid grid-cols-2 gap-4">
-            {/* Left: basic info */}
-            <div className="space-y-3">
-              {firm.description && (
-                <div>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
-                    Description
-                  </p>
-                  <p className="text-sm text-cos-midnight line-clamp-4">
-                    {firm.description}
+        <div className="border-t border-cos-border">
+          {/* Sub-tabs */}
+          <div className="flex gap-0 border-b border-cos-border bg-cos-cloud/30">
+            {([
+              { key: "overview" as FirmTab, label: "Overview", icon: <Building2 className="h-3.5 w-3.5" /> },
+              { key: "experts" as FirmTab, label: "Experts", icon: <UserCheck className="h-3.5 w-3.5" />, count: relatedData?.expertCount },
+              { key: "clients" as FirmTab, label: "Clients", icon: <Briefcase className="h-3.5 w-3.5" />, count: relatedData?.clientCount },
+              { key: "caseStudies" as FirmTab, label: "Case Studies", icon: <FileText className="h-3.5 w-3.5" />, count: relatedData?.caseStudyCount },
+            ]).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => handleTabClick(tab.key)}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-colors border-b-2 ${
+                  activeTab === tab.key
+                    ? "border-cos-electric text-cos-electric"
+                    : "border-transparent text-cos-slate hover:text-cos-midnight"
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+                {tab.count != null && tab.count > 0 && (
+                  <span className="ml-0.5 rounded-cos-pill bg-cos-electric/10 px-1.5 py-0.5 text-[10px] font-semibold text-cos-electric">
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-4">
+            {/* Overview Tab */}
+            {activeTab === "overview" && (
+              <div className="grid grid-cols-2 gap-4">
+                {/* Left: basic info */}
+                <div className="space-y-3">
+                  {firm.description && (
+                    <div>
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
+                        Description
+                      </p>
+                      <p className="text-sm text-cos-midnight line-clamp-4">
+                        {firm.description}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-4 text-xs text-cos-slate">
+                    {firm.foundedYear && (
+                      <span>Founded {firm.foundedYear}</span>
+                    )}
+                    {firm.employeeCount && (
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        {firm.employeeCount} employees
+                      </span>
+                    )}
+                    {firm.sizeBand && (
+                      <span>{firm.sizeBand.replace(/_/g, " ")}</span>
+                    )}
+                    {firm.location && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {firm.location}
+                      </span>
+                    )}
+                    {firm.industry && (
+                      <span className="flex items-center gap-1">
+                        <Tag className="h-3 w-3" />
+                        {firm.industry}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="font-mono text-[10px] text-cos-slate-light">
+                    ID: {firm.id}
                   </p>
                 </div>
-              )}
 
-              <div className="flex flex-wrap gap-4 text-xs text-cos-slate">
-                {firm.foundedYear && (
-                  <span>Founded {firm.foundedYear}</span>
-                )}
-                {firm.employeeCount && (
-                  <span className="flex items-center gap-1">
-                    <Users className="h-3 w-3" />
-                    {firm.employeeCount} employees
-                  </span>
-                )}
-                {firm.sizeBand && (
-                  <span>{firm.sizeBand.replace(/_/g, " ")}</span>
-                )}
-                {firm.location && (
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-3 w-3" />
-                    {firm.location}
-                  </span>
-                )}
-                {firm.industry && (
-                  <span className="flex items-center gap-1">
-                    <Tag className="h-3 w-3" />
-                    {firm.industry}
-                  </span>
-                )}
-              </div>
-
-              {/* Taxonomy tags (compact) */}
-              <div className="flex flex-wrap gap-2 text-xs">
-                {firm.categories && firm.categories.length > 0 && (
-                  <span className="flex items-center gap-1 text-cos-electric">
-                    <Tag className="h-3 w-3" />
-                    {firm.categories.length} categor{firm.categories.length === 1 ? "y" : "ies"}
-                  </span>
-                )}
-                {firm.industries && firm.industries.length > 0 && (
-                  <span className="text-cos-warm">
-                    {firm.industries.length} industr{firm.industries.length === 1 ? "y" : "ies"}
-                  </span>
-                )}
-                {firm.markets && firm.markets.length > 0 && (
-                  <span className="flex items-center gap-1 text-cos-signal">
-                    <MapPin className="h-3 w-3" />
-                    {firm.markets.length} market{firm.markets.length !== 1 ? "s" : ""}
-                  </span>
-                )}
-              </div>
-
-              <p className="font-mono text-[10px] text-cos-slate-light">
-                ID: {firm.id}
-              </p>
-            </div>
-
-            {/* Right: association links */}
-            <div className="space-y-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
-                Connections
-              </p>
-
-              {firm.expertCount != null && firm.expertCount > 0 && (
-                <FirmAssociationLink
-                  nodeId={firm.id}
-                  assocType="experts"
-                  label="Associated Experts"
-                  count={firm.expertCount}
-                  icon={<Users className="h-3.5 w-3.5 text-cos-signal" />}
-                  renderItem={(item) => (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-cos-midnight">{item.name}</span>
-                      {item.title && (
-                        <span className="text-xs text-cos-slate">{item.title}</span>
-                      )}
-                    </div>
-                  )}
-                />
-              )}
-
-              {firm.caseStudyCount != null && firm.caseStudyCount > 0 && (
-                <FirmAssociationLink
-                  nodeId={firm.id}
-                  assocType="caseStudies"
-                  label="Associated Case Studies"
-                  count={firm.caseStudyCount}
-                  icon={<FileText className="h-3.5 w-3.5 text-cos-warm" />}
-                  renderItem={(item) => (
+                {/* Right: graph relationships */}
+                <div className="space-y-3">
+                  {firm.categories && firm.categories.length > 0 && (
                     <div>
-                      <p className="text-sm text-cos-midnight">{item.title}</p>
-                      {item.summary && (
-                        <p className="mt-0.5 text-xs text-cos-slate line-clamp-2">{item.summary}</p>
-                      )}
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
+                        Categories
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {firm.categories.map((cat) => (
+                          <span
+                            key={cat}
+                            className="rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[10px] font-medium text-cos-electric"
+                          >
+                            {cat}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
-                />
-              )}
 
-              {firm.clientCount != null && firm.clientCount > 0 && (
-                <FirmAssociationLink
-                  nodeId={firm.id}
-                  assocType="clients"
-                  label="Associated Clients"
-                  count={firm.clientCount}
-                  icon={<Briefcase className="h-3.5 w-3.5 text-purple-600" />}
-                  renderItem={(item) => (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-cos-midnight">{item.name}</span>
-                      {item.industry && (
-                        <span className="text-xs text-cos-slate">{item.industry}</span>
-                      )}
+                  {firm.industries && firm.industries.length > 0 && (
+                    <div>
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
+                        Industries
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {firm.industries.map((ind) => (
+                          <span
+                            key={ind}
+                            className="rounded-cos-pill bg-cos-warm/10 px-2 py-0.5 text-[10px] font-medium text-cos-warm"
+                          >
+                            {ind}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
-                />
-              )}
 
-              {/* No associations */}
-              {(!firm.expertCount || firm.expertCount === 0) &&
-                (!firm.caseStudyCount || firm.caseStudyCount === 0) &&
-                (!firm.clientCount || firm.clientCount === 0) && (
-                  <p className="text-xs text-cos-slate-light">
-                    No connections in the knowledge graph yet.
+                  {firm.markets && firm.markets.length > 0 && (
+                    <div>
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate">
+                        Markets
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {firm.markets.slice(0, 10).map((mkt) => (
+                          <span
+                            key={mkt}
+                            className="flex items-center gap-0.5 rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-medium text-cos-signal"
+                          >
+                            <MapPin className="h-2.5 w-2.5" />
+                            {mkt}
+                          </span>
+                        ))}
+                        {firm.markets.length > 10 && (
+                          <span className="text-[10px] text-cos-slate">
+                            +{firm.markets.length - 10} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {(!firm.categories || firm.categories.length === 0) &&
+                    (!firm.industries || firm.industries.length === 0) &&
+                    (!firm.markets || firm.markets.length === 0) && (
+                      <p className="text-xs text-cos-slate-light">
+                        No knowledge graph data for this firm yet.
+                      </p>
+                    )}
+                </div>
+              </div>
+            )}
+
+            {/* Experts Tab */}
+            {activeTab === "experts" && (
+              <div>
+                {relatedLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
+                  </div>
+                ) : relatedData?.experts && relatedData.experts.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-cos-slate mb-2">
+                      {relatedData.expertCount} expert{relatedData.expertCount !== 1 ? "s" : ""} associated with this firm
+                    </p>
+                    {relatedData.experts.map((expert) => (
+                      <div
+                        key={expert.id}
+                        className="flex items-center gap-3 rounded-cos-lg bg-cos-cloud/50 px-3 py-2.5"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-cos-full bg-cos-electric/10 text-xs font-semibold text-cos-electric">
+                          {expert.name?.charAt(0)?.toUpperCase() || "?"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-cos-midnight truncate">
+                            {expert.name}
+                          </p>
+                          {expert.title && (
+                            <p className="text-xs text-cos-slate truncate">{expert.title}</p>
+                          )}
+                        </div>
+                        {expert.email && (
+                          <span className="hidden md:block text-xs text-cos-slate-light font-mono truncate max-w-[180px]">
+                            {expert.email}
+                          </span>
+                        )}
+                        {expert.classification && (
+                          <span className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-semibold ${
+                            CLASSIFICATION_COLORS[expert.classification] || "bg-cos-slate/10 text-cos-slate"
+                          }`}>
+                            {expert.classification}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    {relatedData.expertCount > relatedData.experts.length && (
+                      <p className="text-xs text-cos-slate-light pt-1">
+                        Showing {relatedData.experts.length} of {relatedData.expertCount} —{" "}
+                        <a href="/admin/experts" className="text-cos-electric hover:underline">
+                          View all in Experts page
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="py-6 text-center text-sm text-cos-slate">
+                    No experts associated with this firm.
                   </p>
                 )}
-            </div>
+              </div>
+            )}
+
+            {/* Clients Tab */}
+            {activeTab === "clients" && (
+              <div>
+                {relatedLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
+                  </div>
+                ) : relatedData?.clients && relatedData.clients.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-cos-slate mb-2">
+                      {relatedData.clientCount} client{relatedData.clientCount !== 1 ? "s" : ""} served by this firm
+                    </p>
+                    {relatedData.clients.map((client) => (
+                      <div
+                        key={client.id}
+                        className="flex items-center gap-3 rounded-cos-lg bg-cos-cloud/50 px-3 py-2.5"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-cos-full bg-cos-warm/10 text-xs font-semibold text-cos-warm">
+                          {client.name?.charAt(0)?.toUpperCase() || "?"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-cos-midnight truncate">
+                            {client.name}
+                          </p>
+                        </div>
+                        {client.industry && (
+                          <span className="rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-semibold text-cos-signal">
+                            {client.industry}
+                          </span>
+                        )}
+                        {client.employeeCount && (
+                          <span className="flex items-center gap-1 text-xs text-cos-slate">
+                            <Users className="h-3 w-3" />
+                            {client.employeeCount}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    {relatedData.clientCount > relatedData.clients.length && (
+                      <p className="text-xs text-cos-slate-light pt-1">
+                        Showing {relatedData.clients.length} of {relatedData.clientCount} —{" "}
+                        <a href="/admin/clients" className="text-cos-electric hover:underline">
+                          View all in Clients page
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="py-6 text-center text-sm text-cos-slate">
+                    No clients associated with this firm.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Case Studies Tab */}
+            {activeTab === "caseStudies" && (
+              <div>
+                {relatedLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
+                  </div>
+                ) : relatedData?.caseStudies && relatedData.caseStudies.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-cos-slate mb-2">
+                      {relatedData.caseStudyCount} case stud{relatedData.caseStudyCount !== 1 ? "ies" : "y"} from this firm
+                    </p>
+                    {relatedData.caseStudies.map((cs) => (
+                      <div
+                        key={cs.id}
+                        className="rounded-cos-lg border border-cos-border bg-cos-cloud/30 p-3"
+                      >
+                        {cs.contentPreview && (
+                          <p className="text-sm text-cos-midnight line-clamp-3 mb-2">
+                            {cs.contentPreview}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {cs.industries?.slice(0, 3).map((ind) => (
+                            <span
+                              key={ind.id}
+                              className="rounded-cos-pill bg-cos-warm/10 px-2 py-0.5 text-[10px] font-medium text-cos-warm"
+                            >
+                              {ind.name}
+                            </span>
+                          ))}
+                          {cs.skills?.slice(0, 4).map((skill) => (
+                            <span
+                              key={skill.id}
+                              className="rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[10px] font-medium text-cos-electric"
+                            >
+                              {skill.name}
+                            </span>
+                          ))}
+                          {cs.status && cs.status !== "published" && (
+                            <span className="rounded-cos-pill bg-cos-slate/10 px-2 py-0.5 text-[10px] font-medium text-cos-slate">
+                              {cs.status}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {relatedData.caseStudyCount > relatedData.caseStudies.length && (
+                      <p className="text-xs text-cos-slate-light pt-1">
+                        Showing {relatedData.caseStudies.length} of {relatedData.caseStudyCount}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="py-6 text-center text-sm text-cos-slate">
+                    No case studies associated with this firm.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -872,105 +1126,6 @@ function OrgExpandedDetails({
           </p>
         )}
       </div>
-    </div>
-  );
-}
-
-/* ── Association Link (lazy-loaded expandable) ───────────────────── */
-
-interface AssocItem {
-  id: string;
-  name?: string;
-  title?: string;
-  summary?: string;
-  website?: string;
-  email?: string;
-  industry?: string;
-}
-
-function FirmAssociationLink({
-  nodeId,
-  assocType,
-  label,
-  count,
-  icon,
-  renderItem,
-}: {
-  nodeId: string;
-  assocType: string;
-  label: string;
-  count: number;
-  icon: React.ReactNode;
-  renderItem: (item: AssocItem) => React.ReactNode;
-}) {
-  const [items, setItems] = useState<AssocItem[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
-
-  async function loadItems() {
-    if (items) {
-      setOpen(!open);
-      return;
-    }
-    setLoading(true);
-    setOpen(true);
-    try {
-      const params = new URLSearchParams({
-        nodeId,
-        nodeType: "Organization",
-        assocType,
-      });
-      const res = await fetch(`/api/admin/graph/associations?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setItems(data.items ?? []);
-      }
-    } catch (err) {
-      console.error("Failed to load associations:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div>
-      <button
-        onClick={loadItems}
-        className="flex items-center gap-2 text-sm font-medium text-cos-midnight hover:text-cos-electric transition-colors"
-      >
-        {icon}
-        <span>{label}</span>
-        <span className="rounded-cos-pill bg-cos-slate/10 px-1.5 py-0.5 text-[10px] font-medium text-cos-slate">
-          {count}
-        </span>
-        {open ? (
-          <ChevronDown className="h-3.5 w-3.5 text-cos-slate" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 text-cos-slate" />
-        )}
-      </button>
-
-      {open && (
-        <div className="mt-2 ml-5 space-y-1.5">
-          {loading ? (
-            <div className="flex items-center gap-2 text-xs text-cos-slate">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Loading...
-            </div>
-          ) : items && items.length > 0 ? (
-            items.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-cos-md bg-cos-cloud px-3 py-2"
-              >
-                {renderItem(item)}
-              </div>
-            ))
-          ) : (
-            <p className="text-xs text-cos-slate-light">None found.</p>
-          )}
-        </div>
-      )}
     </div>
   );
 }

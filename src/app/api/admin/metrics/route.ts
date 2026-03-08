@@ -55,12 +55,26 @@ export async function GET() {
       (planDistribution.pro ?? 0) * PLAN_PRICES.pro.monthly +
       (planDistribution.enterprise ?? 0) * PLAN_PRICES.enterprise.monthly;
 
+    // Expert profiles (imported contacts classified as expert)
+    const expertCount = await db.execute(
+      sql`SELECT COUNT(*)::int AS count FROM "imported_contacts" WHERE expert_classification = 'expert'`
+    );
+    const totalExperts = Number(expertCount.rows[0]?.count ?? 0);
+
+    // Client companies
+    const clientCount = await db.execute(
+      sql`SELECT COUNT(*)::int AS count FROM "imported_clients"`
+    );
+    const totalClients = Number(clientCount.rows[0]?.count ?? 0);
+
     return NextResponse.json({
       totalOrgs,
       totalUsers,
       activeSubscriptions,
       mrr,
       planDistribution,
+      totalExperts,
+      totalClients,
     });
   } catch (error) {
     console.error("[Admin] Metrics error:", error);

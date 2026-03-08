@@ -8,6 +8,8 @@ import {
   DollarSign,
   TrendingUp,
   ArrowUpRight,
+  UserCheck,
+  Briefcase,
 } from "lucide-react";
 
 interface Metrics {
@@ -16,6 +18,8 @@ interface Metrics {
   activeSubscriptions: number;
   mrr: number;
   planDistribution: Record<string, number>;
+  totalExperts: number;
+  totalClients: number;
 }
 
 const PLAN_COLORS: Record<string, { bg: string; bar: string; text: string }> = {
@@ -87,7 +91,7 @@ export default function AdminOverviewPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StatCard
           icon={<Building2 className="h-4.5 w-4.5" />}
           iconColor="text-cos-electric"
@@ -103,9 +107,23 @@ export default function AdminOverviewPage() {
           value={metrics.totalUsers}
         />
         <StatCard
-          icon={<CreditCard className="h-4.5 w-4.5" />}
+          icon={<UserCheck className="h-4.5 w-4.5" />}
           iconColor="text-cos-warm"
           iconBg="bg-cos-warm/10"
+          label="Expert Profiles"
+          value={metrics.totalExperts.toLocaleString()}
+        />
+        <StatCard
+          icon={<Briefcase className="h-4.5 w-4.5" />}
+          iconColor="text-cos-ember"
+          iconBg="bg-cos-ember/10"
+          label="Clients"
+          value={metrics.totalClients.toLocaleString()}
+        />
+        <StatCard
+          icon={<CreditCard className="h-4.5 w-4.5" />}
+          iconColor="text-cos-signal"
+          iconBg="bg-cos-signal/10"
           label="Subscriptions"
           value={metrics.activeSubscriptions}
         />
@@ -161,9 +179,11 @@ export default function AdminOverviewPage() {
       </div>
 
       {/* Quick links */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <QuickLink href="/admin/users" label="Manage Users" icon={<Users className="h-4 w-4" />} />
         <QuickLink href="/admin/organizations" label="Firm Directory" icon={<Building2 className="h-4 w-4" />} />
+        <QuickLink href="/admin/experts" label="Expert Profiles" icon={<UserCheck className="h-4 w-4" />} />
+        <QuickLink href="/admin/clients" label="Client Database" icon={<Briefcase className="h-4 w-4" />} />
         <QuickLink href="/admin/finance" label="AI Costs" icon={<TrendingUp className="h-4 w-4" />} />
         <QuickLink href="/admin/partnerships" label="Partnerships" icon={<CreditCard className="h-4 w-4" />} />
       </div>

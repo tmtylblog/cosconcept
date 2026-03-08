@@ -4,6 +4,8 @@ import {
   importedCompanies,
   importedContacts,
   importedOutreach,
+  importedClients,
+  importedCaseStudies,
   migrationBatches,
 } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
@@ -56,6 +58,23 @@ export async function GET(req: NextRequest) {
       })
       .from(importedOutreach);
 
+    // Client stats
+    const [clientCounts] = await db
+      .select({
+        total: sql<number>`count(*)`,
+        withCompany: sql<number>`count(${importedClients.importedCompanyId})`,
+      })
+      .from(importedClients);
+
+    // Case study stats
+    const [caseStudyCounts] = await db
+      .select({
+        total: sql<number>`count(*)`,
+        withCompany: sql<number>`count(${importedCaseStudies.importedCompanyId})`,
+        published: sql<number>`count(CASE WHEN ${importedCaseStudies.status} = 'published' THEN 1 END)`,
+      })
+      .from(importedCaseStudies);
+
     // Batch stats
     const batches = await db
       .select({
@@ -92,6 +111,15 @@ export async function GET(req: NextRequest) {
         total: Number(outreachCounts.total),
         linkedToCompany: Number(outreachCounts.withCompany),
         linkedToContact: Number(outreachCounts.withContact),
+      },
+      clients: {
+        total: Number(clientCounts.total),
+        linkedToCompany: Number(clientCounts.withCompany),
+      },
+      caseStudies: {
+        total: Number(caseStudyCounts.total),
+        linkedToCompany: Number(caseStudyCounts.withCompany),
+        published: Number(caseStudyCounts.published),
       },
       batches: batches.map((b) => ({
         entityType: b.entityType,

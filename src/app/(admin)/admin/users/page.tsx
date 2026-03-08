@@ -3,7 +3,20 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
-import { Search, Eye, Loader2, Shield, ShieldOff } from "lucide-react";
+import {
+  Search,
+  Eye,
+  Loader2,
+  Shield,
+  ShieldOff,
+  ChevronRight,
+  ChevronDown,
+  ExternalLink,
+  Building2,
+  UserCheck,
+  Mail,
+  MapPin,
+} from "lucide-react";
 
 interface AdminUser {
   id: string;
@@ -14,11 +27,51 @@ interface AdminUser {
   createdAt: string;
 }
 
+interface ExpertProfile {
+  id: string;
+  name: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  title: string | null;
+  expertClassification: string | null;
+  photoUrl: string | null;
+  linkedinUrl: string | null;
+  headline: string | null;
+  shortBio: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  isPartner: boolean | null;
+  company: { id: string; name: string; domain: string | null } | null;
+}
+
+const CLASSIFICATION_COLORS: Record<
+  string,
+  { bg: string; text: string; label: string }
+> = {
+  expert: { bg: "bg-cos-signal/10", text: "text-cos-signal", label: "Expert" },
+  internal: {
+    bg: "bg-cos-slate/10",
+    text: "text-cos-slate",
+    label: "Internal",
+  },
+  ambiguous: {
+    bg: "bg-cos-warm/10",
+    text: "text-cos-warm",
+    label: "Ambiguous",
+  },
+};
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [impersonating, setImpersonating] = useState<string | null>(null);
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [expertProfiles, setExpertProfiles] = useState<
+    Record<string, { loading: boolean; profile: ExpertProfile | null }>
+  >({});
 
   useEffect(() => {
     authClient.admin
@@ -75,6 +128,37 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function handleExpandUser(userId: string) {
+    if (expandedUserId === userId) {
+      setExpandedUserId(null);
+      return;
+    }
+
+    setExpandedUserId(userId);
+
+    // Fetch expert profile if not already loaded
+    if (!expertProfiles[userId]) {
+      setExpertProfiles((prev) => ({
+        ...prev,
+        [userId]: { loading: true, profile: null },
+      }));
+
+      try {
+        const res = await fetch(`/api/admin/users/${userId}/expert-profile`);
+        const data = await res.json();
+        setExpertProfiles((prev) => ({
+          ...prev,
+          [userId]: { loading: false, profile: data.match || null },
+        }));
+      } catch {
+        setExpertProfiles((prev) => ({
+          ...prev,
+          [userId]: { loading: false, profile: null },
+        }));
+      }
+    }
+  }
+
   const filtered = search
     ? users.filter(
         (u) =>
@@ -105,7 +189,8 @@ export default function AdminUsersPage() {
           Users
         </h1>
         <p className="mt-1 text-sm text-cos-slate">
-          {users.length} registered user{users.length !== 1 ? "s" : ""} on the platform.
+          {users.length} registered user{users.length !== 1 ? "s" : ""} on the
+          platform. Click a row to see linked expert profiles.
         </p>
       </div>
 
@@ -131,6 +216,7 @@ export default function AdminUsersPage() {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-cos-border bg-cos-cloud/50">
+              <th className="w-8 px-2 py-3.5" />
               <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                 User
               </th>
@@ -152,101 +238,269 @@ export default function AdminUsersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-cos-border/60">
-            {filtered.map((user) => (
-              <tr
-                key={user.id}
-                className="transition-colors hover:bg-cos-electric/[0.02]"
-              >
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
-                      {user.name?.charAt(0)?.toUpperCase() || "?"}
-                    </div>
-                    <span className="font-medium text-cos-midnight">
-                      {user.name}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-5 py-3.5 font-mono text-xs text-cos-slate">
-                  {user.email}
-                </td>
-                <td className="px-5 py-3.5">
-                  <select
-                    value={user.role}
-                    onChange={(e) =>
-                      handleSetRole(user.id, e.target.value as "user" | "admin")
-                    }
-                    className="rounded-cos-md border border-cos-border bg-cos-cloud px-2.5 py-1 text-xs font-medium text-cos-midnight transition-colors focus:border-cos-electric focus:outline-none"
-                  >
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
-                    <option value="superadmin">Superadmin</option>
-                  </select>
-                </td>
-                <td className="px-5 py-3.5">
-                  {user.banned ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-ember/8 px-2.5 py-1 text-xs font-medium text-cos-ember">
-                      <span className="h-1.5 w-1.5 rounded-full bg-cos-ember" />
-                      Banned
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-signal/8 px-2.5 py-1 text-xs font-medium text-cos-signal">
-                      <span className="h-1.5 w-1.5 rounded-full bg-cos-signal" />
-                      Active
-                    </span>
-                  )}
-                </td>
-                <td className="px-5 py-3.5 text-xs text-cos-slate">
-                  {user.createdAt}
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-1">
-                    {user.banned ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleUnban(user.id)}
-                        className="h-7 gap-1.5 text-xs"
-                      >
-                        <ShieldOff className="h-3 w-3" />
-                        Unban
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleBan(user.id)}
-                        className="h-7 gap-1.5 text-xs"
-                      >
-                        <Shield className="h-3 w-3" />
-                        Ban
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleImpersonate(user.id)}
-                      disabled={
-                        impersonating === user.id ||
-                        user.role === "superadmin"
-                      }
-                      title="Impersonate this user"
-                      className="h-7 w-7 p-0 text-cos-slate hover:text-cos-electric"
+            {filtered.map((user) => {
+              const isExpanded = expandedUserId === user.id;
+              const expertData = expertProfiles[user.id];
+
+              return (
+                <tr key={user.id} className="group">
+                  <td colSpan={7} className="p-0">
+                    {/* Main row */}
+                    <div
+                      className={`flex items-center transition-colors hover:bg-cos-electric/[0.02] ${
+                        isExpanded ? "bg-cos-electric/[0.03]" : ""
+                      }`}
                     >
-                      {impersonating === user.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Eye className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {/* Expand chevron */}
+                      <div className="w-8 px-2 py-3.5">
+                        <button
+                          onClick={() => handleExpandUser(user.id)}
+                          className="text-cos-slate hover:text-cos-electric transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* User */}
+                      <div
+                        className="flex-1 px-5 py-3.5 cursor-pointer"
+                        onClick={() => handleExpandUser(user.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
+                            {user.name?.charAt(0)?.toUpperCase() || "?"}
+                          </div>
+                          <span className="font-medium text-cos-midnight">
+                            {user.name}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Email */}
+                      <div className="px-5 py-3.5 font-mono text-xs text-cos-slate">
+                        {user.email}
+                      </div>
+
+                      {/* Role */}
+                      <div className="px-5 py-3.5">
+                        <select
+                          value={user.role}
+                          onChange={(e) =>
+                            handleSetRole(
+                              user.id,
+                              e.target.value as "user" | "admin"
+                            )
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          className="rounded-cos-md border border-cos-border bg-cos-cloud px-2.5 py-1 text-xs font-medium text-cos-midnight transition-colors focus:border-cos-electric focus:outline-none"
+                        >
+                          <option value="user">User</option>
+                          <option value="admin">Admin</option>
+                          <option value="superadmin">Superadmin</option>
+                        </select>
+                      </div>
+
+                      {/* Status */}
+                      <div className="px-5 py-3.5">
+                        {user.banned ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-ember/8 px-2.5 py-1 text-xs font-medium text-cos-ember">
+                            <span className="h-1.5 w-1.5 rounded-full bg-cos-ember" />
+                            Banned
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-signal/8 px-2.5 py-1 text-xs font-medium text-cos-signal">
+                            <span className="h-1.5 w-1.5 rounded-full bg-cos-signal" />
+                            Active
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Joined */}
+                      <div className="px-5 py-3.5 text-xs text-cos-slate">
+                        {user.createdAt}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="px-5 py-3.5">
+                        <div className="flex items-center gap-1">
+                          {user.banned ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUnban(user.id);
+                              }}
+                              className="h-7 gap-1.5 text-xs"
+                            >
+                              <ShieldOff className="h-3 w-3" />
+                              Unban
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleBan(user.id);
+                              }}
+                              className="h-7 gap-1.5 text-xs"
+                            >
+                              <Shield className="h-3 w-3" />
+                              Ban
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleImpersonate(user.id);
+                            }}
+                            disabled={
+                              impersonating === user.id ||
+                              user.role === "superadmin"
+                            }
+                            title="Impersonate this user"
+                            className="h-7 w-7 p-0 text-cos-slate hover:text-cos-electric"
+                          >
+                            {impersonating === user.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded expert profile section */}
+                    {isExpanded && (
+                      <div className="border-t border-cos-border bg-cos-cloud/30 px-5 py-4">
+                        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-cos-slate mb-3">
+                          <UserCheck className="h-3.5 w-3.5" />
+                          Linked Expert Profile
+                        </h4>
+
+                        {expertData?.loading ? (
+                          <div className="flex items-center gap-2 text-sm text-cos-slate">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Looking up expert profile...
+                          </div>
+                        ) : expertData?.profile ? (
+                          <div className="rounded-cos-lg border border-cos-border bg-cos-surface p-4">
+                            <div className="flex items-start gap-4">
+                              {/* Avatar */}
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-cos-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-sm font-semibold text-cos-signal">
+                                {expertData.profile.name
+                                  ?.charAt(0)
+                                  ?.toUpperCase() || "?"}
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-cos-midnight">
+                                    {expertData.profile.name ||
+                                      `${expertData.profile.firstName} ${expertData.profile.lastName}`}
+                                  </span>
+                                  {expertData.profile.expertClassification && (
+                                    <span
+                                      className={`inline-flex items-center rounded-cos-pill px-2 py-0.5 text-[10px] font-semibold ${
+                                        CLASSIFICATION_COLORS[
+                                          expertData.profile
+                                            .expertClassification
+                                        ]?.bg || "bg-cos-slate/10"
+                                      } ${
+                                        CLASSIFICATION_COLORS[
+                                          expertData.profile
+                                            .expertClassification
+                                        ]?.text || "text-cos-slate"
+                                      }`}
+                                    >
+                                      {CLASSIFICATION_COLORS[
+                                        expertData.profile
+                                          .expertClassification
+                                      ]?.label ||
+                                        expertData.profile
+                                          .expertClassification}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {expertData.profile.title && (
+                                  <p className="text-sm text-cos-slate mt-0.5">
+                                    {expertData.profile.title}
+                                  </p>
+                                )}
+
+                                {expertData.profile.headline && (
+                                  <p className="text-xs text-cos-slate mt-1">
+                                    {expertData.profile.headline}
+                                  </p>
+                                )}
+
+                                <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-cos-slate">
+                                  {expertData.profile.company && (
+                                    <span className="flex items-center gap-1">
+                                      <Building2 className="h-3 w-3" />
+                                      {expertData.profile.company.name}
+                                    </span>
+                                  )}
+                                  {expertData.profile.email && (
+                                    <span className="flex items-center gap-1 font-mono">
+                                      <Mail className="h-3 w-3" />
+                                      {expertData.profile.email}
+                                    </span>
+                                  )}
+                                  {(expertData.profile.city ||
+                                    expertData.profile.country) && (
+                                    <span className="flex items-center gap-1">
+                                      <MapPin className="h-3 w-3" />
+                                      {[
+                                        expertData.profile.city,
+                                        expertData.profile.state,
+                                        expertData.profile.country,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(", ")}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {expertData.profile.linkedinUrl && (
+                                  <a
+                                    href={expertData.profile.linkedinUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 mt-2 rounded-cos-md bg-cos-electric/10 px-3 py-1.5 text-xs font-medium text-cos-electric hover:bg-cos-electric/20 transition-colors"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    LinkedIn Profile
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-cos-slate italic">
+                            No linked expert profile found for{" "}
+                            <span className="font-mono">{user.email}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   className="px-5 py-12 text-center text-sm text-cos-slate"
                 >
                   {search ? "No users match your search." : "No users found."}
