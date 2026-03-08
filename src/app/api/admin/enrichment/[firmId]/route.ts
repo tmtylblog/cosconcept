@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { enrichmentAuditLog, serviceFirms } from "@/lib/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 
 /**
  * GET /api/admin/enrichment/[firmId] — Enrichment audit trail for a firm
@@ -15,7 +17,16 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ firmId: string }> }
 ) {
-  // TODO: Add admin auth check
+  // Verify superadmin role
+  try {
+    const headersList = await headers();
+    const session = await auth.api.getSession({ headers: headersList });
+    if (!session?.user || session.user.role !== "superadmin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { firmId } = await params;
   const phase = req.nextUrl.searchParams.get("phase");
   const limit = parseInt(req.nextUrl.searchParams.get("limit") ?? "50", 10);

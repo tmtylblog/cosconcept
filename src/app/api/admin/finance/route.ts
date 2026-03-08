@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { aiUsageLog, organizations, users } from "@/lib/db/schema";
 import { sql, eq, and, gte, desc } from "drizzle-orm";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/admin/finance — AI cost analytics for admin dashboard
@@ -19,7 +23,16 @@ import { sql, eq, and, gte, desc } from "drizzle-orm";
  *   - top consumers
  */
 export async function GET(req: NextRequest) {
-  // TODO: Add admin auth check
+  // Verify superadmin role
+  try {
+    const headersList = await headers();
+    const session = await auth.api.getSession({ headers: headersList });
+    if (!session?.user || session.user.role !== "superadmin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const params = req.nextUrl.searchParams;
   const period = params.get("period") ?? "30d";
   const orgId = params.get("orgId");
