@@ -42,19 +42,31 @@ export default async function AdminLayout({
           <AdminNavLink href="/admin/users" label="Users" />
           <AdminNavLink href="/admin/organizations" label="Organizations" />
           <AdminNavLink href="/admin/subscriptions" label="Subscriptions" />
+          <AdminNavLink href="/admin/finance" label="AI Costs" />
+          <AdminNavLink href="/admin/enrichment" label="Enrichment" />
+          <AdminNavLink href="/admin/partnerships" label="Partnerships" />
         </nav>
-        <div className="mt-8 border-t border-cos-border pt-4">
+        <div className="mt-6 border-t border-cos-border pt-4">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-cos-slate-light">
+            Tools
+          </p>
+          <nav className="space-y-1">
+            <AdminNavLink href="/admin/neo4j" label="Neo4j" />
+            <AdminNavLink href="/admin/apis" label="APIs" />
+          </nav>
+        </div>
+        <div className="mt-6 border-t border-cos-border pt-4">
           <a
             href="/dashboard"
             className="text-xs text-cos-slate hover:text-cos-electric"
           >
-            Back to App
+            &larr; Back to App
           </a>
         </div>
       </aside>
 
       {/* Admin content */}
-      <main className="flex-1 p-8">{children}</main>
+      <main className="flex-1 overflow-y-auto p-8">{children}</main>
     </div>
   );
 }
