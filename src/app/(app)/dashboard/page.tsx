@@ -113,7 +113,6 @@ export default function DashboardPage() {
   const firmEmployeeCount = companyData?.employeeCount;
   const firmFounded = companyData?.founded;
   const firmRevenue = companyData?.inferredRevenue;
-  const firmWebsite = companyData?.website || result?.url;
 
   // Merge: confirmed profile data takes precedence over enrichment
   const services = profile.services?.length
@@ -225,21 +224,21 @@ export default function DashboardPage() {
       {/* Progressive reveal cards — only appear when data exists */}
       {hasAnyData && (
         <div className={cn("flex w-full flex-col gap-3", isDone && "mt-2")}>
-          {/* Firm identity — PDL company data with domain fallback */}
-          {(firmName || isDone) && (
+          {/* Firm identity — always show when enrichment is done */}
+          {isDone && (
             <RevealCard icon={Building2} label="Your Firm" delay={0}>
               <div className="flex items-start gap-3">
                 {/* Company logo via Clearbit */}
-                {firmWebsite && (
+                {firmDomain && (
                   <img
-                    src={`https://logo.clearbit.com/${new URL(firmWebsite).hostname}`}
+                    src={`https://logo.clearbit.com/${firmDomain}`}
                     alt=""
                     className="h-10 w-10 rounded-cos-lg object-contain bg-white border border-cos-border/30"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-base font-semibold text-cos-midnight">{firmName}</p>
+                  <p className="text-base font-semibold text-cos-midnight">{firmName || firmDomain}</p>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-cos-slate">
                     {firmSize && (
                       <span>{firmSize}{firmEmployeeCount ? ` (${firmEmployeeCount.toLocaleString()})` : ""}</span>
