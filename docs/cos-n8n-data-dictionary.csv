@@ -1,0 +1,201 @@
+TABLE,FIELD,DATA TYPE,SOURCE FILE,POPULATED?,SAMPLE / WHAT IT CONTAINS,CONNECTED TO,DEV: Business Purpose / Context,DEV: Quality Notes,DEV: Priority (High/Med/Low)
+,,,,,,,,,,
+===== SECTION 1: REFERENCE / LOOKUP DATA =====,,,,,,,,,,
+step1_skills,id,UUID,skills.json,Yes,e.g. "abc-123-...","imported_contacts.legacy_data[].user_skills[].skill.id",,
+step1_skills,name,String,skills.json,Yes,"Project Management / Brand Strategy / SEO",,The canonical skill name used across all records,Match to COS L2 taxonomy?,
+step1_skills,l1_category,String,skills.json,Partial,Parent category name,,Which L1 category this skill belongs to,,
+step1_industries,id,UUID,industry.json,Yes,e.g. "5aa9e889-...",,,,
+step1_industries,name,String,industry.json,Yes,"Technology & Software / Healthcare / Financial Services",,Industry vertical name used across orgs + case studies,,
+step1_markets,country_code,String,market-country.json,Yes,"US / GB / DE / AU",,2-letter ISO country code,,
+step1_markets,country_name,String,market-country.json,Yes,"United States / United Kingdom",,Full country name,,
+step1_languages,id,UUID,language.json,Yes,,,,
+step1_languages,name,String,language.json,Yes,"English / Spanish / French",,Language used in org operations,,
+,,,,,,,,,,
+===== SECTION 2: imported_companies (21,170 records) =====,,,,,,,,,,
+imported_companies,id,UUID,Generated,Yes,"590f4cad-6f49-4cf7-be43-2915a3fb949d",,Internal primary key,,
+imported_companies,source_id,String,clients.json + organization.json,Yes,Same as id,,"Original ID from legacy system, useful for tracing records back",,
+imported_companies,source,Enum,Script logic,Yes,"legacy_clients | legacy_organisations",,How to tell a client company from a service firm,,
+imported_companies,name,String,clients.json + org.business_name,Yes,"Wild Tame Co. Ltd / Chameleon Collective",,Company display name,,High
+imported_companies,domain,String,Extracted from website,Partial,"wildta.me / chameleon.co",,"Cleaned domain (no https:// www.) — used for deduplication and enrichment lookups",,High
+imported_companies,description,Text,org.about,Partial (orgs only),"Text description of the firm","service_firms.description",Only populated for service org records — null for all client companies,,Med
+imported_companies,industry,String,industry.name or org,Partial,"Healthcare / Technology & Software",,"Industry vertical — single string, may be inconsistent naming",,Med
+imported_companies,location,String,Computed,Partial,"Birmingham Alabama US",,city + stateOrProvince + country joined with spaces,,Low
+imported_companies,country,String,country field,Partial,"US / JP / GB",,2-letter ISO country code,,Med
+imported_companies,size,String,no_of_employees,Partial,"25 / 150 / 500+",,"Employee count as raw string — inconsistent formats across records",,Low
+imported_companies,linkedin_url,String,org.linkedinUrl,Partial (orgs only),"https://www.linkedin.com/company/...",,"Only present on org records, not client records",,Med
+imported_companies,website_url,String,website field,Partial,"https://wildta.me",,"Full URL including protocol — used as enrichment source",,High
+imported_companies,is_icp,Boolean,Script logic,Yes,"TRUE for orgs / FALSE for clients",,"TRUE = this is a service firm (ICP = Ideal Customer Profile for COS), FALSE = end client",,High
+imported_companies,service_firm_id,UUID,service_firms.id,Partial,,service_firms,"When matched to a live COS firm, links here",,High
+imported_companies,imported_company_id,UUID,Self,N/A,,,Placeholder for resolved duplicate detection,,Low
+imported_companies,review_tags,JSONB,Script default,[],,[],Empty array — dev can tag records manually for review,,Med
+imported_companies,legacy_data,JSONB,Full original row,Yes,Full raw JSON object,,Complete original record preserved for reference — never modified,,Low
+imported_companies,meta,JSONB,Script generated,Yes,"{source, migratedAt, parentFirmId, parentFirmName}",,Audit trail: when migrated + parent firm reference (for client records),,Med
+imported_companies,created_at,Timestamp,Auto,Yes,Import timestamp,,,,Low
+imported_companies,updated_at,Timestamp,Auto,Yes,Import timestamp,,,,Low
+,,,,,,,,,,
+===== SECTION 3: imported_contacts (3,900 records) =====,,,,,,,,,,
+imported_contacts,id,UUID,user-basic.json,Yes,"8825ae9a-6e44-406d-a830-964d5825074d",,Original user ID from legacy platform,,
+imported_contacts,source_id,String,Same as id,Yes,,,,Same as id — legacy reference,,Low
+imported_contacts,source,String,Script default,Yes,"legacy_users",,Always 'legacy_users' — all contacts came from one source,,Low
+imported_contacts,company_id,UUID,organisation.id,Partial,,imported_companies,"FK to parent firm — ~80% populated, some contacts had no org",,High
+imported_contacts,first_name,String,user.firstName,Partial,"Steven / Sarah",,Given name — null if only one name field was set,,High
+imported_contacts,last_name,String,user.lastName,Partial,"Komarnitsky / Chen",,Surname — null if only one name field was set,,High
+imported_contacts,name,String,Computed,Yes,"Steven Komarnitsky",,"Computed full name (firstName + lastName) — always present",,High
+imported_contacts,email,String,user.email,Yes,"stevenk@ccgideas.com",,"Primary email — used as key for PDL enrichment lookup",,High
+imported_contacts,title,String,user.title,Partial,"VP of Marketing / Fractional CMO",,"Job title at time of export — may be outdated",,Med
+imported_contacts,linkedin_url,String,user_professional_information.linkedInUrl,Partial,"https://linkedin.com/in/...",,"LinkedIn profile URL — used as fallback key for PDL enrichment",,High
+imported_contacts,photo_url,String,N/A,No (all null),null,,"Not stored in legacy system — would need PDL/LinkedIn enrichment",,Med
+imported_contacts,headline,String,N/A,No (all null),null,,"Not in legacy system — PDL enrichment would populate",,Med
+imported_contacts,short_bio,String,N/A,No (all null),null,,"Not in legacy system — would need manual input or AI generation",,Med
+imported_contacts,city,String,user_basic_information.city,Partial,"Birmingham, Alabama",,"Some contacts have full city+state in city field — inconsistent",,Low
+imported_contacts,state,String,user_basic_information.stateOrProvince,Partial,"Alabama",,"State or province — US-centric field",,Low
+imported_contacts,country,String,user_basic_information.country,Partial,"US / GB",,2-letter country code,,Low
+imported_contacts,is_partner,Boolean,N/A,No (all null),null,,"To be determined post-migration — is this person at a partner firm?",,Med
+imported_contacts,is_icp,Boolean,N/A,No (all null),null,,"To be determined post-migration — is this an ideal expert profile?",,Med
+imported_contacts,profile_match,String,N/A,No (all null),null,,"PDL match confidence — populated during enrichment",,Med
+imported_contacts,profile_match_justification,Text,N/A,No (all null),null,,"Enrichment notes explaining the match confidence",,Low
+imported_contacts,expert_classification,Enum,Computed from roles,Partial,"expert | internal | null","expert_profiles","expert = has Expert role, internal = Admin only, null = unclear",,High
+imported_contacts,graph_node_id,String,N/A,No (all null),null,,Neo4j node ID — populated after graph sync,,Low
+imported_contacts,review_tags,JSONB,Script default,[],[],,"Empty array — use for manual review tagging",,Low
+imported_contacts,legacy_data,JSONB,Merged from all files,Yes,"{basic:{}, skills:[], industries:[], roles:[], profInfo:{}, workHistory:[]}",,All merged legacy data in one blob — the source of truth for this record,,Med
+imported_contacts,meta,JSONB,Script generated,Yes,"{source, migratedAt, organisationId, organisationName, skillCount, industryCount, hasWorkHistory}",,Audit trail + quick stats,,Low
+imported_contacts,created_at,Timestamp,Auto,Yes,Import timestamp,,,,Low
+imported_contacts,updated_at,Timestamp,Auto,Yes,Import timestamp,,,,Low
+,,,,,,,,,,
+===== SECTION 3a: FIELDS NESTED IN imported_contacts.legacy_data =====,,,,,,,,,,
+legacy_data.basic,firstName + lastName,String,user-basic.json,Yes,,,"Raw name fields before concatenation",,
+legacy_data.basic,email,String,user-basic.json,Yes,,,Primary email,,
+legacy_data.basic,title,String,user-basic.json,Partial,,,Job title at time of data export,,
+legacy_data.basic,organisation.id,UUID,user-basic.json,Partial,,,Parent org reference,,
+legacy_data.roles[],cos_user_role.name,String,user-basic.json,Yes,"Expert / Admin / Deal Maker / Trusted Expert / Partnership Admin / Advisor","See role mapping below",,"Roles determine expert_classification field",,High
+legacy_data.skills[],skill.id + skill.name,Object,user-details.json,Partial,"Project Management / Business Strategy","step1_skills","Skills tagged by the user — may not match COS L2 taxonomy exactly",,High
+legacy_data.industries[],industry.id + industry.name,Object,user-details.json,Partial,"Technology & Software / Healthcare","step1_industries","Industries the expert has worked in",,High
+legacy_data.profInfo,hourlyRate,Integer,user-details.json,Partial,"150 (USD)",,Self-reported hourly rate,,Med
+legacy_data.profInfo,linkedInUrl,String,user-details.json,Partial,"https://linkedin.com/in/...",,LinkedIn URL — key for PDL enrichment,,High
+legacy_data.workHistory[],company,String,user-work-history.json,Partial,"Chameleon Collective",,Previous employer name,,Med
+legacy_data.workHistory[],position,String,user-work-history.json,Partial,"VP of Marketing",,Job title at that employer,,Med
+legacy_data.workHistory[],startDate,String,user-work-history.json,Partial,"2018-01-15",,YYYY-MM-DD format,,Med
+legacy_data.workHistory[],endDate,String,user-work-history.json,Partial,"2021-06-30 | null if current",,null = still at this company,,Med
+legacy_data.workHistory[],description,Text,user-work-history.json,Partial,"Led sales team of 12...",,Free-text role description — quality varies significantly,,High
+,,,,,,,,,,
+===== SECTION 4: imported_case_studies (~500 records) =====,,,,,,,,,,
+imported_case_studies,id,String,Generated,Yes,"cs_{authorId}_{index}",,Deterministic ID for idempotency on re-import,,
+imported_case_studies,source_id,String,cs.authorId,Yes,User ID of case study author,imported_contacts,"The user who authored/owns the case study",,
+imported_case_studies,source,String,Script default,Yes,"legacy_case_studies",,Always 'legacy_case_studies',,
+imported_case_studies,author_org_source_id,UUID,organisation.id,Partial,,imported_companies,"The service firm that published this case study",,High
+imported_case_studies,author_org_name,String,business_name,Partial,"Collective OS / Chameleon Collective",,Denormalized org name for display,,Med
+imported_case_studies,content,Text,cs.about,Partial,HTML content — can be long,,"Full case study body — raw HTML, needs stripping for display. Quality varies.",,High
+imported_case_studies,summary,Text,cs.summary,No (mostly null),null,,"Intended as brief summary — rarely filled in original platform",,Med
+imported_case_studies,status,Enum,cs.status,Yes,"published | draft",,"Only published case studies shown by default",,High
+imported_case_studies,client_companies,JSONB,case_study_companies[],Partial,"[{id, name}]",,"Client companies featured in this case study — names are self-entered, may be inconsistent",,High
+imported_case_studies,industries,JSONB,case_study_industries[],Partial,"[{id:'UUID', name:'Technology & Software'}]","step1_industries","Tagged industries for this case study",,High
+imported_case_studies,skills,JSONB,case_study_skills[],Partial,"[{id:'UUID', name:'Brand Strategy'}]","step1_skills","Skills demonstrated in this case study",,High
+imported_case_studies,links,JSONB,case_study_links[],Partial,"[{link:'https://joincollectiveos.com/...'}]",,"External links — may be slide decks, blog posts, or portfolio links. Often broken.",,Med
+imported_case_studies,markets,JSONB,case_study_markets[],Partial,"[{countryCode:'US'}]","step1_markets","Geographic markets for this case study",,Low
+imported_case_studies,expert_users,JSONB,case_study_users[],Partial,"[{id:'UUID', name:'Expert Name'}]","imported_contacts","Contributing experts — links back to user IDs",,High
+imported_case_studies,imported_company_id,UUID,Post-resolution,Partial,,imported_companies,"Resolved FK to canonical company record — not always set",,Med
+imported_case_studies,legacy_data,JSONB,Full raw row,Yes,Complete original JSON,,Full original record preserved,,Low
+imported_case_studies,meta,JSONB,Script generated,Yes,"{source, migratedAt, skillCount, industryCount, expertCount}",,Quick stats about the record,,Low
+imported_case_studies,created_at,Timestamp,Auto,Yes,Import timestamp,,,,Low
+,,,,,,,,,,
+===== SECTION 5: imported_outreach (Messages) =====,,,,,,,,,,
+imported_outreach,id,UUID,Generated,Yes,,,,
+imported_outreach,source_id,String,n8n message_id,Yes,Original message ID,,Trace back to n8n if needed,,
+imported_outreach,source,String,Script default,Yes,"n8n",,Always 'n8n',,
+imported_outreach,company_id,UUID,Resolved,Partial,,imported_companies,"Sending company — matched from senderOrgId",,High
+imported_outreach,contact_id,UUID,Resolved,Partial,,imported_contacts,"Contact who sent/received this message",,High
+imported_outreach,message_type,String,n8n message_type,Partial,"intro | follow_up | proposal | inquiry",,"Type of outreach — useful for understanding BD activity patterns",,High
+imported_outreach,message_module,String,n8n message_module,Partial,,,Workflow/module that generated this message,,Med
+imported_outreach,message,Text,n8n message field,Partial,Free-text message body,,"Actual outreach text — useful for training AI email writer",,High
+imported_outreach,direction,Enum,n8n field,Partial,"outbound | inbound",,Was this sent or received?,,High
+imported_outreach,sender_org_id,UUID,n8n senderOrgId,Partial,,imported_companies,Sending organization,,Med
+imported_outreach,recipient_org_id,UUID,n8n recipientOrgId,Partial,,imported_companies,Receiving organization,,Med
+imported_outreach,opportunity_title,String,n8n field,Partial,"Project title associated with outreach",,What opportunity/project prompted this message,,Med
+imported_outreach,sent_at,Timestamp,n8n field,Partial,Message timestamp,,When outreach occurred,,Med
+imported_outreach,legacy_data,JSONB,Full original row,Yes,Complete n8n row,,Full original record,,Low
+imported_outreach,created_at,Timestamp,Auto,Yes,Import timestamp,,,,Low
+,,,,,,,,,,
+===== SECTION 6: Step 5 Network Data =====,,,,,,,,,,
+step5_match_activity,—,—,match-activity.json,Unknown (not imported to DB),,,"Network activity log — connections, views, interactions between orgs",,Med
+step5_perfect_match,—,—,perfect-match.json,Unknown (not imported to DB),,,"Match records where two firms were designated as perfect matches",,High
+,,,,,,,,,,
+===== SECTION 7: enrichment_audit_log (PDL + AI enrichment) =====,,,,,,,,,,
+enrichment_audit_log,id,UUID,Generated,Yes,,,,
+enrichment_audit_log,firm_id,UUID,Context,Partial,,service_firms,Which firm triggered this enrichment,,Med
+enrichment_audit_log,user_id,UUID,Context,Partial,,users,Which COS user triggered this enrichment,,Low
+enrichment_audit_log,phase,Enum,Script,Yes,"pdl | jina | classifier | linkedin | specialist-generator",,"What kind of enrichment this is — critical for filtering",,High
+enrichment_audit_log,source,String,Varies by phase,Yes,"Email address / LinkedIn URL / Company name",,"The input used for enrichment — email for PDL person lookup, URL for Jina",,High
+enrichment_audit_log,raw_input,Text,Varies,Partial,Input payload sent to enrichment service,,Full input for debugging/replay,,Low
+enrichment_audit_log,raw_output,Text,Varies,Partial,Raw response from enrichment service,,Full response — may be large,,Low
+enrichment_audit_log,extracted_data,JSONB,Processed,Partial,"PDL person object OR AI specialist profile JSON",,"The structured data we actually stored — this is what the migration reads",,High
+enrichment_audit_log,model,String,AI calls only,Partial,"claude-sonnet-4-5 / gemini-flash",,Which AI model generated this,,Low
+enrichment_audit_log,cost_usd,Decimal,Tracked,Partial,"0.004",,Cost of this enrichment operation,,Med
+enrichment_audit_log,confidence,Decimal,AI scoring,Partial,"0.85",,Confidence score for AI outputs,,Med
+enrichment_audit_log,duration_ms,Integer,Tracked,Partial,"2400",,Processing time in milliseconds,,Low
+enrichment_audit_log,status,Enum,Result,Yes,"success | error | skipped",,Did the enrichment succeed?,,Med
+enrichment_audit_log,error_message,String,On failure,Partial,Error description,,What went wrong if status = error,,Med
+enrichment_audit_log,created_at,Timestamp,Auto,Yes,Enrichment timestamp,,,,Low
+,,,,,,,,,,
+===== SECTION 7a: FIELDS NESTED IN enrichment_audit_log.extracted_data (phase=pdl) =====,,,,,,,,,,
+pdl_person,id,String,PDL API,Partial,"PDL person identifier",,PDL's internal ID for this person,,Med
+pdl_person,firstName + lastName,String,PDL API,Partial,,,Canonical name from PDL,,High
+pdl_person,email,String,PDL API,Partial,,,Confirmed email from PDL — may differ from legacy email,,High
+pdl_person,phoneNumbers[],String,PDL API,Partial,"[+1-205-555-1234]",,Phone numbers from PDL,,Low
+pdl_person,skills[],String,PDL API,Partial,"['Project Management', 'Brand Strategy']",,Skills inferred by PDL from LinkedIn/public data — top 10 used as topSkills,,High
+pdl_person,workHistory[],Object,PDL API,Partial,"{company, title, startDate, endDate, isCurrent}","expert_profiles.pdl_data","PDL-sourced work history — higher quality than self-reported legacy data",,High
+pdl_person,education[],Object,PDL API,Partial,"{school, degree, major, endDate}",,Education history from PDL,,Med
+pdl_person,location,Object,PDL API,Partial,"{city, state, country}",,Current location from PDL,,Med
+pdl_person,linkedinUrl,String,PDL API,Partial,"https://linkedin.com/in/...",,Confirmed LinkedIn URL,,High
+pdl_person,seniority,Enum,PDL API,Partial,"executive | senior | manager | entry",,"PDL's seniority classification",,Med
+pdl_person,jobTitle,String,PDL API,Partial,"VP of Marketing",,Current job title at time of PDL query,,High
+pdl_person,jobCompany,String,PDL API,Partial,"Chameleon Collective",,Current employer at time of PDL query,,High
+pdl_person,jobIndustry,String,PDL API,Partial,"Professional Services",,Industry of current employer,,Med
+,,,,,,,,,,
+===== SECTION 7b: FIELDS NESTED IN enrichment_audit_log.extracted_data (phase=specialist-generator) =====,,,,,,,,,,
+specialist_gen,contactId,UUID,Script,Yes,,imported_contacts,"Links AI output back to the source contact",,High
+specialist_gen,title,String,AI generated,Partial,"Fractional CMO for B2B SaaS",,The specialist role title — headline of this profile,,High
+specialist_gen,bodyDescription,Text,AI generated,Partial,"150-500 word description of expertise",,Detailed specialty description — feeds quality score,,High
+specialist_gen,summary,Text,AI generated,Partial,Short 1-2 sentence summary,,Brief version of bodyDescription,,Med
+specialist_gen,skills[],String,AI generated,Partial,"['Growth Marketing', 'ABM', 'Product-Led Growth']",,Skills specific to this specialty — should match COS L2 taxonomy,,High
+specialist_gen,industries[],String,AI generated,Partial,"['SaaS', 'Fintech']",,Industries this specialist serves,,High
+specialist_gen,services[],String,AI generated,Partial,"['Go-to-Market Strategy', 'Demand Generation']",,Services offered in this specialty,,High
+specialist_gen,examples[].title,String,AI generated,Partial,"Rebuilt GTM for Series B Fintech",,Work example title — used in quality scoring,,High
+specialist_gen,examples[].subject,String,AI generated,Partial,"Led full GTM rebuild...",,Work example description — used in quality scoring,,High
+specialist_gen,examples[].companyName,String,AI generated,Partial,"Acme Corp",,Company where this work happened,,Med
+specialist_gen,examples[].companyIndustry,String,AI generated,Partial,"Fintech",,Industry of that company,,Med
+specialist_gen,examples[].startDate,String,AI generated,Partial,"2021-03",,YYYY-MM format,,Low
+specialist_gen,examples[].endDate,String,AI generated,Partial,"2022-09 | null",,null = current engagement,,Low
+specialist_gen,examples[].isPdlSource,Boolean,AI generated,Partial,"true | false",,Did this example come from PDL work history?,,Low
+,,,,,,,,,,
+===== SECTION 8: ROLE MAPPING (imported_contacts.legacy_data.roles) =====,,,,,,,,,,
+ROLE NAME,MAPS TO expert_classification,WHAT IT MEANS IN PRACTICE,,,,,DEV: Confirm this is still the right interpretation,DEV: Are any roles missing from this list?,
+Expert,expert,"Core expert/consultant on the platform",,,,,,,
+Admin,internal,"Firm admin user — manages the org account",,,,,,,
+Deal Maker,expert (via Expert role check),"Business development person — usually also has Expert role",,,,,,,
+Trusted Expert,expert,"Higher-tier expert with verified track record",,,,,,,
+Partnership Admin,internal,"Manages partnership relationships for the firm",,,,,,,
+Advisor,expert (via Expert role check),"Advisory/board level — strategic contributor",,,,,,,
+Collective Manager,internal,"Platform admin for Collective OS",,,,,,,
+,,,,,,,,,,
+===== SECTION 9: COUNTS & DATA QUALITY SUMMARY =====,,,,,,,,,,
+TABLE,APPROX RECORD COUNT,FULLY POPULATED (%),KNOWN GAPS,DEV: Actual record count (check DB),DEV: Quality assessment,DEV: Priority for enrichment,,,,
+imported_companies,~21170,"name: 100% / domain: ~70% / description: ~5% (orgs only)","description missing for all 20k clients; industry inconsistent",,,,,,
+imported_contacts,~3900,"name: 100% / email: 100% / title: ~60% / linkedin: ~40% / skills: ~70%","photo_url and headline missing everywhere; work history only 1383 records",,,,,,
+imported_case_studies,~500,"content: ~80% / skills+industries: ~70% / client_companies: ~60%","summary almost always null; links may be broken",,,,,,
+imported_outreach,~Unknown,"message: partial / direction: partial","Record count and quality unknown — not fully analyzed",,,,,,
+enrichment_audit_log,"~Unknown (PDL + AI)","PDL: subset of contacts / AI: subset","Not all contacts were enriched — depends on how many had valid email/LinkedIn",,,,,,
+expert_profiles,"~0 (migration not run yet)","N/A","Migration script exists but needs to be run against the DB",,,,,,
+specialist_profiles,"~0 (migration not run yet)","N/A","Will be populated when migrate-contacts-to-experts.mjs runs",,,,,,
+,,,,,,,,,,
+===== SECTION 10: KEY QUESTIONS FOR DEV =====,,,,,,,,,,
+#,QUESTION,YOUR ANSWER,,,,,,,,
+1,"How many records are actually in imported_companies?",,,,,,,,,
+2,"How many imported_contacts have email AND linkedin_url both populated?",,,,,,,,,
+3,"How many records in enrichment_audit_log with phase='pdl'? (= how many contacts were PDL-enriched)",,,,,,,,,
+4,"How many records in enrichment_audit_log with phase='specialist-generator'? (= how many AI profiles exist)",,,,,,,,,
+5,"Have the step5 network files (match-activity.json, perfect-match.json) been imported to the DB at all?",,,,,,,,,
+6,"What percentage of imported_contacts have expert_classification='expert' vs 'internal' vs null?",,,,,,,,,
+7,"Are there duplicate companies in imported_companies (same name, different IDs)?",,,,,,,,,
+8,"What's the typical quality score distribution on specialist_profiles once migration runs?",,,,,,,,,
+9,"Are the legacy skills/industries names compatible with the COS L2 taxonomy, or do they need remapping?",,,,,,,,,
+10,"Which service firms in service_firms table have NO corresponding imported_companies record?",,,,,,,,,
