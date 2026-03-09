@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Collective OS — Knowledge Graph Architecture Briefing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fragment+Mono&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --midnight: #3a302d;
+    --electric: #1f86a1;
+    --cloud: #f6f4ef;
+    --signal: #60b9bf;
+    --ember: #e44627;
+    --warm: #f3af3d;
+    --slate: #9b9590;
+    --pg-blue: #336791;
+    --neo-green: #018bff;
+    --surface: #faf9f6;
+    --border: #e8e4dd;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    color: var(--midnight);
+    background: var(--cloud);
+    line-height: 1.65;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- COVER --- */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 80px;
+    position: relative;
+    overflow: hidden;
+    background: var(--midnight);
+    color: var(--cloud);
+  }
+
+  .cover::before {
+    content: '';
+    position: absolute;
+    top: -200px;
+    right: -200px;
+    width: 800px;
+    height: 800px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(31,134,161,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .cover::after {
+    content: '';
+    position: absolute;
+    bottom: -300px;
+    left: -100px;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(96,185,191,0.1) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .cover-badge {
+    display: inline-block;
+    font-family: 'Fragment Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--signal);
+    border: 1px solid rgba(96,185,191,0.3);
+    padding: 6px 14px;
+    border-radius: 4px;
+    margin-bottom: 40px;
+  }
+
+  .cover h1 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 56px;
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 24px;
+    max-width: 700px;
+  }
+
+  .cover h1 span { color: var(--signal); }
+
+  .cover p {
+    font-size: 18px;
+    color: var(--slate);
+    max-width: 560px;
+    line-height: 1.7;
+  }
+
+  .cover-meta {
+    position: absolute;
+    bottom: 60px;
+    left: 80px;
+    display: flex;
+    gap: 48px;
+    font-family: 'Fragment Mono', monospace;
+    font-size: 12px;
+    color: var(--slate);
+  }
+
+  .cover-meta dt { color: rgba(155,149,144,0.6); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+  .cover-meta dd { color: var(--signal); }
+
+  /* --- PAGE LAYOUT --- */
+  .page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 80px 40px;
+  }
+
+  .page + .page { padding-top: 0; }
+
+  /* --- SECTION HEADERS --- */
+  .section-num {
+    font-family: 'Fragment Mono', monospace;
+    font-size: 12px;
+    color: var(--electric);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  h2 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 16px;
+    color: var(--midnight);
+  }
+
+  h3 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 22px;
+    font-weight: 600;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    color: var(--midnight);
+  }
+
+  h4 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    margin-top: 32px;
+    margin-bottom: 10px;
+  }
+
+  .section-intro {
+    font-size: 17px;
+    color: var(--slate);
+    max-width: 680px;
+    margin-bottom: 48px;
+    line-height: 1.75;
+  }
+
+  /* --- DIVIDER --- */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 64px 0;
+  }
+
+  /* --- DUAL STORAGE DIAGRAM --- */
+  .dual-diagram {
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr;
+    gap: 0;
+    margin: 40px 0;
+  }
+
+  .db-column {
+    padding: 32px;
+    border-radius: 12px;
+  }
+
+  .db-column.pg {
+    background: linear-gradient(135deg, #f0f4f8 0%, #e8edf3 100%);
+    border: 1px solid #d0d8e4;
+  }
+
+  .db-column.neo {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e6f4ff 100%);
+    border: 1px solid #b8deff;
+  }
+
+  .db-column-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .db-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Fragment Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+  }
+
+  .db-icon.pg { background: var(--pg-blue); }
+  .db-icon.neo { background: var(--neo-green); }
+
+  .db-column-header h4 {
+    margin: 0;
+    font-size: 18px;
+  }
+
+  .db-column-header small {
+    display: block;
+    font-size: 12px;
+    color: var(--slate);
+    font-weight: 400;
+    margin-top: 2px;
+  }
+
+  .sync-column {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .sync-arrow {
+    width: 2px;
+    height: 100%;
+    background: repeating-linear-gradient(to bottom, var(--signal) 0, var(--signal) 6px, transparent 6px, transparent 12px);
+    position: relative;
+  }
+
+  .sync-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-90deg);
+    font-family: 'Fragment Mono', monospace;
+    font-size: 10px;
+    color: var(--signal);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    background: var(--cloud);
+    padding: 4px 12px;
+  }
+
+  .db-list { list-style: none; }
+
+  .db-list li {
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    font-size: 13px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .db-list li:last-child { border-bottom: none; }
+
+  .db-list code {
+    font-family: 'Fragment Mono', monospace;
+    font-size: 12px;
+    background: rgba(0,0,0,0.06);
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  .db-list .count {
+    margin-left: auto;
+    font-family: 'Fragment Mono', monospace;
+    font-size: 11px;
+    color: var(--slate);
+  }
+
+  /* --- TABLES --- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    font-size: 14px;
+  }
+
+  thead th {
+    text-align: left;
+    padding: 12px 16px;
+    font-family: 'Fragment Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--slate);
+    border-bottom: 2px solid var(--midnight);
+    font-weight: 500;
+  }
+
+  tbody td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  tbody tr:hover { background: rgba(31,134,161,0.03); }
+
+  td code {
+    font-family: 'Fragment Mono', monospace;
+    font-size: 12px;
+    background: rgba(31,134,161,0.08);
+    color: var(--electric);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  /* --- STATUS BADGES --- */
+  .badge {
+    display: inline-block;
+    font-family: 'Fragment Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+
+  .badge.live { background: rgba(96,185,191,0.15); color: #2a8a8a; }
+  .badge.partial { background: rgba(243,175,61,0.15); color: #b07a10; }
+  .badge.gap { background: rgba(228,70,39,0.12); color: var(--ember); }
+  .badge.seeded { background: rgba(31,134,161,0.1); color: var(--electric); }
+
+  /* --- EDGE DIAGRAM --- */
+  .edge-group {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    margin: 24px 0;
+  }
+
+  .edge-group-title {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .edge-group-title .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .edge-row {
+    display: grid;
+    grid-template-columns: 140px 24px 180px 24px 140px 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 13px;
+  }
+
+  .edge-node {
+    font-family: 'Fragment Mono', monospace;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    text-align: center;
+  }
+
+  .edge-node.firm { background: rgba(31,134,161,0.1); color: var(--electric); }
+  .edge-node.taxonomy { background: rgba(243,175,61,0.12); color: #b07a10; }
+  .edge-node.entity { background: rgba(96,185,191,0.12); color: #2a8a8a; }
+
+  .edge-rel {
+    font-family: 'Fragment Mono', monospace;
+    font-size: 11px;
+    color: var(--slate);
+    text-align: center;
+    white-space: nowrap;
+    background: rgba(0,0,0,0.04);
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .edge-arrow { text-align: center; color: var(--slate); font-size: 12px; }
+
+  .edge-desc { color: var(--slate); font-size: 12px; padding-left: 8px; }
+
+  /* --- CALLOUT --- */
+  .callout {
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin: 32px 0;
+  }
+
+  .callout.warning {
+    background: linear-gradient(135deg, rgba(228,70,39,0.06) 0%, rgba(243,175,61,0.06) 100%);
+    border-left: 4px solid var(--ember);
+  }
+
+  .callout.info {
+    background: linear-gradient(135deg, rgba(31,134,161,0.06) 0%, rgba(96,185,191,0.06) 100%);
+    border-left: 4px solid var(--electric);
+  }
+
+  .callout-title {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 8px;
+  }
+
+  .callout p, .callout li {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .callout ol, .callout ul {
+    padding-left: 20px;
+    margin-top: 8px;
+  }
+
+  .callout li { margin-bottom: 6px; }
+
+  /* --- GAP LIST --- */
+  .gap-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 24px 0;
+  }
+
+  .gap-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+  }
+
+  .gap-card h5 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .gap-card p {
+    font-size: 13px;
+    color: var(--slate);
+    line-height: 1.6;
+  }
+
+  /* --- FLOW DIAGRAM --- */
+  .flow-diagram {
+    background: var(--midnight);
+    border-radius: 16px;
+    padding: 40px;
+    margin: 32px 0;
+    color: var(--cloud);
+    overflow-x: auto;
+  }
+
+  .flow-diagram pre {
+    font-family: 'Fragment Mono', monospace;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--signal);
+  }
+
+  .flow-diagram .dim { color: rgba(155,149,144,0.5); }
+  .flow-diagram .accent { color: var(--warm); }
+  .flow-diagram .highlight { color: var(--signal); }
+  .flow-diagram .label { color: var(--cloud); }
+
+  /* --- FOOTER --- */
+  .doc-footer {
+    text-align: center;
+    padding: 48px 40px;
+    font-size: 12px;
+    color: var(--slate);
+    font-family: 'Fragment Mono', monospace;
+  }
+
+  /* --- PRINT --- */
+  @media print {
+    .cover { min-height: auto; padding: 60px; page-break-after: always; }
+    .page { padding: 40px 20px; }
+    .divider { margin: 40px 0; }
+    body { font-size: 12px; }
+    h2 { font-size: 28px; }
+    .gap-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 768px) {
+    .cover { padding: 40px; }
+    .cover h1 { font-size: 36px; }
+    .dual-diagram { grid-template-columns: 1fr; }
+    .sync-column { display: none; }
+    .edge-row { grid-template-columns: 1fr; gap: 4px; }
+    .gap-grid { grid-template-columns: 1fr; }
+    .cover-meta { flex-direction: column; gap: 16px; bottom: 40px; left: 40px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ========== COVER ========== -->
+<div class="cover">
+  <span class="cover-badge">Technical Briefing</span>
+  <h1>Knowledge Graph <span>&</span> Data Architecture</h1>
+  <p>How Collective OS stores, connects, and queries the professional services landscape &mdash; and what needs to happen before bulk data ingestion.</p>
+  <dl class="cover-meta">
+    <div><dt>Project</dt><dd>Collective OS</dd></div>
+    <div><dt>Date</dt><dd>March 9, 2026</dd></div>
+    <div><dt>Version</dt><dd>1.0</dd></div>
+    <div><dt>Audience</dt><dd>Product &amp; Engineering</dd></div>
+  </dl>
+</div>
+
+<!-- ========== SECTION 01: THE SPLIT ========== -->
+<div class="page">
+  <span class="section-num">01 &mdash; The Architecture</span>
+  <h2>Two databases, one truth</h2>
+  <p class="section-intro">
+    Collective OS uses a dual-database architecture. <strong>PostgreSQL</strong> (Neon) is the system of record for all transactional data &mdash; auth, billing, profiles, CRUD operations. <strong>Neo4j</strong> (Aura) is the relationship engine that maps how firms, experts, skills, and industries connect. Some data lives in both, synced via background jobs.
+  </p>
+
+  <div class="dual-diagram">
+    <!-- PostgreSQL Column -->
+    <div class="db-column pg">
+      <div class="db-column-header">
+        <div class="db-icon pg">PG</div>
+        <h4>PostgreSQL <small>Neon + Drizzle ORM</small></h4>
+      </div>
+      <p style="font-size:12px; color:var(--slate); margin-bottom:16px;">System of record. ACID transactions. User-facing CRUD.</p>
+      <ul class="db-list">
+        <li><code>users</code> Auth accounts <span class="count">~core</span></li>
+        <li><code>organizations</code> Firm containers <span class="count">~core</span></li>
+        <li><code>service_firms</code> Full firm profiles <span class="count">~core</span></li>
+        <li><code>expert_profiles</code> Expert data + PDL <span class="count">~core</span></li>
+        <li><code>specialist_profiles</code> Niche profiles <span class="count">~core</span></li>
+        <li><code>firm_case_studies</code> Case study content <span class="count">~core</span></li>
+        <li><code>partner_preferences</code> 8-dim matching prefs <span class="count">~core</span></li>
+        <li><code>abstraction_profiles</code> AI hidden profiles <span class="count">~core</span></li>
+        <li><code>subscriptions</code> Stripe billing <span class="count">billing</span></li>
+        <li><code>conversations</code> Chat threads <span class="count">chat</span></li>
+        <li><code>partnerships</code> Partner status <span class="count">social</span></li>
+        <li><code>opportunities</code> Shared work <span class="count">social</span></li>
+        <li><code>email_*</code> Email system (3 tables) <span class="count">email</span></li>
+        <li><code>call_*</code> Call intel (4 tables) <span class="count">calls</span></li>
+        <li><code>imported_*</code> Legacy data (5 tables) <span class="count">import</span></li>
+        <li style="font-weight:600; border-bottom:none;">47 tables total</li>
+      </ul>
+    </div>
+
+    <!-- Sync Column -->
+    <div class="sync-column">
+      <div class="sync-arrow">
+        <span class="sync-label">Inngest Sync</span>
+      </div>
+    </div>
+
+    <!-- Neo4j Column -->
+    <div class="db-column neo">
+      <div class="db-column-header">
+        <div class="db-icon neo">N4</div>
+        <h4>Neo4j <small>Aura Graph Database</small></h4>
+      </div>
+      <p style="font-size:12px; color:var(--slate); margin-bottom:16px;">Relationship engine. Graph traversal. Search Layer 1.</p>
+      <ul class="db-list">
+        <li><code>ServiceFirm</code> Enriched firm nodes <span class="count">dynamic</span></li>
+        <li><code>Expert</code> Professional nodes <span class="count">dynamic</span></li>
+        <li><code>SpecialistProfile</code> Niche expertise <span class="count">dynamic</span></li>
+        <li><code>CaseStudy</code> Published work <span class="count">dynamic</span></li>
+        <li><code>Client</code> Companies served <span class="count">dynamic</span></li>
+        <li><code>Service</code> Service offerings <span class="count">dynamic</span></li>
+        <li><code>Skill</code> L2 + L3 skills <span class="count">~18,668</span></li>
+        <li><code>SkillL1</code> Top-level categories <span class="count">~26</span></li>
+        <li><code>Category</code> Firm archetypes <span class="count">30</span></li>
+        <li><code>Market</code> Geographies <span class="count">~200+</span></li>
+        <li><code>Industry</code> Sector verticals <span class="count">~55+</span></li>
+        <li><code>Language</code> Business languages <span class="count">~75+</span></li>
+        <li><code>FirmType</code> Delivery models <span class="count">10</span></li>
+        <li><code>Company</code> Legacy imports <span class="count">import</span></li>
+        <li><code>Person</code> Legacy contacts <span class="count">import</span></li>
+        <li style="font-weight:600; border-bottom:none;">15 node types + 40+ edge types</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">How the sync works</div>
+    <p>When a firm is enriched (website scraped, PDL queried, AI classified), an Inngest background job writes the results to Neo4j via <code>graph-writer.ts</code>. PostgreSQL remains the source of truth &mdash; Neo4j gets a projected copy optimized for graph queries. The <code>graph_node_id</code> column in PG tables enables cross-referencing.</p>
+  </div>
+</div>
+
+<!-- ========== SECTION 02: TAXONOMY ========== -->
+<div class="page">
+  <div class="divider"></div>
+  <span class="section-num">02 &mdash; The Taxonomy Layer</span>
+  <h2>Reference data (Neo4j only)</h2>
+  <p class="section-intro">
+    These nodes form the structural backbone of the graph. They're seeded from CSV files, never edited by users, and serve as the "join points" that connect firms to skills, industries, and markets.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Node Type</th>
+        <th>Count</th>
+        <th>Source</th>
+        <th>Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>SkillL1</code></td>
+        <td>26</td>
+        <td>skills-L1.csv</td>
+        <td>Top categories: "Information Technology", "Finance", "Marketing"</td>
+      </tr>
+      <tr>
+        <td><code>Skill</code> (L2)</td>
+        <td>247</td>
+        <td>skills-L1.csv</td>
+        <td>Subcategories: "Cloud Computing", "Financial Analysis", "Digital Marketing"</td>
+      </tr>
+      <tr>
+        <td><code>Skill</code> (L3)</td>
+        <td>18,421</td>
+        <td>skills-L3-map.csv</td>
+        <td>Granular: "Amazon Web Services (AWS)", "DCF Modeling", "Google Ads"</td>
+      </tr>
+      <tr>
+        <td><code>Category</code></td>
+        <td>30</td>
+        <td>categories.csv</td>
+        <td>Firm archetypes: "Boutique Agency", "Advisory", "Freelancer Network"</td>
+      </tr>
+      <tr>
+        <td><code>Market</code></td>
+        <td>~200+</td>
+        <td>neo4j-seed.ts</td>
+        <td>Countries + regions: "United States", "EMEA", "Southeast Asia"</td>
+      </tr>
+      <tr>
+        <td><code>Industry</code></td>
+        <td>~55+</td>
+        <td>neo4j-seed.ts</td>
+        <td>Verticals: "SaaS", "Healthcare", "Financial Services" (grows via enrichment)</td>
+      </tr>
+      <tr>
+        <td><code>Language</code></td>
+        <td>~75+</td>
+        <td>neo4j-seed.ts</td>
+        <td>Business languages with ISO codes</td>
+      </tr>
+      <tr>
+        <td><code>FirmType</code></td>
+        <td>10</td>
+        <td>neo4j-seed.ts</td>
+        <td>Delivery models: "Staff Augmentation", "Embedded Teams", "Advisory"</td>
+      </tr>
+      <tr>
+        <td><code>PARTNERS_WITH</code></td>
+        <td>346 edges</td>
+        <td>firm-relationships.csv</td>
+        <td>Symbiotic firm-type pairings with frequency, direction, revenue model</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>3-Level Skill Hierarchy</h3>
+  <div class="flow-diagram">
+<pre><span class="label">L1 (26 categories)</span>          <span class="label">L2 (247 subcategories)</span>          <span class="label">L3 (18,421 skills)</span>
+
+<span class="highlight">Information Technology</span> <span class="dim">───┬──</span> <span class="accent">Cloud Computing</span> <span class="dim">──────────┬──</span> AWS
+                       <span class="dim">│</span>                          <span class="dim">├──</span> Azure
+                       <span class="dim">│</span>                          <span class="dim">├──</span> Google Cloud Platform
+                       <span class="dim">│</span>                          <span class="dim">└──</span> Kubernetes
+                       <span class="dim">│</span>
+                       <span class="dim">├──</span> <span class="accent">Cybersecurity</span> <span class="dim">────────┬──</span> Penetration Testing
+                       <span class="dim">│</span>                          <span class="dim">└──</span> SIEM
+                       <span class="dim">│</span>
+                       <span class="dim">└──</span> <span class="accent">Software Development</span> <span class="dim">─┬──</span> React
+                                                  <span class="dim">├──</span> Python
+                                                  <span class="dim">└──</span> TypeScript
+
+<span class="highlight">Finance</span> <span class="dim">────────────────┬──</span> <span class="accent">Financial Analysis</span> <span class="dim">───┬──</span> DCF Modeling
+                       <span class="dim">│</span>                          <span class="dim">└──</span> Revenue Forecasting
+                       <span class="dim">│</span>
+                       <span class="dim">└──</span> <span class="accent">Accounting</span> <span class="dim">───────────┬──</span> GAAP Compliance
+                                                  <span class="dim">└──</span> Tax Planning</pre>
+  </div>
+</div>
+
+<!-- ========== SECTION 03: DUAL-STORED ENTITIES ========== -->
+<div class="page">
+  <div class="divider"></div>
+  <span class="section-num">03 &mdash; Dual-Stored Entities</span>
+  <h2>What lives in both databases</h2>
+  <p class="section-intro">
+    These are the core business entities. PostgreSQL stores the full profile with all metadata. Neo4j stores a lightweight projection with rich relationship edges for graph queries.
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Entity</th>
+        <th>PG Table</th>
+        <th>Neo4j Node</th>
+        <th>PG Stores</th>
+        <th>Neo4j Stores</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Firms</strong></td>
+        <td><code>service_firms</code></td>
+        <td><code>ServiceFirm</code></td>
+        <td>Full profile, enrichment JSON, billing, completeness</td>
+        <td>Name, website, location + all relationship edges</td>
+      </tr>
+      <tr>
+        <td><strong>Experts</strong></td>
+        <td><code>expert_profiles</code></td>
+        <td><code>Expert</code></td>
+        <td>Full PDL data, bio, skills, division, completeness</td>
+        <td>Name, headline, LinkedIn + HAS_EXPERTISE edges</td>
+      </tr>
+      <tr>
+        <td><strong>Specialist Profiles</strong></td>
+        <td><code>specialist_profiles</code></td>
+        <td><code>SpecialistProfile</code></td>
+        <td>Full profile, quality score, searchability, status</td>
+        <td>Title + skill/industry edges</td>
+      </tr>
+      <tr>
+        <td><strong>Case Studies</strong></td>
+        <td><code>firm_case_studies</code></td>
+        <td><code>CaseStudy</code></td>
+        <td>Source URL, AI analysis, status, ingestion metadata</td>
+        <td>Title, description + skill/client/industry edges</td>
+      </tr>
+      <tr>
+        <td><strong>Clients</strong></td>
+        <td><em>extracted, no PG table</em></td>
+        <td><code>Client</code></td>
+        <td>N/A</td>
+        <td>Unique name + HAS_CLIENT edges from firms</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ========== SECTION 04: RELATIONSHIPS ========== -->
+<div class="page">
+  <div class="divider"></div>
+  <span class="section-num">04 &mdash; The Edges</span>
+  <h2>Relationships are the value</h2>
+  <p class="section-intro">
+    The whole point of Neo4j is the edges. These are the connections that power search, matching, and recommendations. Every edge is created automatically by the enrichment pipeline &mdash; no manual data entry.
+  </p>
+
+  <!-- Firm Enrichment Edges -->
+  <div class="edge-group">
+    <div class="edge-group-title">
+      <span class="dot" style="background:var(--electric);"></span>
+      Firm Enrichment Edges (created when a firm is enriched)
+    </div>
+    <div class="edge-row">
+      <span class="edge-node firm">ServiceFirm</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">IN_CATEGORY</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Category</span>
+      <span class="edge-desc">AI-classified firm archetype</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node firm">ServiceFirm</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">HAS_SKILL</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Skill (L2)</span>
+      <span class="edge-desc">AI-classified capabilities</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node firm">ServiceFirm</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">SERVES_INDUSTRY</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Industry</span>
+      <span class="edge-desc">Sectors they work in</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node firm">ServiceFirm</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">OPERATES_IN</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Market</span>
+      <span class="edge-desc">Geographic presence</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node firm">ServiceFirm</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">SPEAKS</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Language</span>
+      <span class="edge-desc">Business languages</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node firm">ServiceFirm</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">OFFERS_SERVICE</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node entity">Service</span>
+      <span class="edge-desc">Named services from website</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node firm">ServiceFirm</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">HAS_CLIENT</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node entity">Client</span>
+      <span class="edge-desc">Companies they've served</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node firm">ServiceFirm</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">HAS_CASE_STUDY</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node entity">CaseStudy</span>
+      <span class="edge-desc">Published success stories</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node firm">ServiceFirm</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">EMPLOYS</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node entity">Expert</span>
+      <span class="edge-desc">Team members</span>
+    </div>
+  </div>
+
+  <!-- Expert Edges -->
+  <div class="edge-group">
+    <div class="edge-group-title">
+      <span class="dot" style="background:var(--signal);"></span>
+      Expert Enrichment Edges (created when an expert is enriched via PDL/LinkedIn)
+    </div>
+    <div class="edge-row">
+      <span class="edge-node entity">Expert</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">HAS_EXPERTISE</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Skill</span>
+      <span class="edge-desc">Skills from work history</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node entity">Expert</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">SERVES_INDUSTRY</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Industry</span>
+      <span class="edge-desc">Industry experience</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node entity">Expert</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">HAS_SPECIALIST_PROFILE</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node entity">SpecialistProfile</span>
+      <span class="edge-desc">AI-generated niche profile</span>
+    </div>
+  </div>
+
+  <!-- Case Study Edges -->
+  <div class="edge-group">
+    <div class="edge-group-title">
+      <span class="dot" style="background:var(--warm);"></span>
+      Case Study Edges (created when a case study is ingested)
+    </div>
+    <div class="edge-row">
+      <span class="edge-node entity">CaseStudy</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">DEMONSTRATES_SKILL</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Skill</span>
+      <span class="edge-desc">Skills proven by this work</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node entity">CaseStudy</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">FOR_CLIENT</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node entity">Client</span>
+      <span class="edge-desc">Who the work was for</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node entity">CaseStudy</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">IN_INDUSTRY</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Industry</span>
+      <span class="edge-desc">Sector of the work</span>
+    </div>
+  </div>
+
+  <!-- Taxonomy Edges -->
+  <div class="edge-group">
+    <div class="edge-group-title">
+      <span class="dot" style="background:var(--slate);"></span>
+      Taxonomy Edges (static, from seed data)
+    </div>
+    <div class="edge-row">
+      <span class="edge-node taxonomy">Skill (L2)</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">BELONGS_TO</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">SkillL1</span>
+      <span class="edge-desc">Hierarchy link</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node taxonomy">Skill (L3)</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">BELONGS_TO</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Skill (L2)</span>
+      <span class="edge-desc">Hierarchy link</span>
+    </div>
+    <div class="edge-row">
+      <span class="edge-node taxonomy">Category</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-rel">PARTNERS_WITH</span>
+      <span class="edge-arrow">&rarr;</span>
+      <span class="edge-node taxonomy">Category</span>
+      <span class="edge-desc">346 symbiotic pairings</span>
+    </div>
+  </div>
+</div>
+
+<!-- ========== SECTION 05: SEARCH ========== -->
+<div class="page">
+  <div class="divider"></div>
+  <span class="section-num">05 &mdash; Search Architecture</span>
+  <h2>Three-layer cascading search</h2>
+  <p class="section-intro">
+    The search engine uses a cost-optimized cascade. Neo4j does the heavy lifting for free, vector search narrows the field cheaply, and the LLM only ranks the final shortlist.
+  </p>
+
+  <div class="flow-diagram">
+<pre>
+  <span class="label">User Query</span>: <span class="dim">"Find a B2B SaaS growth agency in APAC with Salesforce expertise"</span>
+
+  <span class="dim">│</span>
+  <span class="dim">▼</span>
+
+  <span class="highlight">LAYER 1 &mdash; Neo4j Structured Filter</span>                   <span class="accent">~500 candidates  |  $0.00</span>
+  <span class="dim">Cypher query traverses HAS_SKILL, IN_CATEGORY,</span>
+  <span class="dim">SERVES_INDUSTRY, OPERATES_IN edges</span>
+
+  <span class="dim">│</span>
+  <span class="dim">▼</span>
+
+  <span class="highlight">LAYER 2 &mdash; pgvector Similarity</span>                        <span class="accent">~50 candidates   |  ~$0.001</span>
+  <span class="dim">Cosine similarity on abstraction profile</span>
+  <span class="dim">embeddings (1536-dim OpenAI vectors)</span>
+  <span class="dim" style="color:var(--ember);">* NOT YET LIVE &mdash; falls back to text overlap *</span>
+
+  <span class="dim">│</span>
+  <span class="dim">▼</span>
+
+  <span class="highlight">LAYER 3 &mdash; LLM Deep Ranking (Gemini)</span>                  <span class="accent">~15 results      |  ~$0.01-0.05</span>
+  <span class="dim">Bidirectional fit scoring, "why this match"</span>
+  <span class="dim">explanations, partnership readiness check</span>
+
+  <span class="dim">│</span>
+  <span class="dim">▼</span>
+
+  <span class="label">Results</span>: <span class="dim">Ranked firms with match scores, explanations, and evidence</span>
+
+  <span class="accent">Total cost per search: &lt; $0.10  |  Target latency: &lt; 3 seconds</span>
+</pre>
+  </div>
+</div>
+
+<!-- ========== SECTION 06: DESIGNED BUT NOT BUILT ========== -->
+<div class="page">
+  <div class="divider"></div>
+  <span class="section-num">06 &mdash; Designed but Not Built</span>
+  <h2>What's in the blueprint but missing from the code</h2>
+  <p class="section-intro">
+    The knowledge graph design document describes several features that don't exist yet. These are important to understand before deciding what to build next.
+  </p>
+
+  <h3>Missing Node Types</h3>
+  <table>
+    <thead>
+      <tr><th>Node</th><th>Purpose</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>Project</code></td>
+        <td>"Commercial truth" &mdash; actual work delivered with contract value, dates, verification. Connects firms to clients via evidence.</td>
+        <td><span class="badge gap">Not built</span></td>
+      </tr>
+      <tr>
+        <td><code>Collective</code></td>
+        <td>Groups of firms working together. MEMBER_OF edges from ServiceFirm.</td>
+        <td><span class="badge gap">Not built</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Missing Edge Types</h3>
+  <table>
+    <thead>
+      <tr><th>Category</th><th>Edges</th><th>Purpose</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Commercial</strong></td>
+        <td><code>DELIVERED_PROJECT</code>, <code>BENEFITED_FROM</code>, <code>WORKED_ON</code></td>
+        <td>Link firms/experts to projects and clients. The strongest evidence signal.</td>
+        <td><span class="badge gap">Not built</span></td>
+      </tr>
+      <tr>
+        <td><strong>Social</strong></td>
+        <td><code>COMMUNICATES_WITH</code>, <code>CONNECTED_TO</code>, <code>TRUSTS</code>, <code>ENDORSES</code></td>
+        <td>Trust path computation (how many hops to a firm). From LinkedIn CSV + email analysis.</td>
+        <td><span class="badge gap">Not built</span></td>
+      </tr>
+      <tr>
+        <td><strong>Preference</strong></td>
+        <td><code>SEEKS_PARTNER_TYPE</code>, <code>PREFERS_INDUSTRY</code>, <code>PREFERS_MARKET</code>, <code>AVOIDS</code>, <code>BLOCKS</code></td>
+        <td>Partner preferences as graph edges (currently only in PG <code>partner_preferences</code> table).</td>
+        <td><span class="badge gap">Not built</span></td>
+      </tr>
+      <tr>
+        <td><strong>Delivery</strong></td>
+        <td><code>IS_FIRM_TYPE</code></td>
+        <td>Link ServiceFirm to FirmType nodes. FirmType nodes exist but no edges.</td>
+        <td><span class="badge partial">Partial</span></td>
+      </tr>
+      <tr>
+        <td><strong>Symbiotic</strong></td>
+        <td><code>PARTNERS_WITH</code></td>
+        <td>346 pairings exist between Category nodes but are not yet queried by the matching engine.</td>
+        <td><span class="badge seeded">Seeded, unused</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Missing Capabilities</h3>
+  <div class="gap-grid">
+    <div class="gap-card">
+      <h5><span class="badge gap">Critical</span> pgvector not live</h5>
+      <p>The embedding column on <code>abstraction_profiles</code> is commented out. Layer 2 search falls back to naive text overlap instead of cosine similarity.</p>
+    </div>
+    <div class="gap-card">
+      <h5><span class="badge gap">Critical</span> No global firm database</h5>
+      <p>ServiceFirm nodes only exist for enriched platform members. The design envisions 1.5M+ firms. Without this, the graph is sparse.</p>
+    </div>
+    <div class="gap-card">
+      <h5><span class="badge partial">High</span> Graph sync is shallow</h5>
+      <p>The <code>graph-sync-firm</code> Inngest function only passes firmId, name, website &mdash; not the full enrichment payload. Enrichment data doesn't flow to Neo4j properly.</p>
+    </div>
+    <div class="gap-card">
+      <h5><span class="badge partial">High</span> Abstraction profiles incomplete</h5>
+      <p>The <code>enrich/firm-abstraction</code> event type is defined but has no handler function. Auto-generation on enrichment is not wired.</p>
+    </div>
+    <div class="gap-card">
+      <h5><span class="badge partial">Medium</span> Trust path not implemented</h5>
+      <p>The 3-hop trust computation (user &rarr; knows someone &rarr; knows someone &rarr; at firm) is design-only. Requires social graph edges first.</p>
+    </div>
+    <div class="gap-card">
+      <h5><span class="badge partial">Medium</span> Bidirectional matching incomplete</h5>
+      <p>Type definitions exist (<code>bidirectionalFit</code> on <code>MatchCandidate</code>) but the scoring is not computed. Both parties' preferences must align.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ========== SECTION 07: INGESTION DECISIONS ========== -->
+<div class="page">
+  <div class="divider"></div>
+  <span class="section-num">07 &mdash; Before Bulk Ingestion</span>
+  <h2>Decisions to make</h2>
+  <p class="section-intro">
+    Before ingesting large volumes of data, these architectural questions need answers. The current system handles individual firm enrichment well, but bulk ingestion requires different patterns.
+  </p>
+
+  <div class="callout warning">
+    <div class="callout-title">Key questions for the team</div>
+    <ol>
+      <li><strong>Where does bulk data land first?</strong> &mdash; PostgreSQL import tables (staged, then synced to Neo4j) or directly into Neo4j? The current pattern is PG-first via the <code>imported_*</code> tables.</li>
+      <li><strong>What's the batch sync strategy?</strong> &mdash; The current <code>graph-writer.ts</code> handles one firm at a time via Inngest. Bulk ingestion of 10K+ firms needs a batch pipeline (concurrent Inngest jobs? Direct Cypher batch inserts?).</li>
+      <li><strong>Which edges matter most for launch?</strong> &mdash; Skills, industries, and markets are the foundation for Layer 1 search. Without those edges, firms are invisible to the matching engine.</li>
+      <li><strong>Do we need Project nodes?</strong> &mdash; If ingesting real commercial data (contracts, deliverables, revenue), the Project node type should be built first. This is the "commercial truth" signal.</li>
+      <li><strong>How do we handle deduplication?</strong> &mdash; Client nodes use name-based uniqueness. Firms match on website domain. What happens when ingested data has slightly different names for the same entity?</li>
+      <li><strong>What's the enrichment budget?</strong> &mdash; Each firm enrichment costs ~$0.01-0.05 (AI classification + PDL). At 10K firms, that's $100-500. At 100K firms, $1,000-5,000.</li>
+    </ol>
+  </div>
+
+  <h3>Current Data Flow (per firm)</h3>
+  <div class="flow-diagram">
+<pre>
+  <span class="label">1. User submits domain</span>
+     <span class="dim">│</span>
+     <span class="dim">├──</span> <span class="highlight">PDL lookup</span> <span class="dim">(company data, employee count, industry)</span>
+     <span class="dim">├──</span> <span class="highlight">Jina scrape</span> <span class="dim">(website content, services, team, clients)</span>
+     <span class="dim">│</span>
+     <span class="dim">▼</span>
+  <span class="label">2. AI Classification</span> <span class="dim">(Gemini Flash)</span>
+     <span class="dim">│</span>
+     <span class="dim">├──</span> <span class="accent">Map to COS skills (L2 level)</span>
+     <span class="dim">├──</span> <span class="accent">Map to industries</span>
+     <span class="dim">├──</span> <span class="accent">Map to categories (firm archetype)</span>
+     <span class="dim">├──</span> <span class="accent">Extract clients, services, team members</span>
+     <span class="dim">│</span>
+     <span class="dim">▼</span>
+  <span class="label">3. Persist to PostgreSQL</span>
+     <span class="dim">│</span>
+     <span class="dim">├──</span> <span class="highlight">service_firms.enrichment_data</span> <span class="dim">(full JSON)</span>
+     <span class="dim">├──</span> <span class="highlight">enrichment_audit_log</span> <span class="dim">(trail)</span>
+     <span class="dim">│</span>
+     <span class="dim">▼</span>
+  <span class="label">4. Sync to Neo4j</span> <span class="dim">(via Inngest background job)</span>
+     <span class="dim">│</span>
+     <span class="dim">├──</span> <span class="accent">Create ServiceFirm node</span>
+     <span class="dim">├──</span> <span class="accent">Create edges: IN_CATEGORY, HAS_SKILL, SERVES_INDUSTRY, etc.</span>
+     <span class="dim">├──</span> <span class="accent">Create Client nodes + HAS_CLIENT edges</span>
+     <span class="dim">├──</span> <span class="accent">Create Service nodes + OFFERS_SERVICE edges</span>
+     <span class="dim">│</span>
+     <span class="dim">▼</span>
+  <span class="label">5. Deep enrichment</span> <span class="dim">(background, progressive)</span>
+     <span class="dim">│</span>
+     <span class="dim">├──</span> <span class="highlight">Deep crawl</span> <span class="dim">(up to 30 pages for case studies, team bios)</span>
+     <span class="dim">├──</span> <span class="highlight">Case study ingestion</span> <span class="dim">(AI analysis of each case study URL)</span>
+     <span class="dim">├──</span> <span class="highlight">Expert LinkedIn enrichment</span> <span class="dim">(PDL person lookup per expert)</span>
+     <span class="dim">└──</span> <span class="highlight">Abstraction profile</span> <span class="dim">(hidden AI-generated profile for matching)</span>
+</pre>
+  </div>
+
+  <div class="callout info">
+    <div class="callout-title">Recommendation for bulk ingestion</div>
+    <p>The safest path is: import to PostgreSQL <code>imported_companies</code> table first &rarr; classify and enrich in batches via Inngest &rarr; sync to Neo4j. This preserves the audit trail and allows re-processing if the classification model improves. The existing import scripts (<code>scripts/import-companies.mjs</code>) follow this pattern.</p>
+  </div>
+</div>
+
+<!-- ========== SECTION 08: QUICK REFERENCE ========== -->
+<div class="page">
+  <div class="divider"></div>
+  <span class="section-num">08 &mdash; Quick Reference</span>
+  <h2>Key files &amp; endpoints</h2>
+
+  <table>
+    <thead>
+      <tr><th>Area</th><th>File</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Neo4j driver</td><td><code>src/lib/neo4j.ts</code></td><td>Singleton driver + read/write helpers</td></tr>
+      <tr><td>Schema</td><td><code>src/lib/neo4j-schema.ts</code></td><td>12 constraints + indexes</td></tr>
+      <tr><td>Taxonomy seed</td><td><code>src/lib/neo4j-seed.ts</code></td><td>Seeds all reference data</td></tr>
+      <tr><td>Legacy migration</td><td><code>src/lib/neo4j-migrate-legacy.ts</code></td><td>5-step JSON data migration</td></tr>
+      <tr><td>Graph writer</td><td><code>src/lib/enrichment/graph-writer.ts</code></td><td>Enrichment &rarr; Neo4j (firms, experts, case studies)</td></tr>
+      <tr><td>AI classifier</td><td><code>src/lib/enrichment/ai-classifier.ts</code></td><td>Maps firms to COS taxonomy</td></tr>
+      <tr><td>Search (Layer 1)</td><td><code>src/lib/matching/structured-filter.ts</code></td><td>Neo4j Cypher queries for matching</td></tr>
+      <tr><td>PG schema</td><td><code>src/lib/db/schema.ts</code></td><td>All 47 Drizzle tables</td></tr>
+      <tr><td>Seed endpoint</td><td><code>POST /api/admin/neo4j/seed</code></td><td>Trigger taxonomy seeding</td></tr>
+      <tr><td>Migrate endpoint</td><td><code>POST /api/admin/neo4j/migrate</code></td><td>Trigger legacy migration</td></tr>
+      <tr><td>Import sync</td><td><code>POST /api/admin/import/sync-graph</code></td><td>Sync imported data to Neo4j</td></tr>
+      <tr><td>Admin UI</td><td><code>/admin/neo4j</code></td><td>Seed + migrate buttons</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ========== FOOTER ========== -->
+<div class="doc-footer">
+  Collective OS &mdash; Knowledge Graph Architecture Briefing &mdash; March 2026<br>
+  Generated from living context docs at <code>docs/context/</code>
+</div>
+
+</body>
+</html>
