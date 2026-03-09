@@ -19,6 +19,42 @@ COS CONCEPT (Collective OS) is a growth platform for professional services firms
 - Read `docs/BRAND.md` for brand voice, colors, and messaging
 - Read `docs/ONBOARDING-PROMPT.md` for the conversational onboarding flow
 
+## MANDATORY: Context Knowledge System
+
+**All Claude agents MUST follow these rules when working on this project:**
+
+1. **Before starting any task:** Read `docs/context/CONTEXT.md` (master index) and the relevant area file(s) for your task.
+2. **After completing work:** Update the affected context file(s) with any changes you made (new files, routes, tables, components, etc.).
+3. **Schema changes:** Update `docs/context/database.md`
+4. **New API endpoints:** Update `docs/context/api-reference.md`
+5. **New Inngest functions:** Update `docs/context/inngest-jobs.md`
+6. **Design token changes:** Update `docs/context/design-system.md`
+7. **Feature status changes:** Update `docs/context/roadmap.md`
+8. **New admin pages/APIs:** Update `docs/context/admin.md`
+
+### Context Files (docs/context/)
+| File | Covers |
+|------|--------|
+| `CONTEXT.md` | Master index + rules |
+| `architecture.md` | Tech stack, infrastructure, deployment, env vars |
+| `database.md` | All Drizzle tables, relationships, migrations |
+| `knowledge-graph.md` | Neo4j nodes, edges, super-edges, seeding |
+| `auth.md` | Better Auth, roles, permissions, org management |
+| `ai-ossy.md` | Chat system, prompts, tools, memory, multi-model |
+| `enrichment.md` | Website scraping, PDL, classification, case studies |
+| `search-matching.md` | Three-layer cascade, vector search, deep ranker |
+| `voice.md` | Deepgram STT, ElevenLabs TTS, voice manager |
+| `email.md` | Resend, approval queue, inbound/outbound |
+| `billing.md` | Stripe, plans, feature gates, webhooks |
+| `partnerships.md` | Partnership lifecycle, intros, referrals |
+| `admin.md` | All admin pages, APIs, features |
+| `design-system.md` | Tokens, colors, typography, components |
+| `api-reference.md` | All 90+ endpoints by domain |
+| `inngest-jobs.md` | All background jobs, triggers, cron |
+| `data-taxonomy.md` | CSV files, skill hierarchy, firm relationships |
+| `multi-dev.md` | Git workflow, branch naming, conflicts |
+| `roadmap.md` | Build phases, status, gaps, TODOs |
+
 ## Tech Stack (Finalized)
 - **Framework:** Next.js 15 (App Router) + TypeScript
 - **Styling:** Tailwind CSS 4 with `cos-` design token prefix (via `@theme` in globals.css)
