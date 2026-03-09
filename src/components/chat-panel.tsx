@@ -89,20 +89,22 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const [historyLoaded, setHistoryLoaded] = useState(isGuest ? true : false);
   const enrichedUrlRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string>(crypto.randomUUID());
-  // Track whether we need to auto-continue (restored session ends with user message)
-  const needsAutoContinueRef = useRef(false);
-  // Check during init if restored messages end with a user message
-  if (isGuest && typeof window !== "undefined") {
-    try {
-      const saved = sessionStorage.getItem("cos_guest_messages");
-      if (saved) {
-        const msgs = JSON.parse(saved) as UIMessage[];
-        if (msgs.length > 1 && msgs[msgs.length - 1].role === "user") {
-          needsAutoContinueRef.current = true;
+  // Whether we need to auto-continue (computed once on mount, never re-computed)
+  const [needsAutoContinue] = useState(() => {
+    if (isGuest && typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("cos_guest_messages");
+        if (saved) {
+          const msgs = JSON.parse(saved) as UIMessage[];
+          if (msgs.length > 1 && msgs[msgs.length - 1].role === "user") {
+            return true;
+          }
         }
-      }
-    } catch { /* ignore */ }
-  }
+      } catch { /* ignore */ }
+    }
+    return false;
+  });
+  const autoContinueSentRef = useRef(false);
 
   const chatEndpoint = isGuest ? "/api/chat/guest" : "/api/chat";
 
@@ -165,11 +167,10 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const isLoading = status === "submitted" || status === "streaming";
 
   // Auto-continue: if restored guest session ends with a user message,
-  // send a hidden nudge so Ossy picks up where they left off
+  // send a single nudge so Ossy picks up where they left off
   useEffect(() => {
-    if (needsAutoContinueRef.current && isGuest && status === "ready") {
-      needsAutoContinueRef.current = false;
-      // Small delay to let the UI settle, then nudge Ossy to continue
+    if (needsAutoContinue && !autoContinueSentRef.current && isGuest && status === "ready") {
+      autoContinueSentRef.current = true;
       const timer = setTimeout(() => {
         sendMessage({
           text: "Hey, I'm back — where were we?",
