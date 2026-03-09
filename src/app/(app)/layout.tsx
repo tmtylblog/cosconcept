@@ -149,10 +149,17 @@ function AppLayoutInner({
     window.location.reload();
   };
 
-  /** DEV: Simulate adding a new agency — resets chat + enrichment state */
+  /** DEV: Simulate adding a new agency — resets chat + enrichment + guest data */
   const handleSimulateNewUser = () => {
     resetEnrichment();
+    clearGuestData();
     setChatKey((k) => k + 1);
+    // Clear all cos_ session storage keys for a truly fresh start
+    try {
+      Object.keys(sessionStorage).forEach((key) => {
+        if (key.startsWith("cos_")) sessionStorage.removeItem(key);
+      });
+    } catch { /* ignore */ }
     if (pathname !== "/dashboard") {
       router.push("/dashboard");
     }
@@ -197,6 +204,14 @@ function AppLayoutInner({
               className="fixed bottom-6 right-6 z-40 rounded-cos-pill border border-cos-border/50 bg-white/80 px-4 py-2 text-xs font-medium text-cos-slate-dim backdrop-blur-sm transition-colors hover:border-cos-border hover:text-cos-midnight"
             >
               Already have an account? Sign in
+            </button>
+
+            {/* DEV: Simulate New Onboarding — bottom left */}
+            <button
+              onClick={handleSimulateNewUser}
+              className="fixed bottom-6 left-6 z-40 rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember backdrop-blur-sm transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
+            >
+              🔄 Simulate New Onboarding
             </button>
           </div>
         </div>
@@ -255,6 +270,14 @@ function AppLayoutInner({
             className="fixed bottom-6 left-6 z-40 rounded-cos-pill border border-cos-border/50 bg-white/80 px-4 py-2 text-xs font-medium text-cos-slate-dim backdrop-blur-sm transition-colors hover:border-cos-border hover:text-cos-midnight"
           >
             Already have an account? Sign in
+          </button>
+
+          {/* DEV: Simulate New Onboarding — bottom center */}
+          <button
+            onClick={handleSimulateNewUser}
+            className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember backdrop-blur-sm transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
+          >
+            🔄 Simulate New Onboarding
           </button>
         </div>
       )}

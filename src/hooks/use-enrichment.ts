@@ -181,18 +181,41 @@ export function EnrichmentProvider({
             setEnrichedUrl(enrichmentData.url);
             setContextForOssy(buildContextForOssy(enrichmentData));
 
-            // Set accurate status based on actual data completeness
-            const hasRealData = !!(enrichmentData.companyData || enrichmentData.extracted || enrichmentData.classification);
-            if (hasRealData) {
+            // Set accurate status based on ACTUAL data quality
+            // Use the same strict criteria as auto-retry and lookup gap-fill
+            const ed = enrichmentData;
+            const cd = ed.companyData;
+            const hydHasRealPdl = !!(cd && (
+              (cd.employeeCount ?? 0) > 0 || cd.size || cd.location || cd.inferredRevenue
+            ));
+            const hydHasScrape = !!(
+              (ed.extracted?.services?.length) ||
+              (ed.extracted?.clients?.length) ||
+              ed.extracted?.aboutPitch ||
+              ed.groundTruth
+            );
+            const hydHasClassify = !!(
+              ed.classification?.categories?.length &&
+              ed.classification?.skills?.length
+            );
+            const isComplete = hydHasRealPdl && hydHasScrape && hydHasClassify;
+            const hasAnyRealData = hydHasRealPdl || hydHasScrape || hydHasClassify;
+
+            if (isComplete) {
+              // All three stages have real data — show as done
+              setStatus("done");
+              setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
+            } else if (hasAnyRealData) {
+              // Partial data — show what we have, auto-retry will fill gaps
               setStatus("done");
               setStages({
                 overall: "done",
-                pdl: enrichmentData.companyData ? "done" : "idle",
-                scrape: (enrichmentData.extracted || enrichmentData.groundTruth) ? "done" : "idle",
-                classify: enrichmentData.classification?.categories?.length ? "done" : "idle",
+                pdl: hydHasRealPdl ? "done" : "idle",
+                scrape: hydHasScrape ? "done" : "idle",
+                classify: hydHasClassify ? "done" : "idle",
               });
             } else {
-              // Result shell with no real data — show enriching state while auto-retry fills it
+              // No real data at all — show enriching state while auto-retry fills it
               setStatus("loading");
               setStages({
                 overall: "enriching",
