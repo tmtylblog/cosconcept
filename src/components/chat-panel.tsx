@@ -14,7 +14,6 @@ import { useGuestData } from "@/hooks/use-guest-data";
 import { isPersonalEmail, CORPORATE_EMAIL_ERROR } from "@/lib/email-validation";
 import { cn } from "@/lib/utils";
 import { ToolResultRenderer } from "@/components/chat/tool-result-renderer";
-import { ChatEnrichmentCards } from "@/components/chat/enrichment-cards";
 
 const GUEST_MESSAGE_LIMIT = 30;
 
@@ -50,7 +49,7 @@ const defaultWelcomeMessages: UIMessage[] = [
     parts: [
       {
         type: "text",
-        text: "Hey! I'm Ossy, your AI growth consultant. I'd love to get to know you and your firm so I can start finding the right partners. While we chat, could you share your firm's website? I'll do some behind-the-scenes research so we can hit the ground running. Just drop the URL whenever you're ready \u2014 and in the meantime, tell me a bit about what you do!",
+        text: "Hey! I'm Ossy, your AI growth consultant. Drop your firm's website or domain below and I'll start researching your company right away.",
       },
     ],
   },
@@ -378,9 +377,6 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
             </div>
           );
         })}
-
-        {/* Inline enrichment cards — appear in chat flow as data arrives */}
-        {enrichmentStatus !== "idle" && <ChatEnrichmentCards />}
 
         {isLoading && messages[messages.length - 1]?.role === "user" && (
           <div className="flex gap-2">
