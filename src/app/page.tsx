@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation";
-
+/**
+ * Root page — middleware rewrites "/" to "/dashboard" so this is a fallback.
+ * The (app)/layout.tsx handles guest overlay vs authenticated dashboard.
+ */
 export default function Home() {
-  // Root URL goes straight to the chat/dashboard experience
-  redirect("/dashboard");
+  return null;
 }

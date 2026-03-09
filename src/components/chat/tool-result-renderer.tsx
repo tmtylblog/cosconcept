@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Search, UserCheck, FileText, Building2, User } from "lucide-react";
+import { Loader2, Search, UserCheck, FileText, Building2, User, Check, AlertCircle } from "lucide-react";
 import { FirmResultList, FirmDetailCard } from "./firm-result-card";
 import { ExpertResultList } from "./expert-result-card";
 import { CaseStudyResultList } from "./case-study-card";
@@ -41,6 +41,10 @@ const TOOL_LABELS: Record<string, { label: string; icon: React.ReactNode }> = {
     label: "Loading your profile...",
     icon: <User className="h-3.5 w-3.5" />,
   },
+  update_profile: {
+    label: "Saving to your profile...",
+    icon: <UserCheck className="h-3.5 w-3.5" />,
+  },
 };
 
 function ToolLoadingIndicator({ toolName }: { toolName: string }) {
@@ -55,6 +59,30 @@ function ToolLoadingIndicator({ toolName }: { toolName: string }) {
       <span className="flex items-center gap-1.5 text-xs font-medium text-cos-electric">
         {info.icon}
         {info.label}
+      </span>
+    </div>
+  );
+}
+
+// ─── Profile Save Confirmation ─────────────────────────────
+
+function ProfileSaveConfirmation({ success }: { success: boolean }) {
+  if (success) {
+    return (
+      <div className="flex items-center gap-1.5 rounded-cos-lg border border-cos-signal/20 bg-cos-signal/5 px-3 py-1.5">
+        <Check className="h-3.5 w-3.5 text-cos-signal" />
+        <span className="text-xs font-medium text-cos-signal">
+          Saved to your partner profile
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 rounded-cos-lg border border-cos-ember/20 bg-cos-ember/5 px-3 py-1.5">
+      <AlertCircle className="h-3.5 w-3.5 text-cos-ember" />
+      <span className="text-xs font-medium text-cos-ember">
+        Failed to save — please try again
       </span>
     </div>
   );
@@ -92,6 +120,13 @@ export function ToolResultRenderer({
     case "get_my_profile":
       // For the user's own profile, reuse the firm detail card
       return <FirmDetailCard firm={result} />;
+
+    case "update_profile":
+      return <ProfileSaveConfirmation success={result.success} />;
+
+    case "request_login":
+      // Login modal is handled by the ChatPanel — don't render anything here
+      return null;
 
     default:
       // Unknown tool — don't render anything, let the text handle it

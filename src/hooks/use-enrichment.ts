@@ -107,8 +107,8 @@ interface EnrichmentContextValue {
   result: EnrichmentResult | null;
   /** Full context string for Ossy prompt */
   contextForOssy: string | null;
-  /** Trigger enrichment for a URL */
-  triggerEnrichment: (url: string) => Promise<void>;
+  /** Trigger enrichment for a URL. Set forceGapFill=true to re-run even if same URL (fills missing data). */
+  triggerEnrichment: (url: string, forceGapFill?: boolean) => Promise<void>;
   /** Reset all enrichment state (for testing / new agency simulation) */
   reset: () => void;
 }
@@ -252,8 +252,8 @@ export function EnrichmentProvider({
   }, []);
 
   const triggerEnrichment = useCallback(
-    async (url: string) => {
-      if (enrichedUrl === url) return; // Same URL — skip
+    async (url: string, forceGapFill?: boolean) => {
+      if (enrichedUrl === url && !forceGapFill) return; // Same URL — skip (unless gap-filling)
 
       // New enrichment run
       const thisRun = ++runIdRef.current;

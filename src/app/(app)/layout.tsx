@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Image from "next/image";
 import { NavBar } from "@/components/nav-bar";
 import { ChatPanel } from "@/components/chat-panel";
 import { LoginPanel } from "@/components/login-panel";
 import { EnrichmentProvider, useEnrichment } from "@/hooks/use-enrichment";
 import { ProfileProvider } from "@/hooks/use-profile";
+import { GuestDataProvider, useGuestData } from "@/hooks/use-guest-data";
 import { useSession, useActiveOrganization } from "@/lib/auth-client";
+import { getEmailDomain, isPersonalEmail } from "@/lib/email-validation";
 import { MessageCircle, X } from "lucide-react";
 
 export default function AppLayout({
@@ -15,7 +18,11 @@ export default function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <AppLayoutOuter>{children}</AppLayoutOuter>;
+  return (
+    <GuestDataProvider>
+      <AppLayoutOuter>{children}</AppLayoutOuter>
+    </GuestDataProvider>
+  );
 }
 
 /** Outer wrapper — gets org ID and provides it to EnrichmentProvider */
@@ -43,13 +50,92 @@ function AppLayoutInner({
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = useSession();
-  const { reset: resetEnrichment } = useEnrichment();
+  const { data: activeOrg } = useActiveOrganization();
+  const {
+    status: enrichmentStatus,
+    result: enrichmentResult,
+    triggerEnrichment,
+    reset: resetEnrichment,
+  } = useEnrichment();
+  const {
+    guestPreferences,
+    hasGuestData,
+    clearGuestData,
+  } = useGuestData();
   const isGuest = !session?.user;
 
   const [navCollapsed, setNavCollapsed] = useState(true);
   const [loginPanelOpen, setLoginPanelOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0);
   const [mobileChat, setMobileChat] = useState(false);
+
+  // ─── Auto-enrich on sign-in: extract domain from email ──────
+  const enrichTriggeredRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!session?.user?.email) return;
+    if (enrichTriggeredRef.current === session.user.email) return;
+
+    const domain = getEmailDomain(session.user.email);
+    if (!domain || isPersonalEmail(session.user.email)) return;
+
+    // Trigger enrichment if:
+    // 1. No enrichment has happened yet (idle)
+    // 2. Enrichment is "done" but PDL company data is missing (gap-fill)
+    //    The gap-aware triggerEnrichment will only call paid APIs for missing pieces
+    const needsEnrichment =
+      enrichmentStatus === "idle" ||
+      (enrichmentStatus === "done" && !enrichmentResult?.companyData);
+
+    if (needsEnrichment) {
+      enrichTriggeredRef.current = session.user.email;
+      const isGapFill = enrichmentStatus === "done";
+      console.log(
+        `[Layout] Auto-enriching from email domain: ${domain}` +
+        (isGapFill ? " (gap-fill: missing PDL data)" : "")
+      );
+      triggerEnrichment(domain, isGapFill);
+    }
+  }, [session?.user?.email, enrichmentStatus, enrichmentResult?.companyData, triggerEnrichment]);
+
+  // ─── Guest-to-auth data migration ──────────────────────────
+  const migrationDoneRef = useRef(false);
+
+  useEffect(() => {
+    if (!session?.user || !activeOrg?.id || !hasGuestData || migrationDoneRef.current) return;
+    migrationDoneRef.current = true;
+
+    async function migrateGuestData() {
+      try {
+        const prefKeys = Object.keys(guestPreferences);
+        if (prefKeys.length > 0) {
+          console.log(`[Layout] Migrating ${prefKeys.length} guest preferences...`);
+          const res = await fetch("/api/onboarding/migrate-preferences", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              organizationId: activeOrg!.id,
+              preferences: guestPreferences,
+            }),
+          });
+          if (!res.ok) {
+            console.warn("[Layout] Preference migration failed:", await res.text());
+            migrationDoneRef.current = false; // allow retry
+            return;
+          }
+          console.log("[Layout] Guest preferences migrated successfully");
+        }
+
+        // Clear guest data after successful migration
+        clearGuestData();
+      } catch (err) {
+        console.error("[Layout] Guest data migration error:", err);
+        migrationDoneRef.current = false; // allow retry
+      }
+    }
+
+    migrateGuestData();
+  }, [session?.user, activeOrg?.id, hasGuestData, guestPreferences, clearGuestData]);
 
   const handleRequestLogin = () => {
     setLoginPanelOpen(true);
@@ -132,10 +218,28 @@ function AppLayoutInner({
         </>
       )}
 
-      {/* Guest chat — show in center when not logged in */}
+      {/* Guest chat — full-screen with branding */}
       {isGuest && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-cos-cloud/80 backdrop-blur-sm">
-          <div className="flex h-full w-full max-w-2xl flex-col">
+        <div className="fixed inset-0 z-30 flex flex-col items-center bg-cos-cloud/80 backdrop-blur-sm">
+          {/* Branding header */}
+          <div className="flex shrink-0 flex-col items-center gap-1 pb-2 pt-6">
+            <Image
+              src="/logo.png"
+              alt="Collective OS"
+              width={48}
+              height={48}
+              className="h-12 w-12 rounded-cos-xl"
+            />
+            <h1 className="font-heading text-lg font-bold text-cos-midnight">
+              Collective OS
+            </h1>
+            <p className="text-xs text-cos-slate-dim">
+              Grow Faster Together
+            </p>
+          </div>
+
+          {/* Chat panel */}
+          <div className="flex w-full max-w-2xl flex-1 flex-col overflow-hidden">
             <ChatPanel
               key={chatKey}
               isGuest={true}

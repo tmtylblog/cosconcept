@@ -10,11 +10,12 @@ import { Button } from "@/components/ui/button";
 import { useActiveOrganization, signIn, signUp } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useProfile } from "@/hooks/use-profile";
+import { useGuestData } from "@/hooks/use-guest-data";
 import { isPersonalEmail, CORPORATE_EMAIL_ERROR } from "@/lib/email-validation";
 import { cn } from "@/lib/utils";
 import { ToolResultRenderer } from "@/components/chat/tool-result-renderer";
 
-const GUEST_MESSAGE_LIMIT = 5;
+const GUEST_MESSAGE_LIMIT = 30;
 
 /** Simple URL regex — catches common website URLs in user messages */
 const URL_REGEX =
@@ -59,8 +60,7 @@ interface ChatPanelProps {
   onRequestLogin?: () => void;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPanelProps) {
+export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const { data: activeOrg } = useActiveOrganization();
   const {
     status: enrichmentStatus,
@@ -68,8 +68,10 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
     triggerEnrichment,
   } = useEnrichment();
   const { updateField: updateProfileField } = useProfile();
+  const { setGuestPreference, setGuestMessages } = useGuestData();
   const [input, setInput] = useState("");
   const [guestMessageCount, setGuestMessageCount] = useState(0);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>(defaultWelcomeMessages);
   const [historyLoaded, setHistoryLoaded] = useState(isGuest ? true : false);
   const enrichedUrlRef = useRef<string | null>(null);
@@ -174,13 +176,14 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
     }
   }, [messages, triggerEnrichment]);
 
-  // Watch for tool results and push to ProfileProvider
-  // In AI SDK v6, tool parts have type "tool-{name}" and state "output-available"
+  // Watch for tool results and push to ProfileProvider (auth) or GuestData (guest)
+  // Also handles request_login tool to trigger sign-in modal
   const processedToolCallsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const msg of messages) {
       if (msg.role !== "assistant") continue;
       for (const part of msg.parts) {
+        // Handle update_profile tool results
         if (
           part.type === "tool-update_profile" &&
           "state" in part &&
@@ -195,12 +198,41 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
             | { success: boolean; field: string; value: string | string[] }
             | undefined;
           if (output?.success && output.field && output.value != null) {
-            updateProfileField(output.field, output.value);
+            if (isGuest) {
+              // Guest mode: cache client-side for migration after auth
+              setGuestPreference(output.field, output.value);
+            } else {
+              // Auth mode: update profile state (already persisted server-side)
+              updateProfileField(output.field, output.value);
+            }
           }
+        }
+
+        // Handle request_login tool results (guest only)
+        if (
+          part.type === "tool-request_login" &&
+          "state" in part &&
+          part.state === "output-available" &&
+          "toolCallId" in part
+        ) {
+          const callId = part.toolCallId as string;
+          if (processedToolCallsRef.current.has(callId)) continue;
+          processedToolCallsRef.current.add(callId);
+
+          // Trigger the login modal
+          setShowLoginPrompt(true);
+          onRequestLogin?.();
         }
       }
     }
-  }, [messages, updateProfileField]);
+  }, [messages, updateProfileField, isGuest, setGuestPreference, onRequestLogin]);
+
+  // Save guest messages for migration after auth
+  useEffect(() => {
+    if (isGuest && messages.length > 1) {
+      setGuestMessages(messages);
+    }
+  }, [messages, isGuest, setGuestMessages]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,7 +241,7 @@ export function ChatPanel({ isGuest, onRequestLogin: _onRequestLogin }: ChatPane
     setInput("");
   };
 
-  const atGuestLimit = isGuest && guestMessageCount >= GUEST_MESSAGE_LIMIT;
+  const atGuestLimit = isGuest && (showLoginPrompt || guestMessageCount >= GUEST_MESSAGE_LIMIT);
 
   return (
     <div className="relative flex h-full flex-col">

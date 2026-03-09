@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { useEnrichment, type StageStatus } from "@/hooks/use-enrichment";
 import { useProfile } from "@/hooks/use-profile";
+import { useSession } from "@/lib/auth-client";
+import { getEmailDomain } from "@/lib/email-validation";
 import { cn } from "@/lib/utils";
 
 /** A single data card that slides in from the bottom when it has content */
@@ -107,9 +109,84 @@ function StageChip({ label, stage }: { label: string; stage: StageStatus }) {
   );
 }
 
+/** Progress indicator for the 8 partner preference questions */
+function PreferenceProgress({
+  desiredServices,
+  partnerIndustries,
+  clientSize,
+  partnerLocations,
+  partnerTypes,
+  partnerSize,
+  projectSize,
+  hourlyRates,
+}: {
+  desiredServices: string[];
+  partnerIndustries: string[];
+  clientSize: string | undefined;
+  partnerLocations: string[];
+  partnerTypes: string[];
+  partnerSize: string[];
+  projectSize: string | undefined;
+  hourlyRates: string | undefined;
+}) {
+  const fields = [
+    { label: "Services wanted", done: desiredServices.length > 0 },
+    { label: "Partner industries", done: partnerIndustries.length > 0 },
+    { label: "Client size", done: !!clientSize },
+    { label: "Locations", done: partnerLocations.length > 0 },
+    { label: "Partner types", done: partnerTypes.length > 0 },
+    { label: "Partner size", done: partnerSize.length > 0 },
+    { label: "Project size", done: !!projectSize },
+    { label: "Hourly rates", done: !!hourlyRates },
+  ];
+
+  const completedCount = fields.filter((f) => f.done).length;
+
+  // Don't show when nothing or everything is done
+  if (completedCount === 0 || completedCount === 8) return null;
+
+  return (
+    <div className="w-full rounded-cos-xl border border-cos-electric/20 bg-gradient-to-r from-cos-electric/5 to-cos-signal/5 px-5 py-4">
+      <div className="mb-2.5 flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-cos-slate">
+          Partner Preferences
+        </span>
+        <span className="text-xs font-bold text-cos-electric">
+          {completedCount}/8
+        </span>
+      </div>
+      {/* Progress bar */}
+      <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-cos-cloud">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-cos-electric to-cos-signal transition-all duration-500"
+          style={{ width: `${(completedCount / 8) * 100}%` }}
+        />
+      </div>
+      {/* Individual field status */}
+      <div className="flex flex-wrap gap-1.5">
+        {fields.map((f) => (
+          <span
+            key={f.label}
+            className={cn(
+              "flex items-center gap-1 rounded-cos-pill px-2 py-0.5 text-[10px] font-medium",
+              f.done
+                ? "bg-cos-signal/10 text-cos-signal"
+                : "bg-cos-cloud text-cos-slate-dim"
+            )}
+          >
+            {f.done && <Check className="h-2.5 w-2.5" />}
+            {f.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { status: enrichmentStatus, stages, result } = useEnrichment();
   const { data: profile } = useProfile();
+  const { data: session } = useSession();
 
   const isEnriching = stages.overall === "enriching";
   const isFailed = enrichmentStatus === "failed";
@@ -118,6 +195,9 @@ export default function DashboardPage() {
   const companyData = result?.companyData;
   const extracted = result?.extracted;
   const classification = result?.classification;
+
+  // Email domain for logo fallback (e.g. chameleon.co from freddie@chameleon.co)
+  const emailDomain = session?.user?.email ? getEmailDomain(session.user.email) : null;
 
   // Firm identity — PDL data with fallbacks from enrichment result
   const firmDomain = result?.domain;
@@ -251,13 +331,21 @@ export default function DashboardPage() {
             <RevealCard icon={Building2} label="Your Firm" delay={0}>
               {result ? (
                 <div className="flex items-start gap-3">
-                  {/* Company logo via Clearbit */}
-                  {firmDomain && (
+                  {/* Company logo via Clearbit — tries enrichment domain first, falls back to email domain */}
+                  {(firmDomain || emailDomain) && (
                     <img
-                      src={`https://logo.clearbit.com/${firmDomain}`}
+                      src={`https://logo.clearbit.com/${firmDomain || emailDomain}`}
                       alt=""
                       className="h-10 w-10 rounded-cos-lg object-contain bg-white border border-cos-border/30"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      onError={(e) => {
+                        const img = e.target as HTMLImageElement;
+                        // If the enrichment domain logo failed and we have a different email domain, try that
+                        if (emailDomain && firmDomain && emailDomain !== firmDomain && img.src.includes(firmDomain)) {
+                          img.src = `https://logo.clearbit.com/${emailDomain}`;
+                        } else {
+                          img.style.display = "none";
+                        }
+                      }}
                     />
                   )}
                   <div className="flex-1 min-w-0">
@@ -349,6 +437,20 @@ export default function DashboardPage() {
             <RevealCard icon={Languages} label="Languages" delay={500}>
               <p>{languages.join(", ")}</p>
             </RevealCard>
+          )}
+
+          {/* ─── Partner Preferences Progress Indicator ── */}
+          {hasAnyData && (
+            <PreferenceProgress
+              desiredServices={desiredServices}
+              partnerIndustries={partnerIndustries}
+              clientSize={clientSize}
+              partnerLocations={partnerLocations}
+              partnerTypes={partnerTypes}
+              partnerSize={partnerSize}
+              projectSize={projectSize}
+              hourlyRates={hourlyRates}
+            />
           )}
 
           {/* ─── Partner Preferences (from chat confirmations) ── */}

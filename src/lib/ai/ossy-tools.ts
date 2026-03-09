@@ -1,39 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod/v4";
-import { eq } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { serviceFirms, partnerPreferences } from "@/lib/db/schema";
+import { updateProfileField, ALL_PROFILE_FIELDS } from "@/lib/profile/update-profile-field";
 import { logOnboardingEvent } from "@/lib/onboarding/event-logger";
-
-/** Fields that map to serviceFirms.enrichmentData.confirmed */
-const FIRM_FIELDS = new Set([
-  "firmCategory",
-  "services",
-  "clients",
-  "skills",
-  "markets",
-  "languages",
-  "industries",
-]);
-
-/** Column mapping for partner preference fields → DB columns */
-const PARTNER_COLUMN_MAP: Record<string, string> = {
-  preferredPartnerTypes: "preferredFirmTypes",
-  preferredPartnerSize: "preferredSizeBands",
-  requiredPartnerIndustries: "preferredIndustries",
-  preferredPartnerLocations: "preferredMarkets",
-  partnershipModels: "partnershipModels",
-  dealBreakers: "dealBreakers",
-  growthGoals: "growthGoals",
-};
-
-/** Fields stored in partnerPreferences.rawOnboardingData JSONB (no dedicated column) */
-const RAW_ONBOARDING_FIELDS = new Set([
-  "desiredPartnerServices",
-  "idealPartnerClientSize",
-  "idealProjectSize",
-  "typicalHourlyRates",
-]);
 
 /** Interview questions in order — used for funnel tracking */
 const INTERVIEW_FIELDS = [
@@ -47,34 +15,7 @@ const INTERVIEW_FIELDS = [
   "typicalHourlyRates",
 ];
 
-/** Generate a short unique ID */
-function uid(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-const profileFieldSchema = z.enum([
-  // Firm profile (confirm enrichment)
-  "firmCategory",
-  "services",
-  "clients",
-  "skills",
-  "markets",
-  "languages",
-  "industries",
-  // Partner preferences (unique to conversation)
-  "preferredPartnerTypes",
-  "preferredPartnerSize",
-  "requiredPartnerIndustries",
-  "preferredPartnerLocations",
-  "partnershipModels",
-  "dealBreakers",
-  "growthGoals",
-  // Partner criteria (stored in rawOnboardingData)
-  "desiredPartnerServices",
-  "idealPartnerClientSize",
-  "idealProjectSize",
-  "typicalHourlyRates",
-]);
+const profileFieldSchema = z.enum(ALL_PROFILE_FIELDS);
 
 const toolInputSchema = z.object({
   field: profileFieldSchema.describe(
@@ -108,73 +49,7 @@ export function createOssyTools(organizationId: string, firmId: string) {
       inputSchema: toolInputSchema,
       execute: async ({ field, value }: ToolInput) => {
         try {
-          if (FIRM_FIELDS.has(field)) {
-            // Merge into serviceFirms.enrichmentData under a "confirmed" key
-            const [firm] = await db
-              .select({ enrichmentData: serviceFirms.enrichmentData })
-              .from(serviceFirms)
-              .where(eq(serviceFirms.id, firmId))
-              .limit(1);
-
-            const existing = (firm?.enrichmentData as Record<string, unknown>) || {};
-            const confirmed = (existing.confirmed as Record<string, unknown>) || {};
-            confirmed[field] = value;
-
-            await db
-              .update(serviceFirms)
-              .set({
-                enrichmentData: { ...existing, confirmed },
-                updatedAt: new Date(),
-              })
-              .where(eq(serviceFirms.id, firmId));
-          } else if (RAW_ONBOARDING_FIELDS.has(field)) {
-            // Store in partnerPreferences.rawOnboardingData JSONB
-            const [existing] = await db
-              .select({ id: partnerPreferences.id, rawOnboardingData: partnerPreferences.rawOnboardingData })
-              .from(partnerPreferences)
-              .where(eq(partnerPreferences.firmId, firmId))
-              .limit(1);
-
-            const rawData = (existing?.rawOnboardingData as Record<string, unknown>) || {};
-            rawData[field] = value;
-
-            if (existing) {
-              await db
-                .update(partnerPreferences)
-                .set({ rawOnboardingData: rawData, updatedAt: new Date() })
-                .where(eq(partnerPreferences.firmId, firmId));
-            } else {
-              await db.insert(partnerPreferences).values({
-                id: uid("pref"),
-                firmId,
-                rawOnboardingData: rawData,
-              });
-            }
-          } else {
-            // Upsert into partnerPreferences table (dedicated column)
-            const dbColumn = PARTNER_COLUMN_MAP[field] || field;
-            const [existing] = await db
-              .select({ id: partnerPreferences.id })
-              .from(partnerPreferences)
-              .where(eq(partnerPreferences.firmId, firmId))
-              .limit(1);
-
-            if (existing) {
-              await db
-                .update(partnerPreferences)
-                .set({
-                  [dbColumn]: value,
-                  updatedAt: new Date(),
-                })
-                .where(eq(partnerPreferences.firmId, firmId));
-            } else {
-              await db.insert(partnerPreferences).values({
-                id: uid("pref"),
-                firmId,
-                [dbColumn]: value,
-              });
-            }
-          }
+          const result = await updateProfileField(firmId, field, value);
 
           // Log interview question completion for funnel tracking
           const questionIndex = INTERVIEW_FIELDS.indexOf(field);
@@ -200,7 +75,7 @@ export function createOssyTools(organizationId: string, firmId: string) {
             }
           }
 
-          return { success: true as const, field, value };
+          return { success: true as const, field: result.field, value: result.value };
         } catch (err) {
           console.error(`[Ossy Tools] Failed to update ${field}:`, err);
           return { success: false as const, field, error: String(err) };

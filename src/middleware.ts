@@ -38,6 +38,11 @@ function isProtectedPath(pathname: string): boolean {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Rewrite root URL to /dashboard (URL stays as /, content from /dashboard)
+  if (pathname === "/") {
+    return NextResponse.rewrite(new URL("/dashboard", req.url));
+  }
+
   // Only protect specific API routes
   if (!isProtectedPath(pathname)) {
     return NextResponse.next();
