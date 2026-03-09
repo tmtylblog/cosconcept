@@ -129,7 +129,7 @@ export async function POST(req: Request) {
           const data = {
             url: r.website || `https://${domain}`,
             domain,
-            logoUrl: r.logoUrl || `https://logo.clearbit.com/${domain}`,
+            logoUrl: r.logoUrl || `https://img.logo.dev/${domain}?token=pk_anonymous&size=128&format=png`,
             success: true,
             companyCard: null,
             companyData: hasRealPdlData

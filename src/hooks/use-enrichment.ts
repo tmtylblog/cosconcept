@@ -330,7 +330,7 @@ export function EnrichmentProvider({
       const resultShell: EnrichmentResult = {
         url: normalized,
         domain,
-        logoUrl: `https://logo.clearbit.com/${domain}`,
+        logoUrl: `https://img.logo.dev/${domain}?token=pk_anonymous&size=128&format=png`,
         success: false,
         companyCard: null,
         companyData: null,
@@ -380,7 +380,7 @@ export function EnrichmentProvider({
             const cached = lookupData.data as EnrichmentResult;
             cached.domain = cached.domain || domain;
             cached.url = cached.url || normalized;
-            cached.logoUrl = cached.logoUrl || `https://logo.clearbit.com/${domain}`;
+            cached.logoUrl = cached.logoUrl || `https://img.logo.dev/${domain}?token=pk_anonymous&size=128&format=png`;
 
             // Seed result with cached data immediately so cards appear
             setResult(cached);

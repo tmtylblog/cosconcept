@@ -142,11 +142,17 @@ export function GuestEnrichmentPanel() {
                 <div className="flex items-start gap-3">
                   {(logoUrl || firmDomain) && (
                     <img
-                      src={logoUrl || `https://logo.clearbit.com/${firmDomain}`}
+                      src={logoUrl || `https://img.logo.dev/${firmDomain}?token=pk_anonymous&size=128&format=png`}
                       alt=""
                       className="h-10 w-10 rounded-cos-lg border border-cos-border/30 bg-white object-contain"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
+                        const img = e.target as HTMLImageElement;
+                        // Fallback to Google favicon if logo.dev fails
+                        if (!img.src.includes("google.com/s2/favicons")) {
+                          img.src = `https://www.google.com/s2/favicons?domain=${firmDomain}&sz=128`;
+                        } else {
+                          img.style.display = "none";
+                        }
                       }}
                     />
                   )}
@@ -197,27 +203,8 @@ export function GuestEnrichmentPanel() {
             </RevealCard>
           )}
 
-          {/* Services */}
-          {services && (
-            <RevealCard icon={Briefcase} label="Services" delay={100}>
-              <PillList
-                items={services}
-                pillClass="bg-cos-electric/8 text-cos-electric"
-                max={8}
-              />
-            </RevealCard>
-          )}
-
-          {/* Clients */}
-          {clients && (
-            <RevealCard icon={Users} label="Clients Identified" delay={200}>
-              <PillList
-                items={clients}
-                pillClass="bg-cos-signal/8 text-cos-signal"
-                max={10}
-              />
-            </RevealCard>
-          )}
+          {/* Services and Clients are hidden during guest onboarding —
+              they appear after the user creates an account and reaches the dashboard */}
 
           {/* Skills */}
           {skills && (
@@ -252,6 +239,17 @@ export function GuestEnrichmentPanel() {
             <RevealCard icon={Languages} label="Languages" delay={500}>
               <p>{languages.join(", ")}</p>
             </RevealCard>
+          )}
+
+          {/* Data correction notice — shown once enrichment has some data */}
+          {hasEnrichment && !isEnriching && (
+            <div className="rounded-cos-xl border border-cos-electric/15 bg-cos-electric/5 px-4 py-3">
+              <p className="text-xs leading-relaxed text-cos-electric">
+                If any of the data above is wrong, you&apos;ll have a chance to
+                update it once you complete the onboarding questions and create
+                your account.
+              </p>
+            </div>
           )}
 
           {/* ─── Partner Preferences Progress ─── */}

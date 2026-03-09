@@ -89,6 +89,20 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const [historyLoaded, setHistoryLoaded] = useState(isGuest ? true : false);
   const enrichedUrlRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string>(crypto.randomUUID());
+  // Track whether we need to auto-continue (restored session ends with user message)
+  const needsAutoContinueRef = useRef(false);
+  // Check during init if restored messages end with a user message
+  if (isGuest && typeof window !== "undefined") {
+    try {
+      const saved = sessionStorage.getItem("cos_guest_messages");
+      if (saved) {
+        const msgs = JSON.parse(saved) as UIMessage[];
+        if (msgs.length > 1 && msgs[msgs.length - 1].role === "user") {
+          needsAutoContinueRef.current = true;
+        }
+      }
+    } catch { /* ignore */ }
+  }
 
   const chatEndpoint = isGuest ? "/api/chat/guest" : "/api/chat";
 
@@ -149,6 +163,22 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const isLoading = status === "submitted" || status === "streaming";
+
+  // Auto-continue: if restored guest session ends with a user message,
+  // send a hidden nudge so Ossy picks up where they left off
+  useEffect(() => {
+    if (needsAutoContinueRef.current && isGuest && status === "ready") {
+      needsAutoContinueRef.current = false;
+      // Small delay to let the UI settle, then nudge Ossy to continue
+      const timer = setTimeout(() => {
+        sendMessage({
+          text: "Hey, I'm back — where were we?",
+        });
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   useEffect(() => {
     if (scrollRef.current) {

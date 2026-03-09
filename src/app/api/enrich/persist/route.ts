@@ -74,7 +74,7 @@ export async function POST(req: Request) {
 
     const hasAnyData = !!(companyData || extracted || classification);
 
-    const logoUrl = domain ? `https://logo.clearbit.com/${domain}` : null;
+    const logoUrl = domain ? `https://img.logo.dev/${domain}?token=pk_anonymous&size=128&format=png` : null;
 
     const responseData = {
       url,
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
         organizationId,
         name: firmName,
         website: url,
-        logoUrl: domain ? `https://logo.clearbit.com/${domain}` : undefined,
+        logoUrl: domain ? `https://img.logo.dev/${domain}?token=pk_anonymous&size=128&format=png` : undefined,
         description: extracted?.aboutPitch || null,
         foundedYear: companyData?.founded || null,
         employeeCount: companyData?.employeeCount || null,

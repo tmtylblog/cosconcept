@@ -175,17 +175,20 @@ export default function DashboardPage() {
             <RevealCard icon={Building2} label="Your Firm" delay={0}>
               {result ? (
                 <div className="flex items-start gap-3">
-                  {/* Company logo via Clearbit — tries enrichment domain first, falls back to email domain */}
+                  {/* Company logo via logo.dev — tries enrichment domain first, falls back to email domain, then Google favicon */}
                   {(firmDomain || emailDomain) && (
                     <img
-                      src={`https://logo.clearbit.com/${firmDomain || emailDomain}`}
+                      src={`https://img.logo.dev/${firmDomain || emailDomain}?token=pk_anonymous&size=128&format=png`}
                       alt=""
                       className="h-10 w-10 rounded-cos-lg object-contain bg-white border border-cos-border/30"
                       onError={(e) => {
                         const img = e.target as HTMLImageElement;
-                        // If the enrichment domain logo failed and we have a different email domain, try that
+                        // If logo.dev failed and we have a different email domain, try that
                         if (emailDomain && firmDomain && emailDomain !== firmDomain && img.src.includes(firmDomain)) {
-                          img.src = `https://logo.clearbit.com/${emailDomain}`;
+                          img.src = `https://img.logo.dev/${emailDomain}?token=pk_anonymous&size=128&format=png`;
+                        } else if (!img.src.includes("google.com/s2/favicons")) {
+                          // Fall back to Google favicon
+                          img.src = `https://www.google.com/s2/favicons?domain=${firmDomain || emailDomain}&sz=128`;
                         } else {
                           img.style.display = "none";
                         }
