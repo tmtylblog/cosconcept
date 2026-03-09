@@ -84,9 +84,9 @@ export function GuestEnrichmentPanel() {
   const hasAnyData = hasEnrichment || !!result || isEnriching;
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col items-center px-6 py-8">
+    <div className="mx-auto flex w-full max-w-xl flex-col items-stretch px-6 py-8">
       {/* Branding */}
-      <div className="mb-6 flex flex-col items-center gap-1">
+      <div className="mb-6 flex flex-col items-center gap-1 self-center">
         <Image
           src="/logo.png"
           alt="Collective OS"

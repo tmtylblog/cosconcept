@@ -89,14 +89,16 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const [historyLoaded, setHistoryLoaded] = useState(isGuest ? true : false);
   const enrichedUrlRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string>(crypto.randomUUID());
-  // Whether we need to auto-continue (computed once on mount, never re-computed)
+  // Whether we need to auto-continue (computed once on mount, never re-computed).
+  // Fires whenever there's a restored guest session with real conversation
+  // (more than just the welcome message), regardless of who spoke last.
   const [needsAutoContinue] = useState(() => {
     if (isGuest && typeof window !== "undefined") {
       try {
         const saved = sessionStorage.getItem("cos_guest_messages");
         if (saved) {
           const msgs = JSON.parse(saved) as UIMessage[];
-          if (msgs.length > 1 && msgs[msgs.length - 1].role === "user") {
+          if (msgs.length > 1) {
             return true;
           }
         }
