@@ -16,6 +16,7 @@ import {
   Video,
   Bot,
   Cpu,
+  CircleDashed,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,10 +30,11 @@ interface QuotaInfo {
 
 interface ApiHealthCheck {
   name: string;
-  status: "healthy" | "warning" | "error";
+  status: "healthy" | "warning" | "error" | "not_configured";
   latencyMs: number;
   quota?: QuotaInfo;
   message?: string;
+  phase?: string;
   checkedAt: string;
 }
 
@@ -74,6 +76,12 @@ const STATUS_CONFIG = {
     icon: XCircle,
     label: "Error",
   },
+  not_configured: {
+    dot: "bg-cos-slate/40",
+    badge: "bg-cos-cloud-dim text-cos-slate border-cos-border",
+    icon: CircleDashed,
+    label: "Not Configured",
+  },
 };
 
 function QuotaBar({ quota }: { quota: QuotaInfo }) {
@@ -89,7 +97,7 @@ function QuotaBar({ quota }: { quota: QuotaInfo }) {
           <span className="font-normal text-cos-slate"> remaining</span>
         </span>
         <span className="text-cos-slate">
-          {quota.used.toLocaleString()} / {quota.limit.toLocaleString()}
+          {quota.used.toLocaleString()} / {quota.limit.toLocaleString()} used
         </span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-cos-cloud">
@@ -105,6 +113,7 @@ function QuotaBar({ quota }: { quota: QuotaInfo }) {
 function ServiceCard({ check }: { check: ApiHealthCheck }) {
   const config = STATUS_CONFIG[check.status];
   const StatusIcon = config.icon;
+  const isNotConfigured = check.status === "not_configured";
 
   return (
     <div
@@ -114,7 +123,9 @@ function ServiceCard({ check }: { check: ApiHealthCheck }) {
           ? "border-cos-ember/30"
           : check.status === "warning"
             ? "border-cos-warm/30"
-            : "border-cos-border"
+            : isNotConfigured
+              ? "border-cos-border/50 opacity-60"
+              : "border-cos-border"
       )}
     >
       {/* Header */}
@@ -127,7 +138,9 @@ function ServiceCard({ check }: { check: ApiHealthCheck }) {
                 ? "bg-cos-ember/8 text-cos-ember"
                 : check.status === "warning"
                   ? "bg-cos-warm/8 text-cos-warm"
-                  : "bg-cos-cloud text-cos-slate"
+                  : isNotConfigured
+                    ? "bg-cos-cloud text-cos-slate/50"
+                    : "bg-cos-cloud text-cos-slate"
             )}
           >
             {SERVICE_ICONS[check.name] ?? <Activity className="h-5 w-5" />}
@@ -136,9 +149,13 @@ function ServiceCard({ check }: { check: ApiHealthCheck }) {
             <h3 className="text-sm font-semibold text-cos-midnight">
               {check.name}
             </h3>
-            <p className="text-xs text-cos-slate">
-              {check.latencyMs}ms
-            </p>
+            {isNotConfigured && check.phase ? (
+              <p className="text-xs text-cos-slate/60">{check.phase}</p>
+            ) : (
+              <p className="text-xs text-cos-slate">
+                {check.latencyMs}ms
+              </p>
+            )}
           </div>
         </div>
         <span
@@ -160,7 +177,11 @@ function ServiceCard({ check }: { check: ApiHealthCheck }) {
         <p
           className={cn(
             "mt-3 text-xs",
-            check.status === "error" ? "text-cos-ember" : "text-cos-slate"
+            check.status === "error"
+              ? "text-cos-ember"
+              : isNotConfigured
+                ? "text-cos-slate/60"
+                : "text-cos-slate"
           )}
         >
           {check.message}
@@ -203,7 +224,7 @@ export default function AdminApiHealthPage() {
       <div className="space-y-6 animate-pulse">
         <div className="h-8 w-48 rounded-cos-md bg-cos-border" />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {[...Array(8)].map((_, i) => (
+          {[...Array(10)].map((_, i) => (
             <div key={i} className="h-36 rounded-cos-xl bg-cos-border/50" />
           ))}
         </div>
@@ -214,9 +235,16 @@ export default function AdminApiHealthPage() {
   const errors = data?.services.filter((s) => s.status === "error") ?? [];
   const warnings = data?.services.filter((s) => s.status === "warning") ?? [];
   const healthy = data?.services.filter((s) => s.status === "healthy") ?? [];
-  const sorted = [...errors, ...warnings, ...healthy];
+  const notConfigured = data?.services.filter((s) => s.status === "not_configured") ?? [];
+
+  // Active services first (errors, warnings, healthy), then not configured at bottom
+  const sorted = [...errors, ...warnings, ...healthy, ...notConfigured];
 
   const overallConfig = STATUS_CONFIG[data?.overall ?? "error"];
+
+  // Count only active services (exclude not_configured from summary)
+  const activeServices = data?.services.filter((s) => s.status !== "not_configured") ?? [];
+  const activeErrors = activeServices.filter((s) => s.status === "error");
 
   return (
     <div className="space-y-6">
@@ -228,6 +256,11 @@ export default function AdminApiHealthPage() {
           </h1>
           <p className="mt-1 text-sm text-cos-slate">
             External service status and quota monitoring.
+            {notConfigured.length > 0 && (
+              <span className="text-cos-slate/60">
+                {" "}{notConfigured.length} service{notConfigured.length > 1 ? "s" : ""} pending setup.
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -240,8 +273,8 @@ export default function AdminApiHealthPage() {
             <span
               className={cn("h-2 w-2 rounded-full", overallConfig.dot)}
             />
-            {data?.overall === "healthy"
-              ? "All Systems Operational"
+            {activeErrors.length === 0 && warnings.length === 0
+              ? "All Active Services Operational"
               : data?.overall === "warning"
                 ? "Some Quotas Low"
                 : "Issues Detected"}
@@ -258,7 +291,7 @@ export default function AdminApiHealthPage() {
         </div>
       </div>
 
-      {/* Alert banner */}
+      {/* Alert banner for active errors/warnings */}
       {(errors.length > 0 || warnings.length > 0) && (
         <div
           className={cn(
@@ -296,12 +329,33 @@ export default function AdminApiHealthPage() {
         </div>
       )}
 
-      {/* Service cards grid */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {sorted.map((check) => (
-          <ServiceCard key={check.name} check={check} />
-        ))}
-      </div>
+      {/* Active services */}
+      {(errors.length > 0 || warnings.length > 0 || healthy.length > 0) && (
+        <>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
+            Active Services ({activeServices.length})
+          </h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {[...errors, ...warnings, ...healthy].map((check) => (
+              <ServiceCard key={check.name} check={check} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Not configured services */}
+      {notConfigured.length > 0 && (
+        <>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-cos-slate/60">
+            Pending Setup ({notConfigured.length})
+          </h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {notConfigured.map((check) => (
+              <ServiceCard key={check.name} check={check} />
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Last checked */}
       {data?.checkedAt && (

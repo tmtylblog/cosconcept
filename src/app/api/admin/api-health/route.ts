@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 interface ApiHealthCheck {
   name: string;
-  status: "healthy" | "warning" | "error";
+  status: "healthy" | "warning" | "error" | "not_configured";
   latencyMs: number;
   quota?: {
     used: number;
@@ -20,6 +20,7 @@ interface ApiHealthCheck {
     percentUsed: number;
   };
   message?: string;
+  phase?: string; // Which build phase this service is needed for
   checkedAt: string;
 }
 
@@ -36,6 +37,17 @@ async function withTimeout<T>(
   ]);
 }
 
+function notConfigured(name: string, envVar: string, phase: string): ApiHealthCheck {
+  return {
+    name,
+    status: "not_configured",
+    latencyMs: 0,
+    message: `${envVar} not set`,
+    phase,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
 // ─── Individual Checks ─────────────────────────────────
 
 async function checkOpenRouter(): Promise<ApiHealthCheck> {
@@ -43,7 +55,7 @@ async function checkOpenRouter(): Promise<ApiHealthCheck> {
   const name = "OpenRouter";
   try {
     const key = process.env.OPENROUTER_API_KEY;
-    if (!key) return { name, status: "error", latencyMs: 0, message: "OPENROUTER_API_KEY not set", checkedAt: new Date().toISOString() };
+    if (!key) return notConfigured(name, "OPENROUTER_API_KEY", "Phase 0");
 
     const res = await fetch("https://openrouter.ai/api/v1/credits", {
       headers: { Authorization: `Bearer ${key}` },
@@ -83,7 +95,7 @@ async function checkPDL(): Promise<ApiHealthCheck> {
   const name = "People Data Labs";
   try {
     const key = process.env.PDL_API_KEY;
-    if (!key) return { name, status: "error", latencyMs: 0, message: "PDL_API_KEY not set", checkedAt: new Date().toISOString() };
+    if (!key) return notConfigured(name, "PDL_API_KEY", "Phase 0");
 
     // Use a domain that won't match — 404 is free, no credit charge
     // But response headers still show remaining credits
@@ -118,7 +130,7 @@ async function checkPDL(): Promise<ApiHealthCheck> {
       quota: remaining > 0 || spent > 0
         ? { used: spent, limit, remaining, unit: "credits", percentUsed: Math.round(percentUsed) }
         : undefined,
-      message: remaining > 0 || spent > 0 ? undefined : "No usage headers returned",
+      message: remaining > 0 || spent > 0 ? undefined : "Connected (no usage headers returned)",
       checkedAt: new Date().toISOString(),
     };
   } catch (err) {
@@ -143,11 +155,35 @@ async function checkJina(): Promise<ApiHealthCheck> {
       return { name, status: "error", latencyMs, message: `HTTP ${res.status}`, checkedAt: new Date().toISOString() };
     }
 
+    // Extract rate limit / token info from response headers
+    const rateLimitRemaining = res.headers.get("x-ratelimit-remaining");
+    const rateLimitLimit = res.headers.get("x-ratelimit-limit");
+    const tokensRemaining = res.headers.get("x-tokens-remaining");
+    const tokensUsed = res.headers.get("x-tokens-used");
+
+    // Try to build quota from available headers
+    let quota: ApiHealthCheck["quota"] | undefined;
+
+    if (tokensRemaining && tokensUsed) {
+      const remaining = parseInt(tokensRemaining, 10);
+      const used = parseInt(tokensUsed, 10);
+      const limit = remaining + used;
+      const percentUsed = limit > 0 ? (used / limit) * 100 : 0;
+      quota = { used, limit, remaining, unit: "tokens", percentUsed: Math.round(percentUsed) };
+    } else if (rateLimitRemaining && rateLimitLimit) {
+      const remaining = parseInt(rateLimitRemaining, 10);
+      const limit = parseInt(rateLimitLimit, 10);
+      const used = limit - remaining;
+      const percentUsed = limit > 0 ? (used / limit) * 100 : 0;
+      quota = { used, limit, remaining, unit: "requests", percentUsed: Math.round(percentUsed) };
+    }
+
     return {
       name,
-      status: "healthy",
+      status: quota && quota.percentUsed > 80 ? "warning" : "healthy",
       latencyMs,
-      message: key ? "Authenticated" : "Using free tier",
+      quota,
+      message: key ? "Authenticated" : "Using free tier (no API key)",
       checkedAt: new Date().toISOString(),
     };
   } catch (err) {
@@ -160,7 +196,7 @@ async function checkDeepgram(): Promise<ApiHealthCheck> {
   const name = "Deepgram";
   try {
     const key = process.env.DEEPGRAM_API_KEY;
-    if (!key) return { name, status: "error", latencyMs: 0, message: "DEEPGRAM_API_KEY not set", checkedAt: new Date().toISOString() };
+    if (!key) return notConfigured(name, "DEEPGRAM_API_KEY", "Phase 1");
 
     // Get projects list first
     const projRes = await fetch("https://api.deepgram.com/v1/projects", {
@@ -215,7 +251,7 @@ async function checkElevenLabs(): Promise<ApiHealthCheck> {
   const name = "ElevenLabs";
   try {
     const key = process.env.ELEVENLABS_API_KEY;
-    if (!key) return { name, status: "error", latencyMs: 0, message: "ELEVENLABS_API_KEY not set", checkedAt: new Date().toISOString() };
+    if (!key) return notConfigured(name, "ELEVENLABS_API_KEY", "Phase 1");
 
     const res = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
       headers: { "xi-api-key": key },
@@ -255,7 +291,7 @@ async function checkResend(): Promise<ApiHealthCheck> {
   const name = "Resend";
   try {
     const key = process.env.RESEND_API_KEY;
-    if (!key) return { name, status: "error", latencyMs: 0, message: "RESEND_API_KEY not set", checkedAt: new Date().toISOString() };
+    if (!key) return notConfigured(name, "RESEND_API_KEY", "Phase 7");
 
     const res = await fetch("https://api.resend.com/domains", {
       headers: { Authorization: `Bearer ${key}` },
@@ -277,7 +313,7 @@ async function checkRecall(): Promise<ApiHealthCheck> {
   const name = "Recall.ai";
   try {
     const key = process.env.RECALL_API_KEY;
-    if (!key) return { name, status: "error", latencyMs: 0, message: "RECALL_API_KEY not set", checkedAt: new Date().toISOString() };
+    if (!key) return notConfigured(name, "RECALL_API_KEY", "Phase 6");
 
     const res = await fetch("https://us-west-2.recall.ai/api/v1/billing/usage/", {
       headers: { Authorization: `Token ${key}` },
@@ -319,7 +355,12 @@ async function checkStripe(): Promise<ApiHealthCheck> {
       checkedAt: new Date().toISOString(),
     };
   } catch (err) {
-    return { name, status: "error", latencyMs: Date.now() - start, message: String(err), checkedAt: new Date().toISOString() };
+    const msg = String(err);
+    // Distinguish "not configured" from actual Stripe errors
+    if (msg.includes("STRIPE_SECRET_KEY") || msg.includes("not set") || msg.includes("not configured")) {
+      return notConfigured(name, "STRIPE_SECRET_KEY", "Phase 5");
+    }
+    return { name, status: "error", latencyMs: Date.now() - start, message: msg, checkedAt: new Date().toISOString() };
   }
 }
 
