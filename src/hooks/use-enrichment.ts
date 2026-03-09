@@ -147,6 +147,9 @@ export function EnrichmentProvider({
   const runIdRef = useRef(0);
   // Track whether we've persisted the current result to DB
   const persistedRef = useRef(false);
+  // Auto-retry: track whether we've attempted gap-fill after hydration
+  const autoRetryDoneRef = useRef(false);
+  const wasHydratedRef = useRef(false);
 
   // ─── SessionStorage: save enrichment result so it survives page reloads ───
   const STORAGE_KEY = "cos_enrichment_result";
@@ -173,12 +176,30 @@ export function EnrichmentProvider({
         if (cached && !cancelled) {
           const enrichmentData = JSON.parse(cached) as EnrichmentResult;
           if (enrichmentData.domain) {
+            wasHydratedRef.current = true;
             setResult(enrichmentData);
             setEnrichedUrl(enrichmentData.url);
             setContextForOssy(buildContextForOssy(enrichmentData));
-            setStatus(enrichmentData.success ? "done" : "loading");
-            if (enrichmentData.success) {
-              setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
+
+            // Set accurate status based on actual data completeness
+            const hasRealData = !!(enrichmentData.companyData || enrichmentData.extracted || enrichmentData.classification);
+            if (hasRealData) {
+              setStatus("done");
+              setStages({
+                overall: "done",
+                pdl: enrichmentData.companyData ? "done" : "idle",
+                scrape: (enrichmentData.extracted || enrichmentData.groundTruth) ? "done" : "idle",
+                classify: enrichmentData.classification?.categories?.length ? "done" : "idle",
+              });
+            } else {
+              // Result shell with no real data — show enriching state while auto-retry fills it
+              setStatus("loading");
+              setStages({
+                overall: "enriching",
+                pdl: "loading",
+                scrape: "loading",
+                classify: "idle",
+              });
             }
             // Don't return — still try DB hydration to get latest data
           }
@@ -243,6 +264,8 @@ export function EnrichmentProvider({
   const reset = useCallback(() => {
     runIdRef.current++;
     persistedRef.current = false;
+    autoRetryDoneRef.current = false;
+    wasHydratedRef.current = false;
     setStatus("idle");
     setStages(INITIAL_STAGES);
     setResult(null);
@@ -294,7 +317,12 @@ export function EnrichmentProvider({
         extracted: null,
         classification: null,
       };
-      setResult(resultShell);
+      // During gap-fill, preserve existing data so cards don't flash empty
+      if (forceGapFill) {
+        setResult((prev) => (prev?.domain === domain ? prev : resultShell));
+      } else {
+        setResult(resultShell);
+      }
 
       // ─── Stage 0: Check our own data first (saves paid API credits) ───
       // Seed from cache if available, then only call paid APIs for missing pieces
@@ -603,6 +631,35 @@ export function EnrichmentProvider({
     },
     [enrichedUrl, organizationId]
   );
+
+  // ─── Auto-retry: if hydrated result is incomplete, re-trigger missing stages ───
+  useEffect(() => {
+    if (!wasHydratedRef.current) return; // Only after hydration, not regular enrichment
+    if (autoRetryDoneRef.current) return; // Only retry once per mount
+    if (!result?.domain) return;
+    if (stages.overall === "enriching") return; // Don't interrupt active enrichment
+
+    // Check data completeness — same criteria as the lookup gap-fill logic
+    const cd = result.companyData;
+    const hasRealPdl = cd && (
+      (cd.employeeCount ?? 0) > 0 || cd.size || cd.location || cd.inferredRevenue
+    );
+    const hasScrape = !!(result.extracted || result.groundTruth);
+    const hasClassify = !!(result.classification?.categories?.length);
+
+    if (!hasRealPdl || !hasScrape || !hasClassify) {
+      autoRetryDoneRef.current = true;
+      const gaps = [
+        !hasRealPdl && "PDL",
+        !hasScrape && "Scrape",
+        !hasClassify && "Classify",
+      ].filter(Boolean);
+      console.log(
+        `[Enrichment] Hydrated result incomplete for ${result.domain} — auto-retrying gaps: ${gaps.join(", ")}`
+      );
+      triggerEnrichment(result.url || result.domain, true);
+    }
+  }, [result, stages.overall, triggerEnrichment]);
 
   const value: EnrichmentContextValue = {
     status,
