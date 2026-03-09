@@ -165,7 +165,7 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   });
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const isLoading = status === "submitted" || status === "streaming";
 
   // Auto-continue: if restored guest session ends with a user message,
@@ -341,11 +341,12 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
         )}
       </div>
 
-      {/* Messages area */}
+      {/* Messages area — justify-end keeps messages anchored near the input when few */}
       <div
         ref={scrollRef}
-        className="cos-scrollbar relative flex-1 space-y-2 overflow-y-auto px-4 py-4"
+        className="cos-scrollbar relative flex flex-1 flex-col justify-end overflow-y-auto px-4 py-4"
       >
+        <div className="space-y-2">
         {messages.map((message, idx) => {
           const text = getMessageText(message);
           // Skip messages with no text content (e.g. tool-only responses)
@@ -471,17 +472,26 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
             </div>
           </div>
         )}
+        </div>{/* close inner space-y-2 wrapper */}
       </div>
 
-      {/* Input area — compact for right column */}
+      {/* Input area */}
       <div className="shrink-0 border-t border-cos-border/50 bg-white/80 px-4 py-3 backdrop-blur-sm">
         <form onSubmit={handleSubmit}>
-          <div className="flex items-center gap-1.5 rounded-cos-xl border border-cos-border bg-cos-cloud/80 px-3 py-0.5 transition-colors focus-within:border-cos-electric focus-within:ring-1 focus-within:ring-cos-electric">
-            <input
+          <div className="flex items-end gap-1.5 rounded-cos-xl border border-cos-border bg-cos-cloud/80 px-3 py-1.5 transition-colors focus-within:border-cos-electric focus-within:ring-1 focus-within:ring-cos-electric">
+            <textarea
               ref={inputRef}
-              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                // Submit on Enter (without Shift)
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (input.trim() && !isLoading && !atGuestLimit) {
+                    handleSubmit(e);
+                  }
+                }
+              }}
               placeholder={
                 atGuestLimit
                   ? "Sign in to keep chatting..."
@@ -490,24 +500,27 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
                     : "Ask Ossy anything..."
               }
               disabled={isLoading || atGuestLimit}
-              className="flex-1 bg-transparent py-2.5 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:outline-none disabled:opacity-50"
+              rows={2}
+              className="flex-1 resize-none bg-transparent py-2 text-sm leading-relaxed text-cos-midnight placeholder:text-cos-slate-light focus:outline-none disabled:opacity-50"
             />
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 shrink-0 text-cos-slate hover:text-cos-midnight"
-            >
-              <Mic className="h-4 w-4" />
-            </Button>
-            <Button
-              type="submit"
-              size="icon"
-              disabled={isLoading || !input.trim() || atGuestLimit}
-              className="h-8 w-8 shrink-0"
-            >
-              <Send className="h-3.5 w-3.5" />
-            </Button>
+            <div className="flex shrink-0 items-center gap-1 pb-0.5">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 text-cos-slate hover:text-cos-midnight"
+              >
+                <Mic className="h-4 w-4" />
+              </Button>
+              <Button
+                type="submit"
+                size="icon"
+                disabled={isLoading || !input.trim() || atGuestLimit}
+                className="h-8 w-8 shrink-0"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
         </form>
       </div>
