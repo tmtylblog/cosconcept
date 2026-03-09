@@ -14,6 +14,7 @@ import { useGuestData } from "@/hooks/use-guest-data";
 import { isPersonalEmail, CORPORATE_EMAIL_ERROR } from "@/lib/email-validation";
 import { cn } from "@/lib/utils";
 import { ToolResultRenderer } from "@/components/chat/tool-result-renderer";
+import { ChatEnrichmentCards } from "@/components/chat/enrichment-cards";
 
 const GUEST_MESSAGE_LIMIT = 30;
 
@@ -377,6 +378,9 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
             </div>
           );
         })}
+
+        {/* Inline enrichment cards — appear in chat flow as data arrives */}
+        {enrichmentStatus !== "idle" && <ChatEnrichmentCards />}
 
         {isLoading && messages[messages.length - 1]?.role === "user" && (
           <div className="flex gap-2">
