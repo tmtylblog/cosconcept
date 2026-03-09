@@ -72,7 +72,20 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
-  const [initialMessages, setInitialMessages] = useState<UIMessage[]>(defaultWelcomeMessages);
+  // For guests, restore saved messages from sessionStorage synchronously
+  // so they're available before useChat initializes on first render
+  const [initialMessages, setInitialMessages] = useState<UIMessage[]>(() => {
+    if (isGuest && typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem("cos_guest_messages");
+        if (saved) {
+          const msgs = JSON.parse(saved) as UIMessage[];
+          if (msgs.length > 0) return msgs;
+        }
+      } catch { /* ignore */ }
+    }
+    return defaultWelcomeMessages;
+  });
   const [historyLoaded, setHistoryLoaded] = useState(isGuest ? true : false);
   const enrichedUrlRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string>(crypto.randomUUID());

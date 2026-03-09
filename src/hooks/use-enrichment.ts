@@ -633,11 +633,14 @@ export function EnrichmentProvider({
   );
 
   // ─── Auto-retry: if hydrated result is incomplete, re-trigger missing stages ───
+  // NOTE: We intentionally do NOT check stages.overall === "enriching" here because
+  // hydration may set it to "enriching" cosmetically (to show the progress banner)
+  // without actually running any enrichment. The autoRetryDoneRef guard prevents
+  // infinite loops and wasHydratedRef ensures this only fires after hydration.
   useEffect(() => {
     if (!wasHydratedRef.current) return; // Only after hydration, not regular enrichment
     if (autoRetryDoneRef.current) return; // Only retry once per mount
     if (!result?.domain) return;
-    if (stages.overall === "enriching") return; // Don't interrupt active enrichment
 
     // Check data completeness — same criteria as the lookup gap-fill logic
     const cd = result.companyData;

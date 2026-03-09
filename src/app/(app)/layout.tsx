@@ -249,12 +249,12 @@ function AppLayoutInner({
             </div>
           )}
 
-          {/* Login bypass — bottom right */}
+          {/* Login bypass — bottom left (visible on all screen sizes) */}
           <button
             onClick={handleRequestLogin}
-            className="fixed bottom-6 right-6 z-40 rounded-cos-pill border border-cos-border/50 bg-white/80 px-4 py-2 text-xs font-medium text-cos-slate-dim backdrop-blur-sm transition-colors hover:border-cos-border hover:text-cos-midnight lg:hidden"
+            className="fixed bottom-6 left-6 z-40 rounded-cos-pill border border-cos-border/50 bg-white/80 px-4 py-2 text-xs font-medium text-cos-slate-dim backdrop-blur-sm transition-colors hover:border-cos-border hover:text-cos-midnight"
           >
-            Sign in
+            Already have an account? Sign in
           </button>
         </div>
       )}
