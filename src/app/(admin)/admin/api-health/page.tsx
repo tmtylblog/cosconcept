@@ -19,6 +19,8 @@ import {
   CircleDashed,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { KeyRound } from "lucide-react";
 
 interface QuotaInfo {
   used: number;
@@ -187,6 +189,17 @@ function ServiceCard({ check }: { check: ApiHealthCheck }) {
           {check.message}
         </p>
       )}
+
+      {/* Quick link to credentials */}
+      {(isNotConfigured || check.status === "error") && (
+        <Link
+          href="/admin/api-health/credentials"
+          className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-cos-electric transition-colors hover:text-cos-electric/80"
+        >
+          <KeyRound className="h-3 w-3" />
+          {isNotConfigured ? "Set up credential" : "Update credential"}
+        </Link>
+      )}
     </div>
   );
 }
@@ -279,6 +292,13 @@ export default function AdminApiHealthPage() {
                 ? "Some Quotas Low"
                 : "Issues Detected"}
           </span>
+          <Link
+            href="/admin/api-health/credentials"
+            className="inline-flex h-9 items-center gap-1.5 rounded-cos-lg border border-cos-border bg-cos-surface px-3 text-xs font-medium text-cos-slate transition-all hover:border-cos-electric/30 hover:text-cos-electric"
+          >
+            <KeyRound className="h-3.5 w-3.5" />
+            Manage Credentials
+          </Link>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
