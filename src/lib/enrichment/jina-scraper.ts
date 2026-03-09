@@ -193,13 +193,22 @@ export async function scrapeFirmWebsite(
 
   // 1. Scrape homepage
   const homepage = await scrapeUrl(baseUrl);
-  const homeDomain = new URL(baseUrl).hostname;
+
+  // Detect redirect: if Jina followed a redirect, the actual URL will differ
+  // from our input. Use the actual URL's domain for link filtering so subpage
+  // links from the redirected domain aren't incorrectly filtered out.
+  const actualUrl = homepage.url || baseUrl;
+  const homeDomain = new URL(actualUrl).hostname;
+  const inputDomain = new URL(baseUrl).hostname;
+  if (homeDomain !== inputDomain) {
+    console.log(`[Jina] Redirect detected: ${inputDomain} → ${homeDomain}`);
+  }
 
   // 2. Find and rank subpages from homepage links
   const candidates: { url: string; category: string; priority: number }[] = [];
   for (const link of homepage.links ?? []) {
     try {
-      const linkUrl = new URL(link, baseUrl);
+      const linkUrl = new URL(link, actualUrl);
       if (linkUrl.hostname !== homeDomain) continue;
       for (const target of TARGET_PAGES) {
         if (target.patterns.some((p) => p.test(linkUrl.pathname))) {
@@ -248,7 +257,7 @@ export async function scrapeFirmWebsite(
   for (const ev of evidence.filter((e) => e.category === "case_studies")) {
     for (const link of ev.page.links ?? []) {
       try {
-        const linkUrl = new URL(link, baseUrl);
+        const linkUrl = new URL(link, actualUrl);
         if (
           linkUrl.hostname === homeDomain &&
           /case|stud|project|work|portfolio/i.test(linkUrl.pathname) &&

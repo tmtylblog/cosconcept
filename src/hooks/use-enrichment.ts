@@ -378,15 +378,25 @@ export function EnrichmentProvider({
             } else {
               console.log("[Enrichment] Cached companyData is incomplete, will call PDL:", JSON.stringify(cd));
             }
-            if (cached.extracted || cached.groundTruth) {
+            // Scrape: require REAL content — not just an empty extracted object
+            const hasRealScrapeData = !!(
+              (cached.extracted?.services?.length) ||
+              (cached.extracted?.clients?.length) ||
+              cached.extracted?.aboutPitch ||
+              cached.groundTruth
+            );
+            if (hasRealScrapeData) {
               needsScrape = false;
               stageData.scrapeExtracted = cached.extracted;
               stageData.scrapeGroundTruth = cached.groundTruth as string | null;
               stageData.scrapePagesScraped = cached.pagesScraped || 0;
               stageData.scrapeEvidenceCategories = cached.evidenceCategories || [];
               setStages((prev) => ({ ...prev, scrape: "done" }));
+            } else {
+              console.log("[Enrichment] Cached scrape data is empty/minimal, will re-scrape");
             }
-            if (cached.classification && cached.classification.categories?.length > 0) {
+            // Classification: require both categories AND skills to count as complete
+            if (cached.classification && (cached.classification.categories?.length ?? 0) > 0 && (cached.classification.skills?.length ?? 0) > 0) {
               needsClassify = false;
               stageData.classificationData = cached.classification;
               setStages((prev) => ({ ...prev, classify: "done" }));
@@ -647,8 +657,18 @@ export function EnrichmentProvider({
     const hasRealPdl = cd && (
       (cd.employeeCount ?? 0) > 0 || cd.size || cd.location || cd.inferredRevenue
     );
-    const hasScrape = !!(result.extracted || result.groundTruth);
-    const hasClassify = !!(result.classification?.categories?.length);
+    // Scrape: require real content, not just a non-null object with empty arrays
+    const hasScrape = !!(
+      (result.extracted?.services?.length) ||
+      (result.extracted?.clients?.length) ||
+      result.extracted?.aboutPitch ||
+      result.groundTruth
+    );
+    // Classification: require both categories AND skills
+    const hasClassify = !!(
+      result.classification?.categories?.length &&
+      result.classification?.skills?.length
+    );
 
     if (!hasRealPdl || !hasScrape || !hasClassify) {
       autoRetryDoneRef.current = true;
