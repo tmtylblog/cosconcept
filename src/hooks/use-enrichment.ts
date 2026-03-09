@@ -592,8 +592,9 @@ export function EnrichmentProvider({
                 `[Enrichment] Classify done: ${data.classification?.categories?.length ?? 0} categories`
               );
             } else {
+              console.warn(`[Enrichment] Classify returned ${classifyRes.status} — check if auth is required`);
               setStages((prev) => ({ ...prev, classify: "failed" }));
-              logOnboardingEventClient({ stage: "enrichment_stage_done", event: "classify_failed", domain, metadata: { status: "failed" } });
+              logOnboardingEventClient({ stage: "enrichment_stage_done", event: "classify_failed", domain, metadata: { status: "failed", httpStatus: classifyRes.status } });
             }
           } catch (err) {
             if (thisRun !== runIdRef.current) return;
