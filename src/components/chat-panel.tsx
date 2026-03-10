@@ -5,7 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import Image from "next/image";
-import { Send, Mic, Loader2, Globe, FileText, X, Sparkles } from "lucide-react";
+import { Send, Mic, Loader2, Globe, FileText, X, Sparkles, Zap, Radio, Users, BookOpen, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
@@ -147,6 +147,41 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   const { guestPreferences, setGuestPreference, setGuestMessages, forceFlushToDb } = useGuestData();
   const [input, setInput] = useState("");
   const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
+
+  // ─── Transcript tip + extraction state ────────────────────────────────
+  const [showTranscriptTip, setShowTranscriptTip] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("cos_transcript_tip_dismissed") !== "true";
+  });
+
+  interface ExtractedOpp {
+    id: string;
+    title: string;
+    description: string;
+    evidence: string | null;
+    signalType: string;
+    priority: string;
+    resolutionApproach: string;
+    requiredCategories: string[];
+    requiredSkills: string[];
+    estimatedValue: string | null;
+    timeline: string | null;
+    clientName: string | null;
+  }
+
+  interface MatchResult {
+    opportunityId: string;
+    opportunityTitle: string;
+    experts: { profileId: string; expertName: string | null; firmName: string | null; profileTitle: string | null; matchedSkills: string[]; source: "own" | "partner" }[];
+    caseStudies: { exampleId: string; title: string | null; description: string | null; firmName: string | null; matchedSkills: string[]; source: "own" | "partner" }[];
+  }
+
+  const [transcriptResult, setTranscriptResult] = useState<
+    null | { loading: true } | { opportunities: ExtractedOpp[]; transcriptId: string }
+  >(null);
+  const [matchResult, setMatchResult] = useState<
+    null | { loading: true; scope: string } | { scope: string; matches: MatchResult[] }
+  >(null);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
 
   // ─── Detect returning guest with all 9 prefs (read directly from localStorage) ───
@@ -444,6 +479,12 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     }
   }, [messages]);
 
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [transcriptResult, matchResult]);
+
   // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
@@ -606,12 +647,57 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     setInput("");
   };
 
-  const handleAnalyseTranscript = () => {
+  const handleAnalyseTranscript = async () => {
     if (!pendingTranscript || isLoading) return;
-    const wordCount = pendingTranscript.trim().split(/\s+/).length;
-    // Send the transcript with a compact prefix — UI renders it as a card bubble
-    sendMessage({ text: `[TRANSCRIPT:${wordCount}]\n${pendingTranscript}` });
+    const transcript = pendingTranscript;
+    setTranscriptResult({ loading: true });
     setPendingTranscript(null);
+    setMatchResult(null);
+
+    // Increment dismissal counter — hide tip after 2 uses
+    const countKey = "cos_transcript_tip_count";
+    const count = parseInt(localStorage.getItem(countKey) ?? "0") + 1;
+    localStorage.setItem(countKey, String(count));
+    if (count >= 2) {
+      localStorage.setItem("cos_transcript_tip_dismissed", "true");
+      setShowTranscriptTip(false);
+    }
+
+    try {
+      const res = await fetch("/api/opportunities/extract-from-transcript", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript, organizationId: activeOrg?.id ?? undefined }),
+      });
+      const data = await res.json() as { opportunities?: ExtractedOpp[]; transcriptId?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Extraction failed");
+      setTranscriptResult({ opportunities: data.opportunities ?? [], transcriptId: data.transcriptId ?? "" });
+    } catch (err) {
+      console.error("[ChatPanel] Transcript extraction failed:", err);
+      setTranscriptResult(null);
+    }
+  };
+
+  const handleFindMatches = async (scope: "own" | "partners" | "both") => {
+    if (!transcriptResult || "loading" in transcriptResult || transcriptResult.opportunities.length === 0) return;
+    setMatchResult({ loading: true, scope });
+    try {
+      const res = await fetch("/api/opportunities/find-matches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          opportunityIds: transcriptResult.opportunities.map((o) => o.id),
+          scope,
+          organizationId: activeOrg?.id ?? undefined,
+        }),
+      });
+      const data = await res.json() as { matches?: MatchResult[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Matching failed");
+      setMatchResult({ scope, matches: data.matches ?? [] });
+    } catch (err) {
+      console.error("[ChatPanel] Find matches failed:", err);
+      setMatchResult(null);
+    }
   };
 
   const atGuestLimit = isGuest && (showLoginPrompt || guestMessageCount >= GUEST_MESSAGE_LIMIT);
@@ -782,6 +868,201 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           );
         })}
 
+        {/* ── Transcript extraction results ───────────────────────────────── */}
+        {transcriptResult && (
+          <div className="flex gap-2 mt-3">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20">
+              <Image src="/logo.png" alt="Ossy" width={18} height={18} className="h-[18px] w-[18px] object-cover" />
+            </div>
+            <div className="flex-1 min-w-0 space-y-2">
+              {"loading" in transcriptResult ? (
+                <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-cos-electric" />
+                    <span className="text-sm text-cos-slate">Reading the transcript and extracting opportunities…</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-4 py-3">
+                    <p className="text-sm text-cos-midnight">
+                      {transcriptResult.opportunities.length === 0
+                        ? "I went through the transcript but didn't spot any clear client opportunities. This might be a more internal or informational call — try one from a client conversation where you discussed their business or upcoming work."
+                        : `I found ${transcriptResult.opportunities.length} ${transcriptResult.opportunities.length === 1 ? "opportunity" : "opportunities"} in this transcript worth exploring:`}
+                    </p>
+                  </div>
+
+                  {transcriptResult.opportunities.map((opp) => (
+                    <div key={opp.id} className="rounded-cos-xl rounded-tl-cos-sm border border-cos-border bg-white px-4 py-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-cos-midnight leading-snug">{opp.title}</p>
+                        <span className={cn(
+                          "shrink-0 rounded-cos-pill px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                          opp.priority === "high" ? "bg-cos-ember/10 text-cos-ember" :
+                          opp.priority === "low" ? "bg-cos-slate/10 text-cos-slate" :
+                          "bg-cos-electric/10 text-cos-electric"
+                        )}>
+                          {opp.priority}
+                        </span>
+                      </div>
+                      <p className="text-xs text-cos-slate leading-relaxed">{opp.description}</p>
+                      {opp.evidence && (
+                        <p className="text-xs italic text-cos-slate/80 border-l-2 border-cos-electric/30 pl-2 leading-relaxed">
+                          &ldquo;{opp.evidence}&rdquo;
+                        </p>
+                      )}
+                      {(opp.requiredCategories.length > 0 || opp.requiredSkills.length > 0) && (
+                        <div className="flex flex-wrap gap-1">
+                          {[...opp.requiredCategories, ...opp.requiredSkills].slice(0, 5).map((tag) => (
+                            <span key={tag} className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] text-cos-slate">{tag}</span>
+                          ))}
+                        </div>
+                      )}
+                      {(opp.estimatedValue || opp.timeline) && (
+                        <div className="flex items-center gap-3 text-[10px] text-cos-slate">
+                          {opp.estimatedValue && <span>💰 {opp.estimatedValue}</span>}
+                          {opp.timeline && <span>🗓 {opp.timeline}</span>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Match search prompt */}
+                  {transcriptResult.opportunities.length > 0 && !matchResult && (
+                    <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-4 py-3 space-y-3">
+                      <p className="text-sm text-cos-midnight">
+                        Want me to search for relevant expertise or case studies that could help you close these? I can look across your own team or your partner network:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => handleFindMatches("own")}
+                          className="flex items-center gap-1.5 rounded-cos-lg border border-cos-electric/30 bg-cos-electric/5 px-3 py-1.5 text-xs font-medium text-cos-electric hover:bg-cos-electric/10 transition-colors"
+                        >
+                          <BookOpen className="h-3 w-3" />
+                          My expertise &amp; case studies
+                        </button>
+                        <button
+                          onClick={() => handleFindMatches("partners")}
+                          className="flex items-center gap-1.5 rounded-cos-lg border border-cos-slate/20 bg-cos-cloud px-3 py-1.5 text-xs font-medium text-cos-slate hover:bg-cos-surface-raised transition-colors"
+                        >
+                          <Users className="h-3 w-3" />
+                          Partner experience
+                        </button>
+                        <button
+                          onClick={() => handleFindMatches("both")}
+                          className="flex items-center gap-1.5 rounded-cos-lg border border-cos-signal/30 bg-cos-signal/5 px-3 py-1.5 text-xs font-medium text-cos-signal hover:bg-cos-signal/10 transition-colors"
+                        >
+                          <Search className="h-3 w-3" />
+                          Search everything
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Match results ────────────────────────────────────────────────── */}
+        {matchResult && (
+          <div className="flex gap-2">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20">
+              <Image src="/logo.png" alt="Ossy" width={18} height={18} className="h-[18px] w-[18px] object-cover" />
+            </div>
+            <div className="flex-1 min-w-0 space-y-2">
+              {"loading" in matchResult ? (
+                <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-cos-electric" />
+                    <span className="text-sm text-cos-slate">
+                      Searching {matchResult.scope === "own" ? "your team" : matchResult.scope === "partners" ? "partner firms" : "your full network"}…
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-4 py-3">
+                    <p className="text-sm text-cos-midnight">
+                      {matchResult.matches.every((m) => m.experts.length === 0 && m.caseStudies.length === 0)
+                        ? `I searched ${matchResult.scope === "own" ? "your team" : matchResult.scope === "partners" ? "your partner network" : "your full network"} but couldn't find direct matches for these opportunities yet. Try adding more specialist profiles and case studies to improve coverage.`
+                        : `Here's what I found in ${matchResult.scope === "own" ? "your team" : matchResult.scope === "partners" ? "your partner network" : "your full network"}:`}
+                    </p>
+                  </div>
+                  {matchResult.matches.map((match) => {
+                    if (match.experts.length === 0 && match.caseStudies.length === 0) return null;
+                    return (
+                      <div key={match.opportunityId} className="rounded-cos-xl rounded-tl-cos-sm border border-cos-border bg-white px-4 py-3 space-y-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-cos-slate">{match.opportunityTitle}</p>
+                        {match.experts.length > 0 && (
+                          <div className="space-y-1.5">
+                            <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-cos-slate">
+                              <Users className="h-3 w-3" /> Expertise ({match.experts.length})
+                            </p>
+                            {match.experts.map((ex) => (
+                              <div key={ex.profileId} className="rounded-cos-lg bg-cos-cloud px-3 py-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-medium text-cos-midnight truncate">{ex.expertName ?? ex.profileTitle ?? "Expert"}</p>
+                                  <span className={cn(
+                                    "shrink-0 rounded-cos-pill px-1.5 py-0.5 text-[9px] font-medium",
+                                    ex.source === "own" ? "bg-cos-electric/10 text-cos-electric" : "bg-cos-signal/10 text-cos-signal"
+                                  )}>
+                                    {ex.source === "own" ? "Own team" : ex.firmName ?? "Partner"}
+                                  </span>
+                                </div>
+                                {ex.profileTitle && ex.expertName && (
+                                  <p className="text-[10px] text-cos-slate mt-0.5">{ex.profileTitle}</p>
+                                )}
+                                {ex.matchedSkills.length > 0 && (
+                                  <div className="mt-1.5 flex flex-wrap gap-1">
+                                    {ex.matchedSkills.slice(0, 3).map((s) => (
+                                      <span key={s} className="rounded-cos-pill bg-cos-electric/10 px-1.5 py-0.5 text-[9px] text-cos-electric">{s}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {match.caseStudies.length > 0 && (
+                          <div className="space-y-1.5">
+                            <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-cos-slate">
+                              <BookOpen className="h-3 w-3" /> Case Studies ({match.caseStudies.length})
+                            </p>
+                            {match.caseStudies.map((cs) => (
+                              <div key={cs.exampleId} className="rounded-cos-lg bg-cos-cloud px-3 py-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-medium text-cos-midnight truncate">{cs.title ?? "Case Study"}</p>
+                                  <span className={cn(
+                                    "shrink-0 rounded-cos-pill px-1.5 py-0.5 text-[9px] font-medium",
+                                    cs.source === "own" ? "bg-cos-electric/10 text-cos-electric" : "bg-cos-signal/10 text-cos-signal"
+                                  )}>
+                                    {cs.source === "own" ? "Own team" : cs.firmName ?? "Partner"}
+                                  </span>
+                                </div>
+                                {cs.description && (
+                                  <p className="mt-0.5 text-[10px] text-cos-slate leading-relaxed line-clamp-2">{cs.description}</p>
+                                )}
+                                {cs.matchedSkills.length > 0 && (
+                                  <div className="mt-1.5 flex flex-wrap gap-1">
+                                    {cs.matchedSkills.slice(0, 3).map((s) => (
+                                      <span key={s} className="rounded-cos-pill bg-cos-signal/10 px-1.5 py-0.5 text-[9px] text-cos-signal">{s}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {isLoading && messages[messages.length - 1]?.role === "user" && (
           <div className="flex gap-2">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20">
@@ -867,6 +1148,32 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transcript tip — visible to authenticated users until dismissed (after 2 uses) */}
+      {showTranscriptTip && !isGuest && !pendingTranscript && !transcriptResult && (
+        <div className="shrink-0 border-t border-cos-electric/20 bg-gradient-to-r from-cos-electric/5 to-cos-signal/5 px-4 py-3">
+          <div className="flex items-start gap-2.5">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-cos-full bg-cos-electric/10">
+              <Zap className="h-3 w-3 text-cos-electric" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-cos-midnight">Paste a client call transcript to find hidden opportunities</p>
+              <p className="mt-0.5 text-[11px] text-cos-slate leading-relaxed">
+                After a call where you discussed a client&apos;s business or upcoming work, paste the transcript here — Ossy will extract every opportunity and match them against your team&apos;s expertise and partner network.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                localStorage.setItem("cos_transcript_tip_dismissed", "true");
+                setShowTranscriptTip(false);
+              }}
+              className="shrink-0 rounded p-0.5 text-cos-slate hover:text-cos-midnight transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       )}
