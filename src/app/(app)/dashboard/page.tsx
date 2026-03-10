@@ -103,8 +103,11 @@ export default function DashboardPage() {
   const dealBreakers = profile.dealBreakers ?? [];
   const growthGoals = profile.growthGoals;
   const desiredServices = profile.desiredPartnerServices ?? [];
-  const clientSize = profile.idealPartnerClientSize;
-  const projectSize = profile.idealProjectSize;
+  // These can be string (legacy) or string[] (new format) — normalize to arrays
+  const clientSizeRaw = profile.idealPartnerClientSize;
+  const clientSize: string[] = Array.isArray(clientSizeRaw) ? clientSizeRaw : clientSizeRaw ? [clientSizeRaw] : [];
+  const projectSizeRaw = profile.idealProjectSize;
+  const projectSize: string[] = Array.isArray(projectSizeRaw) ? projectSizeRaw : projectSizeRaw ? [projectSizeRaw] : [];
   const hourlyRates = profile.typicalHourlyRates;
 
   // Progressive data check — show cards section as soon as ANY data arrives
@@ -319,9 +322,9 @@ export default function DashboardPage() {
             </RevealCard>
           )}
 
-          {clientSize && (
+          {clientSize.length > 0 && (
             <RevealCard icon={Users} label="Ideal Partner Client Size" delay={0}>
-              <p>{clientSize}</p>
+              <PillList items={clientSize} pillClass="bg-cos-midnight/6 text-cos-midnight" />
             </RevealCard>
           )}
 
@@ -349,9 +352,9 @@ export default function DashboardPage() {
             </RevealCard>
           )}
 
-          {projectSize && (
+          {projectSize.length > 0 && (
             <RevealCard icon={Ruler} label="Ideal Project Size" delay={0}>
-              <p>{projectSize}</p>
+              <PillList items={projectSize} pillClass="bg-cos-warm/10 text-cos-warm" />
             </RevealCard>
           )}
 

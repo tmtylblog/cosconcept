@@ -106,21 +106,21 @@ export function PreferenceProgress({
 }: {
   desiredServices: string[];
   partnerIndustries: string[];
-  clientSize: string | undefined;
+  clientSize: string[];
   partnerLocations: string[];
   partnerTypes: string[];
   partnerSize: string[];
-  projectSize: string | undefined;
+  projectSize: string[];
   hourlyRates: string | undefined;
 }) {
   const fields = [
     { label: "Services wanted", done: desiredServices.length > 0 },
     { label: "Partner industries", done: partnerIndustries.length > 0 },
-    { label: "Client size", done: !!clientSize },
+    { label: "Client size", done: clientSize.length > 0 },
     { label: "Locations", done: partnerLocations.length > 0 },
     { label: "Partner types", done: partnerTypes.length > 0 },
     { label: "Partner size", done: partnerSize.length > 0 },
-    { label: "Project size", done: !!projectSize },
+    { label: "Project size", done: projectSize.length > 0 },
     { label: "Hourly rates", done: !!hourlyRates },
   ];
 

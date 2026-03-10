@@ -25,8 +25,8 @@ export interface ProfileData {
   growthGoals?: string;
   // Partner criteria (from rawOnboardingData)
   desiredPartnerServices?: string[];
-  idealPartnerClientSize?: string;
-  idealProjectSize?: string;
+  idealPartnerClientSize?: string | string[];
+  idealProjectSize?: string | string[];
   typicalHourlyRates?: string;
 }
 

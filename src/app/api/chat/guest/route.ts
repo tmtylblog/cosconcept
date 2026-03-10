@@ -38,7 +38,7 @@ const guestUpdateProfileTool = tool({
       z.string(),
       z.array(z.string()),
     ]).describe(
-      "The confirmed value. Use a string for single-value fields, an array for multi-value fields."
+      "The confirmed value. Use an ARRAY for: desiredPartnerServices, requiredPartnerIndustries, idealPartnerClientSize, preferredPartnerLocations, preferredPartnerTypes, preferredPartnerSize, idealProjectSize. Use a STRING for: typicalHourlyRates, firmCategory, growthGoals. Always use array even if only one item selected."
     ),
   }),
   execute: async ({ field, value }) => {

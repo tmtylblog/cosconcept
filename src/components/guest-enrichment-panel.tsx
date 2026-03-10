@@ -71,11 +71,11 @@ export function GuestEnrichmentPanel() {
 
   const desiredServices = asArray(guestPreferences.desiredPartnerServices);
   const partnerIndustries = asArray(guestPreferences.requiredPartnerIndustries);
-  const clientSize = asString(guestPreferences.idealPartnerClientSize);
+  const clientSize = asArray(guestPreferences.idealPartnerClientSize);
   const partnerLocations = asArray(guestPreferences.preferredPartnerLocations);
   const partnerTypes = asArray(guestPreferences.preferredPartnerTypes);
   const partnerSize = asArray(guestPreferences.preferredPartnerSize);
-  const projectSize = asString(guestPreferences.idealProjectSize);
+  const projectSize = asArray(guestPreferences.idealProjectSize);
   const hourlyRates = asString(guestPreferences.typicalHourlyRates);
   const partnerModels = asArray(guestPreferences.partnershipModels);
   const dealBreakers = asArray(guestPreferences.dealBreakers);
@@ -95,11 +95,11 @@ export function GuestEnrichmentPanel() {
     (languages ? 1 : 0) +
     (desiredServices.length > 0 ? 1 : 0) +
     (partnerIndustries.length > 0 ? 1 : 0) +
-    (clientSize ? 1 : 0) +
+    (clientSize.length > 0 ? 1 : 0) +
     (partnerLocations.length > 0 ? 1 : 0) +
     (partnerTypes.length > 0 ? 1 : 0) +
     (partnerSize.length > 0 ? 1 : 0) +
-    (projectSize ? 1 : 0) +
+    (projectSize.length > 0 ? 1 : 0) +
     (hourlyRates ? 1 : 0) +
     (partnerModels.length > 0 ? 1 : 0) +
     (dealBreakers.length > 0 ? 1 : 0) +
@@ -303,9 +303,9 @@ export function GuestEnrichmentPanel() {
               <PillList items={partnerIndustries} pillClass="bg-cos-signal/8 text-cos-signal" />
             </RevealCard>
           )}
-          {clientSize && (
+          {clientSize.length > 0 && (
             <RevealCard icon={Users} label="Ideal Partner Client Size" delay={0}>
-              <p>{clientSize}</p>
+              <PillList items={clientSize} pillClass="bg-cos-midnight/6 text-cos-midnight" />
             </RevealCard>
           )}
           {partnerLocations.length > 0 && (
@@ -323,9 +323,9 @@ export function GuestEnrichmentPanel() {
               <PillList items={partnerSize} pillClass="bg-cos-midnight/6 text-cos-midnight" />
             </RevealCard>
           )}
-          {projectSize && (
+          {projectSize.length > 0 && (
             <RevealCard icon={Ruler} label="Ideal Project Size" delay={0}>
-              <p>{projectSize}</p>
+              <PillList items={projectSize} pillClass="bg-cos-warm/10 text-cos-warm" />
             </RevealCard>
           )}
           {hourlyRates && (
