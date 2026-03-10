@@ -112,14 +112,25 @@ All enrichment routes require authentication unless noted.
 | POST | `/api/partnerships/intro` | Generates (and optionally sends) a three-way intro email between two partner firms. AI-generated content. | Yes |
 
 ### Opportunities
+Private intelligence. Must be promoted to a Lead to share with the network.
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| GET | `/api/opportunities` | Lists opportunities for a firm (own + shared with us) by `firmId`. Includes share/claim counts. | Yes |
-| POST | `/api/opportunities` | Creates a new opportunity with title, description, required skills/industries, estimated value, timeline. | Yes |
-| GET | `/api/opportunities/[id]` | Opportunity details with share info and firm names. | Yes |
-| PATCH | `/api/opportunities/[id]` | Updates opportunity status or details. | Yes |
-| POST | `/api/opportunities/share` | Shares an opportunity with partner firms. Validates accepted partnership status. Skips duplicates. | Yes |
+| GET | `/api/opportunities` | Lists opportunities for a firm by `firmId`. status/signal/priority filters supported. | Yes |
+| POST | `/api/opportunities` | Creates opportunity. New fields: evidence, signalType, priority, resolutionApproach, requiredCategories, requiredMarkets, clientDomain, clientName, clientSizeBand, attachments. status defaults to "new". | Yes |
+| GET | `/api/opportunities/[id]` | Opportunity details. | Yes |
+| PATCH | `/api/opportunities/[id]` | Updates opportunity fields or status (new→in_review→actioned\|dismissed). | Yes |
+| POST | `/api/opportunities/share` | **Promotes** an opportunity to a Lead. Body: `{ opportunityId, overrides? }`. Scores lead quality, inserts `leads` row, marks opportunity "actioned". Returns `{ leadId, qualityScore, qualityTier }`. | Yes |
+
+### Leads
+Shareable opportunities, quality-scored (score is internal only, not exposed to recipients).
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/api/leads` | Lists leads for a firm (own posted + shared-with-us). Supports `status` filter. | Yes |
+| POST | `/api/leads` | Creates lead directly (without an opportunity source). Runs quality scoring. Returns `{ id, qualityScore, qualityTier }`. | Yes |
+| GET | `/api/leads/[id]` | Lead details with shares + partner firm names. Includes quality breakdown. | Yes |
+| PATCH | `/api/leads/[id]` | Updates lead fields or status. Re-scores quality when content fields change. | Yes |
 
 ### Referrals
 
@@ -258,6 +269,12 @@ All admin routes require `superadmin` role unless noted. Prefix: `/api/admin/`.
 | GET | `/api/admin/partnerships` | Lists all partnerships platform-wide with firm names. | superadmin |
 | GET | `/api/admin/partnerships/stats` | Aggregated stats: partnership counts by status, referral counts, opportunity counts. | superadmin |
 | POST | `/api/admin/partnerships/intro` | Queues a partnership intro email for admin-initiated intros. Uses `queuePartnershipIntro()`. | admin |
+
+### Opportunities & Leads (Admin)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/api/admin/opportunities?period=30d` | Opportunity funnel stats (byStatus, bySignal, byPriority, bySource), lead stats (byStatus, avgQuality, qualityTiers, shares), recentOpportunities (20), recentLeads (20). | superadmin |
 
 ### Email (Admin)
 

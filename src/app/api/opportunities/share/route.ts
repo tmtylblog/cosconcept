@@ -1,116 +1,110 @@
 /**
- * Opportunity Sharing API
+ * Promote Opportunity to Lead
  *
- * POST /api/opportunities/share — Share an opportunity with partner firms
+ * POST /api/opportunities/share
+ *
+ * Creates a Lead from an Opportunity — the shareable version that can be
+ * posted to the partner network. Scores lead quality automatically.
+ * Marks the source opportunity as "actioned".
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { opportunities, opportunityShares, partnerships } from "@/lib/db/schema";
-import { eq, or, and } from "drizzle-orm";
-import type { ShareOpportunityInput } from "@/types/partnerships";
+import { opportunities, leads } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { scoreLeadQuality } from "@/lib/opportunities/quality-scorer";
+type SizeBand = "individual" | "micro_1_10" | "small_11_50" | "emerging_51_200" | "mid_201_500" | "upper_mid_501_1000" | "large_1001_5000" | "major_5001_10000" | "global_10000_plus";
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/**
- * POST — Share an opportunity with selected partner firms.
- * Body: { opportunityId, firmIds }
- */
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await req.json()) as ShareOpportunityInput & {
+  const body = await req.json();
+  const { opportunityId, overrides = {} } = body as {
     opportunityId: string;
+    overrides?: Record<string, unknown>;
   };
-  const { opportunityId, firmIds } = body;
 
-  if (!opportunityId || !firmIds?.length) {
-    return NextResponse.json(
-      { error: "opportunityId and firmIds are required" },
-      { status: 400 }
-    );
+  if (!opportunityId) {
+    return NextResponse.json({ error: "opportunityId is required" }, { status: 400 });
   }
 
-  // Verify opportunity exists
-  const opportunity = await db.query.opportunities.findFirst({
+  const opp = await db.query.opportunities.findFirst({
     where: eq(opportunities.id, opportunityId),
   });
 
-  if (!opportunity) {
+  if (!opp) {
     return NextResponse.json({ error: "Opportunity not found" }, { status: 404 });
   }
 
-  // Verify firms are trusted partners
-  const validFirmIds: string[] = [];
-  for (const targetFirmId of firmIds) {
-    const isPartner = await db.query.partnerships.findFirst({
-      where: and(
-        or(
-          and(
-            eq(partnerships.firmAId, opportunity.firmId),
-            eq(partnerships.firmBId, targetFirmId)
-          ),
-          and(
-            eq(partnerships.firmAId, targetFirmId),
-            eq(partnerships.firmBId, opportunity.firmId)
-          )
-        ),
-        eq(partnerships.status, "accepted")
-      ),
-    });
+  const leadData = {
+    title: (overrides.title as string) ?? opp.title,
+    description: (overrides.description as string) ?? opp.description ?? "",
+    evidence: (overrides.evidence as string | undefined) ?? opp.evidence ?? undefined,
+    requiredCategories: (overrides.requiredCategories as string[]) ?? opp.requiredCategories ?? [],
+    requiredSkills: (overrides.requiredSkills as string[]) ?? opp.requiredSkills ?? [],
+    requiredIndustries: (overrides.requiredIndustries as string[]) ?? opp.requiredIndustries ?? [],
+    requiredMarkets: (overrides.requiredMarkets as string[]) ?? opp.requiredMarkets ?? [],
+    estimatedValue: (overrides.estimatedValue as string | undefined) ?? opp.estimatedValue ?? undefined,
+    timeline: (overrides.timeline as string | undefined) ?? opp.timeline ?? undefined,
+    clientDomain: (overrides.clientDomain as string | undefined) ?? opp.clientDomain ?? undefined,
+    clientName: (overrides.clientName as string | undefined) ?? opp.clientName ?? undefined,
+    anonymizeClient: (overrides.anonymizeClient as boolean | undefined) ?? opp.anonymizeClient,
+    clientSizeBand: (overrides.clientSizeBand as string | undefined) ?? opp.clientSizeBand ?? undefined,
+    source: opp.source,
+    attachments: (overrides.attachments as { name: string; url: string; type: string; size: number }[] | undefined) ?? (opp.attachments as { name: string; url: string; type: string; size: number }[] | null) ?? [],
+  };
 
-    if (isPartner) {
-      validFirmIds.push(targetFirmId);
-    }
-  }
-
-  if (validFirmIds.length === 0) {
+  if (!leadData.description) {
     return NextResponse.json(
-      { error: "No valid partner firms to share with" },
+      { error: "A description is required to create a lead" },
       { status: 400 }
     );
   }
 
-  // Create shares (skip duplicates)
-  const created: string[] = [];
-  for (const targetFirmId of validFirmIds) {
-    const existing = await db.query.opportunityShares.findFirst({
-      where: and(
-        eq(opportunityShares.opportunityId, opportunityId),
-        eq(opportunityShares.sharedWithFirmId, targetFirmId)
-      ),
-    });
+  const { score, breakdown } = scoreLeadQuality(leadData);
+  const leadId = generateId("lead");
 
-    if (!existing) {
-      const shareId = generateId("osh");
-      await db.insert(opportunityShares).values({
-        id: shareId,
-        opportunityId,
-        sharedWithFirmId: targetFirmId,
-        sharedBy: session.user.id,
-      });
-      created.push(targetFirmId);
-    }
-  }
-
-  // Update opportunity status to "shared" if currently "open"
-  if (opportunity.status === "open" && created.length > 0) {
-    await db
-      .update(opportunities)
-      .set({ status: "shared", updatedAt: new Date() })
-      .where(eq(opportunities.id, opportunityId));
-  }
-
-  return NextResponse.json({
-    shared: created.length,
-    skipped: validFirmIds.length - created.length,
-    invalidPartners: firmIds.length - validFirmIds.length,
+  await db.insert(leads).values({
+    id: leadId,
+    firmId: opp.firmId,
+    createdBy: session.user.id,
+    opportunityId: opp.id,
+    title: leadData.title,
+    description: leadData.description,
+    evidence: leadData.evidence ?? null,
+    requiredCategories: leadData.requiredCategories,
+    requiredSkills: leadData.requiredSkills,
+    requiredIndustries: leadData.requiredIndustries,
+    requiredMarkets: leadData.requiredMarkets,
+    estimatedValue: leadData.estimatedValue ?? null,
+    timeline: leadData.timeline ?? null,
+    clientDomain: leadData.clientDomain ?? null,
+    clientName: leadData.clientName ?? null,
+    anonymizeClient: leadData.anonymizeClient,
+    clientSizeBand: (leadData.clientSizeBand as SizeBand | null | undefined) ?? null,
+    attachments: leadData.attachments,
+    qualityScore: score,
+    qualityBreakdown: breakdown,
+    status: "open",
   });
+
+  // Mark the opportunity as actioned
+  await db
+    .update(opportunities)
+    .set({ status: "actioned", updatedAt: new Date() })
+    .where(eq(opportunities.id, opportunityId));
+
+  return NextResponse.json(
+    { lead: { id: leadId, qualityScore: score } },
+    { status: 201 }
+  );
 }

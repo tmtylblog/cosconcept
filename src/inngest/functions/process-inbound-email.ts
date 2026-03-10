@@ -122,7 +122,7 @@ export const processInboundEmail = inngest.createFunction(
           createdBy: ownerUserId,
           title: signals.title ?? `Opportunity from ${from}`,
           description: classification.summary,
-          requiredSkills: signals.requiredSkills ?? null,
+          requiredSkills: signals.requiredSkills ?? [],
           estimatedValue: signals.estimatedValue ?? null,
           timeline:
             signals.urgency === "immediate"
@@ -131,7 +131,7 @@ export const processInboundEmail = inngest.createFunction(
                 ? "1-3 months"
                 : "3-6 months",
           source: "email",
-          status: "open",
+          status: "new",
         });
 
         await db

@@ -11,7 +11,8 @@ import {
   serviceFirms,
   partnerships,
   opportunities,
-  opportunityShares,
+  leads,
+  leadShares,
   referrals,
   members,
   users,
@@ -102,16 +103,18 @@ export const weeklyDigest = inngest.createFunction(
             )
           );
 
+        // For each opportunity, find any promoted lead and its shares
         const oppUpdates = await Promise.all(
           recentOpps.map(async (opp) => {
-            const shares = await db
-              .select()
-              .from(opportunityShares)
-              .where(eq(opportunityShares.opportunityId, opp.id));
-
+            const lead = await db.query.leads.findFirst({
+              where: eq(leads.opportunityId, opp.id),
+            });
+            const shares = lead
+              ? await db.select().from(leadShares).where(eq(leadShares.leadId, lead.id))
+              : [];
             return {
               title: opp.title,
-              status: opp.status ?? "open",
+              status: opp.status ?? "new",
               sharedWith: shares.length,
               claimed: shares.filter((s) => s.claimedAt).length,
             };

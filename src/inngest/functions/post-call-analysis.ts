@@ -141,10 +141,21 @@ export const postCallAnalysis = inngest.createFunction(
       transcriptId?: string;
     };
 
-    // Step 1: Extract opportunities
+    // Step 1: Extract opportunities (with firm context for resolution_approach)
     const extractedOpportunities = await step.run("extract-opportunities", async () => {
       console.log(`[PostCallAnalysis] Extracting opportunities from call ${callId}`);
-      return extractOpportunities(transcript, { source: "call_transcript" });
+      const firm = await db.query.serviceFirms.findFirst({
+        where: eq(serviceFirms.id, firmId),
+        columns: { name: true, enrichmentData: true },
+      });
+      const firmCategories =
+        (firm?.enrichmentData as { classification?: { categories?: string[] } } | null)
+          ?.classification?.categories ?? [];
+      return extractOpportunities(transcript, {
+        firmName: firm?.name,
+        firmCategories,
+        source: "call_transcript",
+      });
     });
 
     // Step 2: Run coaching analysis
@@ -166,13 +177,21 @@ export const postCallAnalysis = inngest.createFunction(
             createdBy: userId ?? firmId,
             title: opp.title,
             description: opp.description,
-            requiredSkills: opp.requiredSkills,
-            requiredIndustries: opp.requiredIndustries,
+            evidence: opp.evidence ?? null,
+            signalType: opp.signalType ?? "direct",
+            priority: opp.priority ?? "medium",
+            resolutionApproach: opp.resolutionApproach ?? "network",
+            requiredCategories: opp.requiredCategories ?? [],
+            requiredSkills: opp.requiredSkills ?? [],
+            requiredIndustries: opp.requiredIndustries ?? [],
+            requiredMarkets: opp.requiredMarkets ?? [],
             estimatedValue: opp.estimatedValue ?? null,
             timeline: opp.timeline ?? null,
-            clientType: opp.clientType ?? null,
+            clientName: opp.clientName ?? null,
+            clientSizeBand: (opp.clientSizeBand as "individual" | "micro_1_10" | "small_11_50" | "emerging_51_200" | "mid_201_500" | "upper_mid_501_1000" | "large_1001_5000" | "major_5001_10000" | "global_10000_plus" | null | undefined) ?? null,
             source: "call",
-            status: "open",
+            sourceId: transcriptId ?? null,
+            status: "new",
           });
           createdOpportunities++;
         }

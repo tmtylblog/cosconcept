@@ -216,9 +216,9 @@ All 14 functions are registered in the serve handler at `/api/inngest`.
 **Purpose:** Full post-call analysis pipeline. Extracts opportunities, runs coaching analysis, creates opportunity records, finds expert/case-study recommendations via Neo4j, stores coaching report, and delivers coaching emails (two-party for partnership calls).
 
 **Steps:**
-1. `extract-opportunities` -- AI opportunity extraction from transcript
+1. `extract-opportunities` -- AI opportunity extraction from transcript. Step 1 now fetches `firm.enrichmentData.classification.categories` and passes as `firmCategories` context to the extractor so it can determine `resolutionApproach` (network vs internal vs hybrid).
 2. `coaching-analysis` -- AI coaching analysis (talk ratio, question quality, topics, action items)
-3. `create-opportunities` -- Create `opportunities` DB rows for high-confidence detections (>= 0.6)
+3. `create-opportunities` -- Create `opportunities` DB rows for high-confidence detections (>= 0.6). Uses new schema fields: evidence, signalType, priority, resolutionApproach, requiredCategories, requiredMarkets, clientName, clientSizeBand, sourceId. Status defaults to "new".
 4. `neo4j-recommendations` -- Query Neo4j for experts/case studies matching discussed topics
 5. `store-coaching-report` -- Insert `coachingReports` row, link transcript
 6. `deliver-coaching-emails` -- Send coaching report email to firm owner; for partnership calls, also sends to partner firm if they're a platform member

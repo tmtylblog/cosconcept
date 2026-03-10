@@ -5,7 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import Image from "next/image";
-import { Send, Mic, Loader2, Globe } from "lucide-react";
+import { Send, Mic, Loader2, Globe, FileText, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
@@ -44,6 +44,21 @@ function renderInlineMarkdown(text: string): React.ReactNode[] {
     parts.push(text.slice(lastIndex));
   }
   return parts.length > 0 ? parts : [text];
+}
+
+/**
+ * Detect whether a block of text looks like a call transcript.
+ * Signals: timestamps (00:00 / 00:00:00), speaker labels (Name: or SPEAKER_01:),
+ * and length > 400 characters. Needs 2+ signals to trigger.
+ */
+function looksLikeTranscript(text: string): boolean {
+  if (text.length < 400) return false;
+  let signals = 0;
+  if (/\b\d{1,2}:\d{2}(:\d{2})?\b/.test(text)) signals++; // timestamps
+  if (/^[A-Z][A-Za-z\s]{1,30}:/m.test(text)) signals++; // speaker labels (e.g. "John:", "Host:")
+  if (/\bSPEAKER_\d+\b/i.test(text)) signals++; // auto speaker labels
+  if (text.split("\n").length > 10) signals++; // many lines
+  return signals >= 2;
 }
 
 /** Simple URL regex — catches common website URLs in user messages */
@@ -115,6 +130,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   const { updateField: updateProfileField } = useProfile();
   const { guestPreferences, setGuestPreference, setGuestMessages, forceFlushToDb } = useGuestData();
   const [input, setInput] = useState("");
+  const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
 
   // ─── Detect returning guest with all 9 prefs (read directly from localStorage) ───
@@ -553,6 +569,14 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     setInput("");
   };
 
+  const handleAnalyseTranscript = () => {
+    if (!pendingTranscript || isLoading) return;
+    const wordCount = pendingTranscript.trim().split(/\s+/).length;
+    // Send the transcript with a compact prefix — UI renders it as a card bubble
+    sendMessage({ text: `[TRANSCRIPT:${wordCount}]\n${pendingTranscript}` });
+    setPendingTranscript(null);
+  };
+
   const atGuestLimit = isGuest && (showLoginPrompt || guestMessageCount >= GUEST_MESSAGE_LIMIT);
 
   return (
@@ -657,6 +681,18 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
               >
                 {message.parts.map((part, partIdx) => {
                   if (part.type === "text" && part.text) {
+                    // Compact card for transcript messages
+                    const transcriptMatch = part.text.match(/^\[TRANSCRIPT:(\d+)\]/);
+                    if (transcriptMatch) {
+                      const wordCount = transcriptMatch[1];
+                      return (
+                        <div key={partIdx} className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 shrink-0 opacity-80" />
+                          <span className="text-sm font-medium">Call transcript</span>
+                          <span className="text-xs opacity-70">· {wordCount} words</span>
+                        </div>
+                      );
+                    }
                     return (
                       <p
                         key={partIdx}
@@ -758,6 +794,37 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         </div>{/* close inner space-y-2 wrapper */}
       </div>
 
+      {/* Transcript detection banner */}
+      {pendingTranscript && (
+        <div className="shrink-0 border-t border-cos-electric/20 bg-cos-electric/5 px-4 py-3">
+          <div className="flex items-start gap-3">
+            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-cos-electric" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-cos-midnight">Call transcript detected</p>
+              <p className="text-xs text-cos-slate mt-0.5">
+                {pendingTranscript.trim().split(/\s+/).length} words — want Ossy to extract opportunities from it?
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                onClick={handleAnalyseTranscript}
+                disabled={isLoading}
+                className="flex items-center gap-1 rounded-cos-lg bg-cos-electric px-3 py-1.5 text-xs font-semibold text-white hover:bg-cos-electric-hover disabled:opacity-50"
+              >
+                <Sparkles className="h-3 w-3" />
+                Analyse
+              </button>
+              <button
+                onClick={() => setPendingTranscript(null)}
+                className="rounded-cos-lg p-1.5 text-cos-slate hover:text-cos-midnight"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Input area */}
       <div className="shrink-0 border-t border-cos-border/50 bg-white/80 px-4 py-3 backdrop-blur-sm">
         <form onSubmit={handleSubmit}>
@@ -765,7 +832,15 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (looksLikeTranscript(val)) {
+                  setPendingTranscript(val);
+                  setInput("");
+                } else {
+                  setInput(val);
+                }
+              }}
               onKeyDown={(e) => {
                 // Submit on Enter (without Shift)
                 if (e.key === "Enter" && !e.shiftKey) {

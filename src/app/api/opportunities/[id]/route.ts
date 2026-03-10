@@ -1,20 +1,17 @@
 /**
  * Opportunity Detail API
  *
- * GET   /api/opportunities/[id] — Get details
- * PATCH /api/opportunities/[id] — Update status or details
+ * GET   /api/opportunities/[id]  — Get opportunity details
+ * PATCH /api/opportunities/[id]  — Update status or details
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { opportunities, opportunityShares, serviceFirms } from "@/lib/db/schema";
+import { opportunities } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
-/**
- * GET — Opportunity details with share info.
- */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,7 +22,6 @@ export async function GET(
   }
 
   const { id } = await params;
-
   const opportunity = await db.query.opportunities.findFirst({
     where: eq(opportunities.id, id),
   });
@@ -34,35 +30,9 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Get shares with firm names
-  const shares = await db
-    .select({
-      share: opportunityShares,
-      firm: {
-        id: serviceFirms.id,
-        name: serviceFirms.name,
-        website: serviceFirms.website,
-      },
-    })
-    .from(opportunityShares)
-    .leftJoin(serviceFirms, eq(opportunityShares.sharedWithFirmId, serviceFirms.id))
-    .where(eq(opportunityShares.opportunityId, id));
-
-  return NextResponse.json({
-    opportunity: {
-      ...opportunity,
-      shares: shares.map((s) => ({
-        ...s.share,
-        firm: s.firm,
-      })),
-    },
-  });
+  return NextResponse.json({ opportunity });
 }
 
-/**
- * PATCH — Update opportunity (status, details).
- * Body: { status?, title?, description?, ... }
- */
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -75,11 +45,11 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
 
-  const opportunity = await db.query.opportunities.findFirst({
+  const existing = await db.query.opportunities.findFirst({
     where: eq(opportunities.id, id),
   });
 
-  if (!opportunity) {
+  if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -88,16 +58,23 @@ export async function PATCH(
   if (body.status) updates.status = body.status;
   if (body.title) updates.title = body.title;
   if (body.description !== undefined) updates.description = body.description;
+  if (body.evidence !== undefined) updates.evidence = body.evidence;
+  if (body.signalType) updates.signalType = body.signalType;
+  if (body.priority) updates.priority = body.priority;
+  if (body.resolutionApproach) updates.resolutionApproach = body.resolutionApproach;
+  if (body.requiredCategories) updates.requiredCategories = body.requiredCategories;
   if (body.requiredSkills) updates.requiredSkills = body.requiredSkills;
   if (body.requiredIndustries) updates.requiredIndustries = body.requiredIndustries;
+  if (body.requiredMarkets) updates.requiredMarkets = body.requiredMarkets;
   if (body.estimatedValue !== undefined) updates.estimatedValue = body.estimatedValue;
   if (body.timeline !== undefined) updates.timeline = body.timeline;
-  if (body.clientType !== undefined) updates.clientType = body.clientType;
+  if (body.clientDomain !== undefined) updates.clientDomain = body.clientDomain;
+  if (body.clientName !== undefined) updates.clientName = body.clientName;
+  if (body.anonymizeClient !== undefined) updates.anonymizeClient = body.anonymizeClient;
+  if (body.clientSizeBand !== undefined) updates.clientSizeBand = body.clientSizeBand;
+  if (body.attachments) updates.attachments = body.attachments;
 
-  await db
-    .update(opportunities)
-    .set(updates)
-    .where(eq(opportunities.id, id));
+  await db.update(opportunities).set(updates).where(eq(opportunities.id, id));
 
   return NextResponse.json({ success: true });
 }

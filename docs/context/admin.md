@@ -148,6 +148,12 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 - **Purpose:** Client companies sourced from the knowledge graph. Search, pagination, expandable rows showing associated service firms and case studies. Includes banner redirecting to Knowledge Graph. Being consolidated into the Knowledge Graph page.
 - **API:** `GET /api/admin/clients?q=&page=&limit=`
 
+### 19. Opportunities & Leads
+- **Route:** `/admin/opportunities`
+- **File:** `src/app/(admin)/admin/opportunities/page.tsx`
+- **Purpose:** Platform-wide visibility into the opportunity-to-lead funnel. Period filter (7d/30d/90d/all). Four stat cards (Total Opportunities, Action Rate, Leads Posted, Network Claim Rate). Two breakdown panels: opportunity breakdown by signal type/priority/source, and lead quality distribution (tier bar chart + status pills). Recent Opportunities table (title, firm, signal/priority/resolution badges, status, date). Recent Leads table (title, firm, quality score+tier, status, value, timeline, date).
+- **API:** `GET /api/admin/opportunities?period=30d`
+
 ---
 
 ## Admin API Endpoints

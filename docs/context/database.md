@@ -20,7 +20,8 @@
 | `subscription_status` | trialing, active, past_due, canceled, unpaid, incomplete |
 | `partnership_status` | suggested, requested, accepted, declined, inactive |
 | `partnership_type` | trusted_partner, collective, vendor_network |
-| `opportunity_status` | open, shared, claimed, won, lost, expired |
+| `opportunity_status` | new, in_review, actioned, dismissed |
+| `lead_status` | open, shared, claimed, won, lost, expired |
 | `case_study_status` | pending, ingesting, active, blocked, failed, deleted |
 | `scheduled_call_status` | pending, recording, done, failed, cancelled |
 | `meeting_platform` | google_meet, zoom, teams, other |
@@ -327,7 +328,7 @@ Activity log for a partnership (requested, accepted, referral, etc.).
 ## Opportunities & Referrals
 
 ### `opportunities`
-Work opportunities a firm wants to share with partners.
+Private intelligence extracted from calls, emails, or manually — never shared directly with the network. Must be promoted to a Lead first.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -336,22 +337,59 @@ Work opportunities a firm wants to share with partners.
 | created_by | text FK -> users (cascade) | |
 | title | text NOT NULL | |
 | description | text | |
-| required_skills | jsonb (string[]) | |
+| evidence | text | Verbatim quote or signal that triggered this |
+| signal_type | text (default "direct") | direct \| latent |
+| priority | text (default "medium") | low \| medium \| high |
+| resolution_approach | text (default "network") | network \| internal \| hybrid |
+| required_skills | jsonb (string[]) | L2 skill vocabulary |
 | required_industries | jsonb (string[]) | |
+| required_categories | jsonb (string[]) | Uses 30 COS firm category vocabulary |
+| required_markets | jsonb (string[]) | Uses COS market vocabulary |
 | estimated_value | text | "10k-25k", "50k-100k", etc. |
 | timeline | text | "immediate", "1-3 months", etc. |
-| client_type | text | |
+| client_domain | text | Links to enrichmentCache domain key |
+| client_name | text | Display name (can be anonymized) |
+| anonymize_client | boolean (default false) | Hide client identity when promoting to lead |
+| client_size_band | size_band enum | |
 | source | text (default "manual") | manual \| call \| email \| ossy |
-| status | opportunity_status (default "open") | |
-| expires_at | timestamp | |
+| source_id | text | FK to source record (transcript ID, email thread ID, etc.) |
+| attachments | jsonb | [{name, url, type, size}] — RFPs, briefs, etc. |
+| status | opportunity_status (default "new") | new \| in_review \| actioned \| dismissed |
 
-### `opportunity_shares`
-Tracks which firms an opportunity was shared with.
+### `leads`
+Shareable version of an opportunity. Promoted from an opportunity. Quality-scored to prevent "bad leads" in the network.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | text PK | |
-| opportunity_id | text FK -> opportunities (cascade) | |
+| firm_id | text FK -> service_firms (cascade) | Posting firm |
+| created_by | text FK -> users (cascade) | |
+| opportunity_id | text FK -> opportunities (set null) | Source opportunity (nullable — can create lead directly) |
+| title | text NOT NULL | |
+| description | text | |
+| required_skills | jsonb (string[]) | |
+| required_industries | jsonb (string[]) | |
+| required_categories | jsonb (string[]) | |
+| required_markets | jsonb (string[]) | |
+| estimated_value | text | |
+| timeline | text | |
+| client_domain | text | |
+| client_name | text | |
+| anonymize_client | boolean (default false) | |
+| client_size_band | size_band enum | |
+| attachments | jsonb | |
+| quality_score | integer | 0-100, internal only |
+| quality_breakdown | jsonb | Detailed scoring breakdown |
+| source | text | |
+| status | lead_status (default "open") | open \| shared \| claimed \| won \| lost \| expired |
+
+### `lead_shares`
+Tracks which firms a lead was shared with.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| lead_id | text FK -> leads (cascade) | |
 | shared_with_firm_id | text FK -> service_firms (cascade) | |
 | shared_by | text FK -> users (cascade) | |
 | viewed_at | timestamp | |

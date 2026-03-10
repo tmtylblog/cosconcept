@@ -479,9 +479,20 @@ export const partnershipEvents = pgTable("partnership_events", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// ─── Opportunities ─────────────────────────────────────
+// ─── Opportunities & Leads ──────────────────────────────
 
+// Opportunity = private intelligence, AI-extracted from a call/email
+// Status lifecycle: new → in_review → actioned | dismissed
 export const opportunityStatusEnum = pgEnum("opportunity_status", [
+  "new",
+  "in_review",
+  "actioned",
+  "dismissed",
+]);
+
+// Lead = shareable with partner network, promoted from an opportunity
+// Status lifecycle: open → shared → claimed → won | lost | expired
+export const leadStatusEnum = pgEnum("lead_status", [
   "open",
   "shared",
   "claimed",
@@ -507,25 +518,103 @@ export const opportunities = pgTable("opportunities", {
   createdBy: text("created_by")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+
+  // The opportunity itself
   title: text("title").notNull(),
   description: text("description"),
-  requiredSkills: jsonb("required_skills").$type<string[]>(),
-  requiredIndustries: jsonb("required_industries").$type<string[]>(),
+  evidence: text("evidence"), // The quote/signal from the source text
+  signalType: text("signal_type").notNull().default("direct"), // "direct" | "latent"
+  priority: text("priority").notNull().default("medium"), // "high" | "medium" | "low"
+
+  // Resolution: can we handle this internally, or does it need a partner?
+  resolutionApproach: text("resolution_approach").notNull().default("network"), // "self" | "network" | "hybrid"
+
+  // Taxonomy-keyed fields — same vocabulary as enrichment classification
+  requiredCategories: jsonb("required_categories").$type<string[]>().default([]),
+  requiredSkills: jsonb("required_skills").$type<string[]>().default([]),
+  requiredIndustries: jsonb("required_industries").$type<string[]>().default([]),
+  requiredMarkets: jsonb("required_markets").$type<string[]>().default([]),
+
+  // Value / scope signals
   estimatedValue: text("estimated_value"), // "10k-25k", "50k-100k", etc.
   timeline: text("timeline"), // "immediate", "1-3 months", "3-6 months"
-  clientType: text("client_type"), // industry + size signals
-  source: text("source").notNull().default("manual"), // manual | call | email | ossy
-  status: opportunityStatusEnum("status").notNull().default("open"),
+
+  // Client company — links to enrichmentCache by domain
+  clientDomain: text("client_domain"),
+  clientName: text("client_name"), // real or anonymized display name
+  anonymizeClient: boolean("anonymize_client").notNull().default(false),
+  clientSizeBand: sizeBandEnum("client_size_band"),
+
+  // Source
+  source: text("source").notNull().default("manual"), // "call" | "email" | "manual"
+  sourceId: text("source_id"), // callTranscripts.id or emailMessages.id
+
+  // Attachments: RFPs, briefs, SOW drafts, etc.
+  attachments: jsonb("attachments")
+    .$type<{ name: string; url: string; type: string; size: number }[]>()
+    .default([]),
+
+  status: opportunityStatusEnum("status").notNull().default("new"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Lead = opportunity promoted for sharing with the partner network
+export const leads = pgTable("leads", {
+  id: text("id").primaryKey(),
+  firmId: text("firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  opportunityId: text("opportunity_id").references(() => opportunities.id, {
+    onDelete: "set null",
+  }),
+
+  // Lead content (required for quality gate)
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  evidence: text("evidence"),
+
+  // Taxonomy-keyed — same vocabulary as partner preferences + firm profiles
+  requiredCategories: jsonb("required_categories").$type<string[]>().default([]),
+  requiredSkills: jsonb("required_skills").$type<string[]>().default([]),
+  requiredIndustries: jsonb("required_industries").$type<string[]>().default([]),
+  requiredMarkets: jsonb("required_markets").$type<string[]>().default([]),
+
+  // Value / scope
+  estimatedValue: text("estimated_value"),
+  timeline: text("timeline"),
+
+  // Client context
+  clientDomain: text("client_domain"),
+  clientName: text("client_name"),
+  anonymizeClient: boolean("anonymize_client").notNull().default(false),
+  clientSizeBand: sizeBandEnum("client_size_band"),
+  clientType: text("client_type"), // additional free-text context
+
+  // Hidden quality score (internal only, not exposed to partners)
+  qualityScore: integer("quality_score").notNull().default(0),
+  qualityBreakdown: jsonb("quality_breakdown").$type<Record<string, number>>(),
+
+  // Attachments
+  attachments: jsonb("attachments")
+    .$type<{ name: string; url: string; type: string; size: number }[]>()
+    .default([]),
+
+  status: leadStatusEnum("status").notNull().default("open"),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const opportunityShares = pgTable("opportunity_shares", {
+// Lead shares — which partner firms have been sent a given lead
+export const leadShares = pgTable("lead_shares", {
   id: text("id").primaryKey(),
-  opportunityId: text("opportunity_id")
+  leadId: text("lead_id")
     .notNull()
-    .references(() => opportunities.id, { onDelete: "cascade" }),
+    .references(() => leads.id, { onDelete: "cascade" }),
   sharedWithFirmId: text("shared_with_firm_id")
     .notNull()
     .references(() => serviceFirms.id, { onDelete: "cascade" }),
