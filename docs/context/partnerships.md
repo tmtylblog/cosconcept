@@ -278,6 +278,71 @@ Referral stats bar (shown when referrals exist): Active Partners count, Referral
 - Discover page integration (search -> request partnership)
 - AI opportunity extraction from text content
 
+### Skill Matching Strategy (Phase 4 — Cascading L3→L2→L1)
+
+The COS skills taxonomy has three levels of granularity:
+
+| Level | Count | Example | Source |
+|-------|-------|---------|--------|
+| L1 | 31 categories | "Information Technology", "Sales" | `data/skills-L1.csv` |
+| L2 | 246 subcategories | "E-Commerce", "Artificial Intelligence and Machine Learning (AI/ML)" | `data/skills-L2-map.csv` |
+| L3 | 18,420 granular skills | "Shopify Plus Migration", "TensorFlow Model Training" | `data/skills-L3-map.csv` |
+
+#### How Skills Are Captured
+
+**During onboarding (current — via Ossy prompt):**
+- Partner preferences (`desiredPartnerServices`) are stored at **L2 level**
+- Ossy maps natural language to specific L2 categories using a curated reference list in `src/lib/ai/ossy-prompt.ts`
+- Example: user says "AI" → mapped to "Artificial Intelligence and Machine Learning (AI/ML)", NOT the broad L1 "Information Technology"
+- Example: user says "ecommerce" → mapped to "E-Commerce", NOT the broad L1 "Sales"
+
+**From case studies and projects (future — ground truth):**
+- When firms add case studies, project details, or we scrape their portfolio pages, extract **L3 skills**
+- L3 skills represent what firms have **actually done** — this is the ground truth principle
+- A firm that delivered "Shopify Plus Migration" is demonstrably stronger than one that just lists "E-Commerce"
+- L3 extraction should use the AI classification pipeline (Gemini Flash) against the 18,420 L3 skill entries
+
+#### Cascading Search Strategy for Partner Matchmaking
+
+When searching for partner matches, use a **cascading approach** — start specific, broaden only if needed:
+
+```
+1. L3 Match (most specific, highest confidence)
+   ↓ If insufficient results...
+2. L2 Match (category-level, good general match)
+   ↓ If still insufficient...
+3. L1 Match (broadest, last resort)
+```
+
+**L3 first:** Match the user's stated needs against L3 skills extracted from case studies. These are evidence-backed — the firm demonstrably has this capability. Highest match quality.
+
+**L2 fallback:** If L3 matches are sparse (not enough case studies in the system yet, or the user's need is broad), fall back to L2 category matching against partner profiles and stated capabilities.
+
+**L1 last resort:** Only use L1 for very general exploration ("show me tech firms") or when both L3 and L2 produce too few results.
+
+#### Scoring Implications
+
+- **L3 match** = high confidence → boost match score (e.g., +0.3)
+- **L2 match** = moderate confidence → standard match score
+- **L1 match** = low confidence → lower match score, flag as "broad match"
+- Multiple L3 matches across different case studies = even higher confidence (proven pattern, not one-off)
+
+#### Implementation Path
+
+1. **Load L1/L2/L3 CSVs into Neo4j** as a hierarchical skill graph: `(:L1Category)-[:HAS_SUBCATEGORY]->(:L2Skill)-[:HAS_SKILL]->(:L3Skill)`
+2. **Build a skill normalizer** that maps free-text input to the closest L3 (or L2/L1) match
+3. **Enrich case studies** with L3 skill tags during ingestion (AI classification)
+4. **Cascading search query**: Cypher query that tries L3 match first, counts results, falls back to L2 if needed
+5. **Search & matching engine** (Phase 4) uses this cascade to rank partner recommendations
+6. **Ossy search tools** (`search_partners`, `search_experts`, `search_case_studies`) use the same cascade
+
+#### Key Decision: L2 for Preferences, L3 for Evidence
+
+- **Onboarding preferences** stay at L2 — asking users to pick from 18,420 L3 skills is impractical
+- **Case study extraction** targets L3 — the system should be specific about what evidence it found
+- **Search queries** start at L3 (evidence) and widen to L2 (preferences) as needed
+- This creates a natural quality gradient: firms with more case studies get better matches because they have more L3 evidence
+
 ### Not Yet Built / Gaps
 - Opportunities tab in user UI is a placeholder (empty state only)
 - No dedicated opportunity detail page for users
