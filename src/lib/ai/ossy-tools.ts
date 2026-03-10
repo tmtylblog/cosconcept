@@ -13,6 +13,7 @@ const INTERVIEW_FIELDS = [
   "preferredPartnerSize",
   "idealProjectSize",
   "typicalHourlyRates",
+  "partnershipRole",
 ];
 
 const profileFieldSchema = z.enum(ALL_PROFILE_FIELDS);
@@ -62,7 +63,7 @@ export function createOssyTools(organizationId: string, firmId: string) {
               metadata: { questionNumber: questionIndex + 1, value },
             }).catch(() => {}); // fire-and-forget
 
-            // Check if all 8 interview questions are now answered
+            // Check if all 9 interview questions are now answered
             if (questionIndex === INTERVIEW_FIELDS.length - 1) {
               // Last question — emit onboarding_complete
               logOnboardingEvent({

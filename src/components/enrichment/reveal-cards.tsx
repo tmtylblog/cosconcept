@@ -93,7 +93,7 @@ export function StageChip({ label, stage }: { label: string; stage: StageStatus 
 
 // ─── PreferenceProgress ─────────────────────────────────────
 
-/** Progress indicator for the 8 partner preference questions */
+/** Progress indicator for the 9 partner preference questions */
 export function PreferenceProgress({
   desiredServices,
   partnerIndustries,
@@ -103,6 +103,7 @@ export function PreferenceProgress({
   partnerSize,
   projectSize,
   hourlyRates,
+  partnershipRole,
 }: {
   desiredServices: string[];
   partnerIndustries: string[];
@@ -112,6 +113,7 @@ export function PreferenceProgress({
   partnerSize: string[];
   projectSize: string[];
   hourlyRates: string | undefined;
+  partnershipRole: string | undefined;
 }) {
   const fields = [
     { label: "Services wanted", done: desiredServices.length > 0 },
@@ -122,12 +124,13 @@ export function PreferenceProgress({
     { label: "Partner size", done: partnerSize.length > 0 },
     { label: "Project size", done: projectSize.length > 0 },
     { label: "Hourly rates", done: !!hourlyRates },
+    { label: "Partnership role", done: !!partnershipRole },
   ];
 
   const completedCount = fields.filter((f) => f.done).length;
 
   // Don't show when nothing or everything is done
-  if (completedCount === 0 || completedCount === 8) return null;
+  if (completedCount === 0 || completedCount === 9) return null;
 
   return (
     <div className="w-full rounded-cos-xl border border-cos-electric/20 bg-gradient-to-r from-cos-electric/5 to-cos-signal/5 px-5 py-4">
@@ -136,14 +139,14 @@ export function PreferenceProgress({
           Partner Preferences
         </span>
         <span className="text-xs font-bold text-cos-electric">
-          {completedCount}/8
+          {completedCount}/9
         </span>
       </div>
       {/* Progress bar */}
       <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-cos-cloud">
         <div
           className="h-full rounded-full bg-gradient-to-r from-cos-electric to-cos-signal transition-all duration-500"
-          style={{ width: `${(completedCount / 8) * 100}%` }}
+          style={{ width: `${(completedCount / 9) * 100}%` }}
         />
       </div>
       {/* Individual field status */}

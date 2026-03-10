@@ -38,7 +38,7 @@ const guestUpdateProfileTool = tool({
       z.string(),
       z.array(z.string()),
     ]).describe(
-      "The confirmed value. Use an ARRAY for: desiredPartnerServices, requiredPartnerIndustries, idealPartnerClientSize, preferredPartnerLocations, preferredPartnerTypes, preferredPartnerSize, idealProjectSize. Use a STRING for: typicalHourlyRates, firmCategory, growthGoals. Always use array even if only one item selected."
+      "The confirmed value. Use an ARRAY for: desiredPartnerServices, requiredPartnerIndustries, idealPartnerClientSize, preferredPartnerLocations, preferredPartnerTypes, preferredPartnerSize, idealProjectSize. Use a STRING for: typicalHourlyRates, partnershipRole, firmCategory, growthGoals. Always use array even if only one item selected."
     ),
   }),
   execute: async ({ field, value }) => {
@@ -56,11 +56,11 @@ const guestUpdateProfileTool = tool({
 
 /**
  * Signals the client to show the login/signup modal.
- * Ossy calls this after completing all 8 partner preference questions.
+ * Ossy calls this after completing all 9 partner preference questions.
  */
 const requestLoginTool = tool({
   description:
-    "Call this AFTER you have completed all 8 partner preference questions to prompt the user to sign in. " +
+    "Call this AFTER you have completed all 9 partner preference questions to prompt the user to sign in. " +
     "This will show a login/signup form in the chat. Only call this once per conversation. " +
     "Your message should frame sign-in around VALUE — what you can do for them now that you know their preferences.",
   inputSchema: z.object({
@@ -73,7 +73,7 @@ const requestLoginTool = tool({
 
 /**
  * Guest chat endpoint — no auth required, no billing check.
- * Supports full onboarding: enrichment confirmation + all 8 preference questions.
+ * Supports full onboarding: enrichment confirmation + all 9 preference questions.
  * Tools record data client-side; persisted to DB after sign-in.
  */
 export async function POST(req: Request) {

@@ -32,6 +32,7 @@ export const RAW_ONBOARDING_FIELDS = new Set([
   "idealPartnerClientSize",
   "idealProjectSize",
   "typicalHourlyRates",
+  "partnershipRole",
 ]);
 
 /** All valid profile field names */
@@ -57,6 +58,7 @@ export const ALL_PROFILE_FIELDS = [
   "idealPartnerClientSize",
   "idealProjectSize",
   "typicalHourlyRates",
+  "partnershipRole",
 ] as const;
 
 export type ProfileFieldName = (typeof ALL_PROFILE_FIELDS)[number];

@@ -28,6 +28,7 @@ export interface ProfileData {
   idealPartnerClientSize?: string | string[];
   idealProjectSize?: string | string[];
   typicalHourlyRates?: string;
+  partnershipRole?: string;
 }
 
 interface ProfileContextValue {

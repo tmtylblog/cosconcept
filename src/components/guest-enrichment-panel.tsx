@@ -77,6 +77,7 @@ export function GuestEnrichmentPanel() {
   const partnerSize = asArray(guestPreferences.preferredPartnerSize);
   const projectSize = asArray(guestPreferences.idealProjectSize);
   const hourlyRates = asString(guestPreferences.typicalHourlyRates);
+  const partnershipRole = asString(guestPreferences.partnershipRole);
   const partnerModels = asArray(guestPreferences.partnershipModels);
   const dealBreakers = asArray(guestPreferences.dealBreakers);
   const growthGoals = asString(guestPreferences.growthGoals);
@@ -101,6 +102,7 @@ export function GuestEnrichmentPanel() {
     (partnerSize.length > 0 ? 1 : 0) +
     (projectSize.length > 0 ? 1 : 0) +
     (hourlyRates ? 1 : 0) +
+    (partnershipRole ? 1 : 0) +
     (partnerModels.length > 0 ? 1 : 0) +
     (dealBreakers.length > 0 ? 1 : 0) +
     (growthGoals ? 1 : 0);
@@ -290,6 +292,7 @@ export function GuestEnrichmentPanel() {
             partnerSize={partnerSize}
             projectSize={projectSize}
             hourlyRates={hourlyRates}
+            partnershipRole={partnershipRole}
           />
 
           {/* ─── Partner Preference Cards (from guest cache) ─── */}
@@ -331,6 +334,11 @@ export function GuestEnrichmentPanel() {
           {hourlyRates && (
             <RevealCard icon={DollarSign} label="Typical Hourly Rates" delay={0}>
               <p>{hourlyRates}</p>
+            </RevealCard>
+          )}
+          {partnershipRole && (
+            <RevealCard icon={Handshake} label="Partnership Role" delay={0}>
+              <p>{partnershipRole}</p>
             </RevealCard>
           )}
           {partnerModels.length > 0 && (

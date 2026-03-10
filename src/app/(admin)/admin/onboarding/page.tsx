@@ -607,10 +607,10 @@ export default function AdminOnboardingPage() {
                     <td className="py-2 pr-4">
                       <span className={cn(
                         "font-semibold",
-                        s.questionsAnswered >= 8 ? "text-cos-signal" :
+                        s.questionsAnswered >= 9 ? "text-cos-signal" :
                         s.questionsAnswered > 0 ? "text-cos-electric" : "text-cos-slate"
                       )}>
-                        {s.questionsAnswered}/8
+                        {s.questionsAnswered}/9
                       </span>
                     </td>
                     <td className="py-2 pr-4">

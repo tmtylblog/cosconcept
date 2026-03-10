@@ -109,6 +109,7 @@ export default function DashboardPage() {
   const projectSizeRaw = profile.idealProjectSize;
   const projectSize: string[] = Array.isArray(projectSizeRaw) ? projectSizeRaw : projectSizeRaw ? [projectSizeRaw] : [];
   const hourlyRates = profile.typicalHourlyRates;
+  const partnershipRole = profile.partnershipRole;
 
   // Progressive data check — show cards section as soon as ANY data arrives
   const hasEnrichment = !!(companyData || extracted || classification);
@@ -300,6 +301,7 @@ export default function DashboardPage() {
               partnerSize={partnerSize}
               projectSize={projectSize}
               hourlyRates={hourlyRates}
+              partnershipRole={partnershipRole}
             />
           )}
 
@@ -361,6 +363,12 @@ export default function DashboardPage() {
           {hourlyRates && (
             <RevealCard icon={DollarSign} label="Typical Hourly Rates" delay={0}>
               <p>{hourlyRates}</p>
+            </RevealCard>
+          )}
+
+          {partnershipRole && (
+            <RevealCard icon={Handshake} label="Partnership Role" delay={0}>
+              <p>{partnershipRole}</p>
             </RevealCard>
           )}
 
