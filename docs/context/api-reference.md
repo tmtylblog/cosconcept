@@ -50,6 +50,7 @@ All enrichment routes require authentication unless noted.
 | POST | `/api/enrich/scrape` | Stage 2: Jina website scrape. Scrapes homepage + subpages, extracts clients, services, team, case studies. | No |
 | POST | `/api/enrich/classify` | Stage 3: AI classification. Classifies raw content against COS taxonomy (30 categories, 247 L2 skills, industries, markets, languages). | Yes |
 | POST | `/api/enrich/persist` | Final stage: Persists combined enrichment result to `serviceFirms` table + writes to Neo4j knowledge graph. | Yes |
+| POST | `/api/enrich/cache` | Writes enrichment results to domain-keyed cache (no auth). Guests and auth users both write here. Lookup checks this first. | No |
 
 ### Combined Enrichment
 

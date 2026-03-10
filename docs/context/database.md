@@ -578,6 +578,20 @@ Up to 3 proof-point work examples per specialist profile.
 
 ## Enrichment & AI Tracking
 
+### `enrichment_cache`
+Domain-keyed cache for enrichment results. No auth/org required — guests and auth users both write here. The lookup endpoint checks this first (before service_firms and Neo4j) to avoid re-calling paid APIs.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | domain as id (e.g. "chameleoncollective.com") |
+| domain | text NOT NULL UNIQUE | |
+| firm_name | text | |
+| enrichment_data | jsonb NOT NULL | Full enrichment result |
+| has_pdl | boolean (default false) | Whether PDL stage completed |
+| has_scrape | boolean (default false) | Whether scrape stage completed |
+| has_classify | boolean (default false) | Whether classification completed |
+| hit_count | integer (default 0) | Times this cache entry was used |
+
 ### `enrichment_audit_log`
 Full audit trail of every enrichment step (PDL, Jina, classifier, etc.).
 
