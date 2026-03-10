@@ -112,7 +112,7 @@ export function GuestEnrichmentPanel() {
   }, [cardCount]);
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col items-stretch px-6 py-8">
+    <div className="mx-auto mt-auto flex w-full max-w-xl flex-col items-stretch px-6 py-8">
       {/* Branding */}
       <div className="mb-6 flex flex-col items-center gap-1 self-center">
         <Image
