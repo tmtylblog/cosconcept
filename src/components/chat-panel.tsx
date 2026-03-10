@@ -142,9 +142,22 @@ export function ChatPanel({ isGuest, isOnboarding, onRequestLogin }: ChatPanelPr
     },
   ];
 
+  const onboardingWelcomeMessages: UIMessage[] = [
+    {
+      id: "onboarding-welcome",
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: "Welcome! I've got your firm data ready. Let's set up your partner preferences -- just a few quick questions and you'll be all set.",
+        },
+      ],
+    },
+  ];
+
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>(() => {
+    // Guest flow: restore messages or show welcome-back
     if (isGuest && typeof window !== "undefined") {
-      // If all 9 prefs complete, show welcome-back message (no need for old conversation)
       if (allPrefsComplete) return welcomeBackMessages;
       try {
         const saved = sessionStorage.getItem("cos_guest_messages");
@@ -153,10 +166,18 @@ export function ChatPanel({ isGuest, isOnboarding, onRequestLogin }: ChatPanelPr
           if (msgs.length > 0) return msgs;
         }
       } catch { /* ignore */ }
+      return defaultWelcomeMessages;
+    }
+    // Authenticated onboarding: set correct welcome synchronously
+    // (can't rely on async loadGreeting — useChat initializes from this value)
+    if (!isGuest && isOnboarding) {
+      return onboardingWelcomeMessages;
     }
     return defaultWelcomeMessages;
   });
-  const [historyLoaded, setHistoryLoaded] = useState(isGuest ? true : false);
+  // For guests and onboarding users, messages are set synchronously — no need to fetch greeting
+  // For post-onboarding auth users, historyLoaded=false triggers loadGreeting for personalized greeting
+  const [historyLoaded, setHistoryLoaded] = useState(isGuest || isOnboarding ? true : false);
   const enrichedUrlRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string>(crypto.randomUUID());
   // Track whether we've seen enrichment go through "loading" this session
