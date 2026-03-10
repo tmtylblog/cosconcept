@@ -7,15 +7,56 @@ import { like, or, eq, sql } from "drizzle-orm";
 export const dynamic = "force-dynamic";
 
 /**
+ * Resolve a domain's final destination via HTTP redirect following.
+ * E.g., chameleon.co → chameleoncollective.com
+ * Returns the final hostname (without www.) or null on failure.
+ */
+async function resolveRedirectDomain(domain: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000); // 5s max
+
+    const res = await fetch(`https://${domain}`, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; CollectiveOS/1.0)",
+      },
+    });
+    clearTimeout(timeout);
+
+    const finalUrl = res.url;
+    if (!finalUrl) return null;
+
+    const finalHost = new URL(finalUrl).hostname.replace(/^www\./, "");
+    // Only return if it's actually different from the input
+    if (finalHost.toLowerCase() !== domain.toLowerCase()) {
+      console.log(`[Enrich/Lookup] Redirect: ${domain} → ${finalHost}`);
+      return finalHost.toLowerCase();
+    }
+    return null;
+  } catch (err) {
+    // Timeout, DNS failure, etc. — not an error, just no redirect info
+    console.log(`[Enrich/Lookup] Redirect check for ${domain} failed (expected for some domains):`, (err as Error)?.message);
+    return null;
+  }
+}
+
+/**
  * POST /api/enrich/lookup
  *
  * Check our own data (cache → PostgreSQL → Neo4j) before calling paid APIs.
  * If we've already enriched this domain, return the cached result.
  * This saves PDL credits, Jina calls, and AI classifier tokens.
  *
+ * Also resolves domain aliases via HTTP redirect following — e.g., if
+ * chameleon.co redirects to chameleoncollective.com (already cached),
+ * returns the cached data instead of calling paid APIs.
+ *
  * Returns:
- *   { found: true, source: "cache"|"postgres"|"neo4j", data: EnrichmentResult }
- *   { found: false }
+ *   { found: true, source: "cache"|"postgres"|"neo4j", data: EnrichmentResult, resolvedDomain?: string }
+ *   { found: false, resolvedDomain?: string }
  */
 export async function POST(req: Request) {
   try {
@@ -53,6 +94,44 @@ export async function POST(req: Request) {
       }
     } catch (cacheErr) {
       console.warn("[Enrich/Lookup] Cache table check failed:", cacheErr);
+    }
+
+    // ─── 0b. Domain alias resolution via HTTP redirect ───
+    // If chameleon.co redirects to chameleoncollective.com, check cache for that domain too.
+    // This prevents duplicate enrichment when email domain ≠ website domain.
+    let resolvedDomain: string | null = null;
+    try {
+      resolvedDomain = await resolveRedirectDomain(domain);
+      if (resolvedDomain) {
+        const aliasResults = await db
+          .select({
+            enrichmentData: enrichmentCache.enrichmentData,
+            firmName: enrichmentCache.firmName,
+          })
+          .from(enrichmentCache)
+          .where(eq(enrichmentCache.domain, resolvedDomain))
+          .limit(1);
+
+        if (aliasResults.length > 0 && aliasResults[0].enrichmentData) {
+          // Increment hit count on the resolved domain
+          db.update(enrichmentCache)
+            .set({ hitCount: sql`${enrichmentCache.hitCount} + 1` })
+            .where(eq(enrichmentCache.domain, resolvedDomain))
+            .catch(() => {});
+
+          console.log(
+            `[Enrich/Lookup] Cache HIT via redirect alias: ${domain} → ${resolvedDomain}: ${aliasResults[0].firmName}`
+          );
+          return NextResponse.json({
+            found: true,
+            source: "cache",
+            data: aliasResults[0].enrichmentData,
+            resolvedDomain,
+          });
+        }
+      }
+    } catch (aliasErr) {
+      console.warn("[Enrich/Lookup] Alias resolution failed:", aliasErr);
     }
 
     // ─── 1. Check PostgreSQL (serviceFirms.enrichmentData) ───
@@ -212,8 +291,8 @@ export async function POST(req: Request) {
       console.warn("[Enrich/Lookup] Neo4j check failed:", neo4jErr);
     }
 
-    console.log(`[Enrich/Lookup] Cache MISS for ${domain}`);
-    return NextResponse.json({ found: false });
+    console.log(`[Enrich/Lookup] Cache MISS for ${domain}${resolvedDomain ? ` (also checked redirect: ${resolvedDomain})` : ""}`);
+    return NextResponse.json({ found: false, resolvedDomain: resolvedDomain || undefined });
   } catch (error) {
     console.error("[Enrich/Lookup] Error:", error);
     return NextResponse.json({ found: false });

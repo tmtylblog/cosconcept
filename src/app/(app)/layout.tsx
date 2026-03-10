@@ -80,15 +80,34 @@ function AppLayoutInner({
       : "enriching";
 
   // ─── Auto-enrich on sign-in: extract domain from email ──────
+  // Handles domain aliases (e.g., email is @chameleon.co but firm website is chameleoncollective.com).
+  // If enrichment data already exists for a domain that the email domain redirects to, skip re-enrichment.
   const enrichTriggeredRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!session?.user?.email) return;
     if (enrichTriggeredRef.current === session.user.email) return;
 
-    const domain = getEmailDomain(session.user.email);
-    if (!domain || isPersonalEmail(session.user.email)) return;
+    const emailDomain = getEmailDomain(session.user.email);
+    if (!emailDomain || isPersonalEmail(session.user.email)) return;
 
+    // If enrichment is already done with company data, check if the email domain
+    // is an alias for the enriched domain (e.g., chameleon.co → chameleoncollective.com)
+    if (enrichmentStatus === "done" && enrichmentResult?.companyData) {
+      // Already enriched — domains might differ but that's fine (alias case)
+      enrichTriggeredRef.current = session.user.email;
+      if (enrichmentResult.domain && enrichmentResult.domain !== emailDomain) {
+        console.log(
+          `[Layout] Skipping auto-enrich: email domain (${emailDomain}) differs from enriched domain (${enrichmentResult.domain}), likely an alias`
+        );
+      }
+      return;
+    }
+
+    // If enrichment is loading, wait for it
+    if (enrichmentStatus === "loading") return;
+
+    // Need enrichment — either idle (no data) or done but missing company data
     const needsEnrichment =
       enrichmentStatus === "idle" ||
       (enrichmentStatus === "done" && !enrichmentResult?.companyData);
@@ -97,12 +116,14 @@ function AppLayoutInner({
       enrichTriggeredRef.current = session.user.email;
       const isGapFill = enrichmentStatus === "done";
       console.log(
-        `[Layout] Auto-enriching from email domain: ${domain}` +
+        `[Layout] Auto-enriching from email domain: ${emailDomain}` +
         (isGapFill ? " (gap-fill: missing PDL data)" : "")
       );
-      triggerEnrichment(domain, isGapFill);
+      // The lookup route will follow redirects — if chameleon.co → chameleoncollective.com
+      // is already cached, it'll return the cached data instead of calling paid APIs
+      triggerEnrichment(emailDomain, isGapFill);
     }
-  }, [session?.user?.email, enrichmentStatus, enrichmentResult?.companyData, triggerEnrichment]);
+  }, [session?.user?.email, enrichmentStatus, enrichmentResult?.companyData, enrichmentResult?.domain, triggerEnrichment]);
 
   // ─── Guest-to-auth data migration ──────────────────────────
   const migrationDoneRef = useRef(false);
