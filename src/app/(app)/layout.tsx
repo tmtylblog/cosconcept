@@ -51,10 +51,11 @@ function AppLayoutOuter({
   children: React.ReactNode;
 }) {
   const { data: activeOrg } = useActiveOrganization();
+  const { data: session } = useSession();
 
   return (
     <EnrichmentProvider organizationId={activeOrg?.id}>
-      <ProfileProvider organizationId={activeOrg?.id}>
+      <ProfileProvider organizationId={activeOrg?.id} isAuthenticated={!!session?.user}>
         <AppLayoutInner>{children}</AppLayoutInner>
       </ProfileProvider>
     </EnrichmentProvider>

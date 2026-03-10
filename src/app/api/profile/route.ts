@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { serviceFirms, partnerPreferences } from "@/lib/db/schema";
+import { serviceFirms, partnerPreferences, members } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +16,28 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const organizationId = searchParams.get("organizationId");
+  let organizationId = searchParams.get("organizationId");
+
+  // Server-side fallback: resolve org from user's membership if not provided
+  if (!organizationId && session.user.id) {
+    try {
+      const [membership] = await db
+        .select({ orgId: members.organizationId })
+        .from(members)
+        .where(eq(members.userId, session.user.id))
+        .limit(1);
+      if (membership) {
+        organizationId = membership.orgId;
+      }
+    } catch {
+      // Non-critical
+    }
+  }
 
   if (!organizationId) {
-    return new Response(JSON.stringify({ error: "Missing organizationId" }), {
-      status: 400,
+    // No org found — return empty profile
+    return new Response(JSON.stringify({}), {
+      status: 200,
       headers: { "Content-Type": "application/json" },
     });
   }

@@ -56,16 +56,19 @@ export function useProfile() {
 export function ProfileProvider({
   children,
   organizationId,
+  isAuthenticated = false,
 }: {
   children: ReactNode;
   organizationId?: string;
+  isAuthenticated?: boolean;
 }) {
   const [data, setData] = useState<ProfileData>({});
   const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate from DB on mount
+  // Hydrate from DB on mount. When authenticated but orgId is missing
+  // (e.g. hard refresh), the server resolves org from the session.
   useEffect(() => {
-    if (!organizationId) {
+    if (!isAuthenticated) {
       setHydrated(true);
       return;
     }
@@ -73,7 +76,10 @@ export function ProfileProvider({
 
     async function hydrate() {
       try {
-        const res = await fetch(`/api/profile?organizationId=${organizationId}`);
+        const params = organizationId
+          ? `?organizationId=${organizationId}`
+          : "";
+        const res = await fetch(`/api/profile${params}`);
         if (!res.ok) return;
         const profile = await res.json();
         if (cancelled) return;
@@ -87,7 +93,7 @@ export function ProfileProvider({
 
     hydrate();
     return () => { cancelled = true; };
-  }, [organizationId]);
+  }, [organizationId, isAuthenticated]);
 
   const updateField = useCallback((field: string, value: string | string[]) => {
     setData((prev) => ({ ...prev, [field]: value }));
