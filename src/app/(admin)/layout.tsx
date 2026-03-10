@@ -18,6 +18,7 @@ import {
   Search,
   TrendingUp,
   Lightbulb,
+  Phone,
 } from "lucide-react";
 
 /**
@@ -97,6 +98,7 @@ export default async function AdminLayout({
           <AdminNavLink href="/admin/search" icon={<Search className="h-4 w-4" />} label="Search Test" />
           <AdminNavLink href="/admin/onboarding" icon={<TrendingUp className="h-4 w-4" />} label="Onboarding" />
           <AdminNavLink href="/admin/opportunities" icon={<Lightbulb className="h-4 w-4" />} label="Opportunities" />
+          <AdminNavLink href="/admin/calls" icon={<Phone className="h-4 w-4" />} label="Call Transcripts" />
 
           <SectionHeader label="Tools" />
           <AdminNavLink href="/admin/neo4j" icon={<Database className="h-4 w-4" />} label="Neo4j" />

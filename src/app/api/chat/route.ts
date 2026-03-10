@@ -9,7 +9,8 @@ import { getOrgPlan } from "@/lib/billing/usage-checker";
 import { PLAN_LIMITS } from "@/lib/billing/plan-limits";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { conversations, messages as messagesTable, serviceFirms, partnerPreferences, members } from "@/lib/db/schema";
+import { conversations, messages as messagesTable, serviceFirms, partnerPreferences, members, callRecordings, callTranscripts } from "@/lib/db/schema";
+import { inngest } from "@/inngest/client";
 import { logUsage } from "@/lib/ai/gateway";
 import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
 import { extractMemoriesFromConversation } from "@/lib/ai/memory-extractor";
@@ -184,6 +185,47 @@ export async function POST(req: Request) {
     // Resolve or create conversation ID (only for authenticated users)
     let conversationId = clientConvId || null;
     const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+
+    // ─── Transcript intercept ──────────────────────────────
+    // If the user's last message starts with [TRANSCRIPT:N], store it as a
+    // proper callTranscript record and fire the post-call analysis pipeline.
+    if (firmId && userId && lastUserMsg) {
+      const rawText = getMessageText(lastUserMsg);
+      const transcriptMatch = rawText.match(/^\[TRANSCRIPT:(\d+)\]\n([\s\S]+)$/);
+      if (transcriptMatch) {
+        const transcriptText = transcriptMatch[2];
+        try {
+          const recId = uid("rec");
+          const txId = uid("tx");
+          await db.insert(callRecordings).values({
+            id: recId,
+            firmId,
+            userId,
+            callType: "client",
+          });
+          await db.insert(callTranscripts).values({
+            id: txId,
+            callRecordingId: recId,
+            fullText: transcriptText,
+            processingStatus: "done",
+          });
+          await inngest.send({
+            name: "calls/analyze",
+            data: {
+              callId: recId,
+              firmId,
+              userId,
+              transcript: transcriptText,
+              callType: "client",
+              transcriptId: txId,
+            },
+          });
+          console.log(`[Ossy] Transcript stored (${txId}) + analysis queued`);
+        } catch (err) {
+          console.error("[Ossy] Failed to store transcript:", err);
+        }
+      }
+    }
 
     if (userId && lastUserMsg) {
       try {
