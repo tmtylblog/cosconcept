@@ -186,7 +186,10 @@ Opportunities represent **identified pain points or challenges** that a potentia
 
 ## Lead System
 
-> **STATUS: NOT YET BUILT** — Schema and API do not exist yet. This is a planned concept that must be designed and implemented.
+> **STATUS: PARTIALLY BUILT** — API routes exist (`src/app/api/leads/route.ts`, `src/app/api/leads/[id]/route.ts`) but the full Lead review workflow and UI are being addressed in a separate feature. See alignment notes below before building anything in this area.
+
+> **⚠️ DEVELOPER ALIGNMENT NOTE:**
+> The Lead review workflow is intentionally human-gated — **firm owners must review AI-generated Leads before they are shared with partner firms**. Do NOT build any auto-sharing or auto-dispatch of Leads without explicit product sign-off. The AI generates candidate Leads from Opportunities, but the firm owner is always the final decision-maker on what gets shared and with whom. This review step is being designed as a separate feature — coordinate with the product owner before touching Lead dispatch logic.
 
 Leads are **specific solutions** derived from Opportunities. They are concrete, scoped service offerings that directly address the pain point identified in the parent Opportunity. Leads have a higher probability of closing because they represent a clear match between client need and service provider capability.
 
@@ -194,8 +197,9 @@ Leads are **specific solutions** derived from Opportunities. They are concrete, 
 - Always linked to a parent `Opportunity` via `opportunity_id`
 - Represents one specific solution path (a single Opportunity can have multiple Leads)
 - Scoped to a specific service, skill set, or firm type
-- Shareable with partner firms who have the matching capability
-- Trackable through a sales pipeline (shared → claimed → won/lost)
+- **Firm owner reviews and approves Leads before they are shared** — never auto-dispatched
+- Shareable with partner firms who have the matching capability only after firm owner approval
+- Trackable through a sales pipeline (draft → open → shared → claimed → won/lost)
 
 ### Lead Statuses (planned pgEnum `lead_status`)
 | Status | Meaning |
