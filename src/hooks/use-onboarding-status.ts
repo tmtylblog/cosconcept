@@ -19,9 +19,14 @@ const POLL_INTERVAL = 2000; // 2 seconds
  * Hook that checks onboarding completeness status via the server API.
  * Polls every 2s while onboarding is NOT complete (catches async writes
  * from migration, Ossy tool calls, etc.). Stops polling once complete.
+ *
+ * @param organizationId - Optional org ID. If missing, the server resolves from session.
+ * @param isAuthenticated - When true, the hook runs even without organizationId.
+ *   When false, the hook skips fetching entirely (guest users).
  */
 export function useOnboardingStatus(
-  organizationId: string | undefined
+  organizationId: string | undefined,
+  isAuthenticated: boolean = false,
 ): OnboardingStatus {
   const [status, setStatus] = useState<{
     enrichmentComplete: boolean;
@@ -44,12 +49,12 @@ export function useOnboardingStatus(
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchStatus = useCallback(async () => {
-    if (!organizationId) return;
-
     try {
-      const res = await fetch(
-        `/api/onboarding/status?organizationId=${encodeURIComponent(organizationId)}`
-      );
+      // If we have an orgId, pass it. Otherwise the server resolves from session.
+      const params = organizationId
+        ? `?organizationId=${encodeURIComponent(organizationId)}`
+        : "";
+      const res = await fetch(`/api/onboarding/status${params}`);
       if (!res.ok) return;
 
       const data = await res.json();
@@ -79,7 +84,7 @@ export function useOnboardingStatus(
 
   // Initial fetch + polling setup
   useEffect(() => {
-    if (!organizationId) {
+    if (!isAuthenticated) {
       setIsLoading(false);
       return;
     }
@@ -104,20 +109,20 @@ export function useOnboardingStatus(
         pollingRef.current = null;
       }
     };
-  }, [organizationId, fetchStatus]);
+  }, [isAuthenticated, organizationId, fetchStatus]);
 
   const recheck = useCallback(() => {
     completedRef.current = false;
     fetchStatus();
     // Restart polling if it was stopped
-    if (!pollingRef.current && organizationId) {
+    if (!pollingRef.current && isAuthenticated) {
       pollingRef.current = setInterval(() => {
         if (!completedRef.current) {
           fetchStatus();
         }
       }, POLL_INTERVAL);
     }
-  }, [fetchStatus, organizationId]);
+  }, [fetchStatus, isAuthenticated]);
 
   return {
     ...status,

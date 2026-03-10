@@ -158,7 +158,7 @@ function AppLayoutInner({
     isLoading: onboardingLoading,
     answeredCount,
     totalRequired,
-  } = useOnboardingStatus(session?.user ? activeOrg?.id : undefined);
+  } = useOnboardingStatus(activeOrg?.id, !!session?.user);
 
   // Track previous onboardingComplete to detect transition → bump chatKey
   const prevOnboardingCompleteRef = useRef<boolean | null>(null);
@@ -407,16 +407,14 @@ function AppLayoutInner({
       {/* ─── PHASE 3: ONBOARDING (authenticated, preferences incomplete) ─── */}
       {appPhase === "onboarding" && (
         <>
-          {/* Loading spinner until org is provisioned AND onboarding status resolves.
-              Without activeOrg, the ChatPanel would send organizationId="" and Ossy
-              would have no tools — the race condition that causes missing preference cards. */}
-          {(!activeOrg?.id || onboardingLoading) ? (
+          {/* Brief loading spinner while first onboarding status API call resolves.
+              Server-side fallback resolves organizationId from user's membership
+              when activeOrg is not yet available on the client. */}
+          {onboardingLoading ? (
             <div className="flex h-screen items-center justify-center bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-cos-electric" />
-                <p className="text-sm text-cos-slate">
-                  {!activeOrg?.id ? "Setting up your workspace..." : "Loading your profile..."}
-                </p>
+                <p className="text-sm text-cos-slate">Loading your profile...</p>
               </div>
             </div>
           ) : (

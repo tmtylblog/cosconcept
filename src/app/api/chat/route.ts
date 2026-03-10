@@ -9,7 +9,7 @@ import { getOrgPlan } from "@/lib/billing/usage-checker";
 import { PLAN_LIMITS } from "@/lib/billing/plan-limits";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { conversations, messages as messagesTable, serviceFirms, partnerPreferences } from "@/lib/db/schema";
+import { conversations, messages as messagesTable, serviceFirms, partnerPreferences, members } from "@/lib/db/schema";
 import { logUsage } from "@/lib/ai/gateway";
 import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
 import { extractMemoriesFromConversation } from "@/lib/ai/memory-extractor";
@@ -41,13 +41,33 @@ export async function POST(req: Request) {
     const userId = session?.user?.id;
     const userName = session?.user?.name;
 
-    const { messages, organizationId, websiteContext, conversationId: clientConvId } =
+    const { messages, organizationId: clientOrgId, websiteContext, conversationId: clientConvId } =
       (await req.json()) as {
         messages: UIMessage[];
         organizationId?: string;
         websiteContext?: string;
         conversationId?: string;
       };
+
+    // ─── Server-side org resolution fallback ────────────────
+    // If the client didn't send organizationId (e.g., activeOrg not yet
+    // resolved after hard refresh), look it up from the user's membership.
+    let organizationId = clientOrgId;
+    if (!organizationId && userId) {
+      try {
+        const [membership] = await db
+          .select({ orgId: members.organizationId })
+          .from(members)
+          .where(eq(members.userId, userId))
+          .limit(1);
+        if (membership) {
+          organizationId = membership.orgId;
+          console.log(`[Ossy] Resolved org from membership: ${organizationId}`);
+        }
+      } catch {
+        // Non-critical
+      }
+    }
 
     // Feature gate: check messaging limits
     if (organizationId) {

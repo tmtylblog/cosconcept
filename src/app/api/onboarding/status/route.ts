@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { serviceFirms, partnerPreferences } from "@/lib/db/schema";
+import { serviceFirms, partnerPreferences, members } from "@/lib/db/schema";
 import { PARTNER_COLUMN_MAP, RAW_ONBOARDING_FIELDS } from "@/lib/profile/update-profile-field";
 
 export const dynamic = "force-dynamic";
@@ -43,13 +43,34 @@ export async function GET(req: Request) {
     }
 
     const url = new URL(req.url);
-    const organizationId = url.searchParams.get("organizationId");
+    let organizationId = url.searchParams.get("organizationId");
+
+    // Server-side fallback: resolve org from user's membership if not provided
+    if (!organizationId && session.user.id) {
+      try {
+        const [membership] = await db
+          .select({ orgId: members.organizationId })
+          .from(members)
+          .where(eq(members.userId, session.user.id))
+          .limit(1);
+        if (membership) {
+          organizationId = membership.orgId;
+        }
+      } catch {
+        // Non-critical
+      }
+    }
 
     if (!organizationId) {
-      return NextResponse.json(
-        { error: "Missing organizationId" },
-        { status: 400 }
-      );
+      // Still no org — user genuinely has no membership yet
+      return NextResponse.json({
+        enrichmentComplete: false,
+        preferencesComplete: false,
+        answeredCount: 0,
+        totalRequired: 9,
+        onboardingComplete: false,
+        missingFields: [...REQUIRED_PREF_FIELDS],
+      });
     }
 
     // 1. Find the firm row
