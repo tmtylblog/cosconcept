@@ -19,11 +19,15 @@ export interface CaseStudy {
   statusMessage: string | null;
   title: string | null;
   summary: string | null;
+  thumbnailUrl: string | null;
   userNotes: string | null;
+  isHidden: boolean;
   autoTags: {
     skills: string[];
     industries: string[];
     services: string[];
+    markets: string[];
+    languages: string[];
     clientName: string | null;
   } | null;
   createdAt: string;
@@ -33,12 +37,14 @@ export interface CaseStudy {
 interface UseCaseStudiesReturn {
   caseStudies: CaseStudy[];
   total: number;
+  hiddenCount: number;
   isLoading: boolean;
   isSubmitting: boolean;
   submitError: string | null;
   submitUrl: (url: string, userNotes?: string) => Promise<void>;
   submitText: (text: string, userNotes?: string) => Promise<void>;
   submitPdf: (file: File, userNotes?: string) => Promise<void>;
+  toggleHidden: (id: string) => Promise<void>;
   deleteCaseStudy: (id: string) => Promise<void>;
   refresh: () => void;
 }
@@ -46,58 +52,71 @@ interface UseCaseStudiesReturn {
 // ─── Hook ─────────────────────────────────────────────────
 
 export function useCaseStudies(
-  organizationId: string | undefined
+  organizationId: string | undefined,
+  options?: { includeHidden?: boolean }
 ): UseCaseStudiesReturn {
   const [caseStudies, setCaseStudies] = useState<CaseStudy[]>([]);
   const [total, setTotal] = useState(0);
+  const [hiddenCount, setHiddenCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
+  const includeHidden = options?.includeHidden ?? true;
+
+  // ── Build URL with params ─────────────────────────────
+  const buildUrl = useCallback(() => {
+    if (!organizationId) return null;
+    const params = new URLSearchParams({ organizationId });
+    if (includeHidden) params.set("includeHidden", "true");
+    return `/api/firm/case-studies?${params}`;
+  }, [organizationId, includeHidden]);
+
   // ── Fetch all case studies ──────────────────────────────
   const fetchCaseStudies = useCallback(async () => {
-    if (!organizationId) return;
+    const url = buildUrl();
+    if (!url) return;
     try {
-      const res = await fetch(
-        `/api/firm/case-studies?organizationId=${encodeURIComponent(organizationId)}`
-      );
+      const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json();
       setCaseStudies(data.caseStudies ?? []);
       setTotal(data.total ?? 0);
+      setHiddenCount(data.hiddenCount ?? 0);
     } catch {
       // silent
     }
-  }, [organizationId]);
+  }, [buildUrl]);
 
   // ── Initial load ────────────────────────────────────────
   useEffect(() => {
-    if (!organizationId) {
+    const url = buildUrl();
+    if (!url) {
       setCaseStudies([]);
       setTotal(0);
+      setHiddenCount(0);
       return;
     }
 
     let cancelled = false;
     setIsLoading(true);
 
-    fetch(
-      `/api/firm/case-studies?organizationId=${encodeURIComponent(organizationId)}`
-    )
+    fetch(url)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
       .then((data) => {
         if (cancelled) return;
         setCaseStudies(data?.caseStudies ?? []);
         setTotal(data?.total ?? 0);
+        setHiddenCount(data?.hiddenCount ?? 0);
         setIsLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [organizationId]);
+  }, [buildUrl]);
 
   // ── Poll when items are in-progress ─────────────────────
   useEffect(() => {
@@ -119,6 +138,42 @@ export function useCaseStudies(
       }
     };
   }, [caseStudies, fetchCaseStudies]);
+
+  // ── Toggle hidden ─────────────────────────────────────
+  const toggleHidden = useCallback(
+    async (id: string) => {
+      if (!organizationId) return;
+      const cs = caseStudies.find((c) => c.id === id);
+      if (!cs) return;
+
+      const newHidden = !cs.isHidden;
+
+      // Optimistic update
+      setCaseStudies((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, isHidden: newHidden } : c))
+      );
+
+      try {
+        const res = await fetch("/api/firm/case-studies", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, organizationId, isHidden: newHidden }),
+        });
+        if (!res.ok) {
+          // Revert on failure
+          setCaseStudies((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, isHidden: !newHidden } : c))
+          );
+        }
+      } catch {
+        // Revert on error
+        setCaseStudies((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, isHidden: !newHidden } : c))
+        );
+      }
+    },
+    [organizationId, caseStudies]
+  );
 
   // ── Submit URL ──────────────────────────────────────────
   const submitUrl = useCallback(
@@ -230,12 +285,14 @@ export function useCaseStudies(
   return {
     caseStudies,
     total,
+    hiddenCount,
     isLoading,
     isSubmitting,
     submitError,
     submitUrl,
     submitText,
     submitPdf,
+    toggleHidden,
     deleteCaseStudy,
     refresh: fetchCaseStudies,
   };

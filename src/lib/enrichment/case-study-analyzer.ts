@@ -37,6 +37,8 @@ export interface CaseStudyVisibleLayer {
     skills: string[];
     industries: string[];
     services: string[];
+    markets: string[];
+    languages: string[];
     clientName: string | null;
   };
 }
@@ -115,6 +117,8 @@ Reply with ONLY the 2 sentences, nothing else.`,
     skills: analysis.skillsDemonstrated.slice(0, 10),
     industries: analysis.industries.slice(0, 5),
     services: analysis.servicesUsed.slice(0, 8),
+    markets: [] as string[], // Populated by enrichment classification, not case study extraction
+    languages: [] as string[], // Populated by enrichment classification, not case study extraction
     clientName: analysis.clientName ?? null,
   };
 

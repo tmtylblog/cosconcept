@@ -101,7 +101,7 @@ const COMMON_PATHS = [
   "/blog",
 ];
 
-const MAX_PAGES = 30;
+const MAX_PAGES = 50;
 const SCRAPE_TIMEOUT_MS = 10000;
 
 // ─── Main orchestrator ─────────────────────────────────────
@@ -354,8 +354,8 @@ async function discoverFromSitemap(baseUrl: string): Promise<string[]> {
       }
     }
 
-    // Cap at 200 URLs from sitemap
-    return urls.slice(0, 200);
+    // Cap at 500 URLs from sitemap (increased for sites with many case studies)
+    return urls.slice(0, 500);
   } catch {
     return urls;
   }
@@ -442,24 +442,51 @@ function extractAboutPitch(content: string): string {
 function collectCaseStudyUrls(pages: CrawledPage[], domain: string): string[] {
   const urls = new Set<string>();
 
+  // Skip patterns — pages that are clearly NOT individual case studies
+  const skipPatterns = /\/(about|service|contact|team|people|blog|news|career|faq|privacy|terms|login|signup|search|tag|categor|author|page\/\d)/i;
+  // Known listing suffixes — these are index pages, not case studies themselves
+  const listingExact = new Set<string>();
+
   // From classified case study/portfolio pages
   for (const page of pages) {
-    if (page.pageType === "case_study" || page.pageType === "portfolio") {
+    if (page.pageType === "case_study") {
       urls.add(page.url);
+    }
+    if (page.pageType === "portfolio") {
+      // Portfolio listing pages are not case studies themselves, but their links are
+      listingExact.add(page.url);
     }
   }
 
-  // From links on case study listing pages
+  // From ALL links on portfolio/case study listing pages
+  // Be BROAD here — on portfolio pages, most internal links ARE case studies
+  // (e.g., /work/acme-rebrand, /projects/nike, slugs without obvious keywords)
   for (const page of pages) {
-    if (page.pageType === "portfolio") {
+    if (page.pageType === "portfolio" || page.pageType === "case_study") {
+      const pagePathBase = new URL(page.url).pathname.replace(/\/$/, "");
+
       for (const link of page.scraped.links ?? []) {
         try {
           const parsed = new URL(link, page.url);
-          if (
-            parsed.hostname === domain &&
-            /case|stud|project|work/i.test(parsed.pathname)
-          ) {
-            urls.add(`${parsed.origin}${parsed.pathname}`);
+          if (parsed.hostname !== domain) continue;
+
+          const cleanUrl = `${parsed.origin}${parsed.pathname}`.replace(/\/$/, "");
+          const pathname = parsed.pathname;
+
+          // Skip if it matches non-case-study patterns
+          if (skipPatterns.test(pathname)) continue;
+          // Skip top-level pages (just / or /work with no sub-path)
+          if (pathname === "/" || pathname.split("/").filter(Boolean).length < 1) continue;
+          // Skip files
+          if (/\.(pdf|jpg|jpeg|png|gif|svg|css|js|xml)$/i.test(pathname)) continue;
+
+          // If the link is a child path of this portfolio page, very likely a case study
+          if (pathname.startsWith(pagePathBase + "/") && pathname !== pagePathBase) {
+            urls.add(cleanUrl);
+          }
+          // Also include links matching broad case study patterns
+          else if (/case|stud|project|work|portfolio|results|success|client/i.test(pathname)) {
+            urls.add(cleanUrl);
           }
         } catch {
           /* skip */
@@ -468,7 +495,12 @@ function collectCaseStudyUrls(pages: CrawledPage[], domain: string): string[] {
     }
   }
 
-  return [...urls].slice(0, 200);
+  // Remove listing pages themselves (keep only individual case studies)
+  for (const listing of listingExact) {
+    urls.delete(listing);
+  }
+
+  return [...urls].slice(0, 500);
 }
 
 function emptyResult(

@@ -1006,7 +1006,35 @@ export const importedCaseStudies = pgTable("imported_case_studies", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// ─── Firm Case Studies (user-managed) ─────────────────
+// ─── Firm Services (auto-discovered + user-editable) ──────
+// Structured services extracted from the firm's website via deep crawl.
+// Auto-approved (visible by default). User can edit descriptions and hide.
+
+export const firmServices = pgTable("firm_services", {
+  id: text("id").primaryKey(),
+  firmId: text("firm_id")
+    .notNull()
+    .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").notNull(),
+
+  // Service data
+  name: text("name").notNull(),
+  description: text("description"), // AI-generated, user-editable
+  sourceUrl: text("source_url"), // link to page where found
+  sourcePageTitle: text("source_page_title"),
+  subServices: jsonb("sub_services").$type<string[]>(),
+
+  // Visibility
+  isHidden: boolean("is_hidden").notNull().default(false),
+  displayOrder: integer("display_order").notNull().default(0),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─── Firm Case Studies (auto-discovered + user-managed) ───
+// Case studies discovered from website via deep crawl and ingested automatically.
+// Auto-approved (visible by default). User can hide or manually add more.
 
 export const firmCaseStudies = pgTable("firm_case_studies", {
   id: text("id").primaryKey(),
@@ -1015,24 +1043,30 @@ export const firmCaseStudies = pgTable("firm_case_studies", {
     .references(() => serviceFirms.id, { onDelete: "cascade" }),
   organizationId: text("organization_id").notNull(),
 
-  // Source — what the user provided
+  // Source — discovered from website or user-provided
   sourceUrl: text("source_url").notNull(),
-  sourceType: text("source_type").notNull().default("url"), // "url" | "pdf_url"
+  sourceType: text("source_type").notNull().default("url"), // "url" | "pdf_url" | "text"
   userNotes: text("user_notes"),
 
   // Status
   status: caseStudyStatusEnum("status").notNull().default("pending"),
   statusMessage: text("status_message"),
 
-  // Visible layer (system-generated, user can't edit)
+  // Visible layer (system-generated, user can't edit content — it stays on their site)
   title: text("title"),
-  summary: text("summary"), // AI-generated 2-sentence summary
+  summary: text("summary"), // AI-generated hidden summary for search (not shown to user)
+  thumbnailUrl: text("thumbnail_url"), // og:image or screenshot from source page
   autoTags: jsonb("auto_tags").$type<{
     skills: string[];
     industries: string[];
     services: string[];
+    markets: string[];
+    languages: string[];
     clientName: string | null;
   }>(),
+
+  // Visibility — user can hide (not delete) from their profile
+  isHidden: boolean("is_hidden").notNull().default(false),
 
   // Full AI analysis (not editable by user)
   cosAnalysis: jsonb("cos_analysis"),

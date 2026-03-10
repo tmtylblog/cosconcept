@@ -72,6 +72,16 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "Firm not found" }, { status: 404 });
   }
 
+  const includeHidden = req.nextUrl.searchParams.get("includeHidden") === "true";
+
+  const conditions = [
+    eq(firmCaseStudies.firmId, firm.id),
+    ne(firmCaseStudies.status, "deleted"),
+  ];
+  if (!includeHidden) {
+    conditions.push(eq(firmCaseStudies.isHidden, false));
+  }
+
   const rows = await db
     .select({
       id: firmCaseStudies.id,
@@ -81,21 +91,80 @@ export async function GET(req: NextRequest) {
       statusMessage: firmCaseStudies.statusMessage,
       title: firmCaseStudies.title,
       summary: firmCaseStudies.summary,
+      thumbnailUrl: firmCaseStudies.thumbnailUrl,
       autoTags: firmCaseStudies.autoTags,
       userNotes: firmCaseStudies.userNotes,
+      isHidden: firmCaseStudies.isHidden,
       createdAt: firmCaseStudies.createdAt,
       ingestedAt: firmCaseStudies.ingestedAt,
     })
     .from(firmCaseStudies)
-    .where(
-      and(
-        eq(firmCaseStudies.firmId, firm.id),
-        ne(firmCaseStudies.status, "deleted")
-      )
-    )
+    .where(and(...conditions))
     .orderBy(desc(firmCaseStudies.createdAt));
 
-  return Response.json({ caseStudies: rows, total: rows.length });
+  // Count hidden separately
+  const hiddenRows = includeHidden
+    ? rows.filter((r) => r.isHidden)
+    : await db
+        .select({ id: firmCaseStudies.id })
+        .from(firmCaseStudies)
+        .where(
+          and(
+            eq(firmCaseStudies.firmId, firm.id),
+            ne(firmCaseStudies.status, "deleted"),
+            eq(firmCaseStudies.isHidden, true)
+          )
+        );
+
+  return Response.json({
+    caseStudies: rows,
+    total: rows.length,
+    hiddenCount: hiddenRows.length,
+  });
+}
+
+// ─── PATCH: Update a case study (toggle hidden, etc.) ────
+
+export async function PATCH(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const { id, organizationId, isHidden } = body;
+
+  if (!id || !organizationId) {
+    return Response.json({ error: "id and organizationId required" }, { status: 400 });
+  }
+
+  const firm = await resolveFirm(session.user.id, organizationId);
+  if (!firm) {
+    return Response.json({ error: "Firm not found" }, { status: 404 });
+  }
+
+  // Verify case study belongs to this firm
+  const [cs] = await db
+    .select({ id: firmCaseStudies.id })
+    .from(firmCaseStudies)
+    .where(
+      and(
+        eq(firmCaseStudies.id, id),
+        eq(firmCaseStudies.firmId, firm.id)
+      )
+    )
+    .limit(1);
+
+  if (!cs) {
+    return Response.json({ error: "Case study not found" }, { status: 404 });
+  }
+
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (typeof isHidden === "boolean") updates.isHidden = isHidden;
+
+  await db.update(firmCaseStudies).set(updates).where(eq(firmCaseStudies.id, id));
+
+  return Response.json({ success: true });
 }
 
 // ─── POST: Submit a new case study ────────────────────────

@@ -89,6 +89,10 @@ function AppLayoutInner({
   const [chatKey, setChatKey] = useState(0);
   const [mobileChat, setMobileChat] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [domainClaimed, setDomainClaimed] = useState<{
+    orgName: string;
+    ownerEmailMasked: string;
+  } | null>(null);
 
   // ─── Auto-provision org + firm for authenticated users with no org ────
   // The moment someone authenticates, an "unclaimed" org + firm is created
@@ -116,6 +120,30 @@ function AppLayoutInner({
           // No org at all — create one from email domain
           const email = session?.user?.email ?? "";
           const domain = email.split("@")[1] ?? "my-firm";
+
+          // Check if another user has already claimed this domain
+          try {
+            const checkRes = await fetch("/api/onboarding/check-domain", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ domain }),
+            });
+            if (checkRes.ok) {
+              const checkData = await checkRes.json();
+              if (checkData.claimed) {
+                console.log(`[Layout] Domain ${domain} already claimed by ${checkData.ownerEmailMasked}`);
+                setDomainClaimed({
+                  orgName: checkData.orgName,
+                  ownerEmailMasked: checkData.ownerEmailMasked,
+                });
+                orgProvisionedRef.current = false;
+                return;
+              }
+            }
+          } catch {
+            // If check fails, proceed anyway
+          }
+
           const orgName = domainToOrgName(domain);
           // Add random suffix to slug to avoid collisions
           const slugBase = domain.replace(/\./g, "-");
@@ -170,11 +198,35 @@ function AppLayoutInner({
 
   // Track previous onboardingComplete to detect transition → celebration → full app
   const prevOnboardingCompleteRef = useRef<boolean | null>(null);
+  const deepCrawlTriggeredRef = useRef(false);
   useEffect(() => {
     if (prevOnboardingCompleteRef.current === false && onboardingComplete === true) {
       // Onboarding just completed — show celebration, then reveal full app
       setShowCelebration(true);
       setChatKey((k) => k + 1); // Fresh ChatPanel mount for greeting
+
+      // ── Auto-trigger deep crawl ────────────────────────────
+      // This kicks off the full pipeline: deep crawl → AI extraction → bulk case study + service creation → graph write
+      // The profile pages will be fully populated by the time the user navigates there.
+      if (!deepCrawlTriggeredRef.current && activeOrg?.id) {
+        deepCrawlTriggeredRef.current = true;
+        const domain = enrichmentResult?.domain;
+        const orgName = enrichmentResult?.companyData?.name || activeOrg?.name;
+        console.log(`[Layout] Triggering deep crawl for ${orgName} (${domain || "resolving from DB..."})`);
+        fetch("/api/enrich/deep-crawl", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId: activeOrg.id,
+            website: domain,
+            firmName: orgName,
+          }),
+        }).catch((err) => {
+          console.error("[Layout] Failed to trigger deep crawl:", err);
+          deepCrawlTriggeredRef.current = false;
+        });
+      }
+
       // Celebration shows for 2.5s while authenticated layout loads behind it
       const timer = setTimeout(() => {
         setShowCelebration(false);
@@ -184,7 +236,7 @@ function AppLayoutInner({
       return () => clearTimeout(timer);
     }
     prevOnboardingCompleteRef.current = onboardingComplete;
-  }, [onboardingComplete]);
+  }, [onboardingComplete, activeOrg?.id, activeOrg?.name, enrichmentResult?.domain, enrichmentResult?.companyData?.name]);
 
   // ─── Derive firm section from pathname ──────────────────────
   const firmSection: string | null =
@@ -704,6 +756,60 @@ function AppLayoutInner({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ─── Domain claimed overlay (org already registered by someone else) ─── */}
+      {domainClaimed && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-cos-cloud/95 backdrop-blur-md">
+          <div className="mx-auto w-full max-w-md px-6">
+            <div className="rounded-cos-2xl border border-cos-warm/30 bg-white/80 px-8 py-10 text-center shadow-lg backdrop-blur-sm">
+              {/* Icon */}
+              <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-cos-warm/15">
+                <Building className="h-7 w-7 text-cos-warm" />
+              </div>
+
+              {/* Title */}
+              <h2 className="font-heading text-xl font-bold text-cos-midnight">
+                Account Already Registered
+              </h2>
+
+              {/* Message */}
+              <p className="mt-3 text-sm leading-relaxed text-cos-slate">
+                Someone from <span className="font-semibold text-cos-midnight">{domainClaimed.orgName}</span> has
+                already registered this company on Collective OS.
+              </p>
+
+              {/* Owner email */}
+              <div className="mt-4 rounded-cos-xl border border-cos-border/50 bg-cos-cloud/50 px-5 py-3">
+                <p className="text-xs text-cos-slate-dim">Registered by</p>
+                <p className="mt-1 text-sm font-medium text-cos-midnight">
+                  {domainClaimed.ownerEmailMasked}
+                </p>
+              </div>
+
+              {/* Action */}
+              <p className="mt-4 text-xs leading-relaxed text-cos-slate">
+                Please contact them to be added to the account, or reach out to{" "}
+                <a href="mailto:support@joincollectiveos.com" className="text-cos-electric underline">
+                  support@joincollectiveos.com
+                </a>{" "}
+                for help.
+              </p>
+
+              {/* Sign out */}
+              <button
+                onClick={() => {
+                  authClient.signOut().then(() => {
+                    window.location.href = "/";
+                  });
+                }}
+                className="mt-6 rounded-cos-pill border border-cos-border px-6 py-2 text-xs font-medium text-cos-slate transition-colors hover:border-cos-midnight hover:text-cos-midnight"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

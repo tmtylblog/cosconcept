@@ -2,15 +2,22 @@
  * POST /api/enrich/deep-crawl
  *
  * Trigger a deep website crawl for a firm.
- * Can be called manually by admin or auto-triggered on signup.
+ * Can be called manually by admin or auto-triggered on onboarding completion.
+ *
+ * Accepts EITHER:
+ * - { firmId, website, firmName, organizationId? } — explicit params
+ * - { organizationId } — resolves firmId/website/firmName from DB
  *
  * This queues an Inngest job for background processing.
  */
 
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { inngest } from "@/inngest/client";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { serviceFirms } from "@/lib/db/schema";
 
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -20,11 +27,45 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { firmId, organizationId, website, firmName } = body;
+    let { firmId, website, firmName } = body;
+    const { organizationId } = body;
+
+    // If only organizationId provided, resolve the rest from DB
+    if (!firmId && organizationId) {
+      const [firm] = await db
+        .select({
+          id: serviceFirms.id,
+          name: serviceFirms.name,
+          website: serviceFirms.website,
+          enrichmentData: serviceFirms.enrichmentData,
+        })
+        .from(serviceFirms)
+        .where(eq(serviceFirms.organizationId, organizationId))
+        .limit(1);
+
+      if (!firm) {
+        return NextResponse.json(
+          { error: "Firm not found for this organization" },
+          { status: 404 }
+        );
+      }
+
+      firmId = firm.id;
+      firmName = firmName || firm.name;
+
+      // Resolve website: from firm record, or from enrichment data
+      if (!website) {
+        website = firm.website;
+        if (!website) {
+          const enrichment = firm.enrichmentData as Record<string, unknown> | null;
+          website = enrichment?.domain as string | undefined;
+        }
+      }
+    }
 
     if (!firmId || !website || !firmName) {
       return NextResponse.json(
-        { error: "firmId, website, and firmName are required" },
+        { error: "Could not resolve firmId, website, or firmName. Provide them explicitly or ensure the firm record has a website." },
         { status: 400 }
       );
     }
