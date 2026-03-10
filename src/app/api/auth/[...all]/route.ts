@@ -21,7 +21,41 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    return await _POST(req);
+    const response = await _POST(req);
+
+    // Debug: if Better Auth returns a 500, intercept and add error details
+    if (response.status >= 500) {
+      const cloned = response.clone();
+      let body: string;
+      try {
+        body = await cloned.text();
+      } catch {
+        body = "(could not read body)";
+      }
+      console.error("[AUTH POST 500]", {
+        url: req.nextUrl.pathname,
+        status: response.status,
+        body: body || "(empty)",
+        headers: Object.fromEntries(response.headers.entries()),
+      });
+
+      // If body is empty, return a diagnostic error
+      if (!body || body.length === 0) {
+        return NextResponse.json(
+          {
+            error: "Better Auth returned empty 500",
+            debug: {
+              url: req.nextUrl.pathname,
+              status: response.status,
+              headers: Object.fromEntries(response.headers.entries()),
+            },
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    return response;
   } catch (err) {
     console.error("[AUTH POST ERROR]", err);
     return NextResponse.json(
