@@ -204,6 +204,19 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isLoading = status === "submitted" || status === "streaming";
+  const [stalled, setStalled] = useState(false);
+
+  // ─── Detect stalled responses (no streaming after 25s) ──────
+  useEffect(() => {
+    if (status === "submitted") {
+      setStalled(false);
+      const timer = setTimeout(() => setStalled(true), 25_000);
+      return () => clearTimeout(timer);
+    }
+    if (status === "streaming" || status === "ready") {
+      setStalled(false);
+    }
+  }, [status]);
 
   // Auto-continue: if restored guest session ends with a user message,
   // send a single nudge so Ossy picks up where they left off
@@ -508,13 +521,13 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
           </div>
         )}
 
-        {error && (
+        {(error || stalled) && (
           <div className="rounded-cos-xl border border-cos-ember/20 bg-cos-ember/5 px-4 py-3">
             <p className="text-sm font-medium text-cos-ember">
-              Ossy hit a snag — try sending your message again.
+              {stalled ? "Ossy is taking too long — try sending your message again." : "Ossy hit a snag — try sending your message again."}
             </p>
             <p className="mt-1 text-xs text-cos-slate">
-              {error.message || "Connection issue or timeout"}
+              {error?.message || (stalled ? "The response timed out. This sometimes happens with longer conversations." : "Connection issue or timeout")}
             </p>
           </div>
         )}

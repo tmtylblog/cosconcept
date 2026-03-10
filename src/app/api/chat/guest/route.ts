@@ -92,7 +92,20 @@ export async function POST(req: Request) {
       collectedPreferences: collectedPreferences ?? undefined,
     });
 
-    const modelMessages = await convertToModelMessages(messages);
+    console.log("[Ossy Guest] System prompt length:", systemPrompt.length);
+    console.log("[Ossy Guest] Messages count:", messages.length, "User msgs:", userMessages.length);
+
+    let modelMessages;
+    try {
+      modelMessages = await convertToModelMessages(messages);
+      console.log("[Ossy Guest] Converted model messages:", modelMessages.length);
+    } catch (convErr) {
+      console.error("[Ossy Guest] Message conversion failed:", convErr);
+      return new Response(
+        JSON.stringify({ error: "Failed to process conversation history" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     const guestTools = {
       update_profile: guestUpdateProfileTool,
@@ -104,8 +117,27 @@ export async function POST(req: Request) {
       system: systemPrompt,
       messages: modelMessages,
       maxOutputTokens: 2048,
-      ...{ tools: guestTools, maxSteps: 5 },
-    });
+      tools: guestTools,
+      maxSteps: 5,
+      onStepFinish: ({ text, toolCalls, finishReason }) => {
+        console.log("[Ossy Guest] Step finished:", {
+          finishReason,
+          hasText: !!text,
+          textLength: text?.length ?? 0,
+          toolCallCount: toolCalls?.length ?? 0,
+        });
+      },
+      onFinish: ({ text, finishReason, usage }) => {
+        console.log("[Ossy Guest] Finished:", {
+          finishReason,
+          textLength: text?.length ?? 0,
+          usage: JSON.stringify(usage),
+        });
+      },
+      onError: ({ error }) => {
+        console.error("[Ossy Guest] Stream error:", error);
+      },
+    } as Parameters<typeof streamText>[0]);
 
     return result.toUIMessageStreamResponse();
   } catch (error) {
