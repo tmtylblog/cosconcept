@@ -144,6 +144,30 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
 
   const chatEndpoint = isGuest ? "/api/chat/guest" : "/api/chat";
 
+  // ─── BUG FIX: Use ref for transport body so it's never stale ──────
+  // useChat creates the Chat instance (and its transport) once via useRef.
+  // If we pass body as a plain object, it freezes at the first-render values
+  // and contextForOssy / guestPreferences are always null / {} on the server.
+  // By passing body as a function that reads from a ref, each API call
+  // gets the latest values.
+  const transportBodyRef = useRef<Record<string, unknown>>({});
+
+  // Keep the ref in sync with current state (runs on every render change)
+  useEffect(() => {
+    if (isGuest) {
+      transportBodyRef.current = {
+        websiteContext: contextForOssy,
+        collectedPreferences: guestPreferences,
+      };
+    } else {
+      transportBodyRef.current = {
+        organizationId: activeOrg?.id ?? "",
+        websiteContext: contextForOssy,
+        conversationId: conversationIdRef.current,
+      };
+    }
+  }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id]);
+
   // Load greeting on mount — clean slate every session.
   // Returning users get a personalized greeting; new users get onboarding welcome.
   const loadGreeting = useCallback(async () => {
@@ -188,16 +212,7 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
     messages: initialMessages,
     transport: new DefaultChatTransport({
       api: chatEndpoint,
-      body: isGuest
-        ? {
-            websiteContext: contextForOssy,
-            collectedPreferences: guestPreferences,
-          }
-        : {
-            organizationId: activeOrg?.id ?? "",
-            websiteContext: contextForOssy,
-            conversationId: conversationIdRef.current,
-          },
+      body: () => transportBodyRef.current,
     }),
   });
 
@@ -205,18 +220,45 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const isLoading = status === "submitted" || status === "streaming";
   const [stalled, setStalled] = useState(false);
+  const lastMessageSnapshotRef = useRef("");
 
-  // ─── Detect stalled responses (no streaming after 25s) ──────
+  // ─── Detect stalled responses ───────────────────────────────
+  // Phase 1: "submitted" → no streaming starts within 25s
+  // Phase 2: "streaming" → no new content arrives for 20s
+  //   (catches mid-stream hangs during multi-step tool use)
   useEffect(() => {
     if (status === "submitted") {
       setStalled(false);
       const timer = setTimeout(() => setStalled(true), 25_000);
       return () => clearTimeout(timer);
     }
-    if (status === "streaming" || status === "ready") {
-      setStalled(false);
+    if (status === "streaming") {
+      // Capture current message state; if it doesn't change within 20s, we stalled
+      const currentSnapshot = JSON.stringify(
+        messages.slice(-1).map((m) => getMessageText(m))
+      );
+
+      // If content changed since last check, reset
+      if (currentSnapshot !== lastMessageSnapshotRef.current) {
+        lastMessageSnapshotRef.current = currentSnapshot;
+        setStalled(false);
+      }
+
+      const timer = setTimeout(() => {
+        const newSnapshot = JSON.stringify(
+          messages.slice(-1).map((m) => getMessageText(m))
+        );
+        if (newSnapshot === lastMessageSnapshotRef.current) {
+          setStalled(true);
+        }
+      }, 20_000);
+      return () => clearTimeout(timer);
     }
-  }, [status]);
+    if (status === "ready") {
+      setStalled(false);
+      lastMessageSnapshotRef.current = "";
+    }
+  }, [status, messages]);
 
   // Auto-continue: if restored guest session ends with a user message,
   // send a single nudge so Ossy picks up where they left off
@@ -479,20 +521,29 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
                       </p>
                     );
                   }
-                  if (part.type === "tool-invocation") {
+                  // AI SDK v6 uses part.type = "tool-<toolName>" (e.g. "tool-update_profile")
+                  if (part.type.startsWith("tool-")) {
+                    const toolPart = part as unknown as {
+                      type: string;
+                      toolCallId: string;
+                      toolName: string;
+                      args: Record<string, unknown>;
+                      state: "call" | "partial-call" | "output-available";
+                      output?: unknown;
+                    };
+                    // Extract tool name from part type (strip "tool-" prefix)
+                    const toolName = part.type.slice(5);
                     return (
                       <div key={partIdx} className="my-2">
                         <ToolResultRenderer
-                          toolInvocation={
-                            part as unknown as {
-                              type: "tool-invocation";
-                              toolInvocationId: string;
-                              toolName: string;
-                              args: Record<string, unknown>;
-                              state: "call" | "partial-call" | "result";
-                              result?: unknown;
-                            }
-                          }
+                          toolInvocation={{
+                            type: "tool-invocation",
+                            toolInvocationId: toolPart.toolCallId || `${message.id}-${partIdx}`,
+                            toolName,
+                            args: toolPart.args || {},
+                            state: toolPart.state === "output-available" ? "result" : "call",
+                            result: toolPart.output,
+                          }}
                         />
                       </div>
                     );
