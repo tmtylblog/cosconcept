@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import {
   Loader2,
   AlertCircle,
@@ -82,6 +83,33 @@ export function GuestEnrichmentPanel() {
 
   const hasEnrichment = !!(companyData || extracted || classification);
   const hasAnyData = hasEnrichment || !!result || isEnriching;
+
+  // ─── Auto-scroll to bottom when new cards appear ──────────
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const cardCount =
+    (result ? 1 : 0) +
+    (categories ? 1 : 0) +
+    (skills ? 1 : 0) +
+    (industries ? 1 : 0) +
+    (markets ? 1 : 0) +
+    (languages ? 1 : 0) +
+    (desiredServices.length > 0 ? 1 : 0) +
+    (partnerIndustries.length > 0 ? 1 : 0) +
+    (clientSize ? 1 : 0) +
+    (partnerLocations.length > 0 ? 1 : 0) +
+    (partnerTypes.length > 0 ? 1 : 0) +
+    (partnerSize.length > 0 ? 1 : 0) +
+    (projectSize ? 1 : 0) +
+    (hourlyRates ? 1 : 0) +
+    (partnerModels.length > 0 ? 1 : 0) +
+    (dealBreakers.length > 0 ? 1 : 0) +
+    (growthGoals ? 1 : 0);
+
+  useEffect(() => {
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [cardCount]);
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col items-stretch px-6 py-8">
@@ -320,6 +348,8 @@ export function GuestEnrichmentPanel() {
               <p>{growthGoals}</p>
             </RevealCard>
           )}
+          {/* Scroll anchor — auto-scrolls here when new cards appear */}
+          <div ref={bottomRef} />
         </div>
       )}
     </div>

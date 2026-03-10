@@ -220,8 +220,8 @@ function AppLayoutInner({
       {/* ─── PHASE 2: ENRICHING (guest, domain submitted) ─── */}
       {guestPhase === "enriching" && (
         <div className="animate-fade-slide-in flex h-screen overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
-          {/* Center: Enrichment cards */}
-          <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-cos-cloud/60">
+          {/* Center: Enrichment cards — anchored to bottom like chat */}
+          <main className="relative flex min-w-0 flex-1 flex-col justify-end overflow-y-auto bg-cos-cloud/60">
             <GuestEnrichmentPanel />
           </main>
 
