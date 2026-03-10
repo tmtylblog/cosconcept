@@ -33,22 +33,11 @@ export const auth = betterAuth({
     process.env.BETTER_AUTH_URL!,
   ],
 
-  logger: {
-    level: "debug",
-    log(level, message, ...args) {
-      const prefix = `[BETTER-AUTH ${level.toUpperCase()}]`;
-      if (level === "error") {
-        console.error(prefix, message, ...args);
-      } else if (level === "warn") {
-        console.warn(prefix, message, ...args);
-      } else {
-        console.log(prefix, message, ...args);
-      }
-    },
-  },
-
+  // Rate limiting disabled — Better Auth's built-in rate limiter corrupts JSON
+  // storage on Vercel serverless (SyntaxError in safeJSONParse). Use Upstash
+  // Redis for rate limiting when needed (Phase 4+).
   rateLimit: {
-    enabled: false, // Temporarily disabled for debugging
+    enabled: false,
   },
 
   emailAndPassword: {

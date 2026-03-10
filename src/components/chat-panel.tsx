@@ -585,9 +585,13 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         if (toolName === "request_login") {
           // Force-flush all preferences to DB before showing login
           forceFlushToDb();
-          // Trigger the login modal
-          setShowLoginPrompt(true);
-          onRequestLogin?.();
+          // Delay before showing login modal so the user can read Ossy's
+          // explanation (e.g., why a brand/client is being directed to login
+          // instead of continuing the onboarding flow)
+          setTimeout(() => {
+            setShowLoginPrompt(true);
+            onRequestLogin?.();
+          }, 4000);
         }
 
         // Handle navigate_section tool results (authenticated firm pages)

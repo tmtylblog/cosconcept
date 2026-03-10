@@ -320,50 +320,99 @@ function AppLayoutInner({
       {/* ─── PHASE 1: LANDING (guest, no domain yet) ─── */}
       {appPhase === "landing" && (
         <div className="flex h-screen overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
-          {/* Blurred backdrop with centered chat */}
-          <div className="fixed inset-0 z-30 flex flex-col items-center bg-cos-cloud/80 backdrop-blur-sm">
-            {/* Branding header */}
-            <div className="flex shrink-0 flex-col items-center gap-1 pb-2 pt-6">
+          {/* Center: Welcome content — directs users to chat or login */}
+          <main className="relative flex min-w-0 flex-1 flex-col items-center justify-center bg-cos-cloud/60 px-8">
+            <div className="w-full max-w-md text-center">
+              {/* Logo + branding */}
               <Image
                 src="/logo.png"
                 alt="Collective OS"
-                width={48}
-                height={48}
-                className="h-12 w-12 rounded-cos-xl"
+                width={64}
+                height={64}
+                className="mx-auto h-16 w-16 rounded-cos-xl"
               />
-              <h1 className="font-heading text-lg font-bold text-cos-midnight">
+              <h1 className="mt-4 font-heading text-2xl font-bold text-cos-midnight">
                 Collective OS
               </h1>
-              <p className="text-xs text-cos-slate-dim">
+              <p className="mt-1 text-sm text-cos-slate">
                 Grow Faster Together
               </p>
-            </div>
 
-            {/* Centered chat panel */}
-            <div className="flex w-full max-w-2xl flex-1 flex-col overflow-hidden">
-              <ChatPanel
-                key={chatKey}
-                isGuest={true}
-                onRequestLogin={handleRequestLogin}
-              />
-            </div>
+              {/* Value proposition */}
+              <p className="mt-6 text-sm leading-relaxed text-cos-slate">
+                The operating system for partnership-led growth.
+                Find, match, and manage the right partners for your
+                professional services firm.
+              </p>
 
-            {/* Login bypass button — bottom right */}
-            <button
-              onClick={handleRequestLogin}
-              className="fixed bottom-6 right-6 z-40 rounded-cos-pill border border-cos-border/50 bg-white/80 px-4 py-2 text-xs font-medium text-cos-slate-dim backdrop-blur-sm transition-colors hover:border-cos-border hover:text-cos-midnight"
-            >
-              Already have an account? Sign in
-            </button>
+              {/* CTA: direct to chat */}
+              <div className="mt-8 rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-6 py-5">
+                <div className="flex items-center justify-center gap-2 text-cos-electric">
+                  <MessageCircle className="h-5 w-5" />
+                  <span className="text-sm font-semibold">Get Started</span>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-cos-slate">
+                  Enter your company domain in the chat to get an instant
+                  profile — we&apos;ll discover your services, team, and more.
+                </p>
+              </div>
+
+              {/* Login link */}
+              <button
+                onClick={handleRequestLogin}
+                className="mt-6 text-sm text-cos-electric transition-colors hover:underline"
+              >
+                Already have an account? Sign in
+              </button>
+            </div>
 
             {/* DEV: Simulate New Onboarding — bottom left */}
             <button
               onClick={handleSimulateNewUser}
-              className="fixed bottom-6 left-6 z-40 rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember backdrop-blur-sm transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
+              className="absolute bottom-6 left-6 rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
             >
               🔄 Simulate New Onboarding
             </button>
-          </div>
+          </main>
+
+          {/* Right: Chat panel — matches enriching/authenticated layout */}
+          <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-midnight/20 lg:flex">
+            <ChatPanel
+              key={chatKey}
+              isGuest={true}
+              onRequestLogin={handleRequestLogin}
+            />
+          </aside>
+
+          {/* Mobile: Floating Ossy button + full-screen chat overlay */}
+          {!mobileChat && (
+            <button
+              onClick={() => setMobileChat(true)}
+              className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-cos-electric text-white shadow-lg transition-transform hover:scale-105 lg:hidden"
+              aria-label="Open Ossy chat"
+            >
+              <MessageCircle className="h-5 w-5" />
+            </button>
+          )}
+          {mobileChat && (
+            <div className="fixed inset-0 z-50 flex flex-col bg-cos-cloud lg:hidden">
+              <div className="flex h-12 items-center justify-end border-b border-cos-border/30 px-4">
+                <button
+                  onClick={() => setMobileChat(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-cos-full text-cos-slate-dim hover:bg-cos-cloud-dim hover:text-cos-midnight"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <ChatPanel
+                  key={chatKey}
+                  isGuest={true}
+                  onRequestLogin={handleRequestLogin}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
