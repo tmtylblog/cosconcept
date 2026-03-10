@@ -54,6 +54,8 @@ export function createOssyTools(organizationId: string, firmId: string) {
 
           // Log interview question completion for funnel tracking
           const questionIndex = INTERVIEW_FIELDS.indexOf(field);
+          let nextAction: string | undefined;
+
           if (questionIndex >= 0) {
             logOnboardingEvent({
               organizationId,
@@ -73,10 +75,20 @@ export function createOssyTools(organizationId: string, firmId: string) {
                 event: "all_questions_done",
                 metadata: { questionsAnswered: INTERVIEW_FIELDS.length },
               }).catch(() => {});
+              nextAction = "All 9 onboarding questions are complete! Congratulate the user and let them know their dashboard is unlocking.";
+            } else {
+              // More questions remain — tell the model to continue
+              const nextField = INTERVIEW_FIELDS[questionIndex + 1];
+              nextAction = `Saved question ${questionIndex + 1} of 9. Now immediately ask the user onboarding question ${questionIndex + 2} (${nextField}). Do NOT stop here — the next question must be in your response.`;
             }
           }
 
-          return { success: true as const, field: result.field, value: result.value };
+          return {
+            success: true as const,
+            field: result.field,
+            value: result.value,
+            ...(nextAction ? { nextAction } : {}),
+          };
         } catch (err) {
           console.error(`[Ossy Tools] Failed to update ${field}:`, err);
           return { success: false as const, field, error: String(err) };
