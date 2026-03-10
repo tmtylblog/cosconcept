@@ -12,9 +12,18 @@ import { EnrichmentProvider, useEnrichment } from "@/hooks/use-enrichment";
 import { ProfileProvider } from "@/hooks/use-profile";
 import { GuestDataProvider, useGuestData } from "@/hooks/use-guest-data";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
-import { useSession, useActiveOrganization } from "@/lib/auth-client";
+import { authClient, useSession, useActiveOrganization } from "@/lib/auth-client";
 import { getEmailDomain, isPersonalEmail } from "@/lib/email-validation";
 import { MessageCircle, X, Loader2 } from "lucide-react";
+
+/** Convert a domain like "chameleon.co" to a nice org name like "Chameleon" */
+function domainToOrgName(domain: string): string {
+  const parts = domain.split(".");
+  const companyPart = parts[0];
+  return companyPart
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 // ─── App Phase Type ─────────────────────────────────────────
 // Phase 1: landing — guest, no domain submitted
@@ -77,6 +86,71 @@ function AppLayoutInner({
   const [loginPanelOpen, setLoginPanelOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0);
   const [mobileChat, setMobileChat] = useState(false);
+
+  // ─── Auto-provision org + firm for authenticated users with no org ────
+  // The moment someone authenticates, an "unclaimed" org + firm is created
+  // so ALL data is stored from the very first interaction. This org transitions
+  // from onboarding → fully claimed once the user completes the process.
+  const orgProvisionedRef = useRef(false);
+
+  useEffect(() => {
+    if (!session?.user || activeOrg?.id || orgProvisionedRef.current) return;
+    orgProvisionedRef.current = true;
+
+    async function provisionOrg() {
+      try {
+        // Check if user already has any orgs (maybe just not set active)
+        const { data: orgs } = await authClient.organization.list();
+        const orgList = (orgs as { id: string; name: string; slug: string }[]) ?? [];
+
+        let orgId: string;
+
+        if (orgList.length > 0) {
+          // Has org(s) but none set active — just activate the first one
+          orgId = orgList[0].id;
+          console.log(`[Layout] Auto-activating existing org: ${orgId}`);
+        } else {
+          // No org at all — create one from email domain
+          const email = session?.user?.email ?? "";
+          const domain = email.split("@")[1] ?? "my-firm";
+          const orgName = domainToOrgName(domain);
+          // Add random suffix to slug to avoid collisions
+          const slugBase = domain.replace(/\./g, "-");
+          const slug = `${slugBase}-${Math.random().toString(36).slice(2, 6)}`;
+
+          console.log(`[Layout] Auto-creating org "${orgName}" (slug: ${slug}) for ${email}`);
+          const { data: newOrg, error: createErr } = await authClient.organization.create({
+            name: orgName,
+            slug,
+          });
+
+          if (!newOrg || createErr) {
+            console.error("[Layout] Failed to create org:", createErr);
+            orgProvisionedRef.current = false;
+            return;
+          }
+          orgId = newOrg.id;
+        }
+
+        // Set org active (triggers useActiveOrganization re-render)
+        await authClient.organization.setActive({ organizationId: orgId });
+
+        // Ensure serviceFirms row exists for this org
+        await fetch("/api/onboarding/ensure-org", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ organizationId: orgId }),
+        });
+
+        console.log(`[Layout] Org provisioned and active: ${orgId}`);
+      } catch (err) {
+        console.error("[Layout] Org provisioning failed:", err);
+        orgProvisionedRef.current = false;
+      }
+    }
+
+    provisionOrg();
+  }, [session?.user, activeOrg?.id]);
 
   // ─── Onboarding status (authenticated users only) ─────────
   const {
