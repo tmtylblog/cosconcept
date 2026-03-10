@@ -70,9 +70,10 @@ const requestLoginTool = tool({
  */
 export async function POST(req: Request) {
   try {
-    const { messages, websiteContext } = (await req.json()) as {
+    const { messages, websiteContext, collectedPreferences } = (await req.json()) as {
       messages: UIMessage[];
       websiteContext?: string;
+      collectedPreferences?: Record<string, string | string[]>;
     };
 
     // Safety limit: reject if conversation is extremely long (abuse prevention)
@@ -88,6 +89,7 @@ export async function POST(req: Request) {
       isOnboarding: true,
       isGuest: true,
       websiteContext: websiteContext ?? undefined,
+      collectedPreferences: collectedPreferences ?? undefined,
     });
 
     const modelMessages = await convertToModelMessages(messages);

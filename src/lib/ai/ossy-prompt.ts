@@ -146,6 +146,7 @@ export function getOssyPrompt(context?: {
   hasToolAccess?: boolean;
   websiteContext?: string;
   memoryContext?: string;
+  collectedPreferences?: Record<string, string | string[]>;
 }): string {
   let prompt = OSSY_SYSTEM_PROMPT;
 
@@ -278,6 +279,41 @@ ${context.websiteContext}\n`;
 
   if (context?.memoryContext) {
     prompt += `\n${context.memoryContext}\n`;
+  }
+
+  // ─── Inject already-collected preferences (for session resume) ───
+  if (context?.collectedPreferences && Object.keys(context.collectedPreferences).length > 0) {
+    const prefLines = Object.entries(context.collectedPreferences)
+      .map(([field, value]) => {
+        const display = Array.isArray(value) ? value.join(", ") : value;
+        return `- ${field}: ${display}`;
+      })
+      .join("\n");
+
+    // Map field names to question numbers for Ossy
+    const PREF_QUESTION_MAP: Record<string, number> = {
+      desiredPartnerServices: 1,
+      requiredPartnerIndustries: 2,
+      idealPartnerClientSize: 3,
+      preferredPartnerLocations: 4,
+      preferredPartnerTypes: 5,
+      preferredPartnerSize: 6,
+      idealProjectSize: 7,
+      typicalHourlyRates: 8,
+    };
+
+    const answeredNums = Object.keys(context.collectedPreferences)
+      .map((k) => PREF_QUESTION_MAP[k])
+      .filter(Boolean)
+      .sort();
+    const nextQ = answeredNums.length > 0 ? Math.max(...answeredNums) + 1 : 1;
+
+    prompt += `\n## Already Collected Preferences
+The user has ALREADY answered the following partner preference questions in a previous visit. These are saved — do NOT re-ask them. Pick up from question ${nextQ > 8 ? "done (all 8 answered)" : nextQ}.
+
+${prefLines}
+
+IMPORTANT: Skip all questions above. Continue with the NEXT unanswered question. If all 8 are answered, call request_login.\n`;
   }
 
   return prompt;

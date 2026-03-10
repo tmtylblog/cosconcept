@@ -98,7 +98,7 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
     triggerEnrichment,
   } = useEnrichment();
   const { updateField: updateProfileField } = useProfile();
-  const { setGuestPreference, setGuestMessages } = useGuestData();
+  const { guestPreferences, setGuestPreference, setGuestMessages } = useGuestData();
   const [input, setInput] = useState("");
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
@@ -189,7 +189,10 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
     transport: new DefaultChatTransport({
       api: chatEndpoint,
       body: isGuest
-        ? { websiteContext: contextForOssy }
+        ? {
+            websiteContext: contextForOssy,
+            collectedPreferences: guestPreferences,
+          }
         : {
             organizationId: activeOrg?.id ?? "",
             websiteContext: contextForOssy,
