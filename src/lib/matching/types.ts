@@ -117,4 +117,11 @@ export interface SearchResult {
     totalDurationMs: number;
     estimatedCostUsd: number;
   };
+  /** Only present when debug: true is passed to executeSearch() */
+  debugLayers?: {
+    layer1: { count: number; topCandidates: MatchCandidate[] };
+    layer2: { count: number; topCandidates: MatchCandidate[] };
+    layer3: { count: number; results: MatchCandidate[] };
+    parsedFilters: SearchFilters;
+  };
 }

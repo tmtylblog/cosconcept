@@ -14,6 +14,7 @@ import {
   Globe,
   MessageSquare,
   Target,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -583,7 +584,8 @@ export default function AdminOnboardingPage() {
                   <th className="pb-2 pr-4 font-medium">Enrichment</th>
                   <th className="pb-2 pr-4 font-medium">Questions</th>
                   <th className="pb-2 pr-4 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Time</th>
+                  <th className="pb-2 pr-4 font-medium">Time</th>
+                  <th className="pb-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-cos-border/50">
@@ -614,13 +616,23 @@ export default function AdminOnboardingPage() {
                     <td className="py-2 pr-4">
                       <SessionStatusBadge session={s} />
                     </td>
-                    <td className="py-2 text-cos-slate">
+                    <td className="py-2 pr-4 text-cos-slate">
                       {new Date(s.lastEventAt).toLocaleDateString("en-US", {
                         month: "short",
                         day: "numeric",
                         hour: "numeric",
                         minute: "2-digit",
                       })}
+                    </td>
+                    <td className="py-2">
+                      {s.domain && (
+                        <a
+                          href={`/admin/onboarding/sessions/${encodeURIComponent(s.domain)}`}
+                          className="flex items-center gap-1 text-xs text-cos-electric hover:underline"
+                        >
+                          View <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
                     </td>
                   </tr>
                 ))}

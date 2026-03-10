@@ -15,7 +15,8 @@ import {
   FileUp,
   Sparkles,
   Activity,
-  BarChart3,
+  Search,
+  TrendingUp,
 } from "lucide-react";
 
 /**
@@ -91,12 +92,15 @@ export default async function AdminLayout({
           <AdminNavLink href="/admin/api-health" icon={<Activity className="h-4 w-4" />} label="API Health" />
           <AdminNavLink href="/admin/partnerships" icon={<Handshake className="h-4 w-4" />} label="Partnerships" />
 
+          <SectionHeader label="Matching" />
+          <AdminNavLink href="/admin/search" icon={<Search className="h-4 w-4" />} label="Search Test" />
+          <AdminNavLink href="/admin/onboarding" icon={<TrendingUp className="h-4 w-4" />} label="Onboarding" />
+
           <SectionHeader label="Tools" />
           <AdminNavLink href="/admin/neo4j" icon={<Database className="h-4 w-4" />} label="Neo4j" />
           <AdminNavLink href="/admin/apis" icon={<Globe className="h-4 w-4" />} label="APIs" />
           <AdminNavLink href="/admin/migration" icon={<FileUp className="h-4 w-4" />} label="Data Import" />
           <AdminNavLink href="/admin/enrichment" icon={<Sparkles className="h-4 w-4" />} label="Enrichment" />
-          <AdminNavLink href="/admin/onboarding" icon={<BarChart3 className="h-4 w-4" />} label="Onboarding" />
         </nav>
 
         <div className="h-px bg-gradient-to-r from-transparent via-cos-border to-transparent" />

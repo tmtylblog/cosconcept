@@ -23,15 +23,17 @@ import type { SearchQuery, SearchResult, SearchFilters } from "./types";
  * @param rawQuery - Natural language search query
  * @param searcherFirmId - The firm performing the search (for bidirectional matching)
  * @param explicitFilters - Optional explicit filters (override NL parsing)
+ * @param debug - When true, include intermediate layer candidates in the result
  */
 export async function executeSearch(params: {
   rawQuery: string;
   searcherFirmId?: string;
   explicitFilters?: Partial<SearchFilters>;
   skipLlmRanking?: boolean;
+  debug?: boolean;
 }): Promise<SearchResult> {
   const start = Date.now();
-  const { rawQuery, searcherFirmId, explicitFilters, skipLlmRanking } = params;
+  const { rawQuery, searcherFirmId, explicitFilters, skipLlmRanking, debug } = params;
 
   // Step 1: Parse query into structured filters
   const parsedFilters = await parseSearchQuery(rawQuery);
@@ -83,7 +85,7 @@ export async function executeSearch(params: {
     0.0 + // Layer 2 (pgvector, free; embedding ~$0.00002)
     (skipLlmRanking ? 0 : 0.005); // Layer 3 (Gemini Flash ~$0.005)
 
-  return {
+  const result: SearchResult = {
     query,
     candidates: finalCandidates,
     stats: {
@@ -94,4 +96,15 @@ export async function executeSearch(params: {
       estimatedCostUsd,
     },
   };
+
+  if (debug) {
+    result.debugLayers = {
+      layer1: { count: structuredCandidates.length, topCandidates: layer1Candidates.slice(0, 20) },
+      layer2: { count: layer2Candidates.length, topCandidates: layer2Candidates.slice(0, 20) },
+      layer3: { count: finalCandidates.length, results: finalCandidates },
+      parsedFilters: filters,
+    };
+  }
+
+  return result;
 }
