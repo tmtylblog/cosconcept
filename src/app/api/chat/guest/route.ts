@@ -25,7 +25,9 @@ const guestUpdateProfileTool = tool({
     "Record a confirmed data point from the user's profile or partner preferences. " +
     "Call this AFTER the user confirms information, not while still suggesting. " +
     "You can call this multiple times per response for different fields. " +
-    "This saves the data so it can be persisted when the user signs in.",
+    "This saves the data so it can be persisted when the user signs in. " +
+    "IMPORTANT: Do NOT write any acknowledgment text before this tool call. " +
+    "Wait for the tool result, THEN write your acknowledgment AND the next question together.",
   inputSchema: z.object({
     field: profileFieldSchema.describe(
       "The profile field to update. " +
@@ -42,7 +44,14 @@ const guestUpdateProfileTool = tool({
   }),
   execute: async ({ field, value }) => {
     // No DB write — just return the data for client-side caching
-    return { success: true as const, field, value, source: "guest" as const };
+    // The _continue hint reminds the model to acknowledge + ask the next question
+    return {
+      success: true as const,
+      field,
+      value,
+      source: "guest" as const,
+      _continue: "Saved! Now respond with a brief acknowledgment AND the next onboarding question.",
+    };
   },
 });
 
