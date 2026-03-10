@@ -6,6 +6,7 @@ import {
   useCallback,
   useState,
   useEffect,
+  useRef,
 } from "react";
 import type { ReactNode } from "react";
 import type { UIMessage } from "ai";
@@ -31,6 +32,7 @@ interface GuestDataContextValue {
 
 const PREFS_KEY = "cos_guest_preferences";
 const MSGS_KEY = "cos_guest_messages";
+const DOMAIN_KEY = "cos_guest_domain";
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -48,6 +50,41 @@ function saveToStorage(key: string, data: unknown): void {
     sessionStorage.setItem(key, JSON.stringify(data));
   } catch {
     // quota exceeded or SSR — ignore
+  }
+}
+
+function getGuestDomain(): string | null {
+  try {
+    return sessionStorage.getItem(DOMAIN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// ─── DB sync helpers ─────────────────────────────────────
+
+/** Write preferences to DB (non-blocking, fire-and-forget) */
+function syncPrefsToDb(domain: string, preferences: Record<string, string | string[]>) {
+  fetch("/api/guest/preferences", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domain, preferences }),
+  }).catch((err) => console.warn("[GuestData] DB sync failed:", err));
+}
+
+/** Load preferences from DB by domain */
+async function loadPrefsFromDb(
+  domain: string
+): Promise<Record<string, string | string[]> | null> {
+  try {
+    const res = await fetch(
+      `/api/guest/preferences?domain=${encodeURIComponent(domain)}`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.preferences || null;
+  } catch {
+    return null;
   }
 }
 
@@ -74,23 +111,63 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
   >({});
   const [guestMessages, setMsgsState] = useState<UIMessage[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  // Track last-synced state to avoid redundant DB writes
+  const lastSyncedRef = useRef<string>("");
 
-  // Hydrate from sessionStorage on mount
+  // ── Hydrate from sessionStorage first, then DB ────────
   useEffect(() => {
-    setPrefsState(
-      loadFromStorage<Record<string, string | string[]>>(PREFS_KEY, {})
+    // 1. Immediate hydration from sessionStorage (fast, synchronous)
+    const localPrefs = loadFromStorage<Record<string, string | string[]>>(
+      PREFS_KEY,
+      {}
     );
-    setMsgsState(loadFromStorage<UIMessage[]>(MSGS_KEY, []));
+    const localMsgs = loadFromStorage<UIMessage[]>(MSGS_KEY, []);
+    setPrefsState(localPrefs);
+    setMsgsState(localMsgs);
+    lastSyncedRef.current = JSON.stringify(localPrefs);
     setHydrated(true);
+
+    // 2. Then check DB for any preferences saved from a previous session
+    const domain = getGuestDomain();
+    if (domain) {
+      loadPrefsFromDb(domain).then((dbPrefs) => {
+        if (!dbPrefs || Object.keys(dbPrefs).length === 0) return;
+        // Merge: DB values fill gaps, local values take priority (more recent)
+        setPrefsState((current) => {
+          const merged = { ...dbPrefs, ...current };
+          // If DB had fields local didn't, save the merged set back
+          if (Object.keys(merged).length > Object.keys(current).length) {
+            saveToStorage(PREFS_KEY, merged);
+            console.log(
+              `[GuestData] Merged ${Object.keys(dbPrefs).length} DB prefs with ${Object.keys(current).length} local prefs → ${Object.keys(merged).length} total`
+            );
+          }
+          return merged;
+        });
+      });
+    }
   }, []);
 
-  // Persist preferences to sessionStorage
+  // ── Persist preferences to sessionStorage + DB ────────
   useEffect(() => {
     if (!hydrated) return;
+
+    // Always write to sessionStorage (instant)
     saveToStorage(PREFS_KEY, guestPreferences);
+
+    // Only write to DB if preferences actually changed
+    const snapshot = JSON.stringify(guestPreferences);
+    if (snapshot === lastSyncedRef.current) return;
+    if (Object.keys(guestPreferences).length === 0) return;
+    lastSyncedRef.current = snapshot;
+
+    const domain = getGuestDomain();
+    if (domain) {
+      syncPrefsToDb(domain, guestPreferences);
+    }
   }, [guestPreferences, hydrated]);
 
-  // Persist messages to sessionStorage
+  // ── Persist messages to sessionStorage ─────────────────
   useEffect(() => {
     if (!hydrated) return;
     saveToStorage(MSGS_KEY, guestMessages);
@@ -114,9 +191,11 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
   const clearGuestData = useCallback(() => {
     setPrefsState({});
     setMsgsState([]);
+    lastSyncedRef.current = "";
     try {
       sessionStorage.removeItem(PREFS_KEY);
       sessionStorage.removeItem(MSGS_KEY);
+      // Don't remove DOMAIN_KEY — we keep the domain association
     } catch {
       // ignore
     }

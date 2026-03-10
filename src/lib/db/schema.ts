@@ -221,6 +221,8 @@ export const enrichmentCache = pgTable("enrichment_cache", {
   domain: text("domain").notNull().unique(),
   firmName: text("firm_name"),
   enrichmentData: jsonb("enrichment_data").notNull(),
+  // Guest onboarding preferences (persisted per-domain so they survive tab close)
+  guestPreferences: jsonb("guest_preferences").$type<Record<string, string | string[]>>(),
   // Track which stages were completed so partial results can be gap-filled
   hasPdl: boolean("has_pdl").notNull().default(false),
   hasScrape: boolean("has_scrape").notNull().default(false),

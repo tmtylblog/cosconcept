@@ -180,6 +180,8 @@ export function EnrichmentProvider({
             setResult(enrichmentData);
             setEnrichedUrl(enrichmentData.url);
             setContextForOssy(buildContextForOssy(enrichmentData));
+            // Ensure domain key is set for guest preference DB sync
+            try { sessionStorage.setItem("cos_guest_domain", enrichmentData.domain); } catch { /* ignore */ }
 
             // Set accurate status based on ACTUAL data quality
             // Use the same strict criteria as auto-retry and lookup gap-fill
@@ -325,6 +327,9 @@ export function EnrichmentProvider({
         setStages({ overall: "failed", pdl: "failed", scrape: "failed", classify: "failed" });
         return;
       }
+
+      // Persist domain to sessionStorage so guest preferences can sync to DB
+      try { sessionStorage.setItem("cos_guest_domain", domain); } catch { /* ignore */ }
 
       // Initialize result shell so the dashboard can show the domain immediately
       const resultShell: EnrichmentResult = {
