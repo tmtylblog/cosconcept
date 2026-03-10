@@ -15,7 +15,7 @@ import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
 import { extractMemoriesFromConversation } from "@/lib/ai/memory-extractor";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -181,7 +181,7 @@ export async function POST(req: Request) {
       model: openrouter.chat("anthropic/claude-sonnet-4"),
       system: systemPrompt,
       messages: modelMessages,
-      ...(tools ? { tools, maxSteps: 3 } : {}),
+      ...(tools ? { tools, maxSteps: 5 } : {}),
       maxOutputTokens: 2048,
       onFinish: async ({ text, usage, toolCalls }) => {
         // ─── Persist assistant message ───────────────────────

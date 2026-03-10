@@ -5,7 +5,7 @@ import { getOssyPrompt } from "@/lib/ai/ossy-prompt";
 import { ALL_PROFILE_FIELDS } from "@/lib/profile/update-profile-field";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -104,7 +104,7 @@ export async function POST(req: Request) {
       system: systemPrompt,
       messages: modelMessages,
       maxOutputTokens: 2048,
-      ...{ tools: guestTools, maxSteps: 3 },
+      ...{ tools: guestTools, maxSteps: 5 },
     });
 
     return result.toUIMessageStreamResponse();

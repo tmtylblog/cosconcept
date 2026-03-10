@@ -509,9 +509,12 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
         )}
 
         {error && (
-          <div className="rounded-cos-xl border border-cos-danger/20 bg-cos-danger/5 px-4 py-3">
-            <p className="text-sm text-cos-danger">
-              Something went wrong. Please try again.
+          <div className="rounded-cos-xl border border-cos-ember/20 bg-cos-ember/5 px-4 py-3">
+            <p className="text-sm font-medium text-cos-ember">
+              Ossy hit a snag — try sending your message again.
+            </p>
+            <p className="mt-1 text-xs text-cos-slate">
+              {error.message || "Connection issue or timeout"}
             </p>
           </div>
         )}
