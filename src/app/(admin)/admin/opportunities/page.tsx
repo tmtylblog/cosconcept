@@ -11,6 +11,7 @@ import {
   Zap,
   Radio,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 type Period = "7d" | "30d" | "90d" | "all";
 
@@ -117,6 +118,7 @@ function StatCard({
 }
 
 export default function AdminOpportunitiesPage() {
+  const router = useRouter();
   const [data, setData] = useState<OppData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>("30d");
@@ -328,7 +330,11 @@ export default function AdminOpportunitiesPage() {
                     </tr>
                   ))
                 : (data?.recentOpportunities ?? []).map((opp) => (
-                    <tr key={opp.id} className="hover:bg-cos-cloud/30">
+                    <tr
+                      key={opp.id}
+                      className="cursor-pointer hover:bg-cos-cloud/30"
+                      onClick={() => router.push(`/admin/opportunities/${opp.id}`)}
+                    >
                       <td className="px-4 py-3">
                         <p className="max-w-[200px] truncate font-medium text-cos-midnight">{opp.title}</p>
                         {opp.requiredCategories && opp.requiredCategories.length > 0 && (
