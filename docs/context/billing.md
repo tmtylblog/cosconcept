@@ -6,6 +6,91 @@
 
 Stripe-backed subscription billing with three tiers (Free, Pro, Enterprise). Every organization gets a free subscription row on creation. Upgrades flow through Stripe Checkout; plan changes sync back via webhooks. Feature access is enforced server-side via a gate module that checks both boolean features and metered usage quotas.
 
+---
+
+## Freemium Philosophy
+
+> **IMPORTANT — READ BEFORE TOUCHING PLAN LIMITS OR GATING LOGIC**
+
+The freemium model is **not a degraded version of Pro**. It serves a fundamentally different purpose:
+
+> **Freemium users exist to make the network more valuable for paying customers — not to get full platform value themselves.**
+
+### Three Distinct User States
+
+| State | Who | Core Experience |
+|---|---|---|
+| **Freemium** | Joined, not paying | Passive participant — joins paying firms' networks, receives surprise matches via Ossy, cannot initiate anything |
+| **Trial** | New user with high quality profile | Usage-based unlock — gets one real match if composite profile quality threshold is met |
+| **Paid** | Pro or Enterprise | Full active matching, search, outreach, opportunities, leads |
+
+---
+
+### Freemium Users — What They Can and Cannot Do
+
+**Can do (passive):**
+- Maintain a profile on the platform
+- Accept partnership requests initiated by paying firms
+- Participate in opportunity sharing and referrals within a paying firm's network (receive only)
+- Receive "surprise match" introductions pushed by Ossy
+- Be discoverable by paying firms in search results
+
+**Cannot do (requires paid plan):**
+- Search the network
+- Initiate partnership requests
+- Request introductions
+- Create or share opportunities or leads
+- Access call intelligence, email agent, data export
+
+---
+
+### Surprise Match — How It Works
+
+A "surprise match" is a **proactive Ossy-initiated introduction** — not triggered by either user searching. The flow is:
+
+```
+Ossy identifies a paying firm that would benefit from meeting a freemium user
+        ↓
+Ossy reaches out to BOTH parties proactively (email or in-platform message)
+        ↓
+Neither party searched — Ossy is the initiator
+        ↓
+Paying firm gets a high-quality unexpected introduction (core value add)
+Freemium user gets a taste of platform value without paying
+        ↓
+Freemium user is motivated to upgrade to initiate their own matches
+```
+
+**Key principle:** The surprise match is a gift to the **paying firm**, not an entitlement for the freemium user. It improves the paying firm's experience by surfacing high-quality matches they didn't have to search for.
+
+> **⚠️ DEVELOPER NOTE:** Surprise match logic must NEVER be triggered by the freemium user. It is always Ossy-initiated based on paying firm benefit analysis. Do not build any UI that lets freemium users "request" a surprise match.
+
+---
+
+### Trial Unlock — Profile Quality Threshold
+
+New users get a **one-time usage-based trial match** if their profile meets a minimum composite quality score. This incentivises profile completion on signup.
+
+**Composite Profile Quality Score** (to be implemented — `src/lib/billing/profile-quality-scorer.ts`):
+
+| Component | Weight | Signal |
+|---|---|---|
+| Firm profile overview | 30% | Name, description, website, size, founding year, services |
+| Expert profiles | 40% | At least one published specialist profile with `quality_status: "strong"` or `"partial"` |
+| Case studies | 30% | At least one active case study with full AI analysis |
+
+**Threshold:** Composite score ≥ 0.7 unlocks the trial match.
+
+**Trial match rules:**
+- One match only — non-renewable
+- Ossy initiates the intro (same flow as surprise match)
+- Once used, user must upgrade to Pro for further matching
+- Trial match is tracked via `ai_usage_log` with `feature: "trial_match"`
+
+> **⚠️ STATUS: NOT YET BUILT** — Profile quality scorer, trial match tracking, and surprise match Inngest job do not exist yet. The current `plan-limits.ts` contains old freemium limits that are being redesigned. Do not rely on the current Free plan limit values — they will be updated when this feature is implemented.
+
+---
+
 ## Stripe Integration
 
 ### Client Setup
@@ -32,19 +117,24 @@ Stripe-backed subscription billing with three tiers (Free, Pro, Enterprise). Eve
 
 **File:** `src/lib/billing/plan-limits.ts`
 
+> **⚠️ OUTDATED** — The Free plan limits below reflect the old freemium model and are being redesigned. See "Freemium Philosophy" section above for the new model. Do not add new features based on these Free limits until they are updated.
+
 | Feature | Free ($0/mo) | Pro ($199/mo) | Enterprise (custom) |
 |---|---|---|---|
 | Tagline | Explore the Network | Harness the Network | Custom Solutions |
 | Seats (`members`) | 1 | 3 | Unlimited |
-| Potential matches/week | 5 | 12 | Unlimited |
-| AI Perfect Matches/month | 1 (trial) | 2 | Unlimited |
-| Opportunity responses/month | 0 | 3 | Unlimited |
+| Potential matches/week | ~~5~~ passive only | 12 | Unlimited |
+| AI Perfect Matches/month | ~~1 (trial)~~ trial on quality threshold | 2 | Unlimited |
+| Opportunity responses/month | 0 (receive only) | 3 | Unlimited |
 | Unlimited messaging | No | Yes | Yes |
 | Search the network | No | Yes | Yes |
 | Enhanced profile | No | Yes | Yes |
 | Call intelligence | No | Yes | Yes |
 | Email agent | No | No | Yes |
 | Data export | No | Yes | Yes |
+| Surprise match (Ossy-initiated) | Yes (passive) | Yes | Yes |
+| Initiate partnership requests | No | Yes | Yes |
+| Join paying firm's network | Yes | Yes | Yes |
 
 Type: `PlanId = "free" | "pro" | "enterprise"`
 
