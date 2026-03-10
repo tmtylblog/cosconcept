@@ -639,7 +639,31 @@ export function EnrichmentProvider({
       }
 
       // ─── Stage 4: Persist to DB (background, best-effort) ──
-      // Always re-persist so any newly-filled gaps are saved
+
+      // 4a. Always write to domain-keyed cache (works for guests AND auth users)
+      // This ensures any future enrichment of the same domain gets instant results.
+      if (hasAnyData) {
+        const cachePayload = {
+          url: normalized,
+          domain,
+          companyData: stageData.pdlCompanyData,
+          companyCard: stageData.pdlCompanyCard,
+          groundTruth: stageData.scrapeGroundTruth,
+          extracted: stageData.scrapeExtracted,
+          classification: stageData.classificationData,
+          pagesScraped: stageData.scrapePagesScraped,
+          evidenceCategories: stageData.scrapeEvidenceCategories,
+        };
+        fetch("/api/enrich/cache", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cachePayload),
+        }).catch((err) => {
+          console.warn("[Enrichment] Cache write failed (best-effort):", err);
+        });
+      }
+
+      // 4b. Auth users: also persist to service_firms + Neo4j graph
       if (organizationId && hasAnyData) {
         persistedRef.current = true;
         fetch("/api/enrich/persist", {

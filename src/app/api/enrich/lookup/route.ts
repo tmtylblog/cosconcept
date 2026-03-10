@@ -1,20 +1,20 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { serviceFirms } from "@/lib/db/schema";
+import { serviceFirms, enrichmentCache } from "@/lib/db/schema";
 import { neo4jRead } from "@/lib/neo4j";
-import { like, or } from "drizzle-orm";
+import { like, or, eq, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/enrich/lookup
  *
- * Check our own data (PostgreSQL + Neo4j) before calling paid APIs.
+ * Check our own data (cache → PostgreSQL → Neo4j) before calling paid APIs.
  * If we've already enriched this domain, return the cached result.
  * This saves PDL credits, Jina calls, and AI classifier tokens.
  *
  * Returns:
- *   { found: true, source: "postgres"|"neo4j", data: EnrichmentResult }
+ *   { found: true, source: "cache"|"postgres"|"neo4j", data: EnrichmentResult }
  *   { found: false }
  */
 export async function POST(req: Request) {
@@ -23,6 +23,36 @@ export async function POST(req: Request) {
 
     if (!domain) {
       return NextResponse.json({ found: false });
+    }
+
+    // ─── 0. Check enrichment_cache (domain-keyed, fastest) ───
+    // This catches results from both guest and authenticated enrichments.
+    try {
+      const cacheResults = await db
+        .select({
+          enrichmentData: enrichmentCache.enrichmentData,
+          firmName: enrichmentCache.firmName,
+        })
+        .from(enrichmentCache)
+        .where(eq(enrichmentCache.domain, domain.toLowerCase()))
+        .limit(1);
+
+      if (cacheResults.length > 0 && cacheResults[0].enrichmentData) {
+        // Increment hit count (fire-and-forget)
+        db.update(enrichmentCache)
+          .set({ hitCount: sql`${enrichmentCache.hitCount} + 1` })
+          .where(eq(enrichmentCache.domain, domain.toLowerCase()))
+          .catch(() => {});
+
+        console.log(`[Enrich/Lookup] Cache HIT (enrichment_cache) for ${domain}: ${cacheResults[0].firmName}`);
+        return NextResponse.json({
+          found: true,
+          source: "cache",
+          data: cacheResults[0].enrichmentData,
+        });
+      }
+    } catch (cacheErr) {
+      console.warn("[Enrich/Lookup] Cache table check failed:", cacheErr);
     }
 
     // ─── 1. Check PostgreSQL (serviceFirms.enrichmentData) ───

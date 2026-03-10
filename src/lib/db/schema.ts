@@ -213,6 +213,23 @@ export const serviceFirms = pgTable("service_firms", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ─── Enrichment Cache (domain-keyed, no auth required) ──────
+// Stores enrichment results keyed by domain so any user (guest or auth)
+// enriching the same domain gets instant results without re-calling paid APIs.
+export const enrichmentCache = pgTable("enrichment_cache", {
+  id: text("id").primaryKey(), // domain as id (e.g. "chameleoncollective.com")
+  domain: text("domain").notNull().unique(),
+  firmName: text("firm_name"),
+  enrichmentData: jsonb("enrichment_data").notNull(),
+  // Track which stages were completed so partial results can be gap-filled
+  hasPdl: boolean("has_pdl").notNull().default(false),
+  hasScrape: boolean("has_scrape").notNull().default(false),
+  hasClassify: boolean("has_classify").notNull().default(false),
+  hitCount: integer("hit_count").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const partnerPreferences = pgTable("partner_preferences", {
   id: text("id").primaryKey(),
   firmId: text("firm_id")
