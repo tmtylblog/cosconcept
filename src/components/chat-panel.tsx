@@ -119,6 +119,10 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const [historyLoaded, setHistoryLoaded] = useState(isGuest ? true : false);
   const enrichedUrlRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string>(crypto.randomUUID());
+  // Track whether we've seen enrichment go through "loading" this session
+  // (distinguishes fresh enrichment from restored/hydrated sessions)
+  const enrichmentWasLoadingRef = useRef(enrichmentStatus === "loading");
+  const enrichmentNudgeSentRef = useRef(false);
   // Whether we need to auto-continue (computed once on mount, never re-computed).
   // Fires whenever there's a restored guest session with real conversation
   // (more than just the welcome message), regardless of who spoke last.
@@ -212,6 +216,35 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
+
+  // ─── Auto-nudge Ossy when enrichment completes ──────────
+  // Track when enrichment enters "loading" so we know this is a fresh run
+  // (not a restored session where enrichment was already "done").
+  useEffect(() => {
+    if (enrichmentStatus === "loading") {
+      enrichmentWasLoadingRef.current = true;
+    }
+  }, [enrichmentStatus]);
+
+  // When enrichment finishes ("done") AND Ossy is idle ("ready"), send a
+  // natural nudge so Ossy receives the enrichment context and can ask the
+  // first follow-up question without the user having to type anything.
+  useEffect(() => {
+    if (
+      enrichmentWasLoadingRef.current &&
+      enrichmentStatus === "done" &&
+      !enrichmentNudgeSentRef.current &&
+      status === "ready"
+    ) {
+      enrichmentNudgeSentRef.current = true;
+      const timer = setTimeout(() => {
+        sendMessage({
+          text: "The research just finished — I can see the data on my dashboard now!",
+        });
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [enrichmentStatus, status, sendMessage]);
 
   useEffect(() => {
     if (scrollRef.current) {
