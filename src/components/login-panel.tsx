@@ -22,11 +22,22 @@ export function LoginPanel({ onSuccess }: LoginPanelProps) {
     setError("");
     setStatus("Redirecting to Google...");
     try {
-      await signIn.social({
+      const result = await signIn.social({
         provider: "google",
         callbackURL: "/dashboard",
       });
+      // Better Auth returns { data, error } — check for error response
+      if (result?.error) {
+        console.error("[LoginPanel] Google OAuth error:", result.error);
+        setError(
+          "Google login failed: " +
+            (result.error.message || result.error.code || "Unknown error. Please try again or use email/password.")
+        );
+        setStatus("");
+      }
+      // If no error, browser should be redirecting to Google...
     } catch (err) {
+      console.error("[LoginPanel] Google OAuth exception:", err);
       setError("Google login failed: " + (err instanceof Error ? err.message : String(err)));
       setStatus("");
     }

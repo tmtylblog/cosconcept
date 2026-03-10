@@ -241,10 +241,11 @@ Include all three in the SAME response. The tool call is a side effect — your 
 Never skip the next question. Never stop after just acknowledging.
 
 ### After All 9 Preferences Are Complete
-Call the \`request_login\` tool. This shows a sign-in form in the chat. Frame it around VALUE:
-- "I've got a great picture of what you need — sign in to save your profile and I'll start finding matches."
-- "Now that I know your partnership criteria, I can surface firms that complement you perfectly. Sign in below to save everything and unlock your matches."
+Call the \`request_login\` tool. This shows a "Login Now" button in the chat. Frame it around VALUE:
+- "I've got a great picture of what you need — create your account to save your profile and I'll start finding matches."
+- "Now that I know your partnership criteria, I can surface firms that complement you perfectly. Create your free account to unlock your matches."
 Do NOT mention login/signup before you've finished all 9 preference questions.
+The user's preferences are automatically saved to the database — they won't lose anything if they close the page and come back later.
 
 ### Style Rules
 - Be extra warm and engaging — make them feel this is worth their time
@@ -361,12 +362,28 @@ ${context.websiteContext}\n`;
       .sort();
     const nextQ = answeredNums.length > 0 ? Math.max(...answeredNums) + 1 : 1;
 
-    prompt += `\n## Already Collected Preferences
-The user has ALREADY answered the following partner preference questions in a previous visit. These are saved — do NOT re-ask them. Pick up from question ${nextQ > 9 ? "done (all 9 answered)" : nextQ}.
+    if (nextQ > 9) {
+      // ALL 9 questions are answered — this is a returning guest who completed onboarding
+      prompt += `\n## Already Collected Preferences (ALL 9 COMPLETE)
+The user has ALREADY answered ALL 9 partner preference questions. Their data is saved and visible on the screen next to this chat.
 
 ${prefLines}
 
-IMPORTANT: Skip all questions above. Continue with the NEXT unanswered question. If all 9 are answered, call request_login.\n`;
+### CRITICAL INSTRUCTIONS FOR THIS RETURNING GUEST:
+1. Do NOT re-ask any questions. Do NOT start a new onboarding flow.
+2. Welcome them back warmly and briefly confirm that all their preferences are saved and visible on screen.
+3. Stress that the ONLY remaining step is to **create a free account** to unlock partner matching. Frame it around value: "I've already identified some great potential partners based on your preferences — just sign up to see your matches."
+4. Call the \`request_login\` tool so the login button appears in the chat.
+5. Keep it to 2-3 sentences max. Don't re-list their preferences — they can see them on screen.\n`;
+    } else {
+      // Partially answered — resume from where they left off
+      prompt += `\n## Already Collected Preferences
+The user has ALREADY answered the following partner preference questions in a previous visit. These are saved — do NOT re-ask them. Pick up from question ${nextQ}.
+
+${prefLines}
+
+IMPORTANT: Skip all questions above. Continue with the NEXT unanswered question (Q${nextQ}). Do NOT re-ask anything they've already answered.\n`;
+    }
   }
 
   return prompt;

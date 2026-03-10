@@ -26,6 +26,8 @@ interface GuestDataContextValue {
   hasGuestData: boolean;
   /** Clear all guest data (call after successful migration) */
   clearGuestData: () => void;
+  /** Force immediate DB sync of all preferences (call before login prompt) */
+  forceFlushToDb: () => void;
 }
 
 // ─── SessionStorage Keys ─────────────────────────────────
@@ -97,6 +99,7 @@ const GuestDataContext = createContext<GuestDataContextValue>({
   setGuestMessages: () => {},
   hasGuestData: false,
   clearGuestData: () => {},
+  forceFlushToDb: () => {},
 });
 
 export function useGuestData() {
@@ -188,6 +191,22 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
     hydrated &&
     (Object.keys(guestPreferences).length > 0 || guestMessages.length > 0);
 
+  /** Imperative flush: immediately write current preferences to both sessionStorage and DB.
+   *  Call this before login/redirect to ensure nothing is lost. */
+  const forceFlushToDb = useCallback(() => {
+    // Sync to sessionStorage immediately
+    saveToStorage(PREFS_KEY, guestPreferences);
+
+    const domain = getGuestDomain();
+    if (domain && Object.keys(guestPreferences).length > 0) {
+      console.log(
+        `[GuestData] Force-flushing ${Object.keys(guestPreferences).length} prefs for ${domain}`
+      );
+      syncPrefsToDb(domain, guestPreferences);
+      lastSyncedRef.current = JSON.stringify(guestPreferences);
+    }
+  }, [guestPreferences]);
+
   const clearGuestData = useCallback(() => {
     setPrefsState({});
     setMsgsState([]);
@@ -210,6 +229,7 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
         setGuestMessages,
         hasGuestData,
         clearGuestData,
+        forceFlushToDb,
       }}
     >
       {children}
