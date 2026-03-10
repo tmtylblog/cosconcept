@@ -116,6 +116,31 @@ const PHASE_COLORS: Record<string, string> = {
   onboarding: "bg-emerald-100 text-emerald-700",
 };
 
+const CACHE_SOURCE_LABELS: Record<string, { label: string; sub: string }> = {
+  cache: { label: "Enrichment Cache", sub: "domain-keyed local cache table" },
+  postgres: { label: "Platform Database", sub: "previously enriched firm in serviceFirms" },
+  neo4j: { label: "Knowledge Graph", sub: "data found in Neo4j graph DB" },
+};
+
+/** Format a UTC ISO timestamp to the user's local date + time */
+function fmtTs(iso: string, opts?: { dateOnly?: boolean; timeOnly?: boolean }): string {
+  const d = new Date(iso);
+  if (opts?.timeOnly) {
+    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  }
+  if (opts?.dateOnly) {
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 // ─── Page ────────────────────────────────────────────────────
 
 export default function SessionDetailPage({
@@ -211,6 +236,12 @@ export default function SessionDetailPage({
       ? "bg-cos-warm/10 text-cos-warm"
       : "bg-cos-slate/10 text-cos-slate";
 
+  // Cache event analysis
+  const cacheEvent = data.events.find((e) => e.stage === "cache_lookup");
+  const cacheSource = cacheEvent?.metadata?.source as string | undefined;
+  const cacheGaps = cacheEvent?.metadata?.gaps as string[] | undefined;
+  const cacheSourceInfo = cacheSource ? CACHE_SOURCE_LABELS[cacheSource] : null;
+
   // Enrichment summary
   const enrichmentData = data.enrichmentData ?? {};
   const ed = enrichmentData as Record<string, unknown>;
@@ -227,7 +258,7 @@ export default function SessionDetailPage({
       </a>
 
       {/* Header */}
-      <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-6">
+      <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-6 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
@@ -250,21 +281,71 @@ export default function SessionDetailPage({
           <div className="text-right text-xs text-cos-slate-light space-y-0.5">
             <p>
               Started:{" "}
-              <span className="text-cos-slate">
-                {new Date(data.firstEventAt).toLocaleString()}
-              </span>
+              <span className="text-cos-slate">{fmtTs(data.firstEventAt)}</span>
             </p>
             <p>
               Last event:{" "}
-              <span className="text-cos-slate">
-                {new Date(data.lastEventAt).toLocaleString()}
-              </span>
+              <span className="text-cos-slate">{fmtTs(data.lastEventAt)}</span>
             </p>
             {data.firmId && (
               <p className="font-mono text-[11px]">firmId: {data.firmId}</p>
             )}
           </div>
         </div>
+
+        {/* Cache status banner */}
+        {cacheEvent && (
+          <div
+            className={`flex items-start gap-3 rounded-cos-lg px-4 py-3 text-sm ${
+              cacheEvent.event === "cache_hit_full"
+                ? "bg-cos-signal/8 border border-cos-signal/20"
+                : cacheEvent.event === "cache_hit_partial"
+                ? "bg-cos-warm/8 border border-cos-warm/20"
+                : "bg-cos-slate/8 border border-cos-border"
+            }`}
+          >
+            <Zap
+              className={`mt-0.5 h-4 w-4 shrink-0 ${
+                cacheEvent.event === "cache_hit_full"
+                  ? "text-cos-signal"
+                  : cacheEvent.event === "cache_hit_partial"
+                  ? "text-cos-warm"
+                  : "text-cos-slate"
+              }`}
+            />
+            <div className="flex-1 min-w-0">
+              <p className={`font-semibold ${
+                cacheEvent.event === "cache_hit_full"
+                  ? "text-cos-signal"
+                  : cacheEvent.event === "cache_hit_partial"
+                  ? "text-cos-warm"
+                  : "text-cos-slate"
+              }`}>
+                {cacheEvent.event === "cache_hit_full"
+                  ? "Full Cache Hit — no paid API calls needed"
+                  : cacheEvent.event === "cache_hit_partial"
+                  ? "Partial Cache Hit — some data reused"
+                  : "Cache Miss — full enrichment run"}
+              </p>
+              {cacheSourceInfo && (
+                <p className="mt-0.5 text-xs text-cos-slate">
+                  Source: <span className="font-medium text-cos-midnight">{cacheSourceInfo.label}</span>
+                  <span className="ml-1 text-cos-slate-light">({cacheSourceInfo.sub})</span>
+                </p>
+              )}
+              {cacheGaps && cacheGaps.length > 0 && (
+                <p className="mt-0.5 text-xs text-cos-slate">
+                  Still needed fresh:{" "}
+                  {cacheGaps.map((g) => (
+                    <span key={g} className="mr-1.5 font-mono text-[11px] rounded px-1.5 py-0.5 bg-cos-warm/15 text-cos-warm">
+                      {g}
+                    </span>
+                  ))}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Section 1: Event Timeline */}
@@ -309,7 +390,7 @@ export default function SessionDetailPage({
                       {label}
                     </span>
                     <span className="text-[11px] text-cos-slate-light">
-                      {new Date(ev.createdAt).toLocaleTimeString()}
+                      {fmtTs(ev.createdAt)}
                     </span>
                     {hasMetadata &&
                       (isExpanded ? (
