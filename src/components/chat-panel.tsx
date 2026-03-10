@@ -396,9 +396,9 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
 
   // ─── Auto-continuation safety net ──────────────────────────
   // If Ossy saved a preference (tool result present) but didn't ask the
-  // next question (no "?" in text after the last tool call), auto-nudge
-  // to keep the conversation going. This catches the multi-step stall
-  // where the model generates text+tool in step 1, then stops in step 2.
+  // next question (no "?" in text), auto-nudge to keep the conversation
+  // going. This catches the multi-step stall where the model generates
+  // text+tool in step 1, then stops in step 2.
   const continuationSentRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!isGuest || status !== "ready" || messages.length < 3) return;
@@ -406,40 +406,34 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
     const lastMsg = messages[messages.length - 1];
     if (lastMsg.role !== "assistant") return;
 
-    // Check if this message has an update_profile tool result
-    const hasToolSave = lastMsg.parts.some(
-      (p) => p.type === "tool-update_profile" && "state" in p && p.state === "output-available"
-    );
+    // Check if this message has ANY tool save (update_profile completed)
+    const hasToolSave = lastMsg.parts.some((p) => {
+      // Match tool-update_profile with completed state
+      if (p.type === "tool-update_profile" && "state" in p && p.state === "output-available") return true;
+      // Also catch via startsWith in case type format varies
+      if (p.type.startsWith("tool-") && "state" in p && (p as { state: string }).state === "output-available") {
+        const toolName = p.type.slice(5);
+        if (toolName === "update_profile") return true;
+      }
+      return false;
+    });
     if (!hasToolSave) return;
 
-    // Check if the text AFTER the last tool result contains a question
-    const textParts = lastMsg.parts.filter(
-      (p): p is { type: "text"; text: string } => p.type === "text" && !!p.text
-    );
-    const fullText = textParts.map((p) => p.text).join("");
-
-    // Find text that appears AFTER the last tool part
-    const lastToolIdx = [...lastMsg.parts].reverse().findIndex(
-      (p) => p.type.startsWith("tool-")
-    );
-    const afterToolParts = lastToolIdx >= 0
-      ? lastMsg.parts.slice(lastMsg.parts.length - lastToolIdx)
-      : [];
-    const afterToolText = afterToolParts
+    // Get ALL text from the message
+    const fullText = lastMsg.parts
       .filter((p): p is { type: "text"; text: string } => p.type === "text" && !!p.text)
       .map((p) => p.text)
       .join("");
 
-    // If neither the full text nor post-tool text has a question mark,
-    // the model stopped without asking the next question
-    const hasQuestion = fullText.includes("?") || afterToolText.includes("?");
-    if (hasQuestion) return;
+    // If the message text contains a question mark, Ossy asked the next
+    // question — no nudge needed
+    if (fullText.includes("?")) return;
 
-    // Only nudge once per message
+    // Only nudge once per message ID
     if (continuationSentRef.current.has(lastMsg.id)) return;
     continuationSentRef.current.add(lastMsg.id);
 
-    console.log("[ChatPanel] Auto-continuation: Ossy saved but didn't ask next question, nudging");
+    console.log("[ChatPanel] Auto-continuation: Ossy saved but didn't ask next question, nudging. Text:", fullText.slice(0, 80));
     const timer = setTimeout(() => {
       sendMessage({ text: "Got it, what's next?" });
     }, 800);
