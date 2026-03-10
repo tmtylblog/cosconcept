@@ -427,9 +427,11 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     }
   }, [messages]);
 
+  // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
 
   // Track guest messages for inline login prompt
   useEffect(() => {
@@ -490,6 +492,24 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
             if (isGuest) {
               // Guest mode: cache client-side for migration after auth
               setGuestPreference(output.field, output.value);
+
+              // Auto-detect Q9 completion: if all 9 prefs are now filled,
+              // trigger login prompt as client-side fallback (in case model
+              // doesn't call request_login reliably after the tool result).
+              const updatedPrefs = { ...guestPreferences, [output.field]: output.value };
+              const filledCount = PREF_FIELDS.filter((f) => {
+                const v = updatedPrefs[f];
+                return v != null && (Array.isArray(v) ? v.length > 0 : v !== "");
+              }).length;
+              if (filledCount >= 9 && !showLoginPrompt) {
+                console.log("[ChatPanel] All 9 guest preferences complete — auto-showing login prompt");
+                forceFlushToDb();
+                // Small delay so the congratulation text streams first
+                setTimeout(() => {
+                  setShowLoginPrompt(true);
+                  onRequestLogin?.();
+                }, 2000);
+              }
             } else {
               // Auth mode: update profile state (already persisted server-side)
               updateProfileField(output.field, output.value);
@@ -578,6 +598,15 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   };
 
   const atGuestLimit = isGuest && (showLoginPrompt || guestMessageCount >= GUEST_MESSAGE_LIMIT);
+
+  // Re-focus input when assistant finishes responding (status → ready).
+  // The textarea is disabled during loading, so focus is lost. Re-acquire it.
+  useEffect(() => {
+    if (status === "ready" && !atGuestLimit) {
+      const timer = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [status, atGuestLimit]);
 
   return (
     <div className="relative flex h-full flex-col">

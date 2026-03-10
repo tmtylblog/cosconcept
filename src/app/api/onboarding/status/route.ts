@@ -165,7 +165,10 @@ export async function GET(req: Request) {
 
     const answeredCount = answeredFields.length;
     const preferencesComplete = answeredCount >= 9;
-    const onboardingComplete = enrichmentComplete && preferencesComplete;
+    // Gate is purely preferences-based. Enrichment enriches the experience
+    // but should never block the user from accessing the app after answering
+    // all 9 questions (enrichment may fail for unreachable websites, etc.).
+    const onboardingComplete = preferencesComplete;
 
     return NextResponse.json({
       enrichmentComplete,

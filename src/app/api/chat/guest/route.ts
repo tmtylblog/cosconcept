@@ -15,6 +15,19 @@ const openrouter = createOpenRouter({
 
 const profileFieldSchema = z.enum(ALL_PROFILE_FIELDS);
 
+/** Interview questions in order — used for Q9 completion detection */
+const INTERVIEW_FIELDS_GUEST = [
+  "desiredPartnerServices",
+  "requiredPartnerIndustries",
+  "idealPartnerClientSize",
+  "preferredPartnerLocations",
+  "preferredPartnerTypes",
+  "preferredPartnerSize",
+  "idealProjectSize",
+  "typicalHourlyRates",
+  "partnershipRole",
+];
+
 /**
  * Guest version of update_profile — does NOT write to DB.
  * Returns structured data so the client can cache it in sessionStorage
@@ -43,13 +56,26 @@ const guestUpdateProfileTool = tool({
   }),
   execute: async ({ field, value }) => {
     // No DB write — just return the data for client-side caching
-    // The _continue hint reminds the model to acknowledge + ask the next question
+    // Generate contextual continuation hint based on question progress
+    const questionIndex = INTERVIEW_FIELDS_GUEST.indexOf(field);
+    let nextAction: string;
+
+    if (questionIndex === INTERVIEW_FIELDS_GUEST.length - 1) {
+      // Q9 (last question) — tell model to congratulate and call request_login
+      nextAction = "All 9 onboarding questions are complete! Congratulate the user and call request_login to show the sign-up button.";
+    } else if (questionIndex >= 0) {
+      const nextField = INTERVIEW_FIELDS_GUEST[questionIndex + 1];
+      nextAction = `Saved question ${questionIndex + 1} of 9. Now immediately ask question ${questionIndex + 2} (${nextField}). Do NOT stop here — the next question must be in your response.`;
+    } else {
+      nextAction = "Saved! Now respond with a brief acknowledgment AND the next onboarding question.";
+    }
+
     return {
       success: true as const,
       field,
       value,
       source: "guest" as const,
-      _continue: "Saved! Now respond with a brief acknowledgment AND the next onboarding question.",
+      nextAction,
     };
   },
 });

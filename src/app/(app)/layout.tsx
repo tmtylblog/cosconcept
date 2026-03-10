@@ -14,7 +14,7 @@ import { GuestDataProvider, useGuestData } from "@/hooks/use-guest-data";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { authClient, useSession, useActiveOrganization } from "@/lib/auth-client";
 import { getEmailDomain, isPersonalEmail } from "@/lib/email-validation";
-import { MessageCircle, X, Loader2 } from "lucide-react";
+import { MessageCircle, X, Loader2, Sparkles } from "lucide-react";
 
 /** Convert a domain like "chameleon.co" to a nice org name like "Chameleon" */
 function domainToOrgName(domain: string): string {
@@ -87,6 +87,7 @@ function AppLayoutInner({
   const [loginPanelOpen, setLoginPanelOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0);
   const [mobileChat, setMobileChat] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   // ─── Auto-provision org + firm for authenticated users with no org ────
   // The moment someone authenticates, an "unclaimed" org + firm is created
@@ -165,12 +166,16 @@ function AppLayoutInner({
     missingFields,
   } = useOnboardingStatus(activeOrg?.id, !!session?.user);
 
-  // Track previous onboardingComplete to detect transition → bump chatKey
+  // Track previous onboardingComplete to detect transition → celebration → full app
   const prevOnboardingCompleteRef = useRef<boolean | null>(null);
   useEffect(() => {
     if (prevOnboardingCompleteRef.current === false && onboardingComplete === true) {
-      // Onboarding just completed — force fresh ChatPanel mount for greeting
-      setChatKey((k) => k + 1);
+      // Onboarding just completed — show celebration, then reveal full app
+      setShowCelebration(true);
+      setChatKey((k) => k + 1); // Fresh ChatPanel mount for greeting
+      // Celebration shows for 2.5s while authenticated layout loads behind it
+      const timer = setTimeout(() => setShowCelebration(false), 2500);
+      return () => clearTimeout(timer);
     }
     prevOnboardingCompleteRef.current = onboardingComplete;
   }, [onboardingComplete]);
@@ -576,6 +581,23 @@ function AppLayoutInner({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ─── Celebration overlay (onboarding → authenticated transition) ─── */}
+      {showCelebration && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-cos-cloud/95 backdrop-blur-md">
+          <div className="animate-fade-slide-in flex flex-col items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-cos-signal/20">
+              <Sparkles className="h-8 w-8 text-cos-signal" />
+            </div>
+            <h2 className="font-heading text-xl font-bold text-cos-midnight">
+              You&apos;re all set!
+            </h2>
+            <p className="text-sm text-cos-slate">
+              Unlocking your dashboard...
+            </p>
+          </div>
         </div>
       )}
 
