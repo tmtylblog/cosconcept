@@ -142,8 +142,25 @@ export async function GET(req: Request) {
     }
 
     // ─── 6. Recent sessions ─────────────────────────────
+    // visit_count: number of distinct visits (gap >4h between events = new visit)
     const recentQuery = await db.execute(sql`
-      WITH session_summary AS (
+      WITH event_gaps AS (
+        SELECT
+          domain,
+          created_at,
+          LAG(created_at) OVER (PARTITION BY domain ORDER BY created_at) AS prev_at
+        FROM onboarding_events
+        WHERE domain IS NOT NULL
+        ${periodDate ? sql`AND created_at >= ${periodDate}` : sql``}
+      ),
+      visit_starts AS (
+        SELECT domain, COUNT(*) AS visit_count
+        FROM event_gaps
+        WHERE prev_at IS NULL
+           OR EXTRACT(EPOCH FROM (created_at - prev_at)) > 14400
+        GROUP BY domain
+      ),
+      session_summary AS (
         SELECT
           domain,
           MIN(user_id) AS user_id,
@@ -164,8 +181,9 @@ export async function GET(req: Request) {
         ${periodDate ? sql`AND created_at >= ${periodDate}` : sql``}
         GROUP BY domain
       )
-      SELECT *
-      FROM session_summary
+      SELECT s.*, COALESCE(v.visit_count, 1)::int AS visit_count
+      FROM session_summary s
+      LEFT JOIN visit_starts v ON v.domain = s.domain
       ORDER BY last_event_at DESC
       LIMIT 50
     `);
@@ -181,6 +199,7 @@ export async function GET(req: Request) {
       completed: row.completed as boolean,
       enrichmentOk: row.enrichment_ok as boolean,
       enrichmentFailed: row.enrichment_failed as boolean,
+      visitCount: Number(row.visit_count),
     }));
 
     // ─── 7. Daily trend ─────────────────────────────────

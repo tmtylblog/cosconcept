@@ -55,6 +55,7 @@ interface RecentSession {
   completed: boolean;
   enrichmentOk: boolean;
   enrichmentFailed: boolean;
+  visitCount: number;
 }
 
 interface DailyTrend {
@@ -582,6 +583,7 @@ export default function AdminOnboardingPage() {
               <thead>
                 <tr className="border-b border-cos-border text-left text-cos-slate">
                   <th className="pb-2 pr-4 font-medium">Domain</th>
+                  <th className="pb-2 pr-4 font-medium">Visits</th>
                   <th className="pb-2 pr-4 font-medium">Cache</th>
                   <th className="pb-2 pr-4 font-medium">Enrichment</th>
                   <th className="pb-2 pr-4 font-medium">Questions</th>
@@ -594,6 +596,15 @@ export default function AdminOnboardingPage() {
                 {data.recentSessions.map((s, i) => (
                   <tr key={`${s.domain}-${i}`} className="text-cos-midnight">
                     <td className="py-2 pr-4 font-medium">{s.domain}</td>
+                    <td className="py-2 pr-4">
+                      {s.visitCount > 1 ? (
+                        <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[10px] font-medium text-cos-electric">
+                          ↩ {s.visitCount} visits
+                        </span>
+                      ) : (
+                        <span className="text-cos-slate">1</span>
+                      )}
+                    </td>
                     <td className="py-2 pr-4">
                       <CacheEventBadge event={s.cacheEvent} />
                     </td>

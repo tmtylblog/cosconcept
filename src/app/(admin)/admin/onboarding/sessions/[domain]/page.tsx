@@ -350,22 +350,56 @@ export default function SessionDetailPage({
 
       {/* Section 1: Event Timeline */}
       <section className="space-y-3">
-        <h2 className="font-heading text-base font-semibold text-cos-midnight">
+        <h2 className="font-heading text-base font-semibold text-cos-midnight flex items-center gap-3">
           Event Timeline
+          {(() => {
+            const visits = data.events.reduce((count, ev, idx) => {
+              const prev = data.events[idx - 1];
+              const gap = prev ? new Date(ev.createdAt).getTime() - new Date(prev.createdAt).getTime() : 0;
+              return count + (idx === 0 || gap > 4 * 60 * 60 * 1000 ? 1 : 0);
+            }, 0);
+            return visits > 1 ? (
+              <span className="rounded-cos-pill bg-cos-electric/10 px-2.5 py-0.5 text-xs font-semibold text-cos-electric">
+                ↩ {visits} visits
+              </span>
+            ) : null;
+          })()}
         </h2>
         <div className="relative space-y-2 pl-8">
           {/* Vertical line */}
           <div className="absolute left-3.5 top-2 bottom-2 w-px bg-cos-border" />
 
-          {data.events.map((ev) => {
+          {data.events.map((ev, idx) => {
             const colors = STAGE_COLORS[ev.stage] ?? STAGE_COLORS.domain_submitted;
             const icon = STAGE_ICONS[ev.stage] ?? <Globe className="h-3.5 w-3.5" />;
             const label = ev.label ?? EVENT_LABELS[ev.event] ?? ev.event.replace(/_/g, " ");
             const isExpanded = expandedEventId === ev.id;
             const hasMetadata = ev.metadata && Object.keys(ev.metadata).length > 0;
 
+            // Detect return visit gap (>4h since previous event)
+            const prevEv = data.events[idx - 1];
+            const gapMs = prevEv
+              ? new Date(ev.createdAt).getTime() - new Date(prevEv.createdAt).getTime()
+              : 0;
+            const isReturnVisit = gapMs > 4 * 60 * 60 * 1000;
+            const gapLabel = isReturnVisit
+              ? gapMs > 86400000
+                ? `Returned ${Math.round(gapMs / 86400000)}d later`
+                : `Returned ${Math.round(gapMs / 3600000)}h later`
+              : null;
+
             return (
               <div key={ev.id} className="relative">
+                {/* Return visit gap marker */}
+                {gapLabel && (
+                  <div className="relative -ml-8 mb-2 mt-1 flex items-center gap-2 pl-8">
+                    <div className="flex-1 border-t border-dashed border-cos-electric/30" />
+                    <span className="shrink-0 rounded-cos-pill bg-cos-electric/10 px-2.5 py-0.5 text-[10px] font-semibold text-cos-electric">
+                      ↩ {gapLabel}
+                    </span>
+                    <div className="flex-1 border-t border-dashed border-cos-electric/30" />
+                  </div>
+                )}
                 {/* Timeline dot */}
                 <div
                   className={`absolute -left-[22px] flex h-5 w-5 items-center justify-center rounded-full ${colors.bg} ${colors.text}`}
