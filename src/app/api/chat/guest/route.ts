@@ -26,8 +26,7 @@ const guestUpdateProfileTool = tool({
     "Call this AFTER the user confirms information, not while still suggesting. " +
     "You can call this multiple times per response for different fields. " +
     "This saves the data so it can be persisted when the user signs in. " +
-    "IMPORTANT: Do NOT write any acknowledgment text before this tool call. " +
-    "Wait for the tool result, THEN write your acknowledgment AND the next question together.",
+    "Always include your full text response (acknowledgment + next question) alongside this tool call.",
   inputSchema: z.object({
     field: profileFieldSchema.describe(
       "The profile field to update. " +
