@@ -17,6 +17,36 @@ import { ToolResultRenderer } from "@/components/chat/tool-result-renderer";
 
 const GUEST_MESSAGE_LIMIT = 30;
 
+/** Render basic inline markdown: **bold** and *italic* as React elements */
+function renderInlineMarkdown(text: string): React.ReactNode[] {
+  // Split on **bold** and *italic* patterns
+  const parts: React.ReactNode[] = [];
+  // Match **bold**, then *italic* (order matters — bold first to avoid conflicts)
+  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    if (match[2]) {
+      // **bold**
+      parts.push(<strong key={match.index} className="font-semibold">{match[2]}</strong>);
+    } else if (match[3]) {
+      // *italic*
+      parts.push(<em key={match.index}>{match[3]}</em>);
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts.length > 0 ? parts : [text];
+}
+
 /** Simple URL regex — catches common website URLs in user messages */
 const URL_REGEX =
   /(?:https?:\/\/)?(?:www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z]{2,10}\b(?:[-a-zA-Z0-9()@:%_+.~#?&/=]*)/gi;
@@ -396,7 +426,7 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
                         key={partIdx}
                         className="whitespace-pre-wrap text-sm leading-relaxed"
                       >
-                        {part.text}
+                        {renderInlineMarkdown(part.text)}
                       </p>
                     );
                   }
@@ -501,7 +531,7 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
               }
               disabled={isLoading || atGuestLimit}
               rows={2}
-              className="flex-1 resize-none bg-transparent py-2 text-sm leading-relaxed text-cos-midnight placeholder:text-cos-slate-light focus:outline-none disabled:opacity-50"
+              className="flex-1 resize-none appearance-none border-0 bg-transparent py-2 text-sm leading-relaxed text-cos-midnight shadow-none outline-none ring-0 placeholder:text-cos-slate-light focus:border-0 focus:outline-none focus:ring-0 disabled:opacity-50"
             />
             <div className="flex shrink-0 items-center gap-1 pb-0.5">
               <Button
