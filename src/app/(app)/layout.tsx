@@ -9,7 +9,7 @@ import { LoginPanel } from "@/components/login-panel";
 import { GuestEnrichmentPanel } from "@/components/guest-enrichment-panel";
 import { AuthOnboardingPanel } from "@/components/auth-onboarding-panel";
 import { EnrichmentProvider, useEnrichment } from "@/hooks/use-enrichment";
-import { ProfileProvider } from "@/hooks/use-profile";
+import { ProfileProvider, useProfile } from "@/hooks/use-profile";
 import { GuestDataProvider, useGuestData } from "@/hooks/use-guest-data";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { authClient, useSession, useActiveOrganization } from "@/lib/auth-client";
@@ -153,12 +153,16 @@ function AppLayoutInner({
     provisionOrg();
   }, [session?.user, activeOrg?.id]);
 
+  // ─── Profile hydration state ────────────────────────────
+  const { hydrated: profileHydrated } = useProfile();
+
   // ─── Onboarding status (authenticated users only) ─────────
   const {
     onboardingComplete,
     isLoading: onboardingLoading,
     answeredCount,
     totalRequired,
+    missingFields,
   } = useOnboardingStatus(activeOrg?.id, !!session?.user);
 
   // Track previous onboardingComplete to detect transition → bump chatKey
@@ -428,14 +432,33 @@ function AppLayoutInner({
                 />
               </main>
 
-              {/* Right: Chat panel — desktop (authenticated onboarding mode) */}
+              {/* Right: Chat panel — desktop (authenticated onboarding mode)
+                  Delayed until profile is hydrated so ChatPanel knows which
+                  question to start with. Shows a "reviewing" placeholder first. */}
               <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-border/30 bg-cos-cloud/60 lg:flex">
-                <ChatPanel
-                  key={chatKey}
-                  isGuest={false}
-                  isOnboarding={true}
-                  onRequestLogin={handleRequestLogin}
-                />
+                {profileHydrated ? (
+                  <ChatPanel
+                    key={chatKey}
+                    isGuest={false}
+                    isOnboarding={true}
+                    missingFields={missingFields}
+                    answeredCount={answeredCount}
+                    onRequestLogin={handleRequestLogin}
+                  />
+                ) : (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
+                    <Image
+                      src="/logo.png"
+                      alt="Ossy"
+                      width={40}
+                      height={40}
+                      className="h-10 w-10 animate-pulse rounded-cos-xl"
+                    />
+                    <p className="text-center text-sm text-cos-slate-dim">
+                      Ossy is reviewing your profile…
+                    </p>
+                  </div>
+                )}
               </aside>
 
               {/* Mobile: Floating Ossy button + full-screen chat overlay */}
@@ -459,12 +482,29 @@ function AppLayoutInner({
                     </button>
                   </div>
                   <div className="flex-1 overflow-hidden">
-                    <ChatPanel
-                      key={chatKey}
-                      isGuest={false}
-                      isOnboarding={true}
-                      onRequestLogin={handleRequestLogin}
-                    />
+                    {profileHydrated ? (
+                      <ChatPanel
+                        key={chatKey}
+                        isGuest={false}
+                        isOnboarding={true}
+                        missingFields={missingFields}
+                        answeredCount={answeredCount}
+                        onRequestLogin={handleRequestLogin}
+                      />
+                    ) : (
+                      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6">
+                        <Image
+                          src="/logo.png"
+                          alt="Ossy"
+                          width={40}
+                          height={40}
+                          className="h-10 w-10 animate-pulse rounded-cos-xl"
+                        />
+                        <p className="text-center text-sm text-cos-slate-dim">
+                          Ossy is reviewing your profile…
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

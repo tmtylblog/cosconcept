@@ -84,13 +84,28 @@ const defaultWelcomeMessages: UIMessage[] = [
   },
 ];
 
+// ─── Onboarding question map (field → bolded question text) ────────
+const ONBOARDING_QUESTIONS: { field: string; question: string }[] = [
+  { field: "desiredPartnerServices", question: "what services would you love to bring in from a partner? Things you don't do in-house but your clients need?" },
+  { field: "requiredPartnerIndustries", question: "what industry experience is critical when you're looking for a partner?" },
+  { field: "idealPartnerClientSize", question: "what size companies do your ideal partners typically serve?" },
+  { field: "preferredPartnerLocations", question: "where should your ideal partners be located? Or are you open to remote?" },
+  { field: "preferredPartnerTypes", question: "what types of firms are you interested in partnering with?" },
+  { field: "preferredPartnerSize", question: "what size partner firm do you prefer working with?" },
+  { field: "idealProjectSize", question: "what project size does your ideal partner typically handle?" },
+  { field: "typicalHourlyRates", question: "what hourly rate ranges are typical for partner subcontractors in your world?" },
+  { field: "partnershipRole", question: "are you looking to find work through partners, share opportunities with others, or both?" },
+];
+
 interface ChatPanelProps {
   isGuest?: boolean;
   isOnboarding?: boolean;
+  missingFields?: string[];
+  answeredCount?: number;
   onRequestLogin?: () => void;
 }
 
-export function ChatPanel({ isGuest, isOnboarding, onRequestLogin }: ChatPanelProps) {
+export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount, onRequestLogin }: ChatPanelProps) {
   const { data: activeOrg } = useActiveOrganization();
   const {
     status: enrichmentStatus,
@@ -142,18 +157,30 @@ export function ChatPanel({ isGuest, isOnboarding, onRequestLogin }: ChatPanelPr
     },
   ];
 
-  const onboardingWelcomeMessages: UIMessage[] = [
-    {
+  // Build onboarding welcome dynamically based on what's already answered
+  const onboardingWelcomeMessages: UIMessage[] = (() => {
+    const answered = answeredCount ?? 0;
+    const missing = missingFields ?? [];
+
+    // Find the next unanswered question
+    const nextQ = ONBOARDING_QUESTIONS.find((q) => missing.includes(q.field))
+      ?? ONBOARDING_QUESTIONS[0]; // fallback to Q1
+
+    let text: string;
+    if (answered === 0) {
+      // Fresh start — warm welcome + Q1
+      text = `Welcome! I can see your firm data on the left. Let's set up your partner preferences -- just a few quick questions and you'll be all set.\n\nFirst up -- **${nextQ.question}**`;
+    } else {
+      // Returning user — acknowledge progress + next question
+      text = `Welcome back! I can see you've already answered ${answered} of 9 partner preference questions -- nice progress! Let's pick up where we left off.\n\n**${nextQ.question}**`;
+    }
+
+    return [{
       id: "onboarding-welcome",
-      role: "assistant",
-      parts: [
-        {
-          type: "text",
-          text: "Welcome! I can see your firm data on the left. Let's set up your partner preferences -- just a few quick questions and you'll be all set.\n\nFirst up -- **what services would you love to bring in from a partner? Things you don't do in-house but your clients need?**",
-        },
-      ],
-    },
-  ];
+      role: "assistant" as const,
+      parts: [{ type: "text" as const, text }],
+    }];
+  })();
 
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>(() => {
     // Guest flow: restore messages or show welcome-back
@@ -236,20 +263,9 @@ export function ChatPanel({ isGuest, isOnboarding, onRequestLogin }: ChatPanelPr
   const loadGreeting = useCallback(async () => {
     if (isGuest) return;
 
-    // Authenticated onboarding phase — skip the greeting API, use fixed welcome
+    // Authenticated onboarding phase — skip the greeting API, use dynamic welcome
     if (isOnboarding) {
-      setInitialMessages([
-        {
-          id: "onboarding-welcome",
-          role: "assistant" as const,
-          parts: [
-            {
-              type: "text" as const,
-              text: "Welcome! I've got your firm data ready. Let's set up your partner preferences -- just a few quick questions and you'll be all set.",
-            },
-          ],
-        },
-      ]);
+      setInitialMessages(onboardingWelcomeMessages);
       setHistoryLoaded(true);
       return;
     }
