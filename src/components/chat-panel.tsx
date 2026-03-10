@@ -149,7 +149,7 @@ export function ChatPanel({ isGuest, isOnboarding, onRequestLogin }: ChatPanelPr
       parts: [
         {
           type: "text",
-          text: "Welcome! I've got your firm data ready. Let's set up your partner preferences -- just a few quick questions and you'll be all set.",
+          text: "Welcome! I can see your firm data on the left. Let's set up your partner preferences -- just a few quick questions and you'll be all set.\n\nFirst up -- **what services would you love to bring in from a partner? Things you don't do in-house but your clients need?**",
         },
       ],
     },
