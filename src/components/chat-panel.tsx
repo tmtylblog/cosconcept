@@ -100,24 +100,51 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const { guestPreferences, setGuestPreference, setGuestMessages, forceFlushToDb } = useGuestData();
   const [input, setInput] = useState("");
   const [guestMessageCount, setGuestMessageCount] = useState(0);
-  // Show login prompt if all 9 prefs are already answered (returning guest)
-  const [showLoginPrompt, setShowLoginPrompt] = useState(() => {
-    if (!isGuest) return false;
-    const PREF_FIELDS = [
-      "desiredPartnerServices", "requiredPartnerIndustries", "idealPartnerClientSize",
-      "preferredPartnerLocations", "preferredPartnerTypes", "preferredPartnerSize",
-      "idealProjectSize", "typicalHourlyRates", "partnershipRole",
-    ];
-    const answeredCount = PREF_FIELDS.filter((f) => {
-      const v = guestPreferences[f];
-      return v != null && (Array.isArray(v) ? v.length > 0 : v !== "");
-    }).length;
-    return answeredCount >= 9;
+
+  // ─── Detect returning guest with all 9 prefs (read directly from localStorage) ───
+  // Must read from localStorage here because GuestDataProvider hasn't hydrated yet
+  const PREF_FIELDS = [
+    "desiredPartnerServices", "requiredPartnerIndustries", "idealPartnerClientSize",
+    "preferredPartnerLocations", "preferredPartnerTypes", "preferredPartnerSize",
+    "idealProjectSize", "typicalHourlyRates", "partnershipRole",
+  ];
+  const [allPrefsComplete] = useState(() => {
+    if (!isGuest || typeof window === "undefined") return false;
+    try {
+      const raw = localStorage.getItem("cos_guest_preferences") || sessionStorage.getItem("cos_guest_preferences");
+      if (!raw) return false;
+      const prefs = JSON.parse(raw) as Record<string, unknown>;
+      const count = PREF_FIELDS.filter((f) => {
+        const v = prefs[f];
+        return v != null && (Array.isArray(v) ? v.length > 0 : v !== "");
+      }).length;
+      return count >= 9;
+    } catch { return false; }
   });
+
+  const [showLoginPrompt, setShowLoginPrompt] = useState(allPrefsComplete);
+
   // For guests, restore saved messages from sessionStorage synchronously
-  // so they're available before useChat initializes on first render
+  // so they're available before useChat initializes on first render.
+  // BUT: if all 9 prefs are complete (returning guest), use a fixed welcome-back
+  // message instead of trying to restore the old conversation.
+  const welcomeBackMessages: UIMessage[] = [
+    {
+      id: "welcome-back",
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: "Welcome back! All your preferences are saved and visible on your screen. The only step left is to **create a free account** to unlock partner matching — just click the button below.",
+        },
+      ],
+    },
+  ];
+
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>(() => {
     if (isGuest && typeof window !== "undefined") {
+      // If all 9 prefs complete, show welcome-back message (no need for old conversation)
+      if (allPrefsComplete) return welcomeBackMessages;
       try {
         const saved = sessionStorage.getItem("cos_guest_messages");
         if (saved) {
@@ -136,10 +163,11 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   const enrichmentWasLoadingRef = useRef(enrichmentStatus === "loading");
   const enrichmentNudgeSentRef = useRef(false);
   // Whether we need to auto-continue (computed once on mount, never re-computed).
-  // Fires whenever there's a restored guest session with real conversation
-  // (more than just the welcome message), regardless of who spoke last.
+  // SKIP auto-continue if all 9 prefs are complete — the welcome-back message handles it.
+  // Otherwise fires whenever there's a restored guest session with real conversation.
   const [needsAutoContinue] = useState(() => {
-    if (isGuest && typeof window !== "undefined") {
+    if (!isGuest || allPrefsComplete) return false;
+    if (typeof window !== "undefined") {
       try {
         const saved = sessionStorage.getItem("cos_guest_messages");
         if (saved) {

@@ -30,7 +30,9 @@ interface GuestDataContextValue {
   forceFlushToDb: () => void;
 }
 
-// ─── SessionStorage Keys ─────────────────────────────────
+// ─── Storage Keys ────────────────────────────────────────
+// Domain + preferences use localStorage (survives browser close).
+// Messages use sessionStorage (less critical, large payload).
 
 const PREFS_KEY = "cos_guest_preferences";
 const MSGS_KEY = "cos_guest_messages";
@@ -38,7 +40,27 @@ const DOMAIN_KEY = "cos_guest_domain";
 
 // ─── Helpers ─────────────────────────────────────────────
 
-function loadFromStorage<T>(key: string, fallback: T): T {
+/** Read from localStorage (persistent) with JSON parse */
+function loadFromLocal<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Write to localStorage (persistent) */
+function saveToLocal(key: string, data: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch {
+    // quota exceeded or SSR — ignore
+  }
+}
+
+/** Read from sessionStorage (tab-scoped) */
+function loadFromSession<T>(key: string, fallback: T): T {
   try {
     const raw = sessionStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
@@ -47,7 +69,8 @@ function loadFromStorage<T>(key: string, fallback: T): T {
   }
 }
 
-function saveToStorage(key: string, data: unknown): void {
+/** Write to sessionStorage (tab-scoped) */
+function saveToSession(key: string, data: unknown): void {
   try {
     sessionStorage.setItem(key, JSON.stringify(data));
   } catch {
@@ -55,11 +78,22 @@ function saveToStorage(key: string, data: unknown): void {
   }
 }
 
+/** Get guest domain from localStorage first, then sessionStorage as fallback */
 function getGuestDomain(): string | null {
   try {
-    return sessionStorage.getItem(DOMAIN_KEY);
+    return localStorage.getItem(DOMAIN_KEY) || sessionStorage.getItem(DOMAIN_KEY);
   } catch {
     return null;
+  }
+}
+
+/** Save domain to BOTH localStorage and sessionStorage */
+export function setGuestDomain(domain: string): void {
+  try {
+    localStorage.setItem(DOMAIN_KEY, domain);
+    sessionStorage.setItem(DOMAIN_KEY, domain);
+  } catch {
+    // ignore
   }
 }
 
@@ -117,14 +151,23 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
   // Track last-synced state to avoid redundant DB writes
   const lastSyncedRef = useRef<string>("");
 
-  // ── Hydrate from sessionStorage first, then DB ────────
+  // ── Hydrate: localStorage → sessionStorage → DB ────────
   useEffect(() => {
-    // 1. Immediate hydration from sessionStorage (fast, synchronous)
-    const localPrefs = loadFromStorage<Record<string, string | string[]>>(
-      PREFS_KEY,
-      {}
-    );
-    const localMsgs = loadFromStorage<UIMessage[]>(MSGS_KEY, []);
+    // 1. Immediate hydration from localStorage (persistent, survives browser close)
+    //    Fall back to sessionStorage for backwards compat with older sessions
+    let localPrefs = loadFromLocal<Record<string, string | string[]>>(PREFS_KEY, {});
+    if (Object.keys(localPrefs).length === 0) {
+      localPrefs = loadFromSession<Record<string, string | string[]>>(PREFS_KEY, {});
+      // Migrate to localStorage if found in sessionStorage
+      if (Object.keys(localPrefs).length > 0) {
+        saveToLocal(PREFS_KEY, localPrefs);
+        console.log(`[GuestData] Migrated ${Object.keys(localPrefs).length} prefs from sessionStorage → localStorage`);
+      }
+    }
+
+    // Messages stay in sessionStorage (large payload, less critical)
+    const localMsgs = loadFromSession<UIMessage[]>(MSGS_KEY, []);
+
     setPrefsState(localPrefs);
     setMsgsState(localMsgs);
     lastSyncedRef.current = JSON.stringify(localPrefs);
@@ -138,11 +181,14 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
         // Merge: DB values fill gaps, local values take priority (more recent)
         setPrefsState((current) => {
           const merged = { ...dbPrefs, ...current };
+          const currentCount = Object.keys(current).length;
+          const mergedCount = Object.keys(merged).length;
           // If DB had fields local didn't, save the merged set back
-          if (Object.keys(merged).length > Object.keys(current).length) {
-            saveToStorage(PREFS_KEY, merged);
+          if (mergedCount > currentCount) {
+            saveToLocal(PREFS_KEY, merged);
+            saveToSession(PREFS_KEY, merged); // keep sessionStorage in sync too
             console.log(
-              `[GuestData] Merged ${Object.keys(dbPrefs).length} DB prefs with ${Object.keys(current).length} local prefs → ${Object.keys(merged).length} total`
+              `[GuestData] Merged ${Object.keys(dbPrefs).length} DB prefs with ${currentCount} local prefs → ${mergedCount} total`
             );
           }
           return merged;
@@ -151,12 +197,13 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ── Persist preferences to sessionStorage + DB ────────
+  // ── Persist preferences to localStorage + sessionStorage + DB ────────
   useEffect(() => {
     if (!hydrated) return;
 
-    // Always write to sessionStorage (instant)
-    saveToStorage(PREFS_KEY, guestPreferences);
+    // Write to both storages (instant)
+    saveToLocal(PREFS_KEY, guestPreferences);
+    saveToSession(PREFS_KEY, guestPreferences);
 
     // Only write to DB if preferences actually changed
     const snapshot = JSON.stringify(guestPreferences);
@@ -173,7 +220,7 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
   // ── Persist messages to sessionStorage ─────────────────
   useEffect(() => {
     if (!hydrated) return;
-    saveToStorage(MSGS_KEY, guestMessages);
+    saveToSession(MSGS_KEY, guestMessages);
   }, [guestMessages, hydrated]);
 
   const setGuestPreference = useCallback(
@@ -191,11 +238,12 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
     hydrated &&
     (Object.keys(guestPreferences).length > 0 || guestMessages.length > 0);
 
-  /** Imperative flush: immediately write current preferences to both sessionStorage and DB.
+  /** Imperative flush: immediately write current preferences to all storages + DB.
    *  Call this before login/redirect to ensure nothing is lost. */
   const forceFlushToDb = useCallback(() => {
-    // Sync to sessionStorage immediately
-    saveToStorage(PREFS_KEY, guestPreferences);
+    // Sync to both storages immediately
+    saveToLocal(PREFS_KEY, guestPreferences);
+    saveToSession(PREFS_KEY, guestPreferences);
 
     const domain = getGuestDomain();
     if (domain && Object.keys(guestPreferences).length > 0) {
@@ -212,6 +260,7 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
     setMsgsState([]);
     lastSyncedRef.current = "";
     try {
+      localStorage.removeItem(PREFS_KEY);
       sessionStorage.removeItem(PREFS_KEY);
       sessionStorage.removeItem(MSGS_KEY);
       // Don't remove DOMAIN_KEY — we keep the domain association

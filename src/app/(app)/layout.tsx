@@ -154,10 +154,13 @@ function AppLayoutInner({
     resetEnrichment();
     clearGuestData();
     setChatKey((k) => k + 1);
-    // Clear all cos_ session storage keys for a truly fresh start
+    // Clear all cos_ keys from both storages for a truly fresh start
     try {
       Object.keys(sessionStorage).forEach((key) => {
         if (key.startsWith("cos_")) sessionStorage.removeItem(key);
+      });
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith("cos_")) localStorage.removeItem(key);
       });
     } catch { /* ignore */ }
     if (pathname !== "/dashboard") {

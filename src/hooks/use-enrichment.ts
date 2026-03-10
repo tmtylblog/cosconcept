@@ -151,28 +151,30 @@ export function EnrichmentProvider({
   const autoRetryDoneRef = useRef(false);
   const wasHydratedRef = useRef(false);
 
-  // ─── SessionStorage: save enrichment result so it survives page reloads ───
+  // ─── Storage: save enrichment result to survive page reloads + browser close ───
   const STORAGE_KEY = "cos_enrichment_result";
 
-  // Save result to sessionStorage whenever it changes
+  // Save result to BOTH localStorage and sessionStorage whenever it changes
   useEffect(() => {
     if (!result) return;
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result));
+      const json = JSON.stringify(result);
+      localStorage.setItem(STORAGE_KEY, json);
+      sessionStorage.setItem(STORAGE_KEY, json);
     } catch {
       // quota exceeded or SSR — ignore
     }
   }, [result]);
 
-  // Hydrate from DB on mount, or fall back to sessionStorage
+  // Hydrate from localStorage/sessionStorage on mount, then try DB
   useEffect(() => {
     if (result) return; // Already have data in memory
     let cancelled = false;
 
     async function hydrate() {
-      // Try sessionStorage first (instant, survives guest→auth reload)
+      // Try localStorage first (survives browser close), then sessionStorage
       try {
-        const cached = sessionStorage.getItem(STORAGE_KEY);
+        const cached = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
         if (cached && !cancelled) {
           const enrichmentData = JSON.parse(cached) as EnrichmentResult;
           if (enrichmentData.domain) {
@@ -180,8 +182,11 @@ export function EnrichmentProvider({
             setResult(enrichmentData);
             setEnrichedUrl(enrichmentData.url);
             setContextForOssy(buildContextForOssy(enrichmentData));
-            // Ensure domain key is set for guest preference DB sync
-            try { sessionStorage.setItem("cos_guest_domain", enrichmentData.domain); } catch { /* ignore */ }
+            // Ensure domain key is set in both storages for guest preference DB sync
+            try {
+              localStorage.setItem("cos_guest_domain", enrichmentData.domain);
+              sessionStorage.setItem("cos_guest_domain", enrichmentData.domain);
+            } catch { /* ignore */ }
 
             // Set accurate status based on ACTUAL data quality
             // Use the same strict criteria as auto-retry and lookup gap-fill
@@ -296,7 +301,12 @@ export function EnrichmentProvider({
     setResult(null);
     setContextForOssy(null);
     setEnrichedUrl(null);
-    try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("cos_guest_domain");
+      sessionStorage.removeItem("cos_guest_domain");
+    } catch { /* ignore */ }
   }, []);
 
   const triggerEnrichment = useCallback(
@@ -328,8 +338,12 @@ export function EnrichmentProvider({
         return;
       }
 
-      // Persist domain to sessionStorage so guest preferences can sync to DB
-      try { sessionStorage.setItem("cos_guest_domain", domain); } catch { /* ignore */ }
+      // Persist domain to both storages so guest preferences can sync to DB
+      // localStorage survives browser close; sessionStorage is for same-tab backup
+      try {
+        localStorage.setItem("cos_guest_domain", domain);
+        sessionStorage.setItem("cos_guest_domain", domain);
+      } catch { /* ignore */ }
 
       // Initialize result shell so the dashboard can show the domain immediately
       const resultShell: EnrichmentResult = {
