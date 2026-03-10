@@ -33,7 +33,8 @@ export type AIFeature =
   | "memory"
   | "case_study"
   | "expert"
-  | "abstraction";
+  | "abstraction"
+  | "network_search";
 
 export interface AIUsageEntry {
   organizationId?: string;

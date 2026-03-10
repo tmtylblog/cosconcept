@@ -12,10 +12,14 @@
 
 import { parseSearchQuery } from "./query-parser";
 import { structuredFilter, toMatchCandidates } from "./structured-filter";
+import { pgStructuredFilter } from "./pg-structured-filter";
 import { vectorRerank } from "./vector-search";
 import { deepRank } from "./deep-ranker";
 import { loadAbstractionProfile } from "./abstraction-generator";
 import type { SearchQuery, SearchResult, SearchFilters } from "./types";
+
+/** Use PostgreSQL search when Neo4j is not configured or explicitly set */
+const USE_PG_SEARCH = !process.env.NEO4J_URI || process.env.SEARCH_MODE === "pg";
 
 /**
  * Execute a full cascading search.
@@ -54,9 +58,17 @@ export async function executeSearch(params: {
     searcherProfile: searcherProfile ?? undefined,
   };
 
-  // Step 2: Layer 1 — Structured filtering (Neo4j)
-  const structuredCandidates = await structuredFilter(filters, 500);
-  const layer1Candidates = toMatchCandidates(structuredCandidates);
+  // Step 2: Layer 1 — Structured filtering (PostgreSQL or Neo4j)
+  let layer1Candidates;
+  let layer1Count: number;
+  if (USE_PG_SEARCH) {
+    layer1Candidates = await pgStructuredFilter(filters, 500, searcherFirmId);
+    layer1Count = layer1Candidates.length;
+  } else {
+    const structuredCandidates = await structuredFilter(filters, 500);
+    layer1Candidates = toMatchCandidates(structuredCandidates);
+    layer1Count = structuredCandidates.length;
+  }
 
   // Step 3: Layer 2 — Vector similarity re-ranking
   const layer2Candidates = await vectorRerank(
@@ -89,7 +101,7 @@ export async function executeSearch(params: {
     query,
     candidates: finalCandidates,
     stats: {
-      layer1Candidates: structuredCandidates.length,
+      layer1Candidates: layer1Count,
       layer2Candidates: layer2Candidates.length,
       layer3Ranked: finalCandidates.length,
       totalDurationMs: durationMs,
@@ -99,7 +111,7 @@ export async function executeSearch(params: {
 
   if (debug) {
     result.debugLayers = {
-      layer1: { count: structuredCandidates.length, topCandidates: layer1Candidates.slice(0, 20) },
+      layer1: { count: layer1Count, topCandidates: layer1Candidates.slice(0, 20) },
       layer2: { count: layer2Candidates.length, topCandidates: layer2Candidates.slice(0, 20) },
       layer3: { count: finalCandidates.length, results: finalCandidates },
       parsedFilters: filters,

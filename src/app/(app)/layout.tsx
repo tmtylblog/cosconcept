@@ -14,7 +14,7 @@ import { GuestDataProvider, useGuestData } from "@/hooks/use-guest-data";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { authClient, useSession, useActiveOrganization } from "@/lib/auth-client";
 import { getEmailDomain, isPersonalEmail } from "@/lib/email-validation";
-import { MessageCircle, X, Loader2, Sparkles } from "lucide-react";
+import { MessageCircle, X, Loader2, Sparkles, Building, CheckCircle2 } from "lucide-react";
 
 /** Convert a domain like "chameleon.co" to a nice org name like "Chameleon" */
 function domainToOrgName(domain: string): string {
@@ -29,8 +29,9 @@ function domainToOrgName(domain: string): string {
 // Phase 1: landing — guest, no domain submitted
 // Phase 2: enriching — guest, domain submitted, enrichment in progress
 // Phase 3: onboarding — authenticated but NOT all 9 prefs complete
+// Phase 3b: brand_waitlist — authenticated brand/client, skips onboarding
 // Phase 4: authenticated — onboarding complete, full app access
-type AppPhase = "landing" | "enriching" | "onboarding" | "authenticated";
+type AppPhase = "landing" | "enriching" | "onboarding" | "brand_waitlist" | "authenticated";
 
 export default function AppLayout({
   children,
@@ -164,6 +165,7 @@ function AppLayoutInner({
     answeredCount,
     totalRequired,
     missingFields,
+    isBrandWaitlist,
   } = useOnboardingStatus(activeOrg?.id, !!session?.user);
 
   // Track previous onboardingComplete to detect transition → celebration → full app
@@ -184,12 +186,14 @@ function AppLayoutInner({
     prevOnboardingCompleteRef.current = onboardingComplete;
   }, [onboardingComplete]);
 
-  // ─── Derive app phase (4 states) ──────────────────────────
+  // ─── Derive app phase (5 states) ──────────────────────────
   const appPhase: AppPhase = !session?.user
     ? (enrichmentStatus === "idle" ? "landing" : "enriching")
-    : onboardingComplete
-      ? "authenticated"
-      : "onboarding";
+    : isBrandWaitlist
+      ? "brand_waitlist"
+      : onboardingComplete
+        ? "authenticated"
+        : "onboarding";
 
   // ─── Auto-enrich on sign-in: extract domain from email ──────
   // Handles domain aliases (e.g., email is @chameleon.co but firm website is chameleoncollective.com).
@@ -528,6 +532,60 @@ function AppLayoutInner({
             </div>
           )}
         </>
+      )}
+
+      {/* ─── PHASE 3b: BRAND WAITLIST (brand/client entity, no onboarding needed) ─── */}
+      {appPhase === "brand_waitlist" && (
+        <div className="flex h-screen items-center justify-center bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
+          <div className="mx-auto w-full max-w-md px-6">
+            <div className="rounded-cos-2xl border border-cos-warm/30 bg-white/80 px-8 py-10 text-center shadow-lg backdrop-blur-sm">
+              {/* Icon */}
+              <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-cos-warm/15">
+                <Building className="h-7 w-7 text-cos-warm" />
+              </div>
+
+              {/* Title */}
+              <h2 className="font-heading text-xl font-bold text-cos-midnight">
+                Thanks for registering!
+              </h2>
+
+              {/* Subtitle */}
+              <p className="mt-3 text-sm leading-relaxed text-cos-slate">
+                Collective OS is currently built for service providers — agencies,
+                consultancies, and fractional leaders — to find and partner with each other.
+              </p>
+
+              {/* Value prop */}
+              <div className="mt-6 rounded-cos-xl border border-cos-signal/20 bg-cos-signal/5 px-5 py-4">
+                <p className="text-sm font-medium text-cos-midnight">
+                  Brand &amp; Client Matching — Coming Soon
+                </p>
+                <p className="mt-1.5 text-xs leading-relaxed text-cos-slate">
+                  We&apos;re building a way for brands and product companies to find
+                  vetted service providers through Collective OS. You&apos;re on the list!
+                </p>
+              </div>
+
+              {/* Confirmation */}
+              <div className="mt-6 flex items-center justify-center gap-2 text-sm text-cos-signal">
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="font-medium">Your interest has been registered</span>
+              </div>
+
+              {/* Sign out */}
+              <button
+                onClick={() => {
+                  authClient.signOut().then(() => {
+                    window.location.href = "/";
+                  });
+                }}
+                className="mt-8 text-xs text-cos-slate-dim underline transition-colors hover:text-cos-midnight"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ─── PHASE 4: AUTHENTICATED (onboarding complete, full app access) ─── */}

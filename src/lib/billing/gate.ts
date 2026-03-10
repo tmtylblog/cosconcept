@@ -3,6 +3,7 @@ import {
   getMatchesThisWeek,
   getAiPerfectMatchesThisMonth,
   getOpportunityResponsesThisMonth,
+  getSearchesThisMonth,
 } from "./usage-checker";
 import { PLAN_LIMITS } from "./plan-limits";
 
@@ -29,7 +30,8 @@ type BooleanFeature =
 type UsageFeature =
   | "potentialMatches"
   | "aiPerfectMatches"
-  | "opportunityResponses";
+  | "opportunityResponses"
+  | "networkSearches";
 
 /**
  * Check if an org's plan allows a boolean feature.
@@ -84,6 +86,11 @@ export async function requireUsage(
       current = await getOpportunityResponsesThisMonth(organizationId);
       limit = limits.opportunityResponsesPerMonth;
       label = "opportunity responses this month";
+      break;
+    case "networkSearches":
+      current = await getSearchesThisMonth(organizationId);
+      limit = limits.monthlySearches;
+      label = "network searches this month";
       break;
   }
 

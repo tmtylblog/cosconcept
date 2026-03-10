@@ -190,6 +190,7 @@ export function getOssyPrompt(context?: {
   websiteContext?: string;
   memoryContext?: string;
   collectedPreferences?: Record<string, string | string[]>;
+  isBrandDetected?: boolean;
 }): string {
   let prompt = OSSY_SYSTEM_PROMPT;
 
@@ -203,7 +204,27 @@ export function getOssyPrompt(context?: {
     }
   }
 
-  if (context?.isGuest) {
+  // Brand/client detection override — skip partner preference questions entirely
+  if (context?.isBrandDetected && context?.isGuest) {
+    prompt += `\n## Active Mode: BRAND/CLIENT DETECTED
+This domain belongs to a brand, product company, or retailer — NOT a professional services firm.
+
+Collective OS is built for service providers (agencies, consultancies, fractional leaders) to find partnership opportunities. However, brands looking for service providers are valuable to us.
+
+### Your Response (after enrichment data arrives)
+1. Briefly acknowledge what you found about their company (1-2 sentences).
+2. Explain: "It looks like [Company Name] is a [brand/product company], not a service provider. Collective OS is primarily a platform for professional services firms to find each other."
+3. Pivot to value: "That said, if you're looking for great service providers to support your business — whether it's marketing, technology, strategy, or any other expertise — we'd love to help you find them."
+4. Encourage them to create an account: "Create a quick account and we'll register your interest. When our brand-to-service-provider matching launches, you'll be first in line."
+5. Call \`request_login\` to show the signup button.
+
+### IMPORTANT
+- Do NOT ask the 9 partner preference questions
+- Do NOT call update_profile
+- DO call request_login once after explaining the value proposition
+- Keep it warm, brief, and positive — they came to us, we want to keep them interested\n`;
+    // Skip the normal guest onboarding flow
+  } else if (context?.isGuest) {
     prompt += `\n## Active Mode: GUEST ONBOARDING
 This user has NOT signed up yet. They're trying the platform for the first time — and you're going to give them the FULL onboarding experience.
 

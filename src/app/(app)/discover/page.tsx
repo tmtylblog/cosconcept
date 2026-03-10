@@ -4,7 +4,6 @@ import { useState, useCallback } from "react";
 import { Search, Filter, Sparkles, Building2, ArrowRight, ChevronDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePlan } from "@/hooks/use-plan";
-import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { useActiveOrganization } from "@/lib/auth-client";
 
 interface MatchCandidate {
@@ -34,9 +33,13 @@ interface SearchStats {
 }
 
 export default function DiscoverPage() {
-  const { canUse } = usePlan();
-  const canSearch = canUse("canSearchNetwork");
+  const { limits, remaining, plan, refresh: refreshPlan } = usePlan();
   const { data: activeOrg } = useActiveOrganization();
+
+  const searchLimit = limits.monthlySearches;
+  const searchesRemaining = remaining.searchesThisMonth;
+  const isUnlimited = searchLimit === -1;
+  const isExhausted = !isUnlimited && searchesRemaining <= 0;
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MatchCandidate[]>([]);
@@ -44,6 +47,7 @@ export default function DiscoverPage() {
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [searchGated, setSearchGated] = useState(false);
   const [requestingPartnership, setRequestingPartnership] = useState<string | null>(null);
   const [partnershipRequested, setPartnershipRequested] = useState<Set<string>>(new Set());
 
@@ -76,6 +80,7 @@ export default function DiscoverPage() {
     if (!query.trim()) return;
     setSearching(true);
     setHasSearched(true);
+    setSearchGated(false);
 
     try {
       const res = await fetch("/api/search", {
@@ -88,25 +93,21 @@ export default function DiscoverPage() {
         const data = await res.json();
         setResults(data.candidates ?? []);
         setStats(data.stats ?? null);
+        // Refresh plan data to update remaining count
+        refreshPlan();
+      } else if (res.status === 403) {
+        // Search limit reached
+        setSearchGated(true);
+        setResults([]);
+        setStats(null);
+        refreshPlan();
       }
     } catch {
       /* ignore */
     } finally {
       setSearching(false);
     }
-  }, [query]);
-
-  if (!canSearch) {
-    return (
-      <div className="p-6">
-        <UpgradePrompt
-          feature="Network Search"
-          description="Search the entire Collective OS network to find firms that match your ideal partner profile."
-          requiredPlan="pro"
-        />
-      </div>
-    );
-  }
+  }, [query, refreshPlan]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
@@ -118,6 +119,25 @@ export default function DiscoverPage() {
           Search the network for firms that complement your services.
         </p>
       </div>
+
+      {/* Search counter banner */}
+      {!isUnlimited && (
+        <div className={`flex items-center justify-between rounded-cos-lg border px-4 py-2.5 text-sm ${
+          searchesRemaining <= 3
+            ? "border-cos-ember/30 bg-cos-ember/5 text-cos-ember"
+            : "border-cos-electric/20 bg-cos-electric/5 text-cos-electric"
+        }`}>
+          <span>
+            <span className="font-semibold">{Math.max(0, searchesRemaining)}</span> of{" "}
+            <span className="font-semibold">{searchLimit}</span> free searches remaining this month
+          </span>
+          {searchesRemaining <= 3 && (
+            <Button variant="ghost" size="sm" className="text-cos-electric hover:text-cos-electric/80" asChild>
+              <a href="/settings/billing">Upgrade to Pro</a>
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Search bar */}
       <form
@@ -183,6 +203,22 @@ export default function DiscoverPage() {
           <span>from {stats.layer1Candidates} candidates</span>
           <span>{stats.totalDurationMs}ms</span>
           <span>~${stats.estimatedCostUsd.toFixed(4)} cost</span>
+        </div>
+      )}
+
+      {/* Search gate — shown when free trial exhausted */}
+      {(searchGated || isExhausted) && (
+        <div className="rounded-cos-2xl border border-cos-ember/20 bg-cos-ember/5 p-6 text-center">
+          <Sparkles className="mx-auto h-8 w-8 text-cos-ember" />
+          <h3 className="mt-3 font-heading text-sm font-semibold text-cos-midnight">
+            You&apos;ve used all {searchLimit} free searches this month
+          </h3>
+          <p className="mt-1 max-w-sm mx-auto text-xs text-cos-slate">
+            Upgrade to Pro for unlimited network searches, enhanced profiles, and more.
+          </p>
+          <Button className="mt-4" asChild>
+            <a href="/settings/billing">Upgrade to Pro — $199/mo</a>
+          </Button>
         </div>
       )}
 

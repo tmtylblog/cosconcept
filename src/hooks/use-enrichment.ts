@@ -28,6 +28,8 @@ export interface EnrichmentExtracted {
   teamMembers: string[];
 }
 
+export type FirmNature = "service_provider" | "product_company" | "brand_or_retailer" | "hybrid" | "unclear";
+
 export interface EnrichmentClassification {
   categories: string[];
   skills: string[];
@@ -35,6 +37,7 @@ export interface EnrichmentClassification {
   markets: string[];
   languages: string[];
   confidence: number;
+  firmNature?: FirmNature;
 }
 
 export interface EnrichmentResult {
@@ -83,7 +86,8 @@ function buildContextForOssy(data: Partial<EnrichmentResult>): string {
         `\nSkills: ${data.classification.skills.join(", ") || "unknown"}` +
         `\nIndustries: ${data.classification.industries.join(", ") || "unknown"}` +
         `\nMarkets: ${data.classification.markets.join(", ") || "unknown"}` +
-        `\nLanguages: ${data.classification.languages.join(", ") || "unknown"}`
+        `\nLanguages: ${data.classification.languages.join(", ") || "unknown"}` +
+        (data.classification.firmNature ? `\nFirm Nature: ${data.classification.firmNature}` : "")
     );
   }
   if (data.extracted?.teamMembers?.length) {
@@ -107,6 +111,8 @@ interface EnrichmentContextValue {
   result: EnrichmentResult | null;
   /** Full context string for Ossy prompt */
   contextForOssy: string | null;
+  /** Whether the enriched domain is a brand/product company (not a service provider) */
+  isBrandDetected: boolean;
   /** Trigger enrichment for a URL. Set forceGapFill=true to re-run even if same URL (fills missing data). */
   triggerEnrichment: (url: string, forceGapFill?: boolean) => Promise<void>;
   /** Reset all enrichment state (for testing / new agency simulation) */
@@ -120,6 +126,7 @@ const EnrichmentContext = createContext<EnrichmentContextValue>({
   stages: INITIAL_STAGES,
   result: null,
   contextForOssy: null,
+  isBrandDetected: false,
   triggerEnrichment: async () => {},
   reset: () => {},
 });
@@ -751,11 +758,15 @@ export function EnrichmentProvider({
     }
   }, [result, stages.overall, triggerEnrichment]);
 
+  const firmNature = result?.classification?.firmNature;
+  const isBrandDetected = firmNature === "brand_or_retailer" || firmNature === "product_company";
+
   const value: EnrichmentContextValue = {
     status,
     stages,
     result,
     contextForOssy,
+    isBrandDetected,
     triggerEnrichment,
     reset,
   };

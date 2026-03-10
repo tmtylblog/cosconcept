@@ -31,6 +31,8 @@ const openrouter = createOpenRouter({
 
 // ─── Classification result ──────────────────────────────
 
+export type FirmNature = "service_provider" | "product_company" | "brand_or_retailer" | "hybrid" | "unclear";
+
 export interface FirmClassification {
   /** Primary firm categories (from 30 COS categories) */
   categories: string[];
@@ -44,6 +46,8 @@ export interface FirmClassification {
   languages: string[];
   /** AI confidence score (0-1) */
   confidence: number;
+  /** Whether the firm is a service provider, product company, or brand/retailer */
+  firmNature: FirmNature;
 }
 
 // ─── Classifier ─────────────────────────────────────────
@@ -113,6 +117,18 @@ Only select from: ${markets.slice(0, 50).join(", ")}... (all UN countries + regi
 Select business languages this firm works in.
 Available: ${languages.slice(0, 30).join(", ")}...
 
+### 6. Firm Nature
+Determine if this is primarily:
+- "service_provider" — a consulting firm, agency, freelance network, or professional services company that does work FOR clients
+- "product_company" — a SaaS/tech company that sells a software product or platform
+- "brand_or_retailer" — a consumer brand, retailer, manufacturer, or product company (e.g., fashion brand, food company, electronics retailer)
+- "hybrid" — offers both professional services AND has a significant product/brand component
+- "unclear" — not enough evidence to determine
+
+Key signals for service_provider: case studies about client work, "our clients", consulting/agency language, team of consultants/strategists
+Key signals for brand_or_retailer: "Shop now", product catalog, "Add to cart", manufacturing, retail stores, consumer products
+Key signals for product_company: "Sign up", "Start free trial", feature pages, API docs, pricing for a software product
+
 Be precise. Only tag what the evidence supports. Don't guess.`;
 
   try {
@@ -139,6 +155,9 @@ Be precise. Only tag what the evidence supports. Don't guess.`;
         confidence: z
           .number()
           .describe("Confidence score 0-1 based on evidence quality"),
+        firmNature: z
+          .enum(["service_provider", "product_company", "brand_or_retailer", "hybrid", "unclear"])
+          .describe("Whether this is a service provider, product company, brand/retailer, hybrid, or unclear"),
       }),
       maxOutputTokens: 1024,
     });
@@ -174,6 +193,7 @@ Be precise. Only tag what the evidence supports. Don't guess.`;
         validLanguages.has(l.toLowerCase())
       ),
       confidence: Math.min(1, Math.max(0, result.object.confidence)),
+      firmNature: result.object.firmNature ?? "unclear",
     };
   } catch (error) {
     console.error("[AI Classifier] Classification failed:", error);
@@ -185,6 +205,7 @@ Be precise. Only tag what the evidence supports. Don't guess.`;
       markets: [],
       languages: [],
       confidence: 0,
+      firmNature: "unclear",
     };
   }
 }

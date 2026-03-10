@@ -33,7 +33,7 @@ import { RevealCard, PillList, StageChip, PreferenceProgress } from "@/component
  * Also shows partner preference cards populated from guest sessionStorage cache.
  */
 export function GuestEnrichmentPanel() {
-  const { status: enrichmentStatus, stages, result } = useEnrichment();
+  const { status: enrichmentStatus, stages, result, isBrandDetected } = useEnrichment();
   const { guestPreferences } = useGuestData();
 
   const isEnriching = stages.overall === "enriching";
@@ -282,79 +282,100 @@ export function GuestEnrichmentPanel() {
             </div>
           )}
 
-          {/* ─── Partner Preferences Progress ─── */}
-          <PreferenceProgress
-            desiredServices={desiredServices}
-            partnerIndustries={partnerIndustries}
-            clientSize={clientSize}
-            partnerLocations={partnerLocations}
-            partnerTypes={partnerTypes}
-            partnerSize={partnerSize}
-            projectSize={projectSize}
-            hourlyRates={hourlyRates}
-            partnershipRole={partnershipRole}
-          />
+          {/* ─── Brand Detected Notice ─── */}
+          {isBrandDetected && hasEnrichment && !isEnriching && (
+            <div className="rounded-cos-2xl border border-cos-warm/30 bg-gradient-to-br from-cos-warm/5 to-cos-ember/5 px-5 py-5 text-center">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-cos-warm/15">
+                <Building className="h-5 w-5 text-cos-warm" />
+              </div>
+              <h3 className="font-heading text-sm font-semibold text-cos-midnight">
+                Looking for service providers?
+              </h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-cos-slate">
+                It looks like this is a brand or product company. Collective OS helps
+                brands find great service providers — from agencies to consultants.
+                Chat with Ossy to learn more and register your interest.
+              </p>
+            </div>
+          )}
 
-          {/* ─── Partner Preference Cards (from guest cache) ─── */}
-          {desiredServices.length > 0 && (
-            <RevealCard icon={Search} label="Services Wanted from Partners" delay={0}>
-              <PillList items={desiredServices} pillClass="bg-cos-electric/8 text-cos-electric" />
-            </RevealCard>
-          )}
-          {partnerIndustries.length > 0 && (
-            <RevealCard icon={Briefcase} label="Required Partner Industries" delay={0}>
-              <PillList items={partnerIndustries} pillClass="bg-cos-signal/8 text-cos-signal" />
-            </RevealCard>
-          )}
-          {clientSize.length > 0 && (
-            <RevealCard icon={Users} label="Ideal Partner Client Size" delay={0}>
-              <PillList items={clientSize} pillClass="bg-cos-midnight/6 text-cos-midnight" />
-            </RevealCard>
-          )}
-          {partnerLocations.length > 0 && (
-            <RevealCard icon={MapPin} label="Partner Locations" delay={0}>
-              <p>{partnerLocations.join(", ")}</p>
-            </RevealCard>
-          )}
-          {partnerTypes.length > 0 && (
-            <RevealCard icon={Handshake} label="Preferred Partner Types" delay={0}>
-              <PillList items={partnerTypes} pillClass="bg-cos-signal/10 text-cos-signal" />
-            </RevealCard>
-          )}
-          {partnerSize.length > 0 && (
-            <RevealCard icon={Building} label="Preferred Partner Size" delay={0}>
-              <PillList items={partnerSize} pillClass="bg-cos-midnight/6 text-cos-midnight" />
-            </RevealCard>
-          )}
-          {projectSize.length > 0 && (
-            <RevealCard icon={Ruler} label="Ideal Project Size" delay={0}>
-              <PillList items={projectSize} pillClass="bg-cos-warm/10 text-cos-warm" />
-            </RevealCard>
-          )}
-          {hourlyRates && (
-            <RevealCard icon={DollarSign} label="Typical Hourly Rates" delay={0}>
-              <p>{hourlyRates}</p>
-            </RevealCard>
-          )}
-          {partnershipRole && (
-            <RevealCard icon={Handshake} label="Partnership Role" delay={0}>
-              <p>{partnershipRole}</p>
-            </RevealCard>
-          )}
-          {partnerModels.length > 0 && (
-            <RevealCard icon={Target} label="Partnership Models" delay={0}>
-              <PillList items={partnerModels} pillClass="bg-cos-electric/10 text-cos-electric" />
-            </RevealCard>
-          )}
-          {dealBreakers.length > 0 && (
-            <RevealCard icon={ShieldAlert} label="Deal Breakers" delay={0}>
-              <PillList items={dealBreakers} pillClass="bg-cos-ember/10 text-cos-ember" />
-            </RevealCard>
-          )}
-          {growthGoals && (
-            <RevealCard icon={TrendingUp} label="Growth Goals" delay={0}>
-              <p>{growthGoals}</p>
-            </RevealCard>
+          {/* ─── Partner Preferences Progress (only for service providers) ─── */}
+          {!isBrandDetected && (
+            <>
+              <PreferenceProgress
+                desiredServices={desiredServices}
+                partnerIndustries={partnerIndustries}
+                clientSize={clientSize}
+                partnerLocations={partnerLocations}
+                partnerTypes={partnerTypes}
+                partnerSize={partnerSize}
+                projectSize={projectSize}
+                hourlyRates={hourlyRates}
+                partnershipRole={partnershipRole}
+              />
+
+              {/* ─── Partner Preference Cards (from guest cache) ─── */}
+              {desiredServices.length > 0 && (
+                <RevealCard icon={Search} label="Services Wanted from Partners" delay={0}>
+                  <PillList items={desiredServices} pillClass="bg-cos-electric/8 text-cos-electric" />
+                </RevealCard>
+              )}
+              {partnerIndustries.length > 0 && (
+                <RevealCard icon={Briefcase} label="Required Partner Industries" delay={0}>
+                  <PillList items={partnerIndustries} pillClass="bg-cos-signal/8 text-cos-signal" />
+                </RevealCard>
+              )}
+              {clientSize.length > 0 && (
+                <RevealCard icon={Users} label="Ideal Partner Client Size" delay={0}>
+                  <PillList items={clientSize} pillClass="bg-cos-midnight/6 text-cos-midnight" />
+                </RevealCard>
+              )}
+              {partnerLocations.length > 0 && (
+                <RevealCard icon={MapPin} label="Partner Locations" delay={0}>
+                  <p>{partnerLocations.join(", ")}</p>
+                </RevealCard>
+              )}
+              {partnerTypes.length > 0 && (
+                <RevealCard icon={Handshake} label="Preferred Partner Types" delay={0}>
+                  <PillList items={partnerTypes} pillClass="bg-cos-signal/10 text-cos-signal" />
+                </RevealCard>
+              )}
+              {partnerSize.length > 0 && (
+                <RevealCard icon={Building} label="Preferred Partner Size" delay={0}>
+                  <PillList items={partnerSize} pillClass="bg-cos-midnight/6 text-cos-midnight" />
+                </RevealCard>
+              )}
+              {projectSize.length > 0 && (
+                <RevealCard icon={Ruler} label="Ideal Project Size" delay={0}>
+                  <PillList items={projectSize} pillClass="bg-cos-warm/10 text-cos-warm" />
+                </RevealCard>
+              )}
+              {hourlyRates && (
+                <RevealCard icon={DollarSign} label="Typical Hourly Rates" delay={0}>
+                  <p>{hourlyRates}</p>
+                </RevealCard>
+              )}
+              {partnershipRole && (
+                <RevealCard icon={Handshake} label="Partnership Role" delay={0}>
+                  <p>{partnershipRole}</p>
+                </RevealCard>
+              )}
+              {partnerModels.length > 0 && (
+                <RevealCard icon={Target} label="Partnership Models" delay={0}>
+                  <PillList items={partnerModels} pillClass="bg-cos-electric/10 text-cos-electric" />
+                </RevealCard>
+              )}
+              {dealBreakers.length > 0 && (
+                <RevealCard icon={ShieldAlert} label="Deal Breakers" delay={0}>
+                  <PillList items={dealBreakers} pillClass="bg-cos-ember/10 text-cos-ember" />
+                </RevealCard>
+              )}
+              {growthGoals && (
+                <RevealCard icon={TrendingUp} label="Growth Goals" delay={0}>
+                  <p>{growthGoals}</p>
+                </RevealCard>
+              )}
+            </>
           )}
           {/* Scroll anchor — auto-scrolls here when new cards appear */}
           <div ref={bottomRef} />

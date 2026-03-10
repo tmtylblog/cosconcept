@@ -20,8 +20,10 @@ export interface PlanLimits {
   opportunityResponsesPerMonth: number;
   /** Unlimited messaging */
   unlimitedMessaging: boolean;
-  /** Can search the network */
+  /** Can search the network (all plans — metered for free) */
   canSearchNetwork: boolean;
+  /** Monthly network search limit (-1 = unlimited) */
+  monthlySearches: number;
   /** Enhanced profile listing */
   enhancedProfile: boolean;
   /** Can access call intelligence (future) */
@@ -39,7 +41,8 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     aiPerfectMatchesPerMonth: 1, // trial
     opportunityResponsesPerMonth: 0,
     unlimitedMessaging: false,
-    canSearchNetwork: false,
+    canSearchNetwork: true,
+    monthlySearches: 10,
     enhancedProfile: false,
     canAccessCallIntelligence: false,
     canAccessEmailAgent: false,
@@ -52,6 +55,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     opportunityResponsesPerMonth: 3,
     unlimitedMessaging: true,
     canSearchNetwork: true,
+    monthlySearches: -1, // unlimited
     enhancedProfile: true,
     canAccessCallIntelligence: true,
     canAccessEmailAgent: false,
@@ -64,6 +68,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     opportunityResponsesPerMonth: Infinity,
     unlimitedMessaging: true,
     canSearchNetwork: true,
+    monthlySearches: -1, // unlimited
     enhancedProfile: true,
     canAccessCallIntelligence: true,
     canAccessEmailAgent: true,

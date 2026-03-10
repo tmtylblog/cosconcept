@@ -209,6 +209,11 @@ export const serviceFirms = pgTable("service_firms", {
   enrichmentData: jsonb("enrichment_data"),
   enrichmentStatus: text("enrichment_status").default("pending"), // pending | enriched | verified
   classificationConfidence: real("classification_confidence"),
+  // Entity type: service_firm (default), potential_client (brand/retailer wanting services)
+  entityType: text("entity_type").default("service_firm"),
+  // Waitlist tracking for potential clients (brands)
+  registeredInterestEmail: text("registered_interest_email"),
+  registeredInterestAt: timestamp("registered_interest_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

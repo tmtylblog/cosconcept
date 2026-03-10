@@ -97,6 +97,11 @@ export async function POST(req: Request) {
         ? domain.split(".")[0].charAt(0).toUpperCase() + domain.split(".")[0].slice(1)
         : "Unknown Firm");
 
+    // Determine entity type from classification firmNature
+    const firmNature = classification?.firmNature as string | undefined;
+    const isBrand = firmNature === "brand_or_retailer" || firmNature === "product_company";
+    const entityType = isBrand ? "potential_client" : "service_firm";
+
     await db
       .insert(serviceFirms)
       .values({
@@ -110,6 +115,13 @@ export async function POST(req: Request) {
         enrichmentStatus: hasAnyData ? "enriched" : "failed",
         classificationConfidence: classification?.confidence || null,
         profileCompleteness: calculateProfileCompleteness(responseData),
+        entityType,
+        ...(isBrand
+          ? {
+              registeredInterestEmail: session.user.email ?? null,
+              registeredInterestAt: new Date(),
+            }
+          : {}),
       })
       .onConflictDoUpdate({
         target: serviceFirms.id,
@@ -122,11 +134,18 @@ export async function POST(req: Request) {
           enrichmentStatus: hasAnyData ? "enriched" : "failed",
           classificationConfidence: classification?.confidence || null,
           profileCompleteness: calculateProfileCompleteness(responseData),
+          entityType,
+          ...(isBrand
+            ? {
+                registeredInterestEmail: session.user.email ?? null,
+                registeredInterestAt: new Date(),
+              }
+            : {}),
           updatedAt: new Date(),
         },
       });
 
-    console.log(`[Enrich/Persist] Saved enrichment for org ${organizationId}`);
+    console.log(`[Enrich/Persist] Saved enrichment for org ${organizationId} (entityType: ${entityType})`);
 
     // ─── Write to Neo4j Knowledge Graph (best-effort) ───
     try {

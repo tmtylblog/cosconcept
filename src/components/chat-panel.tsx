@@ -141,6 +141,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     status: enrichmentStatus,
     contextForOssy,
     triggerEnrichment,
+    isBrandDetected,
   } = useEnrichment();
   const { updateField: updateProfileField } = useProfile();
   const { guestPreferences, setGuestPreference, setGuestMessages, forceFlushToDb } = useGuestData();
@@ -279,6 +280,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       transportBodyRef.current = {
         websiteContext: contextForOssy,
         collectedPreferences: guestPreferences,
+        isBrandDetected,
       };
     } else {
       transportBodyRef.current = {
@@ -287,7 +289,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         conversationId: conversationIdRef.current,
       };
     }
-  }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id]);
+  }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id, isBrandDetected]);
 
   // Load greeting on mount — clean slate every session.
   // In onboarding mode: hardcoded onboarding welcome (skip greeting endpoint).

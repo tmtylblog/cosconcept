@@ -104,10 +104,11 @@ const requestLoginTool = tool({
  */
 export async function POST(req: Request) {
   try {
-    const { messages, websiteContext, collectedPreferences } = (await req.json()) as {
+    const { messages, websiteContext, collectedPreferences, isBrandDetected } = (await req.json()) as {
       messages: UIMessage[];
       websiteContext?: string;
       collectedPreferences?: Record<string, string | string[]>;
+      isBrandDetected?: boolean;
     };
 
     // Safety limit: reject if conversation is extremely long (abuse prevention)
@@ -124,6 +125,7 @@ export async function POST(req: Request) {
       isGuest: true,
       websiteContext: websiteContext ?? undefined,
       collectedPreferences: collectedPreferences ?? undefined,
+      isBrandDetected: isBrandDetected ?? false,
     });
 
     console.log("[Ossy Guest] System prompt length:", systemPrompt.length);

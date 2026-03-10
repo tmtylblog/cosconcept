@@ -47,7 +47,7 @@ export async function POST(req: Request) {
         `${classification.industries.length} industries, ` +
         `${classification.markets.length} markets, ` +
         `${classification.languages.length} languages ` +
-        `(confidence: ${classification.confidence.toFixed(2)})`
+        `(confidence: ${classification.confidence.toFixed(2)}, nature: ${classification.firmNature})`
     );
 
     return NextResponse.json({ classification });

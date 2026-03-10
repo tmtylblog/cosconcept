@@ -93,17 +93,37 @@ export async function getOpportunityResponsesThisMonth(
 }
 
 /**
+ * Count network searches performed by an org this month.
+ */
+export async function getSearchesThisMonth(
+  organizationId: string
+): Promise<number> {
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(aiUsageLog)
+    .where(
+      and(
+        eq(aiUsageLog.organizationId, organizationId),
+        eq(aiUsageLog.feature, "network_search"),
+        gte(aiUsageLog.createdAt, monthStart())
+      )
+    );
+  return Number(result[0]?.count ?? 0);
+}
+
+/**
  * Full usage snapshot for an org.
  */
 export async function getOrgUsage(organizationId: string) {
   const plan = await getOrgPlan(organizationId);
   const limits = PLAN_LIMITS[plan];
 
-  const [matchesThisWeek, aiPerfectMatches, opportunityResponses] =
+  const [matchesThisWeek, aiPerfectMatches, opportunityResponses, searchesThisMonth] =
     await Promise.all([
       getMatchesThisWeek(organizationId),
       getAiPerfectMatchesThisMonth(organizationId),
       getOpportunityResponsesThisMonth(organizationId),
+      getSearchesThisMonth(organizationId),
     ]);
 
   return {
@@ -113,6 +133,7 @@ export async function getOrgUsage(organizationId: string) {
       matchesThisWeek,
       aiPerfectMatches,
       opportunityResponses,
+      searchesThisMonth,
     },
     remaining: {
       matchesThisWeek: Math.max(
@@ -127,6 +148,9 @@ export async function getOrgUsage(organizationId: string) {
         0,
         limits.opportunityResponsesPerMonth - opportunityResponses
       ),
+      searchesThisMonth: limits.monthlySearches === -1
+        ? Infinity
+        : Math.max(0, limits.monthlySearches - searchesThisMonth),
     },
   };
 }

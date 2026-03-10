@@ -62,7 +62,43 @@ export async function POST(req: Request) {
       console.log(`[Migration] Created serviceFirms row: ${firmId}`);
     }
 
-    // Migrate each preference field
+    // Check if this firm is a brand/client based on enrichment data
+    const [firmData] = await db
+      .select({
+        enrichmentData: serviceFirms.enrichmentData,
+      })
+      .from(serviceFirms)
+      .where(eq(serviceFirms.id, firmId))
+      .limit(1);
+
+    const enrichmentData = firmData?.enrichmentData as Record<string, unknown> | null;
+    const classification = enrichmentData?.classification as Record<string, unknown> | null;
+    const firmNature = classification?.firmNature as string | undefined;
+    const isBrand = firmNature === "brand_or_retailer" || firmNature === "product_company";
+
+    if (isBrand) {
+      // Brand/client entity — set entity type and register interest, skip preference migration
+      await db
+        .update(serviceFirms)
+        .set({
+          entityType: "potential_client",
+          registeredInterestEmail: session.user.email,
+          registeredInterestAt: new Date(),
+        })
+        .where(eq(serviceFirms.id, firmId));
+
+      console.log(`[Migration] Brand detected for ${firmId} — set entityType=potential_client, registered interest`);
+
+      return NextResponse.json({
+        success: true,
+        migrated: 0,
+        total: 0,
+        results: [],
+        entityType: "potential_client",
+      });
+    }
+
+    // Migrate each preference field (service providers only)
     const results: { field: string; success: boolean }[] = [];
 
     for (const [field, value] of Object.entries(preferences)) {

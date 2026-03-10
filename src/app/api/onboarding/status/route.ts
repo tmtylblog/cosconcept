@@ -79,6 +79,7 @@ export async function GET(req: Request) {
         id: serviceFirms.id,
         enrichmentData: serviceFirms.enrichmentData,
         enrichmentStatus: serviceFirms.enrichmentStatus,
+        entityType: serviceFirms.entityType,
       })
       .from(serviceFirms)
       .where(eq(serviceFirms.organizationId, organizationId))
@@ -165,10 +166,14 @@ export async function GET(req: Request) {
 
     const answeredCount = answeredFields.length;
     const preferencesComplete = answeredCount >= 9;
-    // Gate is purely preferences-based. Enrichment enriches the experience
-    // but should never block the user from accessing the app after answering
-    // all 9 questions (enrichment may fail for unreachable websites, etc.).
-    const onboardingComplete = preferencesComplete;
+
+    // Brand/client entities skip the 9-question onboarding entirely
+    const entityType = firmRow.entityType ?? "service_firm";
+    const isBrandWaitlist = entityType === "potential_client" || entityType === "brand";
+
+    // Gate is purely preferences-based for service firms.
+    // Brand/client entities bypass the gate (they go straight to waitlist screen).
+    const onboardingComplete = isBrandWaitlist || preferencesComplete;
 
     return NextResponse.json({
       enrichmentComplete,
@@ -177,6 +182,8 @@ export async function GET(req: Request) {
       totalRequired: 9,
       onboardingComplete,
       missingFields,
+      entityType,
+      isBrandWaitlist,
     });
   } catch (error) {
     console.error("[Onboarding/Status] Error:", error);

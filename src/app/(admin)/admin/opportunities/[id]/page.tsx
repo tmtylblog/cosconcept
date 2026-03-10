@@ -206,7 +206,7 @@ export default function OpportunityDetailPage() {
                   ? <Radio className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
                   : <Zap className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />}
                 <blockquote className="text-sm italic leading-relaxed text-[var(--cos-text-secondary)]">
-                  "{opp.evidence}"
+                  &ldquo;{opp.evidence}&rdquo;
                 </blockquote>
               </div>
               <p className="mt-2 text-xs text-[var(--cos-text-muted)]">

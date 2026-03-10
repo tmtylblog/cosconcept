@@ -8,12 +8,14 @@ interface UsageData {
   matchesThisWeek: number;
   aiPerfectMatches: number;
   opportunityResponses: number;
+  searchesThisMonth: number;
 }
 
 interface RemainingData {
   matchesThisWeek: number;
   aiPerfectMatches: number;
   opportunityResponses: number;
+  searchesThisMonth: number;
 }
 
 interface PlanState {
@@ -33,12 +35,14 @@ const DEFAULT_USAGE: UsageData = {
   matchesThisWeek: 0,
   aiPerfectMatches: 0,
   opportunityResponses: 0,
+  searchesThisMonth: 0,
 };
 
 const DEFAULT_REMAINING: RemainingData = {
   matchesThisWeek: 0,
   aiPerfectMatches: 0,
   opportunityResponses: 0,
+  searchesThisMonth: 10,
 };
 
 export function usePlan(): PlanState {

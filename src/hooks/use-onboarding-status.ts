@@ -9,6 +9,7 @@ export interface OnboardingStatus {
   totalRequired: number;
   onboardingComplete: boolean;
   missingFields: string[];
+  isBrandWaitlist: boolean;
   isLoading: boolean;
   recheck: () => void;
 }
@@ -35,6 +36,7 @@ export function useOnboardingStatus(
     totalRequired: number;
     onboardingComplete: boolean;
     missingFields: string[];
+    isBrandWaitlist: boolean;
   }>({
     enrichmentComplete: false,
     preferencesComplete: false,
@@ -42,6 +44,7 @@ export function useOnboardingStatus(
     totalRequired: 9,
     onboardingComplete: false,
     missingFields: [],
+    isBrandWaitlist: false,
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -65,6 +68,7 @@ export function useOnboardingStatus(
         totalRequired: data.totalRequired ?? 9,
         onboardingComplete: data.onboardingComplete ?? false,
         missingFields: data.missingFields ?? [],
+        isBrandWaitlist: data.isBrandWaitlist ?? false,
       });
 
       if (data.onboardingComplete) {
