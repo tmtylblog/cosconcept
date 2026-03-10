@@ -345,26 +345,31 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
 
   // Watch for tool results and push to ProfileProvider (auth) or GuestData (guest)
   // Also handles request_login tool to trigger sign-in modal
+  // NOTE: AI SDK v6 tool parts may NOT have `toolCallId` — use msg.id+partIdx as dedup key
   const processedToolCallsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const msg of messages) {
       if (msg.role !== "assistant") continue;
-      for (const part of msg.parts) {
-        // Handle update_profile tool results
-        if (
-          part.type === "tool-update_profile" &&
-          "state" in part &&
-          part.state === "output-available" &&
-          "toolCallId" in part
-        ) {
-          const callId = part.toolCallId as string;
-          if (processedToolCallsRef.current.has(callId)) continue;
-          processedToolCallsRef.current.add(callId);
+      for (let partIdx = 0; partIdx < msg.parts.length; partIdx++) {
+        const part = msg.parts[partIdx];
+        // Check for any tool part with output available
+        if (!part.type.startsWith("tool-") || !("state" in part) || part.state !== "output-available") continue;
 
+        const toolName = part.type.slice(5); // "tool-update_profile" → "update_profile"
+        // Generate a stable dedup key (toolCallId may not exist in AI SDK v6)
+        const callId = ("toolCallId" in part && part.toolCallId)
+          ? (part.toolCallId as string)
+          : `${msg.id}-${partIdx}`;
+        if (processedToolCallsRef.current.has(callId)) continue;
+        processedToolCallsRef.current.add(callId);
+
+        // Handle update_profile tool results
+        if (toolName === "update_profile") {
           const output = (part as { output?: unknown }).output as
             | { success: boolean; field: string; value: string | string[] }
             | undefined;
           if (output?.success && output.field && output.value != null) {
+            console.log(`[ChatPanel] Tool save detected: ${output.field} =`, output.value);
             if (isGuest) {
               // Guest mode: cache client-side for migration after auth
               setGuestPreference(output.field, output.value);
@@ -376,16 +381,7 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
         }
 
         // Handle request_login tool results (guest only)
-        if (
-          part.type === "tool-request_login" &&
-          "state" in part &&
-          part.state === "output-available" &&
-          "toolCallId" in part
-        ) {
-          const callId = part.toolCallId as string;
-          if (processedToolCallsRef.current.has(callId)) continue;
-          processedToolCallsRef.current.add(callId);
-
+        if (toolName === "request_login") {
           // Trigger the login modal
           setShowLoginPrompt(true);
           onRequestLogin?.();
