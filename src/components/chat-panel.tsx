@@ -6,6 +6,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Send, Mic, Loader2, Globe, FileText, X, Sparkles, Zap, Radio, Users, BookOpen, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useActiveOrganization } from "@/lib/auth-client";
@@ -133,10 +134,12 @@ interface ChatPanelProps {
   isOnboarding?: boolean;
   missingFields?: string[];
   answeredCount?: number;
+  firmSection?: string | null;
   onRequestLogin?: () => void;
 }
 
-export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount, onRequestLogin }: ChatPanelProps) {
+export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount, firmSection, onRequestLogin }: ChatPanelProps) {
+  const router = useRouter();
   const { data: activeOrg } = useActiveOrganization();
   const pathname = usePathname();
   const {
@@ -324,9 +327,10 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         organizationId: activeOrg?.id ?? "",
         websiteContext: contextForOssy,
         conversationId: conversationIdRef.current,
+        firmSection: firmSection ?? undefined,
       };
     }
-  }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id, isBrandDetected]);
+  }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id, isBrandDetected, firmSection]);
 
   // Load greeting on mount — clean slate every session.
   // In onboarding mode: hardcoded onboarding welcome (skip greeting endpoint).
@@ -585,9 +589,19 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           setShowLoginPrompt(true);
           onRequestLogin?.();
         }
+
+        // Handle navigate_section tool results (authenticated firm pages)
+        if (toolName === "navigate_section") {
+          const output = (part as { output?: unknown }).output as
+            | { success: boolean; navigateTo: string }
+            | undefined;
+          if (output?.success && output.navigateTo) {
+            router.push(output.navigateTo);
+          }
+        }
       }
     }
-  }, [messages, updateProfileField, isGuest, setGuestPreference, onRequestLogin, forceFlushToDb]);
+  }, [messages, updateProfileField, isGuest, setGuestPreference, onRequestLogin, forceFlushToDb, router]);
 
   // ─── Auto-continuation safety net ──────────────────────────
   // If Ossy saved a preference (tool result present) but didn't ask the

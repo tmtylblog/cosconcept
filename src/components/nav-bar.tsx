@@ -4,6 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   Search,
@@ -17,14 +18,41 @@ import {
   LogIn,
   ArrowLeftRight,
   RotateCcw,
+  ChevronDown,
+  Briefcase,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut, useActiveOrganization } from "@/lib/auth-client";
 
-const navItems = [
+interface NavChild {
+  label: string;
+  href: string;
+  icon?: LucideIcon;
+}
+
+interface NavItem {
+  icon: LucideIcon;
+  label: string;
+  href: string;
+  children?: NavChild[];
+}
+
+const navItems: NavItem[] = [
   { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
   { icon: Search, label: "Discover", href: "/discover" },
-  { icon: Building2, label: "My Firm", href: "/firm" },
+  {
+    icon: Building2,
+    label: "My Firm",
+    href: "/firm",
+    children: [
+      { label: "Overview", href: "/firm" },
+      { label: "Offering", href: "/firm/offering", icon: Briefcase },
+      { label: "Experts", href: "/firm/experts", icon: Users },
+      { label: "Experience", href: "/firm/experience", icon: FileText },
+      { label: "Preferences", href: "/firm/preferences", icon: Handshake },
+    ],
+  },
   { icon: Users, label: "Network", href: "/network" },
   { icon: Handshake, label: "Partnerships", href: "/partnerships" },
   { icon: Settings, label: "Settings", href: "/settings" },
@@ -48,6 +76,7 @@ export function NavBar({
   const pathname = usePathname();
   const { data: activeOrg } = useActiveOrganization();
   const [hovering, setHovering] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(["/firm"]));
 
   const showLabels = !collapsed || hovering;
 
@@ -55,6 +84,41 @@ export function NavBar({
   const visibleItems = isGuest
     ? navItems.filter((item) => item.href === "/dashboard")
     : navItems;
+
+  const toggleMenu = (href: string) => {
+    setExpandedMenus((prev) => {
+      const next = new Set(prev);
+      if (next.has(href)) {
+        next.delete(href);
+      } else {
+        next.add(href);
+      }
+      return next;
+    });
+  };
+
+  const isItemActive = (item: NavItem) => {
+    if (item.children) {
+      return pathname === item.href || pathname.startsWith(item.href + "/");
+    }
+    return pathname === item.href || pathname.startsWith(item.href + "/");
+  };
+
+  const isChildActive = (child: NavChild) => {
+    // Exact match for /firm (Overview), prefix match for others
+    if (child.href === "/firm") {
+      return pathname === "/firm";
+    }
+    return pathname === child.href || pathname.startsWith(child.href + "/");
+  };
+
+  // Auto-expand menus when a child is active
+  const isMenuExpanded = (item: NavItem) => {
+    if (!item.children) return false;
+    if (expandedMenus.has(item.href)) return true;
+    // Auto-expand if any child route is active
+    return item.children.some((child) => isChildActive(child));
+  };
 
   return (
     <aside
@@ -95,28 +159,80 @@ export function NavBar({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-2 py-4">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-4">
         {visibleItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            pathname.startsWith(item.href + "/");
+          const isActive = isItemActive(item);
+          const hasChildren = !!item.children;
+          const menuExpanded = isMenuExpanded(item);
+
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={collapsed && !hovering ? item.label : undefined}
-              className={cn(
-                "flex items-center gap-3 rounded-cos-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-white/15 text-white"
-                  : "text-white/60 hover:bg-white/10 hover:text-white"
+            <div key={item.href}>
+              {/* Parent item */}
+              <div className="flex items-center">
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex flex-1 items-center gap-3 rounded-cos-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-white/15 text-white"
+                      : "text-white/60 hover:bg-white/10 hover:text-white"
+                  )}
+                  title={collapsed && !hovering ? item.label : undefined}
+                >
+                  <item.icon className="h-5 w-5 shrink-0" />
+                  {showLabels && (
+                    <span className="flex-1 truncate">{item.label}</span>
+                  )}
+                </Link>
+                {/* Expand/collapse chevron for items with children */}
+                {hasChildren && showLabels && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      toggleMenu(item.href);
+                    }}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-cos-md text-white/40 transition-colors hover:bg-white/10 hover:text-white/70"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "h-3.5 w-3.5 transition-transform duration-200",
+                        menuExpanded && "rotate-180"
+                      )}
+                    />
+                  </button>
+                )}
+              </div>
+
+              {/* Children sub-menu */}
+              {hasChildren && menuExpanded && showLabels && (
+                <div className="ml-5 mt-0.5 space-y-0.5 border-l border-white/10 pl-3">
+                  {item.children!.map((child) => {
+                    const childActive = isChildActive(child);
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={cn(
+                          "flex items-center gap-2 rounded-cos-md px-2.5 py-1.5 text-[12px] font-medium transition-colors",
+                          childActive
+                            ? "bg-white/10 text-white"
+                            : "text-white/40 hover:bg-white/5 hover:text-white/70"
+                        )}
+                      >
+                        {/* Small dot indicator */}
+                        <div
+                          className={cn(
+                            "h-1 w-1 shrink-0 rounded-full",
+                            childActive ? "bg-cos-electric" : "bg-white/20"
+                          )}
+                        />
+                        <span className="truncate">{child.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               )}
-            >
-              <item.icon className="h-5 w-5 shrink-0" />
-              {showLabels && (
-                <span className="truncate">{item.label}</span>
-              )}
-            </Link>
+            </div>
           );
         })}
 

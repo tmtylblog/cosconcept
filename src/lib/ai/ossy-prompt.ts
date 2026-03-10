@@ -191,6 +191,7 @@ export function getOssyPrompt(context?: {
   memoryContext?: string;
   collectedPreferences?: Record<string, string | string[]>;
   isBrandDetected?: boolean;
+  firmSection?: string;
 }): string {
   let prompt = OSSY_SYSTEM_PROMPT;
 
@@ -202,6 +203,35 @@ export function getOssyPrompt(context?: {
     if (context.firmName) {
       prompt += `- User's firm: ${context.firmName}\n`;
     }
+  }
+
+  // ─── Firm section context (authenticated users viewing My Firm pages) ───
+  if (context?.firmSection && !context?.isOnboarding && !context?.isGuest) {
+    const sectionDescriptions: Record<string, string> = {
+      overview: "their firm's Overview page — company info, categories, skills, industries, markets, and languages. Help them refine their firm profile.",
+      offering: "their firm's Offering page — services and solutions extracted from their website. Help them review, add, or edit their service offerings.",
+      experts: "their firm's Experts page — team roster and member profiles. Help them understand their team data or discuss enriching team profiles from LinkedIn.",
+      experience: "their firm's Experience page — case studies and portfolio. Help them review discovered case studies or discuss adding more project examples.",
+      preferences: "their firm's Partner Preferences page — the 9 matching criteria fields. Help them update their partner preferences for better matches.",
+    };
+
+    const description = sectionDescriptions[context.firmSection] || "their firm profile";
+
+    prompt += `\n## Current Page Context
+The user is currently viewing ${description}
+
+### Section-Aware Behavior
+- Focus your assistance on the content relevant to this page
+- If they ask you to update a field visible on this page, use the \`update_profile\` tool
+- If the user asks about something that belongs to a DIFFERENT section (e.g., asking about partner preferences while on the Overview page), use the \`navigate_section\` tool to move them to the right page. Include a brief explanation in your response: "Let me take you to your [Section] page for that."
+- After navigating, continue the conversation naturally — don't make them re-ask their question
+
+### Available Sections
+- **overview**: Company info, categories, skills, industries, markets, languages
+- **offering**: Services and solutions
+- **experts**: Team members and profiles
+- **experience**: Case studies and portfolio
+- **preferences**: Partner matching preferences (the 9 fields)\n`;
   }
 
   // Brand/client detection override — skip partner preference questions entirely

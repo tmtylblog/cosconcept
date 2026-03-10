@@ -186,6 +186,16 @@ function AppLayoutInner({
     prevOnboardingCompleteRef.current = onboardingComplete;
   }, [onboardingComplete]);
 
+  // ─── Derive firm section from pathname ──────────────────────
+  const firmSection: string | null =
+    pathname === "/firm" ? "overview"
+    : pathname === "/firm/offering" ? "offering"
+    : pathname === "/firm/experts" ? "experts"
+    : pathname === "/firm/experience" ? "experience"
+    : pathname === "/firm/preferences" ? "preferences"
+    : pathname.startsWith("/firm/case-studies") ? "experience"
+    : null;
+
   // ─── Derive app phase (5 states) ──────────────────────────
   const appPhase: AppPhase = !session?.user
     ? (enrichmentStatus === "idle" ? "landing" : "enriching")
@@ -610,6 +620,7 @@ function AppLayoutInner({
             <ChatPanel
               key={chatKey}
               isGuest={false}
+              firmSection={firmSection}
               onRequestLogin={handleRequestLogin}
             />
           </aside>
@@ -638,6 +649,7 @@ function AppLayoutInner({
                 <ChatPanel
                   key={chatKey}
                   isGuest={false}
+                  firmSection={firmSection}
                   onRequestLogin={handleRequestLogin}
                 />
               </div>

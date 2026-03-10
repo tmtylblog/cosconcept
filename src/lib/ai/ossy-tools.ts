@@ -42,6 +42,29 @@ type ToolInput = z.infer<typeof toolInputSchema>;
  */
 export function createOssyTools(organizationId: string, firmId: string) {
   return {
+    navigate_section: tool({
+      description:
+        "Navigate the user to a different section of their firm profile. " +
+        "Use when the user asks about something that belongs on a different page " +
+        "(e.g., they're on Overview but ask about partner preferences). " +
+        "The client will handle the actual navigation.",
+      inputSchema: z.object({
+        section: z.enum(["overview", "offering", "experts", "experience", "preferences"])
+          .describe("The firm section to navigate to"),
+        reason: z.string().describe("Brief explanation of why navigating (shown to user)"),
+      }),
+      execute: async ({ section, reason }) => {
+        const routes: Record<string, string> = {
+          overview: "/firm",
+          offering: "/firm/offering",
+          experts: "/firm/experts",
+          experience: "/firm/experience",
+          preferences: "/firm/preferences",
+        };
+        return { success: true, navigateTo: routes[section], section, reason };
+      },
+    }),
+
     update_profile: tool({
       description:
         "Update the user's firm profile or partner preferences when they confirm a data point. " +

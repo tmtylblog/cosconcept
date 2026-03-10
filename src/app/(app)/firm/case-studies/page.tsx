@@ -84,7 +84,7 @@ export default function CaseStudiesPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link
-          href="/firm"
+          href="/firm/experience"
           className="flex h-7 w-7 items-center justify-center rounded-cos-md text-cos-slate-dim transition-colors hover:bg-cos-cloud-dim hover:text-cos-midnight"
         >
           <ArrowLeft className="h-4 w-4" />
