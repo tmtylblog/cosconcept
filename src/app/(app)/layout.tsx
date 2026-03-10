@@ -366,7 +366,7 @@ function AppLayoutInner({
           </main>
 
           {/* Right: Chat panel — desktop */}
-          <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-border/30 bg-cos-cloud/60 lg:flex">
+          <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-midnight/20 lg:flex">
             <ChatPanel
               key={chatKey}
               isGuest={true}
@@ -448,7 +448,7 @@ function AppLayoutInner({
               {/* Right: Chat panel — desktop (authenticated onboarding mode)
                   Delayed until profile is hydrated so ChatPanel knows which
                   question to start with. Shows a "reviewing" placeholder first. */}
-              <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-border/30 bg-cos-cloud/60 lg:flex">
+              <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-midnight/20 lg:flex">
                 {profileHydrated ? (
                   <ChatPanel
                     key={chatKey}
@@ -606,7 +606,7 @@ function AppLayoutInner({
           </main>
 
           {/* Right: Chat panel — desktop */}
-          <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-border/30 bg-cos-cloud/60 lg:flex">
+          <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-midnight/20 lg:flex">
             <ChatPanel
               key={chatKey}
               isGuest={false}

@@ -626,9 +626,9 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   }, [status, atGuestLimit]);
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div className="relative flex h-full flex-col bg-cos-midnight">
       {/* Header — compact for right column */}
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-cos-border/50 px-4">
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-white/10 px-4">
         <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-cos-full bg-gradient-to-br from-cos-electric to-cos-signal p-0.5">
           <Image
             src="/logo.png"
@@ -639,7 +639,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="font-heading text-sm font-semibold text-cos-midnight">
+          <h2 className="font-heading text-sm font-semibold text-white">
             Ossy
           </h2>
           <p className="text-[10px] text-cos-signal">
@@ -680,7 +680,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       {/* Messages area — justify-end keeps messages anchored near the input when few */}
       <div
         ref={scrollRef}
-        className="cos-scrollbar relative flex flex-1 flex-col justify-end overflow-y-auto px-4 py-4"
+        className="cos-scrollbar relative flex flex-1 flex-col justify-end overflow-y-auto bg-cos-midnight-light/30 px-4 py-4"
       >
         <div className="space-y-2">
         {messages.map((message, idx) => {
@@ -721,7 +721,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                 className={cn(
                   "rounded-cos-xl px-4 py-3",
                   message.role === "assistant"
-                    ? "rounded-tl-cos-sm bg-cos-surface-raised"
+                    ? "rounded-tl-cos-sm bg-white/95 text-cos-midnight shadow-sm"
                     : "ml-auto rounded-tr-cos-sm bg-cos-electric text-white"
                 )}
               >
@@ -793,18 +793,18 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                 className="h-[18px] w-[18px] object-cover"
               />
             </div>
-            <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-4 py-3">
-              <Loader2 className="h-4 w-4 animate-spin text-cos-slate" />
+            <div className="rounded-cos-xl rounded-tl-cos-sm bg-white/95 px-4 py-3 shadow-sm">
+              <Loader2 className="h-4 w-4 animate-spin text-cos-electric" />
             </div>
           </div>
         )}
 
         {(error || stalled) && (
-          <div className="rounded-cos-xl border border-cos-ember/20 bg-cos-ember/5 px-4 py-3">
+          <div className="rounded-cos-xl border border-cos-ember/30 bg-cos-ember/10 px-4 py-3">
             <p className="text-sm font-medium text-cos-ember">
               {stalled ? "Ossy is taking too long — try sending your message again." : "Ossy hit a snag — try sending your message again."}
             </p>
-            <p className="mt-1 text-xs text-cos-slate">
+            <p className="mt-1 text-xs text-white/60">
               {error?.message || (stalled ? "The response timed out. This sometimes happens with longer conversations." : "Connection issue or timeout")}
             </p>
           </div>
@@ -823,7 +823,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
               />
             </div>
             <div className="space-y-2">
-              <div className="rounded-cos-xl rounded-tl-cos-sm bg-cos-surface-raised px-4 py-3">
+              <div className="rounded-cos-xl rounded-tl-cos-sm bg-white/95 px-4 py-3 shadow-sm">
                 <p className="text-sm leading-relaxed text-cos-midnight">
                   Your preferences are saved! Create a free account to unlock partner matching and continue your growth journey.
                 </p>
@@ -842,12 +842,12 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
       {/* Transcript detection banner */}
       {pendingTranscript && (
-        <div className="shrink-0 border-t border-cos-electric/20 bg-cos-electric/5 px-4 py-3">
+        <div className="shrink-0 border-t border-cos-electric/20 bg-cos-electric/10 px-4 py-3">
           <div className="flex items-start gap-3">
             <FileText className="mt-0.5 h-4 w-4 shrink-0 text-cos-electric" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-cos-midnight">Call transcript detected</p>
-              <p className="text-xs text-cos-slate mt-0.5">
+              <p className="text-sm font-medium text-white">Call transcript detected</p>
+              <p className="text-xs text-white/60 mt-0.5">
                 {pendingTranscript.trim().split(/\s+/).length} words — want Ossy to extract opportunities from it?
               </p>
             </div>
@@ -872,9 +872,9 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       )}
 
       {/* Input area */}
-      <div className="shrink-0 border-t border-cos-border/50 bg-white/80 px-4 py-3 backdrop-blur-sm">
+      <div className="shrink-0 border-t border-white/10 px-4 py-3">
         <form onSubmit={handleSubmit}>
-          <div className="flex items-end gap-1.5 rounded-cos-xl border border-cos-border bg-cos-cloud/80 px-3 py-1.5 transition-colors focus-within:border-cos-electric focus-within:ring-1 focus-within:ring-cos-electric">
+          <div className="flex items-end gap-1.5 rounded-cos-xl border border-white/20 bg-white/95 px-3 py-1.5 shadow-lg transition-colors focus-within:border-cos-electric focus-within:ring-2 focus-within:ring-cos-electric/40">
             <textarea
               ref={inputRef}
               value={input}
@@ -905,14 +905,14 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
               }
               disabled={isLoading || atGuestLimit}
               rows={2}
-              className="flex-1 resize-none appearance-none border-0 bg-transparent py-2 text-sm leading-relaxed text-cos-midnight shadow-none outline-none ring-0 placeholder:text-cos-slate-light focus:border-0 focus:outline-none focus:ring-0 disabled:opacity-50"
+              className="flex-1 resize-none appearance-none border-0 bg-transparent py-2 text-sm leading-relaxed text-cos-midnight shadow-none outline-none ring-0 placeholder:text-cos-slate focus:border-0 focus:outline-none focus:ring-0 disabled:opacity-50"
             />
             <div className="flex shrink-0 items-center gap-1 pb-0.5">
               <Button
                 type="button"
                 size="icon"
                 variant="ghost"
-                className="h-8 w-8 shrink-0 text-cos-slate hover:text-cos-midnight"
+                className="h-8 w-8 shrink-0 text-cos-slate hover:text-cos-electric"
               >
                 <Mic className="h-4 w-4" />
               </Button>
@@ -920,7 +920,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                 type="submit"
                 size="icon"
                 disabled={isLoading || !input.trim() || atGuestLimit}
-                className="h-8 w-8 shrink-0"
+                className="h-8 w-8 shrink-0 bg-cos-electric text-white hover:bg-cos-electric-hover disabled:opacity-40"
               >
                 <Send className="h-3.5 w-3.5" />
               </Button>
