@@ -316,13 +316,14 @@ export default function AdminOpportunitiesPage() {
                 <th className="px-4 py-2.5 text-left">Resolution</th>
                 <th className="px-4 py-2.5 text-left">Status</th>
                 <th className="px-4 py-2.5 text-left">Date</th>
+                <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-cos-border/50">
               {loading
                 ? Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: 7 }).map((_, j) => (
+                      {Array.from({ length: 8 }).map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-3 w-24 animate-pulse rounded bg-cos-cloud" />
                         </td>
@@ -369,6 +370,11 @@ export default function AdminOpportunitiesPage() {
                       </td>
                       <td className="px-4 py-3 text-xs text-cos-slate whitespace-nowrap">
                         {fmtDate(opp.createdAt)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="inline-flex items-center gap-1 rounded-cos-lg border border-cos-border px-2.5 py-1 text-xs font-medium text-cos-slate hover:border-cos-electric hover:text-cos-electric transition-colors">
+                          View <ArrowUpRight className="h-3 w-3" />
+                        </span>
                       </td>
                     </tr>
                   ))}
