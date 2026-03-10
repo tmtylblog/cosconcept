@@ -96,22 +96,64 @@ Ossy generates AI-crafted introduction emails connecting two firms. Two paths ex
 
 ---
 
+## Core Concepts: Opportunities vs Leads
+
+> **IMPORTANT DISTINCTION** — Opportunities and Leads are two separate concepts with a parent-child relationship. This distinction is critical to understanding the entire business development pipeline.
+
+### Opportunity
+An **Opportunity** is a **pain point or challenge** that a potential client is experiencing. It is inferred from context — a conversation, a call, an email, a chat message. It is NOT a concrete work package or something that can be directly sold. It represents the underlying problem.
+
+- A single Opportunity can give rise to **multiple Leads** (multiple solutions to the same problem)
+- Opportunities are discovered/extracted by AI from signals in conversations, calls, and emails
+- They represent **what the client is struggling with**, not what the service provider offers
+
+**Example:** A potential client mentions in a call: *"We're losing customers after the first 90 days and we don't know why."* This is an Opportunity — a churn problem. It could be solved by a retention strategist, a UX firm, a data analytics firm, or a customer success consultancy — multiple Leads.
+
+### Lead
+A **Lead** is a **specific solution** to an Opportunity — a concrete, scoped offering that a service provider can deliver to address the client's pain point. Leads have a significantly higher probability of closing because they map directly to an identified, specific need.
+
+- A Lead is always linked to a parent Opportunity
+- A single Opportunity generates one or more Leads (one per potential solution path)
+- Leads are what get **shared with partner firms** for potential engagement
+- Leads represent **what can be sold** — the translation of pain into solution
+
+**Example (continuing from above):** The churn Opportunity generates three Leads:
+1. *"Customer success program design"* → shared with a CS consultancy partner
+2. *"Onboarding UX audit and redesign"* → shared with a UX firm partner
+3. *"Churn analytics and segmentation"* → shared with a data analytics partner
+
+### Pipeline Flow
+
+```
+Context Signal (call / email / chat / manual)
+        ↓
+AI Extraction → Opportunity (pain point identified)
+        ↓
+Translation → Lead(s) (specific solutions derived from pain point)
+        ↓
+Shared with → Partner Firm(s) (only accepted partners)
+        ↓
+Claimed → Active Engagement → Won / Lost
+```
+
+---
+
 ## Opportunity System
 
-Opportunities represent business leads that can be shared with trusted partners.
+Opportunities represent **identified pain points or challenges** that a potential client is experiencing. They are inferred from context and serve as the starting point of the business development pipeline. A single opportunity can lead to multiple leads (solutions).
 
 ### Opportunity Statuses (pgEnum `opportunity_status`)
 | Status | Meaning |
 |---|---|
-| `open` | Newly created, not yet shared |
-| `shared` | Has been shared with at least one partner firm |
-| `claimed` | A partner firm has claimed the opportunity |
-| `won` | The opportunity converted to a deal |
-| `lost` | The opportunity was lost |
+| `open` | Newly created, not yet translated into leads |
+| `shared` | Has generated at least one lead that has been shared |
+| `claimed` | At least one lead has been claimed by a partner firm |
+| `won` | At least one lead converted to a deal |
+| `lost` | All leads were lost or no solution found |
 | `expired` | The opportunity expired without action |
 
 ### Opportunity Sources
-`manual` | `call` | `email` | `ossy` -- Indicates how the opportunity was created.
+`manual` | `call` | `email` | `ossy` -- Indicates how the opportunity was discovered.
 
 ### Creating Opportunities
 - `POST /api/opportunities` with `{ firmId, title, description?, requiredSkills?, requiredIndustries?, estimatedValue?, timeline?, clientType?, source? }`
@@ -135,10 +177,78 @@ Opportunities represent business leads that can be shared with trusted partners.
 - `PATCH /api/opportunities/[id]` -- Update any field (status, title, description, skills, etc.)
 
 ### AI Opportunity Extraction
-- `src/lib/ai/opportunity-extractor.ts` scans text (call transcripts, emails, chat messages) for opportunity signals
-- Detects phrases like: "We need help with...", "Our client needs...", "We don't do [service]..."
+- `src/lib/ai/opportunity-extractor.ts` scans text (call transcripts, emails, chat messages) for pain point signals
+- Detects phrases like: "We need help with...", "Our client is struggling with...", "We don't do [service]...", "We're losing customers because..."
 - Returns structured opportunities with confidence scores (threshold: >= 0.5)
 - Model: `google/gemini-2.0-flash-001` via OpenRouter
+
+---
+
+## Lead System
+
+> **STATUS: NOT YET BUILT** — Schema and API do not exist yet. This is a planned concept that must be designed and implemented.
+
+Leads are **specific solutions** derived from Opportunities. They are concrete, scoped service offerings that directly address the pain point identified in the parent Opportunity. Leads have a higher probability of closing because they represent a clear match between client need and service provider capability.
+
+### Lead Characteristics
+- Always linked to a parent `Opportunity` via `opportunity_id`
+- Represents one specific solution path (a single Opportunity can have multiple Leads)
+- Scoped to a specific service, skill set, or firm type
+- Shareable with partner firms who have the matching capability
+- Trackable through a sales pipeline (shared → claimed → won/lost)
+
+### Lead Statuses (planned pgEnum `lead_status`)
+| Status | Meaning |
+|---|---|
+| `draft` | AI-generated, not yet reviewed |
+| `open` | Reviewed and ready to be shared |
+| `shared` | Shared with one or more partner firms |
+| `claimed` | A partner firm has claimed this lead |
+| `won` | Converted to an active engagement |
+| `lost` | Not converted — client went elsewhere or need dissolved |
+| `expired` | No action taken within expiry window |
+
+### Lead Sources (planned)
+`ai_generated` | `manual` | `ossy` -- How the lead was created from the opportunity.
+
+### Planned Schema (`leads` table)
+| Column | Type | Notes |
+|---|---|---|
+| `id` | text PK | |
+| `opportunity_id` | text FK → opportunities | Parent pain point |
+| `firm_id` | text FK → service_firms | Firm that owns this lead |
+| `title` | text | Specific solution title |
+| `description` | text | How this solution addresses the opportunity |
+| `required_skills` | jsonb (string[]) | Skills needed to deliver this solution |
+| `required_industries` | jsonb (string[]) | Relevant industry context |
+| `estimated_value` | text | Deal size estimate |
+| `timeline` | text | Expected engagement timeline |
+| `status` | lead_status enum | Pipeline stage |
+| `source` | text | ai_generated \| manual \| ossy |
+| `confidence` | real | AI confidence score (min 0.5) |
+| `created_at` | timestamp | |
+| `updated_at` | timestamp | |
+
+### Planned Schema (`lead_shares` table)
+Tracks which partner firms a lead was shared with — mirrors `opportunity_shares` pattern.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | text PK | |
+| `lead_id` | text FK → leads | |
+| `shared_with_firm_id` | text FK → service_firms | |
+| `shared_by` | text FK → users | |
+| `viewed_at` | timestamp | |
+| `claimed_at` | timestamp | |
+
+### Neo4j Representation (planned)
+```cypher
+(:Opportunity { id, title, painPoint, source, confidence })
+  -[:GENERATED_LEAD]->(:Lead { id, title, solution, estimatedValue })
+    -[:MATCHED_TO]->(:ServiceFirm)
+    -[:REQUIRES_SKILL]->(:Skill)
+    -[:FOR_INDUSTRY]->(:Industry)
+```
 
 ---
 
