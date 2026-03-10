@@ -327,8 +327,11 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   // When enrichment finishes ("done") AND Ossy is idle ("ready"), send a
   // natural nudge so Ossy receives the enrichment context and can ask the
   // first follow-up question without the user having to type anything.
+  // IMPORTANT: Guest-only — authenticated users get their greeting from the
+  // greeting endpoint and should NOT receive this auto-nudge.
   useEffect(() => {
     if (
+      isGuest &&
       enrichmentWasLoadingRef.current &&
       enrichmentStatus === "done" &&
       !enrichmentNudgeSentRef.current &&
@@ -342,7 +345,7 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
       }, 600);
       return () => clearTimeout(timer);
     }
-  }, [enrichmentStatus, status, sendMessage]);
+  }, [isGuest, enrichmentStatus, status, sendMessage]);
 
   useEffect(() => {
     if (scrollRef.current) {

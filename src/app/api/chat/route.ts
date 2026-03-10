@@ -9,7 +9,7 @@ import { getOrgPlan } from "@/lib/billing/usage-checker";
 import { PLAN_LIMITS } from "@/lib/billing/plan-limits";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { conversations, messages as messagesTable, serviceFirms } from "@/lib/db/schema";
+import { conversations, messages as messagesTable, serviceFirms, partnerPreferences } from "@/lib/db/schema";
 import { logUsage } from "@/lib/ai/gateway";
 import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
 import { extractMemoriesFromConversation } from "@/lib/ai/memory-extractor";
@@ -91,17 +91,68 @@ export async function POST(req: Request) {
       }
     }
 
-    const hasCompletedOnboarding = !!memoryBlock;
     // Tools are available for any authenticated user with a firm — not gated behind onboarding
     const hasToolAccess = !!firmId;
 
+    // ─── Check for existing partner preferences (from guest migration or previous onboarding) ───
+    // This prevents re-onboarding users who completed preferences as a guest and then signed up.
+    let collectedPreferences: Record<string, string | string[]> | undefined;
+    let hasPartnerPrefs = false;
+    if (firmId) {
+      try {
+        const [prefRow] = await db
+          .select({
+            preferredFirmTypes: partnerPreferences.preferredFirmTypes,
+            preferredSizeBands: partnerPreferences.preferredSizeBands,
+            preferredIndustries: partnerPreferences.preferredIndustries,
+            preferredMarkets: partnerPreferences.preferredMarkets,
+            rawOnboardingData: partnerPreferences.rawOnboardingData,
+          })
+          .from(partnerPreferences)
+          .where(eq(partnerPreferences.firmId, firmId))
+          .limit(1);
+
+        if (prefRow) {
+          const prefs: Record<string, string | string[]> = {};
+          // Dedicated columns → preference field names
+          if (prefRow.preferredFirmTypes?.length) prefs.preferredPartnerTypes = prefRow.preferredFirmTypes;
+          if (prefRow.preferredSizeBands?.length) prefs.preferredPartnerSize = prefRow.preferredSizeBands;
+          if (prefRow.preferredIndustries?.length) prefs.requiredPartnerIndustries = prefRow.preferredIndustries;
+          if (prefRow.preferredMarkets?.length) prefs.preferredPartnerLocations = prefRow.preferredMarkets;
+          // Raw onboarding data (JSONB) → individual fields
+          const raw = prefRow.rawOnboardingData as Record<string, string | string[]> | null;
+          if (raw) {
+            for (const key of ["desiredPartnerServices", "idealPartnerClientSize", "idealProjectSize", "typicalHourlyRates", "partnershipRole"]) {
+              if (raw[key] != null) {
+                const v = raw[key];
+                if (Array.isArray(v) ? v.length > 0 : v !== "") {
+                  prefs[key] = v;
+                }
+              }
+            }
+          }
+          if (Object.keys(prefs).length > 0) {
+            collectedPreferences = prefs;
+            hasPartnerPrefs = true;
+            console.log(`[Ossy] Found ${Object.keys(prefs).length} existing partner preferences for ${firmId}`);
+          }
+        }
+      } catch (err) {
+        console.warn("[Ossy] Failed to load partner preferences:", err);
+      }
+    }
+
+    // Onboarding is "complete" if we have memory OR if the user already has partner preferences
+    const hasCompletedOnboarding = !!memoryBlock || hasPartnerPrefs;
+
     const systemPrompt = getOssyPrompt({
       userName: userName ?? undefined,
-      isOnboarding: !memoryBlock && messages.length <= 2,
+      isOnboarding: !hasCompletedOnboarding && messages.length <= 2,
       hasCompletedOnboarding,
       hasToolAccess,
       websiteContext: websiteContext ?? undefined,
       memoryContext: memoryBlock,
+      collectedPreferences,
     });
 
     const modelMessages = await convertToModelMessages(messages);

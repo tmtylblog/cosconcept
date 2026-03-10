@@ -363,8 +363,9 @@ ${context.websiteContext}\n`;
     const nextQ = answeredNums.length > 0 ? Math.max(...answeredNums) + 1 : 1;
 
     if (nextQ > 9) {
-      // ALL 9 questions are answered — this is a returning guest who completed onboarding
-      prompt += `\n## Already Collected Preferences (ALL 9 COMPLETE)
+      if (context?.isGuest) {
+        // ALL 9 complete as a GUEST — prompt them to sign up
+        prompt += `\n## Already Collected Preferences (ALL 9 COMPLETE)
 The user has ALREADY answered ALL 9 partner preference questions. Their data is saved and visible on the screen next to this chat.
 
 ${prefLines}
@@ -375,6 +376,20 @@ ${prefLines}
 3. Stress that the ONLY remaining step is to **create a free account** to unlock partner matching. Frame it around value: "I've already identified some great potential partners based on your preferences — just sign up to see your matches."
 4. Call the \`request_login\` tool so the login button appears in the chat.
 5. Keep it to 2-3 sentences max. Don't re-list their preferences — they can see them on screen.\n`;
+      } else {
+        // ALL 9 complete and AUTHENTICATED — they've finished onboarding!
+        prompt += `\n## Partner Preferences (ALL 9 COMPLETE — Onboarding Done!)
+This user has completed ALL 9 partner preference questions. Their profile is fully set up.
+
+${prefLines}
+
+### INSTRUCTIONS:
+1. Do NOT re-ask any preference questions. Onboarding is COMPLETE.
+2. Greet them warmly — they're ready to use the platform.
+3. Reference their preferences naturally when helping them (e.g., "Since you're looking for AI/ML partners...")
+4. Proactively suggest searching for partners based on their stated preferences.
+5. If they ask to update any preferences, use the \`update_profile\` tool.\n`;
+      }
     } else {
       // Partially answered — resume from where they left off
       prompt += `\n## Already Collected Preferences
