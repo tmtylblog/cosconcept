@@ -174,7 +174,11 @@ function AppLayoutInner({
       setShowCelebration(true);
       setChatKey((k) => k + 1); // Fresh ChatPanel mount for greeting
       // Celebration shows for 2.5s while authenticated layout loads behind it
-      const timer = setTimeout(() => setShowCelebration(false), 2500);
+      const timer = setTimeout(() => {
+        setShowCelebration(false);
+        // Navigate to Discover so users start exploring partners immediately
+        router.push("/discover");
+      }, 2500);
       return () => clearTimeout(timer);
     }
     prevOnboardingCompleteRef.current = onboardingComplete;

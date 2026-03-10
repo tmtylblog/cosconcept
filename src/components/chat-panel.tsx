@@ -86,7 +86,8 @@ function extractUrl(text: string): string | null {
   return real || null;
 }
 
-const defaultWelcomeMessages: UIMessage[] = [
+/** Default welcome for guests / landing page — asks for firm domain */
+const guestWelcomeMessages: UIMessage[] = [
   {
     id: "welcome",
     role: "assistant",
@@ -94,6 +95,20 @@ const defaultWelcomeMessages: UIMessage[] = [
       {
         type: "text",
         text: "Hey! I'm Ossy, your AI growth consultant. Drop your firm's website or domain below and I'll start researching your company right away.",
+      },
+    ],
+  },
+];
+
+/** Default welcome for authenticated post-onboarding users (before personalized greeting loads) */
+const authWelcomeMessages: UIMessage[] = [
+  {
+    id: "welcome-auth",
+    role: "assistant",
+    parts: [
+      {
+        type: "text",
+        text: "Welcome back! I'm ready to help you discover partners and grow your business. Try searching for partners on the Discover page, or ask me anything about your partnership strategy.",
       },
     ],
   },
@@ -209,14 +224,15 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           if (msgs.length > 0) return msgs;
         }
       } catch { /* ignore */ }
-      return defaultWelcomeMessages;
+      return guestWelcomeMessages;
     }
     // Authenticated onboarding: set correct welcome synchronously
     // (can't rely on async loadGreeting — useChat initializes from this value)
     if (!isGuest && isOnboarding) {
       return onboardingWelcomeMessages;
     }
-    return defaultWelcomeMessages;
+    // Post-onboarding auth: show contextual default while personalized greeting loads
+    return authWelcomeMessages;
   });
   // For guests and onboarding users, messages are set synchronously — no need to fetch greeting
   // For post-onboarding auth users, historyLoaded=false triggers loadGreeting for personalized greeting
@@ -307,8 +323,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         }
       }
 
-      // Not a returning user — use default onboarding welcome
-      // (initialMessages already set to defaultWelcomeMessages)
+      // Not a returning user — keep the authWelcomeMessages set synchronously
     } catch (err) {
       console.error("[ChatPanel] Failed to load greeting:", err);
     } finally {
