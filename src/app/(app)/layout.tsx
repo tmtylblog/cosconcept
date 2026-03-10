@@ -7,15 +7,21 @@ import { NavBar } from "@/components/nav-bar";
 import { ChatPanel } from "@/components/chat-panel";
 import { LoginPanel } from "@/components/login-panel";
 import { GuestEnrichmentPanel } from "@/components/guest-enrichment-panel";
+import { AuthOnboardingPanel } from "@/components/auth-onboarding-panel";
 import { EnrichmentProvider, useEnrichment } from "@/hooks/use-enrichment";
 import { ProfileProvider } from "@/hooks/use-profile";
 import { GuestDataProvider, useGuestData } from "@/hooks/use-guest-data";
+import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { useSession, useActiveOrganization } from "@/lib/auth-client";
 import { getEmailDomain, isPersonalEmail } from "@/lib/email-validation";
-import { MessageCircle, X } from "lucide-react";
+import { MessageCircle, X, Loader2 } from "lucide-react";
 
-// ─── Guest Phase Type ───────────────────────────────────────
-type GuestPhase = "landing" | "enriching" | "authenticated";
+// ─── App Phase Type ─────────────────────────────────────────
+// Phase 1: landing — guest, no domain submitted
+// Phase 2: enriching — guest, domain submitted, enrichment in progress
+// Phase 3: onboarding — authenticated but NOT all 9 prefs complete
+// Phase 4: authenticated — onboarding complete, full app access
+type AppPhase = "landing" | "enriching" | "onboarding" | "authenticated";
 
 export default function AppLayout({
   children,
@@ -72,12 +78,30 @@ function AppLayoutInner({
   const [chatKey, setChatKey] = useState(0);
   const [mobileChat, setMobileChat] = useState(false);
 
-  // ─── Derive guest phase ───────────────────────────────────
-  const guestPhase: GuestPhase = session?.user
-    ? "authenticated"
-    : enrichmentStatus === "idle"
-      ? "landing"
-      : "enriching";
+  // ─── Onboarding status (authenticated users only) ─────────
+  const {
+    onboardingComplete,
+    isLoading: onboardingLoading,
+    answeredCount,
+    totalRequired,
+  } = useOnboardingStatus(session?.user ? activeOrg?.id : undefined);
+
+  // Track previous onboardingComplete to detect transition → bump chatKey
+  const prevOnboardingCompleteRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (prevOnboardingCompleteRef.current === false && onboardingComplete === true) {
+      // Onboarding just completed — force fresh ChatPanel mount for greeting
+      setChatKey((k) => k + 1);
+    }
+    prevOnboardingCompleteRef.current = onboardingComplete;
+  }, [onboardingComplete]);
+
+  // ─── Derive app phase (4 states) ──────────────────────────
+  const appPhase: AppPhase = !session?.user
+    ? (enrichmentStatus === "idle" ? "landing" : "enriching")
+    : onboardingComplete
+      ? "authenticated"
+      : "onboarding";
 
   // ─── Auto-enrich on sign-in: extract domain from email ──────
   // Handles domain aliases (e.g., email is @chameleon.co but firm website is chameleoncollective.com).
@@ -192,7 +216,7 @@ function AppLayoutInner({
   return (
     <>
       {/* ─── PHASE 1: LANDING (guest, no domain yet) ─── */}
-      {guestPhase === "landing" && (
+      {appPhase === "landing" && (
         <div className="flex h-screen overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
           {/* Blurred backdrop with centered chat */}
           <div className="fixed inset-0 z-30 flex flex-col items-center bg-cos-cloud/80 backdrop-blur-sm">
@@ -242,7 +266,7 @@ function AppLayoutInner({
       )}
 
       {/* ─── PHASE 2: ENRICHING (guest, domain submitted) ─── */}
-      {guestPhase === "enriching" && (
+      {appPhase === "enriching" && (
         <div className="animate-fade-slide-in flex h-screen overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
           {/* Center: Enrichment cards — mt-auto anchors to bottom while keeping scroll */}
           <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-cos-cloud/60">
@@ -306,8 +330,82 @@ function AppLayoutInner({
         </div>
       )}
 
-      {/* ─── PHASE 3: AUTHENTICATED ─── */}
-      {guestPhase === "authenticated" && (
+      {/* ─── PHASE 3: ONBOARDING (authenticated, preferences incomplete) ─── */}
+      {appPhase === "onboarding" && (
+        <>
+          {/* Brief loading spinner while first status check resolves — avoids flash */}
+          {onboardingLoading ? (
+            <div className="flex h-screen items-center justify-center bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-cos-electric" />
+                <p className="text-sm text-cos-slate">Loading your profile...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="animate-fade-slide-in flex h-screen overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
+              {/* Center: Auth onboarding panel — enrichment + preference cards */}
+              <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-cos-cloud/60">
+                <AuthOnboardingPanel
+                  answeredCount={answeredCount}
+                  totalRequired={totalRequired}
+                />
+              </main>
+
+              {/* Right: Chat panel — desktop (authenticated onboarding mode) */}
+              <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-border/30 bg-cos-cloud/60 lg:flex">
+                <ChatPanel
+                  key={chatKey}
+                  isGuest={false}
+                  isOnboarding={true}
+                  onRequestLogin={handleRequestLogin}
+                />
+              </aside>
+
+              {/* Mobile: Floating Ossy button + full-screen chat overlay */}
+              {!mobileChat && (
+                <button
+                  onClick={() => setMobileChat(true)}
+                  className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-cos-electric text-white shadow-lg transition-transform hover:scale-105 lg:hidden"
+                  aria-label="Open Ossy chat"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                </button>
+              )}
+              {mobileChat && (
+                <div className="fixed inset-0 z-50 flex flex-col bg-cos-cloud lg:hidden">
+                  <div className="flex h-12 items-center justify-end border-b border-cos-border/30 px-4">
+                    <button
+                      onClick={() => setMobileChat(false)}
+                      className="flex h-8 w-8 items-center justify-center rounded-cos-full text-cos-slate-dim hover:bg-cos-cloud-dim hover:text-cos-midnight"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <ChatPanel
+                      key={chatKey}
+                      isGuest={false}
+                      isOnboarding={true}
+                      onRequestLogin={handleRequestLogin}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* DEV: Simulate New Onboarding — bottom left */}
+              <button
+                onClick={handleSimulateNewUser}
+                className="fixed bottom-6 left-6 z-40 rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember backdrop-blur-sm transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
+              >
+                Simulate New Onboarding
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─── PHASE 4: AUTHENTICATED (onboarding complete, full app access) ─── */}
+      {appPhase === "authenticated" && (
         <div className="flex h-screen overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
           {/* Left: Collapsible navigation */}
           <NavBar

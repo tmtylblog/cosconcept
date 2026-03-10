@@ -86,10 +86,11 @@ const defaultWelcomeMessages: UIMessage[] = [
 
 interface ChatPanelProps {
   isGuest?: boolean;
+  isOnboarding?: boolean;
   onRequestLogin?: () => void;
 }
 
-export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
+export function ChatPanel({ isGuest, isOnboarding, onRequestLogin }: ChatPanelProps) {
   const { data: activeOrg } = useActiveOrganization();
   const {
     status: enrichmentStatus,
@@ -209,9 +210,29 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
   }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id]);
 
   // Load greeting on mount — clean slate every session.
-  // Returning users get a personalized greeting; new users get onboarding welcome.
+  // In onboarding mode: hardcoded onboarding welcome (skip greeting endpoint).
+  // Post-onboarding: returning users get personalized greeting; new users get default.
   const loadGreeting = useCallback(async () => {
     if (isGuest) return;
+
+    // Authenticated onboarding phase — skip the greeting API, use fixed welcome
+    if (isOnboarding) {
+      setInitialMessages([
+        {
+          id: "onboarding-welcome",
+          role: "assistant" as const,
+          parts: [
+            {
+              type: "text" as const,
+              text: "Welcome! I've got your firm data ready. Let's set up your partner preferences -- just a few quick questions and you'll be all set.",
+            },
+          ],
+        },
+      ]);
+      setHistoryLoaded(true);
+      return;
+    }
+
     try {
       const orgParam = activeOrg?.id ? `?organizationId=${activeOrg.id}` : "";
 
@@ -240,7 +261,7 @@ export function ChatPanel({ isGuest, onRequestLogin }: ChatPanelProps) {
     } finally {
       setHistoryLoaded(true);
     }
-  }, [isGuest, activeOrg?.id]);
+  }, [isGuest, isOnboarding, activeOrg?.id]);
 
   useEffect(() => {
     if (!historyLoaded) {

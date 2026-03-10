@@ -142,12 +142,15 @@ export async function POST(req: Request) {
       }
     }
 
-    // Onboarding is "complete" if we have memory OR if the user already has partner preferences
-    const hasCompletedOnboarding = !!memoryBlock || hasPartnerPrefs;
+    // Onboarding is "complete" only when ALL 9 partner preferences are stored
+    const allPrefsCount = collectedPreferences ? Object.keys(collectedPreferences).length : 0;
+    const allPrefsComplete = allPrefsCount >= 9;
+    const hasCompletedOnboarding = allPrefsComplete;
 
     const systemPrompt = getOssyPrompt({
       userName: userName ?? undefined,
-      isOnboarding: !hasCompletedOnboarding && messages.length <= 2,
+      // Always onboarding until all 9 prefs are confirmed — regardless of message count
+      isOnboarding: !allPrefsComplete,
       hasCompletedOnboarding,
       hasToolAccess,
       websiteContext: websiteContext ?? undefined,
