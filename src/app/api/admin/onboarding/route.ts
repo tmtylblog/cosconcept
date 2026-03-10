@@ -87,6 +87,7 @@ export async function GET(req: Request) {
       "preferredPartnerSize",
       "idealProjectSize",
       "typicalHourlyRates",
+      "partnershipRole",
     ];
 
     const questionCompletion: Record<string, { answered: number; rate: number }> = {};

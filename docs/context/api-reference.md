@@ -1,6 +1,6 @@
 # 14. API Reference
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-10
 
 Comprehensive reference for all API routes in `src/app/api/`. Organized by domain.
 
@@ -199,7 +199,12 @@ All admin routes require `superadmin` role unless noted. Prefix: `/api/admin/`.
 | GET | `/api/admin/metrics` | Platform-wide metrics: total orgs, users, plan distribution, MRR, expert/client counts. | superadmin |
 | GET | `/api/admin/finance` | AI cost analytics. Breakdown by feature/model/org/user. Daily trend data. Query params: `period`, `orgId`, `userId`, `breakdown`. | superadmin |
 | GET | `/api/admin/api-health` | Health checks for all external APIs: OpenRouter, PDL, Jina, Deepgram, ElevenLabs, Resend, Recall.ai, Stripe, Neo4j, Neon Postgres. Returns quota/usage for each. | superadmin |
-| GET | `/api/admin/onboarding` | Onboarding funnel analytics: domain submissions, cache hit rates, enrichment success rates, interview completion, drop-off analysis, daily trends, recent sessions. | superadmin |
+| GET | `/api/admin/onboarding` | Onboarding funnel analytics: domain submissions, cache hit rates, enrichment success rates, interview completion, drop-off analysis, daily trends, recent sessions. Query param: `period=7d\|30d\|90d\|all`. | superadmin |
+| GET | `/api/admin/onboarding/sessions/[domain]` | Full session detail for a domain: all `onboarding_events` ordered ASC, enrichment audit log, firm enrichment data, partner preferences. `[domain]` is URL-encoded (e.g. `acme.com`). Returns 404 if no events found. | superadmin |
+| POST | `/api/admin/search/test` | Debug run of the 3-layer cascade search. Body: `{ rawQuery, searcherFirmId?, skipLlmRanking? }`. Returns per-layer candidates (layer1/layer2/layer3), parsed filters, and stats. | superadmin |
+| GET | `/api/admin/abstractions` | Lists abstraction profiles joined to serviceFirms. Stats: totalFirms, profilesGenerated, missingProfiles, avgConfidence. Query params: `missing=true` (firms with no profile), `limit`, `offset`. | superadmin |
+| GET | `/api/admin/abstractions/[firmId]` | Full abstraction profile for one firm (hiddenNarrative, topSkills, typicalClientProfile, partnershipReadiness, evidenceSources, confidenceScores). | superadmin |
+| POST | `/api/admin/abstractions/[firmId]` | Triggers `generateFirmAbstraction()` to regenerate the abstraction profile. Returns the newly generated profile. | superadmin |
 
 ### Organizations
 

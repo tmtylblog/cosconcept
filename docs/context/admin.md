@@ -1,6 +1,6 @@
 # 12. Admin Dashboard
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-10
 
 ## Overview
 
@@ -36,7 +36,7 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 
 ---
 
-## Admin Pages (16 pages)
+## Admin Pages (18 pages)
 
 ### 1. Overview (Dashboard Home)
 - **Route:** `/admin`
@@ -108,8 +108,21 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 ### 12. Onboarding Funnel
 - **Route:** `/admin/onboarding`
 - **File:** `src/app/(admin)/admin/onboarding/page.tsx`
-- **Purpose:** Tracks firm onboarding from domain entry to profile completion. Shows conversion funnel (domain submitted -> enrichment complete -> interview started -> interview complete), enrichment breakdown (cache distribution, stage success rates for PDL/scrape/classify), interview question completion heatmap with drop-off analysis, daily trend chart, and recent sessions table (last 50). Filterable by period.
+- **Purpose:** Tracks firm onboarding from domain entry to profile completion. Shows conversion funnel (domain submitted -> enrichment complete -> interview started -> interview complete), enrichment breakdown (cache distribution, stage success rates for PDL/scrape/classify), interview question completion heatmap with drop-off analysis, daily trend chart, and recent sessions table (last 50). Each session row has a "View" link to the session detail page. Filterable by period.
 - **API:** `GET /api/admin/onboarding?period=30d`
+
+### 17. Onboarding Session Detail
+- **Route:** `/admin/onboarding/sessions/[domain]`
+- **File:** `src/app/(admin)/admin/onboarding/sessions/[domain]/page.tsx`
+- **Purpose:** Per-domain onboarding drill-down. Shows: (1) header with firm name, overall status badge, local timestamps, and a cache status banner (full hit / partial hit / miss, source = enrichment_cache / postgres / neo4j, gaps list for partial); (2) event timeline from `onboarding_events` with stage badges and expandable metadata JSON; (3) enrichment pipeline audit tabbed by phase (PDL/jina/classifier/etc) with cost, duration, confidence, extracted data; (4) interview answers from `partnerPreferences`; (5) full enrichment JSON from `serviceFirms.enrichmentData`.
+- **API:** `GET /api/admin/onboarding/sessions/[domain]`
+- **Note:** `[domain]` is URL-encoded domain string (e.g. `acme.com`). All timestamps display in the browser's local timezone via `toLocaleString()`.
+
+### 18. Search Test Tool (Matching)
+- **Route:** `/admin/search`
+- **File:** `src/app/(admin)/admin/search/page.tsx`
+- **Purpose:** Two sections. (1) **Search Test Tool**: natural language query input, optional searcher firm ID, skip-LLM toggle, Run Search button. Results show 3 expandable layers — Layer 1 (Neo4j structured filter candidates with structuredScore), Layer 2 (vector re-ranked with vectorScore), Layer 3 (LLM-ranked with llmScore and matchExplanation) — plus parsed filters, duration, and estimated cost. (2) **Abstraction Profile Status**: stat cards (total firms, profiles generated, missing, avg confidence) and a table of firms with confidence, top services, last generated, and per-row Regenerate button.
+- **API:** `POST /api/admin/search/test`, `GET /api/admin/abstractions?missing=true`, `GET /api/admin/abstractions/[firmId]`, `POST /api/admin/abstractions/[firmId]`
 
 ### 13. Email Queue
 - **Route:** `/admin/email`
@@ -219,6 +232,15 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/admin/onboarding?period=` | Onboarding funnel analytics |
+| GET | `/api/admin/onboarding/sessions/[domain]` | Full session detail for a domain (events, enrichment audit, interview answers, firm profile) |
+
+### Search & Matching
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/admin/search/test` | Run a debug search through the 3-layer cascade; returns intermediate per-layer candidates + stats |
+| GET | `/api/admin/abstractions?missing=&limit=&offset=` | List abstraction profiles with stats; `?missing=true` shows firms without a profile |
+| GET | `/api/admin/abstractions/[firmId]` | Full abstraction profile detail for one firm |
+| POST | `/api/admin/abstractions/[firmId]` | Trigger `generateFirmAbstraction()` to regenerate profile |
 
 ### Enrichment
 | Method | Path | Purpose |
@@ -242,12 +264,13 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 
 **File:** `src/app/(admin)/layout.tsx`
 
-The layout renders a fixed sidebar (240px) with a main content area (max-width 6xl). The sidebar has four nav sections:
+The layout renders a fixed sidebar (240px) with a main content area (max-width 6xl). The sidebar has five nav sections:
 
 1. **Knowledge Graph** -- Knowledge Graph (accent link)
 2. **Platform** -- Organizations, Users
 3. **Operations** -- Subscriptions, AI Costs, API Health, Partnerships
-4. **Tools** -- Neo4j, APIs, Data Import, Enrichment, Onboarding
+4. **Matching** -- Search Test, Onboarding
+5. **Tools** -- Neo4j, APIs, Data Import, Enrichment
 
 Footer: "Back to App" link to `/dashboard`.
 
@@ -289,7 +312,9 @@ Knowledge Graph tab components:
 | **Neo4j Admin** | `/admin/neo4j` | Taxonomy seeding, legacy migration |
 | **External APIs** | `/admin/apis` | Public API docs, health, integration guide |
 | **Enrichment Audit** | `/admin/enrichment` | Per-firm enrichment trail, raw I/O, costs |
-| **Onboarding Funnel** | `/admin/onboarding` | Conversion funnel, cache/enrichment metrics, question completion, session table |
+| **Onboarding Funnel** | `/admin/onboarding` | Conversion funnel, cache/enrichment metrics, question completion, session table with "View" links |
+| **Onboarding Session** | `/admin/onboarding/sessions/[domain]` | Per-domain event timeline, cache banner, enrichment audit, interview answers, firm profile JSON |
+| **Search Test Tool** | `/admin/search` | 3-layer cascade debug, per-layer candidates, abstraction profile management |
 | **Email Queue** | `/admin/email` | Approve/reject/edit Ossy emails, sent/received history |
 | **Email Settings** | `/admin/email-settings` | Test mode toggle, whitelist management |
 | **Experts** | `/admin/experts` | Legacy view (redirects to KG) |

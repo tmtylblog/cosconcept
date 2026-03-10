@@ -87,6 +87,7 @@ const QUESTION_LABELS: Record<string, string> = {
   preferredPartnerSize: "Partner Size",
   idealProjectSize: "Project Size",
   typicalHourlyRates: "Hourly Rates",
+  partnershipRole: "Partnership Role",
 };
 
 const QUESTION_ORDER = [
@@ -98,6 +99,7 @@ const QUESTION_ORDER = [
   "preferredPartnerSize",
   "idealProjectSize",
   "typicalHourlyRates",
+  "partnershipRole",
 ];
 
 // ─── Components ───────────────────────────────────────
