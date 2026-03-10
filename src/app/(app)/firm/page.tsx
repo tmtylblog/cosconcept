@@ -21,10 +21,15 @@ import {
   ChevronRight,
   Star,
   Mail,
+  Handshake,
+  DollarSign,
+  Target,
+  Compass,
 } from "lucide-react";
 import Link from "next/link";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
+import { useProfile } from "@/hooks/use-profile";
 import { useLegacyData } from "@/hooks/use-legacy-data";
 import { useDbExperts } from "@/hooks/use-db-experts";
 import { cn } from "@/lib/utils";
@@ -45,6 +50,7 @@ interface FirmEdits {
 export default function FirmPage() {
   const { data: activeOrg } = useActiveOrganization();
   const { status, result } = useEnrichment();
+  const { data: profileData, hydrated: profileHydrated } = useProfile();
   const {
     experts: legacyExperts,
     totalExperts: legacyTotalExperts,
@@ -382,6 +388,100 @@ export default function FirmPage() {
         emptyHint="Business languages"
       />
 
+      {/* ─── Partner Preferences ─────────────────────────────── */}
+      {profileHydrated && (
+        <>
+          {/* Section divider */}
+          <div className="flex items-center gap-3 pt-2">
+            <div className="h-px flex-1 bg-cos-border" />
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-cos-electric">
+              <Handshake className="h-3.5 w-3.5" />
+              Partner Preferences
+            </p>
+            <div className="h-px flex-1 bg-cos-border" />
+          </div>
+
+          {/* Desired Partner Services (Q1) */}
+          <PreferenceTagSection
+            icon={<Briefcase className="h-4 w-4" />}
+            title="Desired Partner Services"
+            tags={asArray(profileData.desiredPartnerServices)}
+            tagStyle="rounded-cos-pill bg-cos-electric/10 px-2.5 py-1 text-xs font-medium text-cos-electric"
+            emptyHint="Services you want from partners — tell Ossy to set these"
+          />
+
+          {/* Required Partner Industries (Q2) */}
+          <PreferenceTagSection
+            icon={<Building2 className="h-4 w-4" />}
+            title="Required Partner Industries"
+            tags={asArray(profileData.requiredPartnerIndustries)}
+            tagStyle="rounded-cos-pill bg-cos-signal/10 px-2.5 py-1 text-xs font-medium text-cos-signal"
+            emptyHint="Industry experience required for partner matches"
+          />
+
+          {/* Ideal Partner Client Size (Q3) */}
+          <PreferenceTagSection
+            icon={<Users className="h-4 w-4" />}
+            title="Ideal Partner Client Size"
+            tags={asArray(profileData.idealPartnerClientSize)}
+            tagStyle="rounded-cos-pill bg-cos-midnight/8 px-2.5 py-1 text-xs text-cos-slate"
+            emptyHint="What size companies your ideal partners serve"
+          />
+
+          {/* Partner Locations (Q4) */}
+          <PreferenceTagSection
+            icon={<MapPin className="h-4 w-4" />}
+            title="Partner Locations"
+            tags={asArray(profileData.preferredPartnerLocations)}
+            tagStyle="rounded-cos-pill bg-cos-cloud-dim px-2.5 py-1 text-xs text-cos-slate"
+            emptyHint="Where partners should be located"
+          />
+
+          {/* Partner Types (Q5) */}
+          <PreferenceTagSection
+            icon={<Target className="h-4 w-4" />}
+            title="Partner Firm Types"
+            tags={asArray(profileData.preferredPartnerTypes)}
+            tagStyle="rounded-cos-pill bg-cos-electric/10 px-2.5 py-1 text-xs font-medium text-cos-electric"
+            emptyHint="Types of firms you want to partner with"
+          />
+
+          {/* Partner Size (Q6) */}
+          <PreferenceTagSection
+            icon={<BarChart3 className="h-4 w-4" />}
+            title="Preferred Partner Size"
+            tags={asArray(profileData.preferredPartnerSize)}
+            tagStyle="rounded-cos-pill bg-cos-midnight/8 px-2.5 py-1 text-xs text-cos-slate"
+            emptyHint="Size of partner firms you prefer"
+          />
+
+          {/* Project Size (Q7) */}
+          <PreferenceTagSection
+            icon={<DollarSign className="h-4 w-4" />}
+            title="Ideal Project Size"
+            tags={asArray(profileData.idealProjectSize)}
+            tagStyle="rounded-cos-pill bg-cos-warm/10 px-2.5 py-1 text-xs font-medium text-cos-warm"
+            emptyHint="Typical project budgets for partner work"
+          />
+
+          {/* Hourly Rates (Q8) */}
+          <PreferenceSingleSection
+            icon={<DollarSign className="h-4 w-4" />}
+            title="Typical Hourly Rates"
+            value={typeof profileData.typicalHourlyRates === "string" ? profileData.typicalHourlyRates : undefined}
+            emptyHint="Hourly rate range for partner subcontractors"
+          />
+
+          {/* Partnership Role (Q9) */}
+          <PreferenceSingleSection
+            icon={<Compass className="h-4 w-4" />}
+            title="Partnership Role"
+            value={typeof profileData.partnershipRole === "string" ? profileData.partnershipRole : undefined}
+            emptyHint="Whether you give work, receive work, or both"
+          />
+        </>
+      )}
+
       {/* Experts / Team Members */}
       <ProfileSection
         icon={<Users className="h-4 w-4" />}
@@ -574,6 +674,71 @@ function EditableTagSection({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Normalize a preference value to a string array (handles string | string[] | undefined) */
+function asArray(val: unknown): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.filter(Boolean);
+  if (typeof val === "string" && val) return [val];
+  return [];
+}
+
+/** Read-only tag display for partner preferences */
+function PreferenceTagSection({
+  icon,
+  title,
+  tags,
+  tagStyle,
+  emptyHint,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  tags: string[];
+  tagStyle: string;
+  emptyHint: string;
+}) {
+  if (tags.length === 0) return null;
+  return (
+    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-cos-slate-dim">{icon}</span>
+        <p className="text-xs font-semibold uppercase tracking-wider text-cos-midnight">{title}</p>
+        <span className="rounded-cos-full bg-cos-electric/10 px-1.5 py-0.5 text-[10px] font-semibold text-cos-electric">
+          {tags.length}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {tags.map((tag) => (
+          <span key={tag} className={tagStyle}>{tag}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Read-only single value display for partner preferences */
+function PreferenceSingleSection({
+  icon,
+  title,
+  value,
+  emptyHint,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  value?: string;
+  emptyHint: string;
+}) {
+  if (!value) return null;
+  return (
+    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-cos-slate-dim">{icon}</span>
+        <p className="text-xs font-semibold uppercase tracking-wider text-cos-midnight">{title}</p>
+      </div>
+      <p className="text-sm font-medium text-cos-midnight">{value}</p>
     </div>
   );
 }
