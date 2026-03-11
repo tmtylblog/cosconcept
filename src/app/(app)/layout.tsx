@@ -70,7 +70,7 @@ function AppLayoutInner({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, isPending: sessionPending } = useSession();
   const { data: activeOrg } = useActiveOrganization();
   const {
     status: enrichmentStatus,
@@ -383,6 +383,27 @@ function AppLayoutInner({
       router.push("/dashboard");
     }
   };
+
+  // ─── Session loading gate ──────────────────────────────────
+  // While Better Auth is resolving the session cookie (isPending),
+  // show a loading screen to prevent flashing the guest layout
+  // for authenticated users on page reload or post-signup redirect.
+  if (sessionPending) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
+        <div className="flex flex-col items-center gap-3">
+          <Image
+            src="/logo.png"
+            alt="Collective OS"
+            width={48}
+            height={48}
+            className="h-12 w-12 animate-pulse rounded-cos-xl"
+          />
+          <p className="text-sm text-cos-slate">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
