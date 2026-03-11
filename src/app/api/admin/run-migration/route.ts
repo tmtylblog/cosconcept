@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import neo4j from "neo4j-driver";
 import { neo4jWrite } from "@/lib/neo4j";
 import { db } from "@/lib/db";
 import { partnerPreferences } from "@/lib/db/schema";
@@ -56,7 +57,7 @@ async function runClientNodesToCompany(): Promise<NextResponse> {
     }
 
     let migrated = 0;
-    const BATCH = 100;
+    const BATCH = neo4j.int(100);
 
     while (true) {
       // Domain-keyed merge
