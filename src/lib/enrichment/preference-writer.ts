@@ -4,11 +4,11 @@
  * After the user answers the 5 onboarding questions, this module creates
  * graph edges that the matching engine can traverse:
  *
- * (ServiceFirm)-[:PREFERS {dimension, weight, source, updatedAt}]->(Skill|FirmCategory|Market)
+ * (ServiceFirm)-[:PREFERS {dimension, weight, source, updatedAt}]->(Skill|Category|Market)
  *
  * partnershipPhilosophy → ServiceFirm property (selects matching algorithm)
- * capabilityGaps        → PREFERS edges to Skill or FirmCategory nodes
- * preferredPartnerTypes → PREFERS edges to FirmCategory nodes
+ * capabilityGaps        → PREFERS edges to Skill or Category nodes
+ * preferredPartnerTypes → PREFERS edges to Category nodes
  * dealBreaker           → ServiceFirm property (free text, can't create edges yet)
  * geographyPreference   → ServiceFirm property + optional PREFERS edge to Market
  *
@@ -66,10 +66,10 @@ async function replacePreferEdges(
              r.weight = $weight,
              r.source = "stated",
              r.updatedAt = datetime()`
-      : targetLabel === "FirmCategory"
+      : targetLabel === "Category"
         ? `MATCH (f:ServiceFirm {id: $firmId})
            UNWIND $names AS targetName
-           MERGE (t:FirmCategory {name: targetName})
+           MERGE (t:Category {name: targetName})
            MERGE (f)-[r:PREFERS]->(t)
            SET r.dimension = $dimension,
                r.weight = $weight,
@@ -137,7 +137,7 @@ export async function syncPartnershipPhilosophy(
 
 /**
  * Write PREFERS edges for capabilityGaps.
- * Each gap is classified as either a Skill (L2) or FirmCategory name.
+ * Each gap is classified as either a Skill (L2) or Category name.
  */
 export async function syncCapabilityGaps(
   firmId: string,
@@ -193,7 +193,7 @@ export async function syncCapabilityGaps(
 
   if (categoryGaps.length) {
     try {
-      written += await replacePreferEdges(firmId, "capability_gap_category", "FirmCategory", categoryGaps);
+      written += await replacePreferEdges(firmId, "capability_gap_category", "Category", categoryGaps);
     } catch (err) {
       errors.push(`category gaps: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -212,7 +212,7 @@ export async function syncCapabilityGaps(
 
 /**
  * Write PREFERS edges for preferredPartnerTypes.
- * These are exact FirmCategory names from the 30 COS categories.
+ * These are exact Category names from the 30 COS categories.
  */
 export async function syncPreferredPartnerTypes(
   firmId: string,
@@ -220,7 +220,7 @@ export async function syncPreferredPartnerTypes(
 ): Promise<{ written: number; errors: string[] }> {
   const errors: string[] = [];
   try {
-    const written = await replacePreferEdges(firmId, "firm_category", "FirmCategory", types);
+    const written = await replacePreferEdges(firmId, "firm_category", "Category", types);
     return { written, errors };
   } catch (err) {
     errors.push(`preferredPartnerTypes: ${err instanceof Error ? err.message : String(err)}`);

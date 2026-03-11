@@ -284,7 +284,7 @@ async function checkCandidatesWantSearcher(
   );
   const searcherCategories = new Set(
     searcherOffers
-      .filter((o) => o.label === "FirmCategory" || o.label === "Category")
+      .filter((o) => o.label === "Category")
       .map((o) => o.name)
   );
   const searcherMarkets = new Set(

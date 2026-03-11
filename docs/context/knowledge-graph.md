@@ -134,7 +134,7 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 | Edge | From | To | Properties | Created By |
 |------|------|----|-----------|-----------|
 | `PREFERS` | ServiceFirm | Skill | `dimension: "skill"`, `weight: 0.9`, `source: "stated"`, `updatedAt` | Onboarding Q2 (capabilityGaps) |
-| `PREFERS` | ServiceFirm | FirmCategory | `dimension: "capability_gap_category"`, `weight: 0.9` or `dimension: "firm_category"`, `weight: 0.8` | Onboarding Q2/Q3 |
+| `PREFERS` | ServiceFirm | Category | `dimension: "capability_gap_category"`, `weight: 0.9` or `dimension: "firm_category"`, `weight: 0.8` | Onboarding Q2/Q3 |
 | `PREFERS` | ServiceFirm | Market | `dimension: "market"`, `weight: 0.7`, `source: "stated"`, `updatedAt` | Onboarding Q5 (geographyPreference) |
 
 **ServiceFirm properties set by preference sync:**
