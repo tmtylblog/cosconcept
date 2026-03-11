@@ -110,14 +110,25 @@ The only tool currently implemented. Created per-request via `createOssyTools(or
 - Logs `onboarding_complete` when last question (question 8) is answered
 - Tool result is pushed back to client -- `ChatPanel` watches for `tool-update_profile` parts and calls `updateProfileField` to update the dashboard in real-time
 
-### Post-Onboarding Tools (Described in Prompt, Not Yet Implemented)
+### `search_partners`
 
-The system prompt references these tools for returning users, but they are not yet built:
-- `search_partners` -- find complementary firms
-- `search_experts` -- find individual professionals
-- `search_case_studies` -- find project examples
-- `lookup_firm` -- get details on a specific firm
-- `get_my_profile` -- check user's own firm profile
+Calls `executeSearch()` from `src/lib/matching/search.ts`. Returns ranked `FirmResult[]` with match scores, explanations, and bidirectional fit. Passes the user's `firmId` as `searcherFirmId` for bidirectional matching. `maxSteps: 3` allows multi-tool calls.
+
+### `search_experts`
+
+Calls `searchExperts()` from `src/lib/matching/expert-search.ts`. Queries `expert_profiles` table with ILIKE text search + JSONB overlap filtering on skills/industries. Returns `ExpertResult[]` with name, headline, skills, specialist profiles.
+
+### `search_case_studies`
+
+Calls `searchCaseStudies()` from `src/lib/matching/case-study-search.ts`. Queries `firm_case_studies` table with tag filtering (skills, industries). Returns `CaseStudyResult[]` with title, summary, tags, firm info.
+
+### `lookup_firm`
+
+Calls `lookupFirmDetail()` from `src/lib/matching/firm-lookup.ts`. Looks up a firm by name, domain, or ID. Searches `serviceFirms` + Neo4j. Returns `FirmDetail` with enrichment data, case studies, experts, categories, skills.
+
+### `get_my_profile`
+
+Calls `lookupFirmDetail()` from `src/lib/matching/firm-lookup.ts` using the user's own `firmId`. Returns the same `FirmDetail` object so Ossy can reference the user's firm data in conversation.
 
 ---
 
@@ -255,8 +266,8 @@ Used by `ChatPanel` on mount to replace default welcome message for returning us
 | Trigger | No memory + messages <= 2 | Has memory context |
 | System prompt mode | `ONBOARDING` | `POST-ONBOARDING (Returning User)` |
 | Conversation mode (DB) | `"onboarding"` | `"general"` |
-| Primary focus | Confirm enrichment data, collect 8 partner preferences | Search, explore, advise, refine |
-| Tool usage | `update_profile` only | `update_profile` + search tools (when built) |
+| Primary focus | Confirm enrichment data, collect 5 partner preferences | Search, explore, advise, refine |
+| Tool usage | `update_profile` only | All 6 tools (update_profile + 5 search tools) |
 | Greeting | Default welcome message | AI-generated personalized greeting via Gemini Flash |
 
 Mode detection in `route.ts`:
@@ -440,7 +451,10 @@ Note: `embedding: vector(1536)` column is planned but not yet active (pgvector n
 |---|---|
 | `src/lib/ai/gateway.ts` | AI cost tracking, usage logging, model pricing |
 | `src/lib/ai/ossy-prompt.ts` | System prompt assembly, personality, mode switching |
-| `src/lib/ai/ossy-tools.ts` | `update_profile` tool definition, DB persistence |
+| `src/lib/ai/ossy-tools.ts` | All 6 tool definitions: `update_profile`, `search_partners`, `search_experts`, `search_case_studies`, `lookup_firm`, `get_my_profile` |
+| `src/lib/matching/firm-lookup.ts` | `lookupFirmDetail()` for `lookup_firm` and `get_my_profile` tools |
+| `src/lib/matching/expert-search.ts` | `searchExperts()` for `search_experts` tool |
+| `src/lib/matching/case-study-search.ts` | `searchCaseStudies()` for `search_case_studies` tool |
 | `src/lib/ai/memory-extractor.ts` | Post-conversation memory extraction (Gemini Flash) |
 | `src/lib/ai/memory-retriever.ts` | Pre-response memory retrieval + memory management API |
 | `src/lib/ai/coaching-analyzer.ts` | Call transcript coaching analysis |
@@ -461,7 +475,7 @@ Note: `embedding: vector(1536)` column is planned but not yet active (pgvector n
 
 ## Known Gaps / TODOs
 
-- **Search tools not implemented:** `search_partners`, `search_experts`, `search_case_studies`, `lookup_firm`, `get_my_profile` are described in the system prompt but not built in `ossy-tools.ts`
+- ~~**Search tools not implemented:**~~ All 5 search tools are now implemented in `ossy-tools.ts`: `search_partners`, `search_experts`, `search_case_studies`, `lookup_firm`, `get_my_profile`
 - **Guest migration stub:** `POST /api/chat/migrate` logs but does not persist messages
 - **pgvector not live:** `memoryEntries.embedding` column planned but not active; retrieval is recency-based only
 - **Theme summaries not generated:** `memoryThemes.summary` column exists but `updateThemeSummary` only updates entry count, not the AI summary

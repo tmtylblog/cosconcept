@@ -39,7 +39,7 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 
 | Label | Key Property | Count | Description | Source |
 |-------|-------------|-------|-------------|--------|
-| `Category` | `name` (unique) | 30 | Firm categories (e.g., "Boutique Agency"). Properties: `definition`, `theme`, `sampleOrgs`, `legacyId` | `data/categories.csv` via neo4j-seed.ts |
+| `Category` | `name` (unique) | 30 | Firm categories (e.g., "Boutique Agency"). Properties: `definition`, `theme`, `sampleOrgs`, `legacyId`. **Note:** Some nodes carry dual labels `Category:FirmCategory` from legacy migration. `structured-filter.ts` normalizes this with a `CASE WHEN` clause so queries work regardless of which label a node has. | `data/categories.csv` via neo4j-seed.ts |
 | `SkillL1` | `name` (unique) | ~26 | Top-level skill categories. Properties: `level="L1"`, `legacyId` | `data/skills-L1.csv` |
 | `Skill` | `name` (unique) | ~18,668 | L2 (~247) and L3 (~18,421) skills. Properties: `level` ("L2"/"L3"), `l1` (parent L1 name for L2), `l2` (parent L2 name for L3), `legacyId`, `legacyLevel` | `data/skills-L1.csv`, `data/skills-L3-map.csv` |
 | `Industry` | `name` (unique) | ~55+ | Sector verticals (grows via enrichment). Properties: `legacyId` | neo4j-seed.ts (hardcoded list + enrichment) |

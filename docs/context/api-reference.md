@@ -1,6 +1,6 @@
 # 14. API Reference
 
-> Last updated: 2026-03-10
+> Last updated: 2026-03-11
 
 Comprehensive reference for all API routes in `src/app/api/`. Organized by domain.
 
@@ -305,6 +305,7 @@ All import routes are protected by `ADMIN_SECRET` header (not session auth).
 | POST | `/api/admin/import/outreach` | Imports outreach messages from n8n's fact.messages table into `imported_outreach`. | ADMIN_SECRET |
 | GET | `/api/admin/import/stats` | Returns migration statistics for the admin dashboard. | ADMIN_SECRET |
 | POST | `/api/admin/import/sync-graph` | Syncs imported companies and contacts to Neo4j knowledge graph. Uses MERGE (idempotent). | ADMIN_SECRET |
+| POST | `/api/admin/import/populate-graph` | Populates graph in 3 modes: `sync` (sync firms to Neo4j), `promote` (promote imported companies to ServiceFirm nodes), `classify` (AI-classify firms). File: `src/app/api/admin/import/populate-graph/route.ts`. | ADMIN_SECRET |
 
 ### Neo4j Management
 

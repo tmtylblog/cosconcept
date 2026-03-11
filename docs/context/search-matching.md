@@ -380,9 +380,9 @@ Key types:
 - **Firm-relationships.csv not wired into deep ranker** -- symbiotic relationship data (346 rows) exists but the LLM prompt does not include it
 - **No proactive matchmaking** -- design calls for auto-generating matches on onboarding/preference change/new case study, but no Inngest jobs exist for this
 - **No search API auth** -- route has no authentication check
-- **Ossy chat not integrated** -- search is not callable from Ossy tools (`ossy-tools.ts` has no search references)
+- ~~**Ossy chat not integrated**~~ -- all 5 search tools are now wired in `ossy-tools.ts` (`search_partners`, `search_experts`, `search_case_studies`, `lookup_firm`, `get_my_profile`)
 - **No Redis caching** -- popular search patterns should be cached per design
-- **Expert/case study search** -- only firm search is implemented; expert and case study entity types are defined in types but not supported in the pipeline
+- ~~**Expert/case study search**~~ -- expert search (`searchExperts()`) and case study search (`searchCaseStudies()`) are now implemented and wired to Ossy tools
 - **Size band filtering** -- parsed by query parser but not used in Neo4j structured filter
 
 ---
@@ -404,5 +404,8 @@ Key types:
 | `src/inngest/functions/firm-case-study-ingest.ts` | Full case study ingestion Inngest pipeline |
 | `src/lib/ai/gateway.ts` | AI cost tracking gateway |
 | `src/lib/taxonomy.ts` | CSV taxonomy parsers (categories, skills, markets) |
+| `src/lib/matching/firm-lookup.ts` | `lookupFirmDetail()` -- firm lookup by name, domain, or ID (PG + Neo4j) |
+| `src/lib/matching/expert-search.ts` | `searchExperts()` -- ILIKE + JSONB overlap on `expert_profiles` |
+| `src/lib/matching/case-study-search.ts` | `searchCaseStudies()` -- tag-filtered search on `firm_case_studies` |
 | `src/app/api/search/route.ts` | HTTP endpoint |
 | `src/lib/db/schema.ts` | `abstractionProfiles` (line 233), `partnerPreferences` (line 216) |

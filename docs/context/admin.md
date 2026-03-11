@@ -1,6 +1,6 @@
 # 12. Admin Dashboard
 
-> Last updated: 2026-03-10
+> Last updated: 2026-03-11
 
 ## Overview
 
@@ -263,6 +263,7 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 | POST | `/api/admin/import/outreach` | Import outreach data (ADMIN_SECRET) |
 | GET | `/api/admin/import/stats` | Import statistics (ADMIN_SECRET) |
 | POST | `/api/admin/import/sync-graph` | Sync imported data to Neo4j graph (ADMIN_SECRET) |
+| POST | `/api/admin/import/populate-graph` | Populate graph with 3 modes: `sync` (sync firms to Neo4j), `promote` (promote imported companies to ServiceFirm nodes), `classify` (AI-classify firms). Body: `{ mode }`. (ADMIN_SECRET) |
 
 ---
 
