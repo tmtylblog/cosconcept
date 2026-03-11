@@ -22,6 +22,7 @@ interface StructuredCandidate {
   matchedIndustries: string[];
   matchedMarkets: string[];
   structuredScore: number;
+  bidirectionalFit?: { theyWantUs: number; weWantThem: number };
 }
 
 /**
@@ -199,6 +200,7 @@ export function toMatchCandidates(
     totalScore: c.structuredScore,
     structuredScore: c.structuredScore,
     vectorScore: 0,
+    ...(c.bidirectionalFit ? { bidirectionalFit: c.bidirectionalFit } : {}),
     preview: {
       categories: c.categories,
       topServices: [],
@@ -207,4 +209,215 @@ export function toMatchCandidates(
       website: c.website,
     },
   }));
+}
+
+// ─── Bidirectional Matching ──────────────────────────────
+
+interface SearcherPreferences {
+  skills: string[];
+  categories: string[];
+  markets: string[];
+}
+
+/**
+ * Read the searcher firm's PREFERS edges from Neo4j.
+ * Returns the skills, categories, and markets they stated they want.
+ */
+async function readSearcherPreferences(
+  firmId: string
+): Promise<SearcherPreferences> {
+  interface PrefRow {
+    dimension: string;
+    targetName: string;
+  }
+
+  const rows = await neo4jRead<PrefRow>(
+    `MATCH (f:ServiceFirm {id: $firmId})-[r:PREFERS]->(t)
+     RETURN r.dimension AS dimension, t.name AS targetName`,
+    { firmId }
+  );
+
+  const prefs: SearcherPreferences = { skills: [], categories: [], markets: [] };
+  for (const row of rows) {
+    switch (row.dimension) {
+      case "skill":
+        prefs.skills.push(row.targetName);
+        break;
+      case "capability_gap_category":
+      case "firm_category":
+        prefs.categories.push(row.targetName);
+        break;
+      case "market":
+        prefs.markets.push(row.targetName);
+        break;
+    }
+  }
+  return prefs;
+}
+
+/**
+ * Check if candidate firms PREFERS what the searcher offers.
+ * Returns a map of candidateFirmId → theyWantUs score (0-1).
+ */
+async function checkCandidatesWantSearcher(
+  candidateIds: string[],
+  searcherFirmId: string
+): Promise<Map<string, number>> {
+  if (candidateIds.length === 0) return new Map();
+
+  // Get what the searcher offers (their skills, categories, markets)
+  interface OfferRow {
+    label: string;
+    name: string;
+  }
+
+  const searcherOffers = await neo4jRead<OfferRow>(
+    `MATCH (f:ServiceFirm {id: $firmId})-[:HAS_SKILL|IN_CATEGORY|OPERATES_IN]->(t)
+     RETURN labels(t)[0] AS label, t.name AS name`,
+    { firmId: searcherFirmId }
+  );
+
+  if (searcherOffers.length === 0) return new Map();
+
+  const searcherSkills = new Set(
+    searcherOffers.filter((o) => o.label === "Skill").map((o) => o.name)
+  );
+  const searcherCategories = new Set(
+    searcherOffers
+      .filter((o) => o.label === "FirmCategory" || o.label === "Category")
+      .map((o) => o.name)
+  );
+  const searcherMarkets = new Set(
+    searcherOffers.filter((o) => o.label === "Market").map((o) => o.name)
+  );
+
+  // Check each candidate's PREFERS edges against what the searcher offers
+  interface CandidatePrefRow {
+    candidateId: string;
+    dimension: string;
+    targetName: string;
+  }
+
+  const candidatePrefs = await neo4jRead<CandidatePrefRow>(
+    `UNWIND $candidateIds AS cId
+     MATCH (f:ServiceFirm {id: cId})-[r:PREFERS]->(t)
+     RETURN f.id AS candidateId, r.dimension AS dimension, t.name AS targetName`,
+    { candidateIds }
+  );
+
+  // Group by candidate
+  const prefsByCandidate = new Map<string, CandidatePrefRow[]>();
+  for (const row of candidatePrefs) {
+    const existing = prefsByCandidate.get(row.candidateId) || [];
+    existing.push(row);
+    prefsByCandidate.set(row.candidateId, existing);
+  }
+
+  // Score: how many of their PREFERS match what the searcher offers?
+  const result = new Map<string, number>();
+  for (const [candidateId, prefs] of prefsByCandidate) {
+    if (prefs.length === 0) continue;
+    let matches = 0;
+    for (const pref of prefs) {
+      if (
+        (pref.dimension === "skill" && searcherSkills.has(pref.targetName)) ||
+        ((pref.dimension === "capability_gap_category" || pref.dimension === "firm_category") &&
+          searcherCategories.has(pref.targetName)) ||
+        (pref.dimension === "market" && searcherMarkets.has(pref.targetName))
+      ) {
+        matches++;
+      }
+    }
+    result.set(candidateId, matches / prefs.length);
+  }
+
+  return result;
+}
+
+/**
+ * Bidirectional structured filter: runs standard filtering enriched with
+ * the searcher's PREFERS edges, then checks mutual fit.
+ *
+ * Candidates with mutual PREFERS get up to +20% score boost.
+ */
+export async function bidirectionalStructuredFilter(
+  filters: SearchFilters,
+  searcherFirmId: string,
+  limit = 500
+): Promise<StructuredCandidate[]> {
+  // Read searcher's stated preferences from Neo4j
+  const searcherPrefs = await readSearcherPreferences(searcherFirmId);
+
+  // Enrich filters with searcher's PREFERS (union with explicit filters)
+  const enrichedFilters: SearchFilters = { ...filters };
+  if (searcherPrefs.skills.length > 0) {
+    enrichedFilters.skills = [
+      ...new Set([...(filters.skills || []), ...searcherPrefs.skills]),
+    ];
+  }
+  if (searcherPrefs.categories.length > 0) {
+    enrichedFilters.categories = [
+      ...new Set([...(filters.categories || []), ...searcherPrefs.categories]),
+    ];
+  }
+  if (searcherPrefs.markets.length > 0) {
+    enrichedFilters.markets = [
+      ...new Set([...(filters.markets || []), ...searcherPrefs.markets]),
+    ];
+  }
+
+  // Run standard structured filter with enriched filters
+  const candidates = await structuredFilter(enrichedFilters, limit);
+
+  // Exclude the searcher from results
+  const filtered = candidates.filter((c) => c.firmId !== searcherFirmId);
+
+  // Check bidirectional fit: do the candidates also want the searcher?
+  const candidateIds = filtered.map((c) => c.firmId);
+  const theyWantUsMap = await checkCandidatesWantSearcher(
+    candidateIds,
+    searcherFirmId
+  );
+
+  // Compute weWantThem: how many of our PREFERS match what the candidate offers?
+  // (Already implicit in structuredScore from enriched filters, but let's normalize)
+  const totalSearcherPrefs =
+    searcherPrefs.skills.length +
+    searcherPrefs.categories.length +
+    searcherPrefs.markets.length;
+
+  const boosted = filtered.map((c) => {
+    const theyWantUs = theyWantUsMap.get(c.firmId) ?? 0;
+
+    // weWantThem: what fraction of our PREFERS does this candidate match?
+    let weWantThemMatches = 0;
+    if (totalSearcherPrefs > 0) {
+      for (const s of searcherPrefs.skills) {
+        if (c.matchedSkills.includes(s)) weWantThemMatches++;
+      }
+      for (const cat of searcherPrefs.categories) {
+        if (c.categories.includes(cat)) weWantThemMatches++;
+      }
+      for (const m of searcherPrefs.markets) {
+        if (c.matchedMarkets.includes(m)) weWantThemMatches++;
+      }
+    }
+    const weWantThem =
+      totalSearcherPrefs > 0 ? weWantThemMatches / totalSearcherPrefs : 0;
+
+    // Bidirectional boost: up to +20% for mutual fit
+    const mutualFit = (theyWantUs + weWantThem) / 2;
+    const boost = mutualFit * 0.2;
+
+    return {
+      ...c,
+      structuredScore: Math.min(1, c.structuredScore + boost),
+      bidirectionalFit: { theyWantUs, weWantThem },
+    };
+  });
+
+  // Re-sort by boosted score
+  boosted.sort((a, b) => b.structuredScore - a.structuredScore);
+
+  return boosted.slice(0, limit);
 }

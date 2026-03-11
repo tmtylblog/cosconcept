@@ -86,6 +86,11 @@ const INDEXES = [
   `CREATE INDEX work_history_stage IF NOT EXISTS FOR (n:WorkHistory) ON (n.companyStageAtTime)`,
   `CREATE FULLTEXT INDEX company_search IF NOT EXISTS FOR (n:Company) ON EACH [n.name, n.domain]`,
   `CREATE FULLTEXT INDEX person_search IF NOT EXISTS FOR (n:Person) ON EACH [n.firstName, n.lastName, n.headline]`,
+
+  // ── Preference sync: ServiceFirm property indexes ───────
+  `CREATE INDEX firm_philosophy IF NOT EXISTS FOR (n:ServiceFirm) ON (n.partnershipPhilosophy)`,
+  `CREATE INDEX firm_deal_breaker IF NOT EXISTS FOR (n:ServiceFirm) ON (n.dealBreaker)`,
+  `CREATE INDEX firm_geo_pref IF NOT EXISTS FOR (n:ServiceFirm) ON (n.geographyPreference)`,
 ];
 
 // ─── Schema Setup ─────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { serviceFirms, partnerPreferences } from "@/lib/db/schema";
+import { syncPreferenceFieldToGraph } from "@/lib/enrichment/preference-writer";
 
 // ─── Field Classification Constants ────────────────────────
 
@@ -198,6 +199,11 @@ export async function updateProfileField(
           rawOnboardingData: rawData,
         });
       }
+      // Fire-and-forget: sync preference to Neo4j graph edges
+      // PG is source of truth — Neo4j failure doesn't break onboarding
+      syncPreferenceFieldToGraph(firmId, field, value).catch((err) =>
+        console.error(`[Profile] Neo4j sync failed for ${field}:`, err)
+      );
     } else {
       throw new Error(`Unknown profile field: ${field}`);
     }

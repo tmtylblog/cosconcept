@@ -11,7 +11,7 @@
  */
 
 import { parseSearchQuery } from "./query-parser";
-import { structuredFilter, toMatchCandidates } from "./structured-filter";
+import { structuredFilter, bidirectionalStructuredFilter, toMatchCandidates } from "./structured-filter";
 import { pgStructuredFilter } from "./pg-structured-filter";
 import { vectorRerank } from "./vector-search";
 import { deepRank } from "./deep-ranker";
@@ -64,6 +64,12 @@ export async function executeSearch(params: {
   if (USE_PG_SEARCH) {
     layer1Candidates = await pgStructuredFilter(filters, 500, searcherFirmId);
     layer1Count = layer1Candidates.length;
+  } else if (searcherFirmId) {
+    // Neo4j with bidirectional matching: enriches filters from PREFERS edges
+    // and boosts candidates with mutual preference fit
+    const biCandidates = await bidirectionalStructuredFilter(filters, searcherFirmId, 500);
+    layer1Candidates = toMatchCandidates(biCandidates);
+    layer1Count = biCandidates.length;
   } else {
     const structuredCandidates = await structuredFilter(filters, 500);
     layer1Candidates = toMatchCandidates(structuredCandidates);

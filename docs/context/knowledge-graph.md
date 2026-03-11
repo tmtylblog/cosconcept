@@ -1,8 +1,10 @@
 # 3. Knowledge Graph (Neo4j)
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-11
 
 The Neo4j Aura knowledge graph maps the professional services landscape: firms, experts, clients, projects, skills, industries, and markets. It powers the matching engine (Layer 1 structured filtering), search, recommendations, and trust path analysis.
+
+> ⚠️ **Database Migration (2026-03-11):** Cloned to new Neo4j Aura instance `13a38041.databases.neo4j.io` (was `b78f2c65`). All data preserved. New password set — check Vercel env vars or ask the team.
 
 ---
 
@@ -127,6 +129,26 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 | `BELONGS_TO` | LegacySkill (child) | LegacySkill (parent) |
 | `BELONGS_TO_CATEGORY` | ProfessionalService | Category |
 
+### Preference Sync Edges (preference-writer.ts)
+
+| Edge | From | To | Properties | Created By |
+|------|------|----|-----------|-----------|
+| `PREFERS` | ServiceFirm | Skill | `dimension: "skill"`, `weight: 0.9`, `source: "stated"`, `updatedAt` | Onboarding Q2 (capabilityGaps) |
+| `PREFERS` | ServiceFirm | FirmCategory | `dimension: "capability_gap_category"`, `weight: 0.9` or `dimension: "firm_category"`, `weight: 0.8` | Onboarding Q2/Q3 |
+| `PREFERS` | ServiceFirm | Market | `dimension: "market"`, `weight: 0.7`, `source: "stated"`, `updatedAt` | Onboarding Q5 (geographyPreference) |
+
+**ServiceFirm properties set by preference sync:**
+- `partnershipPhilosophy` — Q1 answer, controls matching algorithm variant
+- `dealBreaker` — Q4 answer, free text stored as property
+- `geographyPreference` — Q5 answer, stored as property + optional Market edge
+
+**Idempotency:** Delete-then-recreate pattern per `(firmId, dimension)` pair. Safe for answer changes.
+
+**Sync triggers:**
+1. Per-field: fire-and-forget after PG write in `update-profile-field.ts`
+2. Full sync: safety net at onboarding completion in `ossy-tools.ts`
+3. Manual: `syncAllPreferencesToGraph(firmId)` can be called from admin
+
 ### Import Sync Edges (sync-graph route)
 
 | Edge | From | To |
@@ -177,7 +199,7 @@ firm_type_A -> [firm-relationships.csv lookup] -> firm_type_B
 
 ### Indexes
 - **Full-text:** `firm_search` (ServiceFirm: name, description), `expert_search` (Expert: fullName, headline), `case_study_search` (CaseStudy: title, description)
-- **Property:** `firm_website` (website), `firm_org_id` (organizationId), `skill_l1` (Skill.l1), `skill_level` (Skill.level), `category_theme` (Category.theme), `expert_firm` (Expert.firmId), `case_study_firm` (CaseStudy.firmId)
+- **Property:** `firm_website` (website), `firm_org_id` (organizationId), `skill_l1` (Skill.l1), `skill_level` (Skill.level), `category_theme` (Category.theme), `expert_firm` (Expert.firmId), `case_study_firm` (CaseStudy.firmId), `firm_philosophy` (partnershipPhilosophy), `firm_deal_breaker` (dealBreaker), `firm_geo_pref` (geographyPreference)
 
 ---
 
@@ -239,7 +261,7 @@ Target: <$0.10 per search, <3 seconds latency.
 
 ### Not Yet Implemented
 - **Social graph edges:** `COMMUNICATES_WITH`, `CONNECTED_TO`, `TRUSTS`, `ENDORSES`, `MEMBER_OF` -- designed but no code
-- **Preference/routing edges:** `SEEKS_PARTNER_TYPE`, `PREFERS_INDUSTRY`, `PREFERS_MARKET`, `AVOIDS`, `BLOCKS` -- designed but no code
+- **Preference/routing edges:** `AVOIDS`, `BLOCKS` -- designed but no code. **`PREFERS` edges are now implemented** via `preference-writer.ts` (synced from onboarding answers). Original design had `SEEKS_PARTNER_TYPE`, `PREFERS_INDUSTRY`, `PREFERS_MARKET` as separate edge types; these are consolidated into a single `PREFERS` edge with a `dimension` property.
 - **Project nodes:** `Project` node type with `DELIVERED_PROJECT`, `BENEFITED_FROM`, `WORKED_ON` edges -- designed but no code
 - **Trust path traversal:** No implementation of the 3-hop trust path computation
 - **LinkedIn CSV upload:** Designed for social graph ingestion but not built
@@ -254,7 +276,7 @@ Target: <$0.10 per search, <3 seconds latency.
 ### Data Gaps
 - **Global firm database:** Not loaded -- ServiceFirm nodes only exist for enriched platform members
 - **Graph sync Inngest:** `graph-sync-firm` function exists but only passes basic data (firmId, name, website) without enrichment results -- needs full enrichment data piped through
-- **Bidirectional matching:** Type definitions exist (`bidirectionalFit` on `MatchCandidate`) but not computed
+- **Bidirectional matching:** **Now implemented** via `bidirectionalStructuredFilter()` in `structured-filter.ts`. Reads PREFERS edges for both searcher and candidates, computes mutual fit, and applies up to +20% score boost. Wired into `search.ts` when `searcherFirmId` is provided and Neo4j is configured.
 
 ---
 
@@ -267,6 +289,7 @@ Target: <$0.10 per search, <3 seconds latency.
 | `src/lib/neo4j-seed.ts` | Taxonomy seeding (categories, skills, markets, etc.) |
 | `src/lib/neo4j-migrate-legacy.ts` | Legacy JSON data migration (5 steps) |
 | `src/lib/enrichment/graph-writer.ts` | Enrichment -> Neo4j writer (firms, experts, case studies, specialist profiles) |
+| `src/lib/enrichment/preference-writer.ts` | Onboarding answers -> Neo4j PREFERS edges + ServiceFirm properties |
 | `src/lib/taxonomy.ts` | CSV parsers for reference data |
 | `src/lib/matching/structured-filter.ts` | Layer 1 Neo4j Cypher queries for matching |
 | `src/lib/matching/search.ts` | Three-layer search orchestrator |

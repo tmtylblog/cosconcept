@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod/v4";
 import { updateProfileField, ALL_PROFILE_FIELDS } from "@/lib/profile/update-profile-field";
 import { logOnboardingEvent } from "@/lib/onboarding/event-logger";
+import { syncAllPreferencesToGraph } from "@/lib/enrichment/preference-writer";
 
 /** v2 interview fields (new 5-question flow) — used for funnel tracking */
 const INTERVIEW_FIELDS_V2 = [
@@ -112,6 +113,13 @@ export function createOssyTools(organizationId: string, firmId: string) {
                 event: "all_questions_done",
                 metadata: { questionsAnswered: totalQuestions },
               }).catch(() => {});
+
+              // Safety net: sync ALL preferences to Neo4j graph
+              // Catches any per-field syncs that may have failed
+              syncAllPreferencesToGraph(firmId).catch((err) =>
+                console.error(`[Ossy Tools] Neo4j full sync failed:`, err)
+              );
+
               nextAction = "All onboarding questions are complete! Congratulate the user and let them know their dashboard is unlocking.";
             } else {
               // More questions remain — tell the model to continue
