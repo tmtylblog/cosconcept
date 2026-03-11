@@ -1,6 +1,6 @@
 # 7. Search & Matching Engine
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-11
 
 ## Overview
 
@@ -58,7 +58,10 @@ Builds dynamic Cypher queries based on parsed filters. Supports four filter dime
 
 **Exports:**
 - `structuredFilter(filters, limit)` -- returns `StructuredCandidate[]`
+- `bidirectionalStructuredFilter(filters, searcherFirmId, limit)` -- reads searcher's PREFERS edges, enriches filters, checks mutual fit, applies up to +20% score boost
 - `toMatchCandidates(candidates)` -- converts to `MatchCandidate[]` format for Layer 2
+
+**Bidirectional routing in `search.ts`:** When `searcherFirmId` is provided and Neo4j is configured (not PG fallback), the orchestrator automatically uses `bidirectionalStructuredFilter` instead of `structuredFilter`. This reads the searcher's `PREFERS` edges from Neo4j, unions them into the search filters, then checks if candidate firms also PREFERS what the searcher offers.
 
 ---
 
@@ -238,21 +241,40 @@ partnerPreferences = pgTable("partner_preferences", {
 7. Values & working style (incl. deal breakers)
 8. Growth goals
 
-**Data flow:** Onboarding conversation -> partner_preferences row + Neo4j edges (`SEEKS_PARTNER_TYPE`, `PREFERS_INDUSTRY`, `PREFERS_MARKET`) + triggers abstraction profile generation + triggers initial match generation.
+**Data flow (v2, 2026-03-11):** Onboarding conversation → `update_profile` tool → PG `partnerPreferences.rawOnboardingData` JSONB → fire-and-forget `syncPreferenceFieldToGraph()` → Neo4j `PREFERS` edges (to Skill/Category/Market nodes) + ServiceFirm properties. On completion → safety-net `syncAllPreferencesToGraph()`. See `src/lib/enrichment/preference-writer.ts`.
+
+**Legacy data flow:** Onboarding conversation -> partner_preferences row + (Neo4j edges were planned as `SEEKS_PARTNER_TYPE`, `PREFERS_INDUSTRY`, `PREFERS_MARKET` but were never implemented for v1 fields).
 
 ---
 
 ## Bidirectional Matching
 
-Both firms must want what the other offers. The deep ranker (Layer 3) evaluates two scores per candidate:
+Both firms must want what the other offers. Bidirectional fit is now computed at **two layers**:
 
-- **`theyWantUs`** (0-1): How much the candidate firm would want to partner with the searcher
-- **`weWantThem`** (0-1): How much the searcher would want the candidate
+### Layer 1: Graph-Based Bidirectional Filter (NEW — 2026-03-11)
 
-These are computed by the LLM based on:
+**File:** `src/lib/matching/structured-filter.ts` → `bidirectionalStructuredFilter()`
+
+When `searcherFirmId` is provided:
+1. Reads the searcher's `PREFERS` edges from Neo4j (skills, categories, markets)
+2. Enriches the search filters with the searcher's stated preferences (union with explicit filters)
+3. Runs standard structured filter with enriched filters
+4. For each candidate, checks their `PREFERS` edges against what the searcher **offers** (HAS_SKILL, IN_CATEGORY, OPERATES_IN)
+5. Computes:
+   - **`weWantThem`** (0-1): fraction of searcher's PREFERS that the candidate matches
+   - **`theyWantUs`** (0-1): fraction of candidate's PREFERS that the searcher matches
+6. Applies bidirectional boost: up to +20% score increase for mutual preference fit
+
+**Data source:** `PREFERS` edges created by `src/lib/enrichment/preference-writer.ts` during onboarding.
+
+### Layer 3: LLM-Based Bidirectional Scoring
+
+The deep ranker (Layer 3) also evaluates bidirectional fit, but based on richer signals:
 - Searcher's abstraction profile (services, skills, industries, partnership goals)
 - Candidate's available data (categories, skills, industries)
 - Complementary capabilities (firms that fill gaps, not duplicates)
+
+The LLM assigns `theyWantUs` and `weWantThem` scores (0-1) along with match explanations.
 
 **Symbiotic relationships:** The `data/firm-relationships.csv` (346 rows) maps natural partnership pairings between firm types. This data is referenced in the design docs but is **not yet wired into the deep ranker prompt** -- the current implementation sends candidate data but doesn't include firm-relationship lookup.
 
@@ -372,11 +394,13 @@ Key types:
 | `src/lib/matching/types.ts` | Shared TypeScript types for all layers |
 | `src/lib/matching/search.ts` | Orchestrator -- `executeSearch()` |
 | `src/lib/matching/query-parser.ts` | NL -> structured filters (Gemini Flash) |
-| `src/lib/matching/structured-filter.ts` | Layer 1: Neo4j Cypher queries |
+| `src/lib/matching/structured-filter.ts` | Layer 1: Neo4j Cypher queries + bidirectional filter |
 | `src/lib/matching/vector-search.ts` | Layer 2: pgvector / text fallback |
 | `src/lib/matching/deep-ranker.ts` | Layer 3: LLM ranking + explanations |
 | `src/lib/matching/abstraction-generator.ts` | Firm abstraction profile generation |
 | `src/lib/enrichment/case-study-analyzer.ts` | Case study visible + hidden layer generation |
+| `src/lib/enrichment/preference-writer.ts` | Onboarding → Neo4j PREFERS edges + ServiceFirm properties |
+| `src/lib/profile/update-profile-field.ts` | PG write + fire-and-forget Neo4j sync |
 | `src/inngest/functions/firm-case-study-ingest.ts` | Full case study ingestion Inngest pipeline |
 | `src/lib/ai/gateway.ts` | AI cost tracking gateway |
 | `src/lib/taxonomy.ts` | CSV taxonomy parsers (categories, skills, markets) |

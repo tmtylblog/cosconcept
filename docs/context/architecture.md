@@ -1,6 +1,6 @@
 # 1. Architecture & Stack
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-11
 
 ## Tech Stack
 
@@ -94,9 +94,9 @@ OPENAI_API_KEY              # Embeddings only
 
 # Databases
 DATABASE_URL                # Neon PostgreSQL connection string
-NEO4J_URI                   # Neo4j Aura bolt URI
-NEO4J_USERNAME              # Neo4j auth
-NEO4J_PASSWORD              # Neo4j auth
+NEO4J_URI                   # Neo4j Aura bolt URI (migrated to 13a38041 on 2026-03-11)
+NEO4J_USERNAME              # Neo4j auth (default: neo4j)
+NEO4J_PASSWORD              # Neo4j auth (rotated 2026-03-11 — get from Vercel or team)
 
 # Auth
 GOOGLE_CLIENT_ID            # Google OAuth

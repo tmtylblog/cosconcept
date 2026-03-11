@@ -1,6 +1,6 @@
 # 5. AI & Ossy
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-11
 
 Ossy is the AI growth consultant inside Collective OS. This document covers the multi-model strategy, system prompt architecture, tools, memory system, chat API, onboarding flows, cost tracking, and guest chat.
 
@@ -49,10 +49,27 @@ The system prompt is assembled dynamically by `getOssyPrompt(context)`. It layer
 - 2-3 short paragraphs max per response
 - Specific over generic ("3 firms with Shopify Plus experience in APAC" not "some great matches")
 
-### Onboarding Protocol (8 Questions)
+### Onboarding Protocol (5 Questions — v2)
 
-Asked one at a time, conversationally. Each confirmed answer triggers `update_profile` tool call:
+Redesigned from 9 questions to 5 high-signal questions (commit `579dad7`, 2026-03-11). Asked one at a time, conversationally. Each confirmed answer triggers `update_profile` tool call, which:
+1. Writes to PG `partnerPreferences.rawOnboardingData` JSONB
+2. Fire-and-forget syncs the answer to Neo4j PREFERS edges via `syncPreferenceFieldToGraph()`
+3. On last question, runs `syncAllPreferencesToGraph()` as a safety net
 
+**The 5 v2 questions:**
+1. `partnershipPhilosophy` — How they approach partnerships (→ ServiceFirm property in Neo4j)
+2. `capabilityGaps` — What skills/capabilities they lack and need in partners (→ PREFERS edges to Skill/Category)
+3. `preferredPartnerTypes` — What types of firms they want to work with (→ PREFERS edges to Category)
+4. `dealBreaker` — Hard no's / red flags (→ ServiceFirm property, free text)
+5. `geographyPreference` — Where they want partners (→ ServiceFirm property + optional PREFERS edge to Market)
+
+**Key files for v2 onboarding:**
+- `src/lib/profile/update-profile-field.ts` — PG write + Neo4j fire-and-forget sync
+- `src/lib/enrichment/preference-writer.ts` — All Neo4j PREFERS edge creation logic
+- `src/lib/ai/ossy-tools.ts` — Tool definitions + onboarding completion detection + safety-net sync
+- `src/lib/ai/ossy-prompt.ts` — System prompt with v2 interview instructions
+
+**Legacy v1 questions (9-question flow, still supported for backward compat):**
 1. `desiredPartnerServices` -- mapped to COS skill categories
 2. `requiredPartnerIndustries` -- standard industry verticals
 3. `idealPartnerClientSize` -- PDL company size bands

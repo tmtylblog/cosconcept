@@ -1,6 +1,6 @@
 # 18. Roadmap & Status
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-11
 
 ## Phase Overview
 
@@ -210,7 +210,7 @@
 - Intro email template (`src/lib/email/templates/intro-email.ts`)
 
 **What's not done (gaps):**
-- **Conversational onboarding flow (8 preference areas)** — partner preferences table exists but no guided Ossy interview flow
+- ~~**Conversational onboarding flow**~~ — **DONE (2026-03-11)** v2 5-question interview live, answers sync to PG + Neo4j PREFERS edges
 - **Collectives** — group partnership containers not implemented (schema does not include collectives table)
 - **Vendor networks** — one-directional partner visibility not implemented
 - **Platform messaging** — no real-time messaging between firms (no Ably/Pusher)
@@ -301,7 +301,7 @@
 
 ### High Priority (needed for launch)
 
-5. **Conversational onboarding flow** — partner preferences schema exists but no guided 8-question Ossy interview
+5. ~~**Conversational onboarding flow**~~ — **DONE (2026-03-11)** Redesigned from 9→5 questions. v2 interview implemented in Ossy system prompt + tools. Answers sync to PG + Neo4j PREFERS edges. See `preference-writer.ts`, `ossy-tools.ts`, `update-profile-field.ts`
 6. **Collectives + vendor networks** — schema and UI not built
 7. **Platform messaging** — no real-time firm-to-firm messaging (Ably/Pusher not integrated)
 8. **AI cost gateway** — stub exists but not wired to track actual AI spend
@@ -312,7 +312,7 @@
 
 11. **Dynamic profile highlighting** — not implemented
 12. **Redis caching for search** — Upstash not integrated
-13. **Proactive matchmaking** — no auto-generation of matches on firm events
+13. **Proactive matchmaking** — no auto-generation of matches on firm events (bidirectional graph filter now exists but not auto-triggered)
 14. **Visibility controls enforcement** — public/partners/private not enforced in queries
 15. **Voice latency optimization** — not tested against <1s target
 16. **Hidden opportunity detection** — no passive signal monitoring
@@ -355,6 +355,20 @@ From git log (most recent first, as of 2026-03-09):
 
 **Recent focus areas:** enrichment pipeline stabilization, expert profile system, case study management, admin tooling, email/call MVPs.
 
+### Recent Activity (2026-03-11)
+
+| Commit | Description |
+|--------|-------------|
+| `4da588b` | fix: use Category label instead of FirmCategory in preference-writer |
+| `b6cb362` | feat: wire onboarding answers to Neo4j PREFERS edges + bidirectional matching |
+| `579dad7` | refactor: redesign onboarding from 9 questions to 5 high-signal questions |
+| `dd55de9` | chore: clean up utility scripts for Track A alignment + push taxonomy tables |
+| `669b162` | refactor: modernize Neo4j graph layer and deprecate legacy code for Track A |
+| `83ea21f` | refactor: migrate admin routes to canonical tables for Track A alignment |
+| `3162d45` | chore: add Track A columns to existing tables |
+
+**Focus:** Track A data migration, onboarding redesign (9→5 questions), Neo4j PREFERS edges, bidirectional matching engine.
+
 ---
 
 ## Phase Dependencies
@@ -391,4 +405,4 @@ Phase 0 (Scaffold) ──→ Phase 1 (Chat) ──→ Phase 2 (Profiles)
 
 3. **Graph-sync is shallow** — The Inngest function `graph-sync-firm` only calls `writeFirmToGraph()` for top-level firm data. It does not create Expert, CaseStudy, or Client nodes with their full relationship edges. This means even enriched firms are only partially represented in Neo4j.
 
-4. **No conversational onboarding** — The 8-dimension partner preference interview (the "dating profile") that drives bidirectional matching has not been built as a guided Ossy conversation. The `partnerPreferences` table exists and has fields for these dimensions, but there is no conversational flow to populate them.
+4. ~~**No conversational onboarding**~~ — **RESOLVED (2026-03-11).** The v2 5-question interview is now live. Onboarding answers write to PG `rawOnboardingData` JSONB and fire-and-forget sync to Neo4j `PREFERS` edges. Bidirectional matching in Layer 1 structured filter uses these edges. See `preference-writer.ts`.
