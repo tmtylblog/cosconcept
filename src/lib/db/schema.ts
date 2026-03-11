@@ -215,6 +215,10 @@ export const serviceFirms = pgTable("service_firms", {
   // Waitlist tracking for potential clients (brands)
   registeredInterestEmail: text("registered_interest_email"),
   registeredInterestAt: timestamp("registered_interest_at"),
+  // Track A: canonical Company node link
+  graphNodeId: text("graph_node_id"), // Neo4j Company node ID
+  isCosCustomer: boolean("is_cos_customer").default(false),
+  cosCustomerSince: timestamp("cos_customer_since"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -251,6 +255,8 @@ export const partnerPreferences = pgTable("partner_preferences", {
   dealBreakers: jsonb("deal_breakers").$type<string[]>(),
   growthGoals: text("growth_goals"),
   rawOnboardingData: jsonb("raw_onboarding_data"),
+  // Track A: tracks when Neo4j PREFERS/AVOIDS edges were last written from this data
+  preferencesSyncedAt: timestamp("preferences_synced_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -305,6 +311,8 @@ export const solutionPartners = pgTable("solution_partners", {
   logoUrl: text("logo_url"),
   websiteUrl: text("website_url"),
   graphNodeId: text("graph_node_id"),
+  // Track A: link to canonical Company node
+  canonicalCompanyId: text("canonical_company_id"),
   isVerified: boolean("is_verified").notNull().default(false),
   meta: jsonb("meta"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1297,6 +1305,9 @@ export const expertProfiles = pgTable("expert_profiles", {
   topSkills: jsonb("top_skills").$type<string[]>(),
   topIndustries: jsonb("top_industries").$type<string[]>(),
   division: expertDivisionEnum("division"),
+
+  // Track A: canonical Person node link
+  personNodeId: text("person_node_id"), // Neo4j Person node ID
 
   // Meta
   isPublic: boolean("is_public").notNull().default(true),
