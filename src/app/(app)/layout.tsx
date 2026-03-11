@@ -84,7 +84,7 @@ function AppLayoutInner({
     clearGuestData,
   } = useGuestData();
 
-  const [navCollapsed, setNavCollapsed] = useState(true);
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [loginPanelOpen, setLoginPanelOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0);
   const [mobileChat, setMobileChat] = useState(false);
@@ -196,12 +196,28 @@ function AppLayoutInner({
     isBrandWaitlist,
   } = useOnboardingStatus(activeOrg?.id, !!session?.user);
 
-  // Track previous onboardingComplete to detect transition → celebration → full app
+  // Track onboarding completion — distinguish initial page load from in-session transition.
+  // On page reload of an already-complete account, skip celebration and go straight to app.
+  // On genuine in-session completion (user answers all 9 questions), show celebration + trigger deep crawl.
+  const onboardingLoadedRef = useRef(false); // has the first API response arrived?
   const prevOnboardingCompleteRef = useRef<boolean | null>(null);
   const deepCrawlTriggeredRef = useRef(false);
+
   useEffect(() => {
+    // Wait for onboarding status to finish its initial load
+    if (onboardingLoading) return;
+
+    // First time we get a non-loading state — this is the "initial load" result
+    if (!onboardingLoadedRef.current) {
+      onboardingLoadedRef.current = true;
+      prevOnboardingCompleteRef.current = onboardingComplete;
+      // No celebration on initial page load — just show whatever phase is correct
+      return;
+    }
+
+    // After initial load: detect genuine false→true transition
     if (prevOnboardingCompleteRef.current === false && onboardingComplete === true) {
-      // Onboarding just completed — show celebration, then reveal full app
+      // Onboarding just completed IN THIS SESSION — show celebration
       setShowCelebration(true);
       setChatKey((k) => k + 1); // Fresh ChatPanel mount for greeting
 
@@ -230,13 +246,14 @@ function AppLayoutInner({
       // Celebration shows for 2.5s while authenticated layout loads behind it
       const timer = setTimeout(() => {
         setShowCelebration(false);
-        // Navigate to Discover so users start exploring partners immediately
         router.push("/discover");
       }, 2500);
+      prevOnboardingCompleteRef.current = onboardingComplete;
       return () => clearTimeout(timer);
     }
+
     prevOnboardingCompleteRef.current = onboardingComplete;
-  }, [onboardingComplete, activeOrg?.id, activeOrg?.name, enrichmentResult?.domain, enrichmentResult?.companyData?.name]);
+  }, [onboardingComplete, onboardingLoading, activeOrg?.id, activeOrg?.name, enrichmentResult?.domain, enrichmentResult?.companyData?.name]);
 
   // ─── Derive firm section from pathname ──────────────────────
   const firmSection: string | null =
