@@ -128,7 +128,10 @@ export default function MigrationDashboard() {
         setJobResults((r) => ({ ...r, [jobId]: data.error ?? "Unknown error" }));
       } else {
         setJobStatuses((s) => ({ ...s, [jobId]: "done" }));
-        setJobResults((r) => ({ ...r, [jobId]: `Triggered. Running in background — check Inngest for progress.` }));
+        const msg = data.message ?? "Done";
+        const detail = data.migrated != null ? ` (${data.migrated} migrated)` :
+                       data.synced != null ? ` (${data.synced} synced)` : "";
+        setJobResults((r) => ({ ...r, [jobId]: msg + detail }));
       }
     } catch (err) {
       setJobStatuses((s) => ({ ...s, [jobId]: "error" }));
