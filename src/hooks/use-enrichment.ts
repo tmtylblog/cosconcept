@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useCallback, useState, useEffect, useRef } from "react";
+import { createContext, useContext, useCallback, useState, useEffect, useRef, useMemo } from "react";
 import type { ReactNode } from "react";
 import React from "react";
 import { logOnboardingEventClient } from "@/lib/onboarding/log-client";
@@ -717,31 +717,35 @@ export function EnrichmentProvider({
   );
 
   // ─── Auto-retry: if hydrated result is incomplete, re-trigger missing stages ───
-  // NOTE: We intentionally do NOT check stages.overall === "enriching" here because
-  // hydration may set it to "enriching" cosmetically (to show the progress banner)
-  // without actually running any enrichment. The autoRetryDoneRef guard prevents
-  // infinite loops and wasHydratedRef ensures this only fires after hydration.
+  // Keep latest triggerEnrichment in a ref so the effect doesn't depend on its identity
+  const triggerEnrichmentRef = useRef(triggerEnrichment);
+  triggerEnrichmentRef.current = triggerEnrichment;
+  const resultRef = useRef(result);
+  resultRef.current = result;
+
+  // Stable dependency key: changes only when the result domain changes
+  const resultDomain = result?.domain;
+
   useEffect(() => {
     if (!wasHydratedRef.current) return; // Only after hydration, not regular enrichment
     if (autoRetryDoneRef.current) return; // Only retry once per mount
-    if (!result?.domain) return;
+    const r = resultRef.current;
+    if (!r?.domain) return;
 
     // Check data completeness — same criteria as the lookup gap-fill logic
-    const cd = result.companyData;
+    const cd = r.companyData;
     const hasRealPdl = cd && (
       (cd.employeeCount ?? 0) > 0 || cd.size || cd.location || cd.inferredRevenue
     );
-    // Scrape: require real content, not just a non-null object with empty arrays
     const hasScrape = !!(
-      (result.extracted?.services?.length) ||
-      (result.extracted?.clients?.length) ||
-      result.extracted?.aboutPitch ||
-      result.groundTruth
+      (r.extracted?.services?.length) ||
+      (r.extracted?.clients?.length) ||
+      r.extracted?.aboutPitch ||
+      r.groundTruth
     );
-    // Classification: require both categories AND skills
     const hasClassify = !!(
-      result.classification?.categories?.length &&
-      result.classification?.skills?.length
+      r.classification?.categories?.length &&
+      r.classification?.skills?.length
     );
 
     if (!hasRealPdl || !hasScrape || !hasClassify) {
@@ -752,16 +756,16 @@ export function EnrichmentProvider({
         !hasClassify && "Classify",
       ].filter(Boolean);
       console.log(
-        `[Enrichment] Hydrated result incomplete for ${result.domain} — auto-retrying gaps: ${gaps.join(", ")}`
+        `[Enrichment] Hydrated result incomplete for ${r.domain} — auto-retrying gaps: ${gaps.join(", ")}`
       );
-      triggerEnrichment(result.url || result.domain, true);
+      triggerEnrichmentRef.current(r.url || r.domain, true);
     }
-  }, [result, stages.overall, triggerEnrichment]);
+  }, [resultDomain, stages.overall]);
 
   const firmNature = result?.classification?.firmNature;
   const isBrandDetected = firmNature === "brand_or_retailer" || firmNature === "product_company";
 
-  const value: EnrichmentContextValue = {
+  const value: EnrichmentContextValue = useMemo(() => ({
     status,
     stages,
     result,
@@ -769,7 +773,7 @@ export function EnrichmentProvider({
     isBrandDetected,
     triggerEnrichment,
     reset,
-  };
+  }), [status, stages, result, contextForOssy, isBrandDetected, triggerEnrichment, reset]);
 
   return React.createElement(
     EnrichmentContext.Provider,

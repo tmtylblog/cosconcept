@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useCallback, useState, useEffect } from "react";
+import { createContext, useContext, useCallback, useState, useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import React from "react";
 
@@ -99,11 +99,11 @@ export function ProfileProvider({
     setData((prev) => ({ ...prev, [field]: value }));
   }, []);
 
-  const contextValue: ProfileContextValue = {
+  const contextValue = useMemo<ProfileContextValue>(() => ({
     data,
     updateField,
     hydrated,
-  };
+  }), [data, updateField, hydrated]);
 
   return React.createElement(
     ProfileContext.Provider,

@@ -7,6 +7,7 @@ import {
   useState,
   useEffect,
   useRef,
+  useMemo,
 } from "react";
 import type { ReactNode } from "react";
 import type { UIMessage } from "ai";
@@ -240,20 +241,24 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
 
   /** Imperative flush: immediately write current preferences to all storages + DB.
    *  Call this before login/redirect to ensure nothing is lost. */
+  const guestPrefsRef = useRef(guestPreferences);
+  guestPrefsRef.current = guestPreferences;
+
   const forceFlushToDb = useCallback(() => {
+    const prefs = guestPrefsRef.current;
     // Sync to both storages immediately
-    saveToLocal(PREFS_KEY, guestPreferences);
-    saveToSession(PREFS_KEY, guestPreferences);
+    saveToLocal(PREFS_KEY, prefs);
+    saveToSession(PREFS_KEY, prefs);
 
     const domain = getGuestDomain();
-    if (domain && Object.keys(guestPreferences).length > 0) {
+    if (domain && Object.keys(prefs).length > 0) {
       console.log(
-        `[GuestData] Force-flushing ${Object.keys(guestPreferences).length} prefs for ${domain}`
+        `[GuestData] Force-flushing ${Object.keys(prefs).length} prefs for ${domain}`
       );
-      syncPrefsToDb(domain, guestPreferences);
-      lastSyncedRef.current = JSON.stringify(guestPreferences);
+      syncPrefsToDb(domain, prefs);
+      lastSyncedRef.current = JSON.stringify(prefs);
     }
-  }, [guestPreferences]);
+  }, []);
 
   const clearGuestData = useCallback(() => {
     setPrefsState({});
@@ -269,18 +274,18 @@ export function GuestDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const value = useMemo(() => ({
+    guestPreferences,
+    setGuestPreference,
+    guestMessages,
+    setGuestMessages,
+    hasGuestData,
+    clearGuestData,
+    forceFlushToDb,
+  }), [guestPreferences, setGuestPreference, guestMessages, setGuestMessages, hasGuestData, clearGuestData, forceFlushToDb]);
+
   return (
-    <GuestDataContext.Provider
-      value={{
-        guestPreferences,
-        setGuestPreference,
-        guestMessages,
-        setGuestMessages,
-        hasGuestData,
-        clearGuestData,
-        forceFlushToDb,
-      }}
-    >
+    <GuestDataContext.Provider value={value}>
       {children}
     </GuestDataContext.Provider>
   );

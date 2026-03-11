@@ -57,22 +57,30 @@ export function useFirmEdits(
   // Debounce timer for aboutPitch
   const pitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync enrichment data as defaults when enrichment completes
+  // Track whether defaults have been seeded to avoid re-running
+  const seededRef = useRef(false);
+  // Keep latest defaults in a ref so effect doesn't depend on the object identity
+  const defaultsRef = useRef(defaults);
+  defaultsRef.current = defaults;
+
+  // Sync enrichment data as defaults when enrichment completes (runs once)
   useEffect(() => {
-    if (enrichmentReady) {
+    if (enrichmentReady && !seededRef.current) {
+      seededRef.current = true;
+      const d = defaultsRef.current;
       setEdits((prev) => ({
         ...prev,
-        services: prev.services ?? defaults.services,
-        clients: prev.clients ?? defaults.clients,
-        categories: prev.categories ?? defaults.categories,
-        skills: prev.skills ?? defaults.skills,
-        industries: prev.industries ?? defaults.industries,
-        markets: prev.markets ?? defaults.markets,
-        languages: prev.languages ?? defaults.languages,
-        aboutPitch: prev.aboutPitch ?? defaults.aboutPitch,
+        services: prev.services ?? d.services,
+        clients: prev.clients ?? d.clients,
+        categories: prev.categories ?? d.categories,
+        skills: prev.skills ?? d.skills,
+        industries: prev.industries ?? d.industries,
+        markets: prev.markets ?? d.markets,
+        languages: prev.languages ?? d.languages,
+        aboutPitch: prev.aboutPitch ?? d.aboutPitch,
       }));
     }
-  }, [enrichmentReady, defaults]);
+  }, [enrichmentReady]);
 
   // ─── Persist helper ──────────────────────────────────────
   const persistField = useCallback(

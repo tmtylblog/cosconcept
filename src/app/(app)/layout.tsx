@@ -278,6 +278,13 @@ function AppLayoutInner({
   // Handles domain aliases (e.g., email is @chameleon.co but firm website is chameleoncollective.com).
   // If enrichment data already exists for a domain that the email domain redirects to, skip re-enrichment.
   const enrichTriggeredRef = useRef<string | null>(null);
+  // Keep triggerEnrichment in a ref to avoid it as an effect dependency (its identity changes)
+  const triggerEnrichmentRef = useRef(triggerEnrichment);
+  triggerEnrichmentRef.current = triggerEnrichment;
+
+  // Stable primitive deps for the auto-enrich effect
+  const hasCompanyData = !!enrichmentResult?.companyData;
+  const enrichedDomain = enrichmentResult?.domain;
 
   useEffect(() => {
     if (!session?.user?.email) return;
@@ -288,12 +295,12 @@ function AppLayoutInner({
 
     // If enrichment is already done with company data, check if the email domain
     // is an alias for the enriched domain (e.g., chameleon.co → chameleoncollective.com)
-    if (enrichmentStatus === "done" && enrichmentResult?.companyData) {
+    if (enrichmentStatus === "done" && hasCompanyData) {
       // Already enriched — domains might differ but that's fine (alias case)
       enrichTriggeredRef.current = session.user.email;
-      if (enrichmentResult.domain && enrichmentResult.domain !== emailDomain) {
+      if (enrichedDomain && enrichedDomain !== emailDomain) {
         console.log(
-          `[Layout] Skipping auto-enrich: email domain (${emailDomain}) differs from enriched domain (${enrichmentResult.domain}), likely an alias`
+          `[Layout] Skipping auto-enrich: email domain (${emailDomain}) differs from enriched domain (${enrichedDomain}), likely an alias`
         );
       }
       return;
@@ -305,7 +312,7 @@ function AppLayoutInner({
     // Need enrichment — either idle (no data) or done but missing company data
     const needsEnrichment =
       enrichmentStatus === "idle" ||
-      (enrichmentStatus === "done" && !enrichmentResult?.companyData);
+      (enrichmentStatus === "done" && !hasCompanyData);
 
     if (needsEnrichment) {
       enrichTriggeredRef.current = session.user.email;
@@ -314,14 +321,15 @@ function AppLayoutInner({
         `[Layout] Auto-enriching from email domain: ${emailDomain}` +
         (isGapFill ? " (gap-fill: missing PDL data)" : "")
       );
-      // The lookup route will follow redirects — if chameleon.co → chameleoncollective.com
-      // is already cached, it'll return the cached data instead of calling paid APIs
-      triggerEnrichment(emailDomain, isGapFill);
+      triggerEnrichmentRef.current(emailDomain, isGapFill);
     }
-  }, [session?.user?.email, enrichmentStatus, enrichmentResult?.companyData, enrichmentResult?.domain, triggerEnrichment]);
+  }, [session?.user?.email, enrichmentStatus, hasCompanyData, enrichedDomain]);
 
   // ─── Guest-to-auth data migration ──────────────────────────
   const migrationDoneRef = useRef(false);
+  // Keep guestPreferences in a ref to avoid the object as an effect dependency
+  const guestPrefsRef = useRef(guestPreferences);
+  guestPrefsRef.current = guestPreferences;
 
   useEffect(() => {
     if (!session?.user || !activeOrg?.id || !hasGuestData || migrationDoneRef.current) return;
@@ -329,7 +337,8 @@ function AppLayoutInner({
 
     async function migrateGuestData() {
       try {
-        const prefKeys = Object.keys(guestPreferences);
+        const prefs = guestPrefsRef.current;
+        const prefKeys = Object.keys(prefs);
         if (prefKeys.length > 0) {
           console.log(`[Layout] Migrating ${prefKeys.length} guest preferences...`);
           const res = await fetch("/api/onboarding/migrate-preferences", {
@@ -337,7 +346,7 @@ function AppLayoutInner({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               organizationId: activeOrg!.id,
-              preferences: guestPreferences,
+              preferences: prefs,
             }),
           });
           if (!res.ok) {
@@ -355,7 +364,7 @@ function AppLayoutInner({
     }
 
     migrateGuestData();
-  }, [session?.user, activeOrg?.id, hasGuestData, guestPreferences, clearGuestData]);
+  }, [session?.user, activeOrg?.id, hasGuestData, clearGuestData]);
 
   const handleRequestLogin = () => {
     setLoginPanelOpen(true);
