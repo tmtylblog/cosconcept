@@ -11,6 +11,7 @@ import {
   UserCheck,
   Briefcase,
   Share2,
+  GitMerge,
 } from "lucide-react";
 
 interface Metrics {
@@ -187,6 +188,7 @@ export default function AdminOverviewPage() {
         <QuickLink href="/admin/knowledge-graph?tab=experts" label="Expert Profiles" icon={<UserCheck className="h-4 w-4" />} />
         <QuickLink href="/admin/knowledge-graph?tab=clients" label="Client Database" icon={<Briefcase className="h-4 w-4" />} />
         <QuickLink href="/admin/finance" label="AI Costs" icon={<TrendingUp className="h-4 w-4" />} />
+        <QuickLink href="/admin/migration" label="Run Migrations" icon={<GitMerge className="h-4 w-4" />} />
       </div>
     </div>
   );

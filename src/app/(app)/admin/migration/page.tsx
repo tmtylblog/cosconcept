@@ -7,9 +7,11 @@ import {
   Users,
   Mail,
   GitBranch,
+  GitMerge,
   RefreshCw,
   AlertTriangle,
   CheckCircle2,
+  XCircle,
   Loader2,
   Shield,
 } from "lucide-react";
@@ -101,11 +103,38 @@ function StatCard({
   );
 }
 
+type JobStatus = "idle" | "running" | "done" | "error";
+
 export default function MigrationDashboard() {
   const [stats, setStats] = useState<MigrationStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [jobStatuses, setJobStatuses] = useState<Record<string, JobStatus>>({});
+  const [jobResults, setJobResults] = useState<Record<string, string>>({});
+
+  async function runTrackAJob(jobId: string) {
+    setJobStatuses((s) => ({ ...s, [jobId]: "running" }));
+    setJobResults((r) => ({ ...r, [jobId]: "" }));
+    try {
+      const res = await fetch("/api/admin/run-migration", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job: jobId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setJobStatuses((s) => ({ ...s, [jobId]: "error" }));
+        setJobResults((r) => ({ ...r, [jobId]: data.error ?? "Unknown error" }));
+      } else {
+        setJobStatuses((s) => ({ ...s, [jobId]: "done" }));
+        setJobResults((r) => ({ ...r, [jobId]: `Triggered. Running in background — check Inngest for progress.` }));
+      }
+    } catch (err) {
+      setJobStatuses((s) => ({ ...s, [jobId]: "error" }));
+      setJobResults((r) => ({ ...r, [jobId]: String(err) }));
+    }
+  }
 
   const adminSecret =
     typeof window !== "undefined"
@@ -486,6 +515,59 @@ export default function MigrationDashboard() {
             </p>
           </div>
         )}
+
+      {/* Track A: One-time Neo4j Schema Migrations */}
+      <div className="mt-8 rounded-xl border border-cos-electric/20 bg-cos-electric/5 p-6">
+        <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-cos-midnight">
+          <GitMerge className="h-5 w-5 text-cos-electric" />
+          Track A: Graph Schema Migrations
+        </h2>
+        <p className="mb-5 text-sm text-cos-midnight/50">
+          One-time jobs to complete the canonical Company/Person node migration.
+          Both are idempotent — safe to run more than once.
+        </p>
+
+        <div className="space-y-4">
+          {[
+            {
+              id: "client-nodes-to-company",
+              title: "Client Nodes → Company",
+              desc: "Converts legacy Client nodes in Neo4j to canonical Company stubs and repoints all HAS_CLIENT / FOR_CLIENT edges.",
+            },
+            {
+              id: "partnership-prefs-to-edges",
+              title: "Partner Preferences → PREFERS Edges",
+              desc: "Syncs any unsynced firm onboarding preferences from Postgres into Neo4j PREFERS edges.",
+            },
+          ].map((job) => {
+            const status = jobStatuses[job.id] ?? "idle";
+            const result = jobResults[job.id];
+            return (
+              <div key={job.id} className="flex items-start gap-4 rounded-lg border border-cos-border/30 bg-white/80 p-4">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-cos-midnight">{job.title}</p>
+                  <p className="text-xs text-cos-midnight/50">{job.desc}</p>
+                  {result && (
+                    <p className={`mt-1.5 text-xs font-mono ${status === "error" ? "text-cos-ember" : "text-cos-electric"}`}>
+                      {result}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => runTrackAJob(job.id)}
+                  disabled={status === "running"}
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-cos-electric px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-cos-electric/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {status === "running" && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {status === "done" && <CheckCircle2 className="h-3 w-3" />}
+                  {status === "error" && <XCircle className="h-3 w-3" />}
+                  {status === "running" ? "Running…" : "Run"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
