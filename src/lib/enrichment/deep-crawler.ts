@@ -12,13 +12,29 @@
  * The deep crawler discovers 10-20+ pages and extracts richer data.
  */
 
-import { scrapeUrl, type JinaScrapeResult } from "./jina-scraper";
+import { scrapeUrl, isBlockedContent, type JinaScrapeResult } from "./jina-scraper";
 import { classifyPageType, type PageType } from "./page-classifier";
 import { extractCaseStudyDeep } from "./extractors/case-study-extractor";
 import { extractTeamMembers } from "./extractors/team-extractor";
 import { extractServicesDeep } from "./extractors/service-extractor";
 import { extractClientsWithConfidence } from "./client-extractor";
 import { logEnrichmentStep } from "./audit-logger";
+
+/** Jitter delay between page requests to avoid CF bot-pattern detection. */
+function sleep(): Promise<void> {
+  return new Promise((r) => setTimeout(r, 5000 + Math.random() * 5000));
+}
+
+const NDA_PATTERNS = [
+  /due to (nda|confidentiality)/i,
+  /client.{0,30}(confidential|cannot disclose|remain anonymous)/i,
+  /nda.{0,30}(prevents|prohibits|restrict)/i,
+  /cannot (share|reveal|disclose).{0,30}client/i,
+];
+
+function detectNdaProtection(content: string): boolean {
+  return NDA_PATTERNS.some((p) => p.test(content));
+}
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -43,6 +59,8 @@ export interface DeepCrawlResult {
     clients: string[];
     aboutPitch: string;
     caseStudyUrls: string[];
+    /** True if the site explicitly states client names are confidential/NDA-protected */
+    clientsNdaProtected: boolean;
   };
   /** Combined raw content for the AI classifier */
   rawContent: string;
@@ -175,6 +193,7 @@ export async function deepCrawlWebsite(params: {
     .slice(0, MAX_PAGES - 1);
 
   for (const [url, source] of toScrape) {
+    await sleep(); // 5–10 second jitter between requests on the same domain
     const scraped = await scrapeWithTimeout(url);
     if (!scraped || scraped.content.length < 50) continue;
 
@@ -239,6 +258,19 @@ export async function deepCrawlWebsite(params: {
     services.push(...extracted);
   }
 
+  // Collect client names already extracted by the case study extractor —
+  // pass them as pre-seeded signals to skip a duplicate AI call.
+  const preSeededClients = caseStudies
+    .map((cs) => cs.clientName)
+    .filter((n): n is string => Boolean(n));
+
+  // Detect NDA protection on client-facing pages
+  const clientNdaContent = [
+    homepage.content,
+    ...clientPages.map((p) => p.scraped.content),
+  ].join("\n");
+  const clientsNdaProtected = detectNdaProtection(clientNdaContent);
+
   // Extract clients with multi-signal confidence scoring
   const clientResult = await extractClientsWithConfidence({
     homepageContent: homepage.content,
@@ -253,6 +285,7 @@ export async function deepCrawlWebsite(params: {
       url: p.url,
       title: p.scraped.title,
     })),
+    preSeededClients,
   });
   const clients = clientResult.clients;
 
@@ -284,6 +317,7 @@ export async function deepCrawlWebsite(params: {
       teamMembers: teamMembers.length,
       services: services.length,
       clients: clients.length,
+      clientsNdaProtected,
     },
     durationMs: Date.now() - start,
     status: "success",
@@ -300,6 +334,7 @@ export async function deepCrawlWebsite(params: {
       clients,
       aboutPitch,
       caseStudyUrls,
+      clientsNdaProtected,
     },
     rawContent,
     stats: {
@@ -321,6 +356,10 @@ async function scrapeWithTimeout(
     const timeout = setTimeout(() => controller.abort(), SCRAPE_TIMEOUT_MS);
     const result = await scrapeUrl(url, { signal: controller.signal });
     clearTimeout(timeout);
+    if (isBlockedContent(result.content)) {
+      console.warn(`[DeepCrawl] Block detected at ${url}`);
+      return null;
+    }
     return result;
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
@@ -519,6 +558,7 @@ function emptyResult(
       clients: [],
       aboutPitch: "",
       caseStudyUrls: [],
+      clientsNdaProtected: false,
     },
     rawContent: "",
     stats: {

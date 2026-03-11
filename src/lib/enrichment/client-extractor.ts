@@ -61,8 +61,21 @@ export async function extractClientsWithConfidence(params: {
     url: string;
     title: string;
   }[];
+  /**
+   * Client names already extracted by the case study extractor.
+   * When provided, the duplicate AI call on case study pages is skipped —
+   * these names are added directly as case_study_ai signals at 0.9 confidence.
+   */
+  preSeededClients?: string[];
 }): Promise<{ clients: string[]; clientSignals: ClientSignal[] }> {
   const allSignals: ClientSignal[] = [];
+
+  // Add pre-seeded signals from the case study extractor (no AI call needed)
+  for (const name of params.preSeededClients ?? []) {
+    if (name && !isBlocklisted(name)) {
+      allSignals.push({ name: cleanName(name), confidence: 0.9, source: "case_study_ai" });
+    }
+  }
 
   // Combine all content sources for section-based extraction
   const allContent = [
@@ -70,10 +83,12 @@ export async function extractClientsWithConfidence(params: {
     ...params.evidencePages.map((p) => p.content),
   ].join("\n\n");
 
-  // Run all extractors in parallel
+  // Run extractors in parallel; skip the AI case-study call if pre-seeded names were provided
   const [aiClients, sectionClients, logoClients, testimonialClients, titleClients] =
     await Promise.all([
-      extractFromCaseStudyContent(params.caseStudyPages),
+      params.preSeededClients?.length
+        ? Promise.resolve([]) // already have these — skip duplicate AI call
+        : extractFromCaseStudyContent(params.caseStudyPages),
       Promise.resolve(extractFromClientSections(allContent)),
       Promise.resolve(extractFromLogoAltText(allContent)),
       Promise.resolve(extractFromTestimonials(allContent)),

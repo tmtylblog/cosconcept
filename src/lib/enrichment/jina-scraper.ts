@@ -19,6 +19,27 @@ import { extractClientsWithConfidence } from "./client-extractor";
 
 const JINA_READER_BASE = "https://r.jina.ai";
 
+// ─── Block / CF detection ─────────────────────────────────
+
+const CF_BLOCK_PATTERNS = [
+  /just a moment/i,
+  /checking your browser/i,
+  /enable javascript and cookies/i,
+  /ddos protection/i,
+  /verify you are human/i,
+  /access denied/i,
+];
+
+/**
+ * Returns true if scraped content looks like a bot-protection page
+ * (Cloudflare challenge, access denied, or suspiciously empty).
+ * Exported so deep-crawler can reuse the same check.
+ */
+export function isBlockedContent(content: string): boolean {
+  if (!content || content.length < 200) return true;
+  return CF_BLOCK_PATTERNS.some((p) => p.test(content));
+}
+
 export interface JinaScrapeResult {
   url: string;
   title: string;
@@ -272,30 +293,27 @@ export async function scrapeFirmWebsite(
   }
 
   // 5. Scrape top 3 case study URLs for smart client extraction
+  // Sequential with jitter delay to avoid CF bot-pattern detection
   const caseStudyPages: { content: string; url: string; title: string }[] = [];
   const csUrlsToScrape = [...new Set(caseStudyUrls)].slice(0, 3);
-  if (csUrlsToScrape.length > 0) {
-    const csResults = await Promise.allSettled(
-      csUrlsToScrape.map((csUrl) => {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        return scrapeUrl(csUrl, { signal: controller.signal }).finally(() =>
-          clearTimeout(timeout)
-        );
-      })
-    );
-    for (let i = 0; i < csResults.length; i++) {
-      const result = csResults[i];
-      if (
-        result.status === "fulfilled" &&
-        result.value.content.length > 100
-      ) {
+  for (const csUrl of csUrlsToScrape) {
+    await new Promise((r) => setTimeout(r, 5000 + Math.random() * 5000));
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const result = await scrapeUrl(csUrl, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!isBlockedContent(result.content)) {
         caseStudyPages.push({
-          content: result.value.content,
-          url: csUrlsToScrape[i],
-          title: result.value.title,
+          content: result.content,
+          url: csUrl,
+          title: result.title,
         });
+      } else {
+        console.warn(`[Jina] Block detected at ${csUrl}`);
       }
+    } catch {
+      /* skip — timeout or scrape error */
     }
   }
 
