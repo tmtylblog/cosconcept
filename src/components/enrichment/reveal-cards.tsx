@@ -93,44 +93,76 @@ export function StageChip({ label, stage }: { label: string; stage: StageStatus 
 
 // ─── PreferenceProgress ─────────────────────────────────────
 
-/** Progress indicator for the 9 partner preference questions */
+/** Progress indicator for the 5 partner preference questions (v2 flow).
+ *  Also supports legacy v1 fields — if any v1 fields are filled but no v2
+ *  fields, it shows the v1 progress instead. */
 export function PreferenceProgress({
+  // v2 fields
+  partnershipPhilosophy,
+  capabilityGaps,
+  partnerTypes,
+  dealBreaker,
+  geographyPreference,
+  // v1 legacy fields (for backward compat)
   desiredServices,
   partnerIndustries,
   clientSize,
   partnerLocations,
-  partnerTypes,
   partnerSize,
   projectSize,
   hourlyRates,
   partnershipRole,
 }: {
-  desiredServices: string[];
-  partnerIndustries: string[];
-  clientSize: string[];
-  partnerLocations: string[];
+  // v2
+  partnershipPhilosophy?: string;
+  capabilityGaps?: string[];
   partnerTypes: string[];
-  partnerSize: string[];
-  projectSize: string[];
-  hourlyRates: string | undefined;
-  partnershipRole: string | undefined;
+  dealBreaker?: string;
+  geographyPreference?: string;
+  // v1 legacy
+  desiredServices?: string[];
+  partnerIndustries?: string[];
+  clientSize?: string[];
+  partnerLocations?: string[];
+  partnerSize?: string[];
+  projectSize?: string[];
+  hourlyRates?: string;
+  partnershipRole?: string;
 }) {
-  const fields = [
-    { label: "Services wanted", done: desiredServices.length > 0 },
-    { label: "Partner industries", done: partnerIndustries.length > 0 },
-    { label: "Client size", done: clientSize.length > 0 },
-    { label: "Locations", done: partnerLocations.length > 0 },
-    { label: "Partner types", done: partnerTypes.length > 0 },
-    { label: "Partner size", done: partnerSize.length > 0 },
-    { label: "Project size", done: projectSize.length > 0 },
-    { label: "Hourly rates", done: !!hourlyRates },
-    { label: "Partnership role", done: !!partnershipRole },
-  ];
+  // Determine which flow to display
+  const hasV2 = !!(partnershipPhilosophy || (capabilityGaps && capabilityGaps.length > 0) || dealBreaker || geographyPreference);
+  const hasV1 = !!((desiredServices && desiredServices.length > 0) || (partnerIndustries && partnerIndustries.length > 0) ||
+    hourlyRates || partnershipRole || (partnerSize && partnerSize.length > 0) || (projectSize && projectSize.length > 0) ||
+    (clientSize && clientSize.length > 0) || (partnerLocations && partnerLocations.length > 0));
 
+  // Show v2 progress if any v2 fields exist, or if neither exists (awaiting first answer)
+  const showV2 = hasV2 || !hasV1;
+
+  const fields = showV2
+    ? [
+        { label: "Philosophy", done: !!partnershipPhilosophy },
+        { label: "Capability gaps", done: (capabilityGaps?.length ?? 0) > 0 },
+        { label: "Partner types", done: partnerTypes.length > 0 },
+        { label: "Deal-breaker", done: !!dealBreaker },
+        { label: "Geography", done: !!geographyPreference },
+      ]
+    : [
+        { label: "Services wanted", done: (desiredServices?.length ?? 0) > 0 },
+        { label: "Partner industries", done: (partnerIndustries?.length ?? 0) > 0 },
+        { label: "Client size", done: (clientSize?.length ?? 0) > 0 },
+        { label: "Locations", done: (partnerLocations?.length ?? 0) > 0 },
+        { label: "Partner types", done: partnerTypes.length > 0 },
+        { label: "Partner size", done: (partnerSize?.length ?? 0) > 0 },
+        { label: "Project size", done: (projectSize?.length ?? 0) > 0 },
+        { label: "Hourly rates", done: !!hourlyRates },
+        { label: "Partnership role", done: !!partnershipRole },
+      ];
+
+  const total = fields.length;
   const completedCount = fields.filter((f) => f.done).length;
 
   // Don't show when nothing or everything is done
-  if (completedCount === 0 || completedCount === 9) return null;
+  if (completedCount === 0 || completedCount === total) return null;
 
   return (
     <div className="w-full rounded-cos-xl border border-cos-electric/20 bg-gradient-to-r from-cos-electric/5 to-cos-signal/5 px-5 py-4">
@@ -139,14 +171,14 @@ export function PreferenceProgress({
           Partner Preferences
         </span>
         <span className="text-xs font-bold text-cos-electric">
-          {completedCount}/9
+          {completedCount}/{total}
         </span>
       </div>
       {/* Progress bar */}
       <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-cos-cloud">
         <div
           className="h-full rounded-full bg-gradient-to-r from-cos-electric to-cos-signal transition-all duration-500"
-          style={{ width: `${(completedCount / 9) * 100}%` }}
+          style={{ width: `${(completedCount / total) * 100}%` }}
         />
       </div>
       {/* Individual field status */}

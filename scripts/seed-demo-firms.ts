@@ -442,45 +442,54 @@ async function seed() {
       }))
     );
 
-    // 3. Partner Preferences (all 9 onboarding fields)
+    // 3. Partner Preferences (v2: 5 onboarding fields + v1 legacy for compat)
     await db.insert(partnerPreferences).values(
       chunk.map((f) => {
-        // Pick partner types different from own type
-        const allTypes = ["boutique_agency", "project_consulting", "staff_augmentation", "advisory", "fractional_interim", "managed_service_provider", "embedded_teams"];
-        const partnerTypes = pickN(allTypes.filter(t => t !== f.firmType), 2 + Math.floor(Math.random() * 2));
-        const partnerSizes = pickN(["micro_1_10", "small_11_50", "emerging_51_200", "mid_201_500"], 2 + Math.floor(Math.random() * 2));
+        // Pick partner types from COS firm categories, different from own
+        const otherCats = CATEGORIES.filter(c => !f.categories.includes(c));
+        const partnerTypeChoices = pickN(otherCats, 2 + Math.floor(Math.random() * 3));
+
+        // Capability gaps — pick 1-3 categories the firm doesn't have
+        const gapChoices = pickN(otherCats, 1 + Math.floor(Math.random() * 3));
+
+        const philosophy = pick(["breadth", "depth", "opportunities"]);
+        const dealBreaker = pick([
+          "None",
+          "Poor communication or unresponsive partners",
+          "Firms that compete directly in our space",
+          "Partners who don't meet deadlines",
+          "No experience with enterprise clients",
+          "Lack of transparency on pricing",
+        ]);
+        const geography = pick(["Global", "North America", "United States", "UK & Europe", "APAC"]);
+
+        // v1 legacy fields for backward compat
+        const legacyPartnerTypes = pickN(["boutique_agency", "project_consulting", "staff_augmentation", "advisory", "fractional_interim"], 2);
+        const partnerSizes = pickN(["micro_1_10", "small_11_50", "emerging_51_200", "mid_201_500"], 2);
         const partnerIndustries = pickN(INDUSTRIES, 2 + Math.floor(Math.random() * 3));
         const partnerMarkets = pickN(MARKETS, 2 + Math.floor(Math.random() * 3));
 
-        // Desired partner services — pick from categories different than own
-        const otherCats = CATEGORIES.filter(c => !f.categories.includes(c));
-        const desiredServices = pickN(otherCats, 2 + Math.floor(Math.random() * 3));
-
-        const growthGoal = pick([
-          "Expand into new verticals and geographies",
-          "Build a reliable bench of specialist partners",
-          "Increase project capacity without hiring",
-          "Offer broader service bundles to existing clients",
-        ]);
-        const partnershipModelChoices = pickN(["co-delivery", "subcontracting", "referral", "white-label"], 1 + Math.floor(Math.random() * 2));
-
-        // Track A: All 9 onboarding fields live in rawOnboardingData (canonical store)
-        // Legacy columns also populated for backward compat during transition
         return {
           id: f.prefId,
           firmId: f.firmId,
-          preferredFirmTypes: partnerTypes,
+          preferredFirmTypes: legacyPartnerTypes,
           preferredSizeBands: partnerSizes,
           preferredIndustries: partnerIndustries,
           preferredMarkets: partnerMarkets,
-          partnershipModels: partnershipModelChoices,
+          partnershipModels: pickN(["co-delivery", "subcontracting", "referral", "white-label"], 1 + Math.floor(Math.random() * 2)),
           dealBreakers: [],
-          growthGoals: growthGoal,
+          growthGoals: pick(["Expand into new verticals", "Build a reliable partner bench", "Increase capacity without hiring"]),
           rawOnboardingData: {
-            desiredPartnerServices: desiredServices,
+            // v2 fields (new 5-question flow)
+            partnershipPhilosophy: philosophy,
+            capabilityGaps: gapChoices,
+            preferredPartnerTypes: partnerTypeChoices,
+            dealBreaker: dealBreaker,
+            geographyPreference: geography,
+            // v1 legacy fields (kept for backward compat)
+            desiredPartnerServices: pickN(otherCats, 2 + Math.floor(Math.random() * 3)),
             requiredPartnerIndustries: partnerIndustries,
             idealPartnerClientSize: f.clientSizes,
-            preferredPartnerTypes: partnerTypes,
             preferredPartnerSize: partnerSizes,
             preferredPartnerLocations: partnerMarkets,
             idealProjectSize: f.projectSize,

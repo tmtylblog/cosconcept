@@ -94,7 +94,13 @@ export default function DashboardPage() {
       ? classification.categories
       : null;
 
-  // Partner preference data (only from profile/chat confirmations)
+  // v2 partner preference data
+  const partnershipPhilosophy = profile.partnershipPhilosophy;
+  const capabilityGaps = profile.capabilityGaps ?? [];
+  const dealBreaker = profile.dealBreaker;
+  const geographyPreference = profile.geographyPreference;
+
+  // Shared + v1 legacy partner preference data
   const partnerTypes = profile.preferredPartnerTypes ?? [];
   const partnerSize = profile.preferredPartnerSize ?? [];
   const partnerIndustries = profile.requiredPartnerIndustries ?? [];
@@ -293,11 +299,15 @@ export default function DashboardPage() {
           {/* ─── Partner Preferences Progress Indicator ── */}
           {hasAnyData && (
             <PreferenceProgress
+              partnershipPhilosophy={partnershipPhilosophy}
+              capabilityGaps={capabilityGaps}
+              partnerTypes={partnerTypes}
+              dealBreaker={dealBreaker}
+              geographyPreference={geographyPreference}
               desiredServices={desiredServices}
               partnerIndustries={partnerIndustries}
               clientSize={clientSize}
               partnerLocations={partnerLocations}
-              partnerTypes={partnerTypes}
               partnerSize={partnerSize}
               projectSize={projectSize}
               hourlyRates={hourlyRates}
@@ -305,67 +315,69 @@ export default function DashboardPage() {
             />
           )}
 
-          {/* ─── Partner Preferences (from chat confirmations) ── */}
+          {/* ─── v2 Partner Preference Cards ── */}
+          {partnershipPhilosophy && (
+            <RevealCard icon={Handshake} label="Partnership Philosophy" delay={0}>
+              <p className="text-sm capitalize">{partnershipPhilosophy === "breadth" ? "Extend breadth of services" : partnershipPhilosophy === "depth" ? "Deepen existing capabilities" : "Open doors to new opportunities"}</p>
+            </RevealCard>
+          )}
+          {capabilityGaps.length > 0 && (
+            <RevealCard icon={Search} label="Capability Gaps" delay={0}>
+              <PillList items={capabilityGaps} pillClass="bg-cos-electric/8 text-cos-electric" />
+            </RevealCard>
+          )}
+          {partnerTypes.length > 0 && (
+            <RevealCard icon={Handshake} label="Preferred Partner Types" delay={0}>
+              <PillList items={partnerTypes} pillClass="bg-cos-signal/10 text-cos-signal" />
+            </RevealCard>
+          )}
+          {dealBreaker && (
+            <RevealCard icon={ShieldAlert} label="Deal-Breaker" delay={0}>
+              <p>{dealBreaker}</p>
+            </RevealCard>
+          )}
+          {geographyPreference && (
+            <RevealCard icon={MapPin} label="Geography Preference" delay={0}>
+              <p>{geographyPreference}</p>
+            </RevealCard>
+          )}
+
+          {/* ─── v1 Legacy Partner Preference Cards ── */}
           {desiredServices.length > 0 && (
             <RevealCard icon={Search} label="Services Wanted from Partners" delay={0}>
-              <PillList
-                items={desiredServices}
-                pillClass="bg-cos-electric/8 text-cos-electric"
-              />
+              <PillList items={desiredServices} pillClass="bg-cos-electric/8 text-cos-electric" />
             </RevealCard>
           )}
-
           {partnerIndustries.length > 0 && (
             <RevealCard icon={Briefcase} label="Required Partner Industries" delay={0}>
-              <PillList
-                items={partnerIndustries}
-                pillClass="bg-cos-signal/8 text-cos-signal"
-              />
+              <PillList items={partnerIndustries} pillClass="bg-cos-signal/8 text-cos-signal" />
             </RevealCard>
           )}
-
           {clientSize.length > 0 && (
             <RevealCard icon={Users} label="Ideal Partner Client Size" delay={0}>
               <PillList items={clientSize} pillClass="bg-cos-midnight/6 text-cos-midnight" />
             </RevealCard>
           )}
-
           {partnerLocations.length > 0 && (
             <RevealCard icon={MapPin} label="Partner Locations" delay={0}>
               <p>{partnerLocations.join(", ")}</p>
             </RevealCard>
           )}
-
-          {partnerTypes.length > 0 && (
-            <RevealCard icon={Handshake} label="Preferred Partner Types" delay={0}>
-              <PillList
-                items={partnerTypes}
-                pillClass="bg-cos-signal/10 text-cos-signal"
-              />
-            </RevealCard>
-          )}
-
           {partnerSize.length > 0 && (
             <RevealCard icon={Building} label="Preferred Partner Size" delay={0}>
-              <PillList
-                items={partnerSize}
-                pillClass="bg-cos-midnight/6 text-cos-midnight"
-              />
+              <PillList items={partnerSize} pillClass="bg-cos-midnight/6 text-cos-midnight" />
             </RevealCard>
           )}
-
           {projectSize.length > 0 && (
             <RevealCard icon={Ruler} label="Ideal Project Size" delay={0}>
               <PillList items={projectSize} pillClass="bg-cos-warm/10 text-cos-warm" />
             </RevealCard>
           )}
-
           {hourlyRates && (
             <RevealCard icon={DollarSign} label="Typical Hourly Rates" delay={0}>
               <p>{hourlyRates}</p>
             </RevealCard>
           )}
-
           {partnershipRole && (
             <RevealCard icon={Handshake} label="Partnership Role" delay={0}>
               <p>{partnershipRole}</p>

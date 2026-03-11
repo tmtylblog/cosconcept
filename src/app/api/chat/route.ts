@@ -10,7 +10,7 @@ import { PLAN_LIMITS } from "@/lib/billing/plan-limits";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { conversations, messages as messagesTable, serviceFirms, members, callRecordings, callTranscripts } from "@/lib/db/schema";
-import { readAllPreferences, INTERVIEW_FIELDS } from "@/lib/profile/update-profile-field";
+import { readAllPreferences, isOnboardingComplete } from "@/lib/profile/update-profile-field";
 import { inngest } from "@/inngest/client";
 import { logUsage } from "@/lib/ai/gateway";
 import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
@@ -133,14 +133,15 @@ export async function POST(req: Request) {
       }
     }
 
-    // Onboarding is "complete" only when ALL interview preference fields are stored
-    const allPrefsCount = collectedPreferences ? Object.keys(collectedPreferences).length : 0;
-    const allPrefsComplete = allPrefsCount >= INTERVIEW_FIELDS.length;
+    // Onboarding is "complete" when either v2 (5Q) or v1 (9Q) fields are all stored
+    const allPrefsComplete = collectedPreferences
+      ? isOnboardingComplete(collectedPreferences)
+      : false;
     const hasCompletedOnboarding = allPrefsComplete;
 
     const systemPrompt = getOssyPrompt({
       userName: userName ?? undefined,
-      // Always onboarding until all 9 prefs are confirmed — regardless of message count
+      // Always onboarding until all prefs are confirmed — regardless of message count
       isOnboarding: !allPrefsComplete,
       hasCompletedOnboarding,
       hasToolAccess,

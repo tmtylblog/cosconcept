@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { serviceFirms, members } from "@/lib/db/schema";
-import { readAllPreferences, INTERVIEW_FIELDS } from "@/lib/profile/update-profile-field";
+import { readAllPreferences, INTERVIEW_FIELDS, LEGACY_INTERVIEW_FIELDS, isOnboardingComplete } from "@/lib/profile/update-profile-field";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
  *
  * Returns onboarding completeness status:
  * - enrichmentComplete: whether firm has real enrichment data
- * - preferencesComplete: whether all 9 partner preferences are stored
- * - answeredCount: how many of the 9 are filled
- * - totalRequired: derived from INTERVIEW_FIELDS.length
+ * - preferencesComplete: whether all partner preferences are stored (v2 5Q or v1 9Q)
+ * - answeredCount: how many of the current interview fields are filled
+ * - totalRequired: derived from INTERVIEW_FIELDS.length (v2 = 5)
  * - onboardingComplete: enrichmentComplete AND preferencesComplete
  * - missingFields: array of field names not yet answered
  */
@@ -101,6 +101,7 @@ export async function GET(req: Request) {
     // Uses readAllPreferences() which checks JSONB first, then falls back to legacy columns
     const prefs = await readAllPreferences(firmRow.id);
 
+    // Check v2 (new 5Q) fields
     const answeredFields: string[] = [];
     const missingFields: string[] = [];
 
@@ -113,7 +114,8 @@ export async function GET(req: Request) {
     }
 
     const answeredCount = answeredFields.length;
-    const preferencesComplete = answeredCount >= totalRequired;
+    // Accept EITHER v2 (5 new fields) OR v1 (9 legacy fields) as complete
+    const preferencesComplete = isOnboardingComplete(prefs);
 
     // Brand/client entities skip the 9-question onboarding entirely
     const entityType = firmRow.entityType ?? "service_firm";

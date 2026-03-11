@@ -28,7 +28,7 @@ function domainToOrgName(domain: string): string {
 // ─── App Phase Type ─────────────────────────────────────────
 // Phase 1: landing — guest, no domain submitted
 // Phase 2: enriching — guest, domain submitted, enrichment in progress
-// Phase 3: onboarding — authenticated but NOT all 9 prefs complete
+// Phase 3: onboarding — authenticated but NOT all preferences complete (v2: 5 questions, v1: 9 legacy)
 // Phase 3b: brand_waitlist — authenticated brand/client, skips onboarding
 // Phase 4: authenticated — onboarding complete, full app access
 type AppPhase = "landing" | "enriching" | "onboarding" | "brand_waitlist" | "authenticated";
@@ -198,7 +198,7 @@ function AppLayoutInner({
 
   // Track onboarding completion — distinguish initial page load from in-session transition.
   // On page reload of an already-complete account, skip celebration and go straight to app.
-  // On genuine in-session completion (user answers all 9 questions), show celebration + trigger deep crawl.
+  // On genuine in-session completion (user answers all preferences), show celebration + trigger deep crawl.
   const onboardingLoadedRef = useRef(false); // has the first API response arrived?
   const prevOnboardingCompleteRef = useRef<boolean | null>(null);
   const deepCrawlTriggeredRef = useRef(false);

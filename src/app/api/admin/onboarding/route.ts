@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { onboardingEvents } from "@/lib/db/schema";
 import { sql, gte, and, eq, desc, count } from "drizzle-orm";
-import { INTERVIEW_FIELDS } from "@/lib/profile/update-profile-field";
+import { INTERVIEW_FIELDS, LEGACY_INTERVIEW_FIELDS } from "@/lib/profile/update-profile-field";
 
 export const dynamic = "force-dynamic";
 
@@ -78,9 +78,10 @@ export async function GET(req: Request) {
       );
     const interviewStarted = interviewStartedResult.length;
 
-    // ─── 3. Per-question completion rates ──────────────
+    // ─── 3. Per-question completion rates (track both v2 and v1 fields) ──
     const questionCompletion: Record<string, { answered: number; rate: number }> = {};
-    for (const field of INTERVIEW_FIELDS) {
+    const allTrackedFields = [...new Set([...INTERVIEW_FIELDS, ...LEGACY_INTERVIEW_FIELDS])];
+    for (const field of allTrackedFields) {
       const answered = eventCounts[`interview_answer:${field}`] ?? 0;
       questionCompletion[field] = {
         answered,

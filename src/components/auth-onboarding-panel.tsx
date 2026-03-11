@@ -31,8 +31,8 @@ import { RevealCard, PillList, StageChip, PreferenceProgress } from "@/component
  * Displays:
  * - Firm identity card (logo, name, metadata)
  * - Enrichment data cards (categories, skills, industries, markets, languages)
- * - Progress banner ("Almost there! X/9 preferences complete")
- * - Partner preference cards as they get filled via Ossy
+ * - Progress banner ("Almost there! X/N preferences complete")
+ * - Partner preference cards as they get filled via Ossy (v2: 5 questions, v1: 9 legacy)
  */
 export function AuthOnboardingPanel({
   answeredCount,
@@ -75,11 +75,20 @@ export function AuthOnboardingPanel({
   const asString = (v: unknown): string | undefined =>
     typeof v === "string" && v ? v : undefined;
 
+  // v2 fields (new 5-question flow)
+  const partnershipPhilosophy = asString(profileData?.partnershipPhilosophy);
+  const capabilityGaps = asArray(profileData?.capabilityGaps);
+  const dealBreaker = asString(profileData?.dealBreaker);
+  const geographyPreference = asString(profileData?.geographyPreference);
+
+  // Shared field
+  const partnerTypes = asArray(profileData?.preferredPartnerTypes);
+
+  // v1 legacy fields (for backward compat display)
   const desiredServices = asArray(profileData?.desiredPartnerServices);
   const partnerIndustries = asArray(profileData?.requiredPartnerIndustries);
   const clientSize = asArray(profileData?.idealPartnerClientSize);
   const partnerLocations = asArray(profileData?.preferredPartnerLocations);
-  const partnerTypes = asArray(profileData?.preferredPartnerTypes);
   const partnerSize = asArray(profileData?.preferredPartnerSize);
   const projectSize = asArray(profileData?.idealProjectSize);
   const hourlyRates = asString(profileData?.typicalHourlyRates);
@@ -97,11 +106,18 @@ export function AuthOnboardingPanel({
     (industries ? 1 : 0) +
     (markets ? 1 : 0) +
     (languages ? 1 : 0) +
+    // v2 fields
+    (partnershipPhilosophy ? 1 : 0) +
+    (capabilityGaps.length > 0 ? 1 : 0) +
+    (dealBreaker ? 1 : 0) +
+    (geographyPreference ? 1 : 0) +
+    // shared
+    (partnerTypes.length > 0 ? 1 : 0) +
+    // v1 legacy
     (desiredServices.length > 0 ? 1 : 0) +
     (partnerIndustries.length > 0 ? 1 : 0) +
     (clientSize.length > 0 ? 1 : 0) +
     (partnerLocations.length > 0 ? 1 : 0) +
-    (partnerTypes.length > 0 ? 1 : 0) +
     (partnerSize.length > 0 ? 1 : 0) +
     (projectSize.length > 0 ? 1 : 0) +
     (hourlyRates ? 1 : 0) +
@@ -312,18 +328,49 @@ export function AuthOnboardingPanel({
 
           {/* ─── Partner Preferences Progress ─── */}
           <PreferenceProgress
+            partnershipPhilosophy={partnershipPhilosophy}
+            capabilityGaps={capabilityGaps}
+            partnerTypes={partnerTypes}
+            dealBreaker={dealBreaker}
+            geographyPreference={geographyPreference}
             desiredServices={desiredServices}
             partnerIndustries={partnerIndustries}
             clientSize={clientSize}
             partnerLocations={partnerLocations}
-            partnerTypes={partnerTypes}
             partnerSize={partnerSize}
             projectSize={projectSize}
             hourlyRates={hourlyRates}
             partnershipRole={partnershipRole}
           />
 
-          {/* ─── Partner Preference Cards ─── */}
+          {/* ─── v2 Partner Preference Cards ─── */}
+          {partnershipPhilosophy && (
+            <RevealCard icon={Handshake} label="Partnership Philosophy" delay={0}>
+              <p className="text-sm capitalize">{partnershipPhilosophy === "breadth" ? "Extend breadth of services" : partnershipPhilosophy === "depth" ? "Deepen existing capabilities" : "Open doors to new opportunities"}</p>
+            </RevealCard>
+          )}
+          {capabilityGaps.length > 0 && (
+            <RevealCard icon={Search} label="Capability Gaps" delay={0}>
+              <PillList items={capabilityGaps} pillClass="bg-cos-electric/8 text-cos-electric" />
+            </RevealCard>
+          )}
+          {partnerTypes.length > 0 && (
+            <RevealCard icon={Handshake} label="Preferred Partner Types" delay={0}>
+              <PillList items={partnerTypes} pillClass="bg-cos-signal/10 text-cos-signal" />
+            </RevealCard>
+          )}
+          {dealBreaker && (
+            <RevealCard icon={Building} label="Deal-Breaker" delay={0}>
+              <p>{dealBreaker}</p>
+            </RevealCard>
+          )}
+          {geographyPreference && (
+            <RevealCard icon={MapPin} label="Geography Preference" delay={0}>
+              <p>{geographyPreference}</p>
+            </RevealCard>
+          )}
+
+          {/* ─── v1 Legacy Partner Preference Cards (for backward compat) ─── */}
           {desiredServices.length > 0 && (
             <RevealCard icon={Search} label="Services Wanted from Partners" delay={0}>
               <PillList items={desiredServices} pillClass="bg-cos-electric/8 text-cos-electric" />
@@ -342,11 +389,6 @@ export function AuthOnboardingPanel({
           {partnerLocations.length > 0 && (
             <RevealCard icon={MapPin} label="Partner Locations" delay={0}>
               <p>{partnerLocations.join(", ")}</p>
-            </RevealCard>
-          )}
-          {partnerTypes.length > 0 && (
-            <RevealCard icon={Handshake} label="Preferred Partner Types" delay={0}>
-              <PillList items={partnerTypes} pillClass="bg-cos-signal/10 text-cos-signal" />
             </RevealCard>
           )}
           {partnerSize.length > 0 && (

@@ -117,7 +117,17 @@ const authWelcomeMessages: UIMessage[] = [
 ];
 
 // ─── Onboarding question map (field → bolded question text) ────────
-const ONBOARDING_QUESTIONS: { field: string; question: string }[] = [
+// v2 flow: 5 questions (new users)
+const ONBOARDING_QUESTIONS_V2: { field: string; question: string }[] = [
+  { field: "partnershipPhilosophy", question: "when you think about partnerships, are you looking to extend the breadth of your services, deepen existing capabilities, or open doors to new opportunities?" },
+  { field: "capabilityGaps", question: "what capabilities or services do you wish you could offer clients but can't today? What gaps would the right partner fill?" },
+  { field: "preferredPartnerTypes", question: "what types of firms are you interested in partnering with?" },
+  { field: "dealBreaker", question: "what's a deal-breaker for you in a potential partner? Something that would make you walk away?" },
+  { field: "geographyPreference", question: "does geography matter for your partnerships? Do you prefer local, regional, national, or are you fully remote-friendly?" },
+];
+
+// v1 flow: 9 questions (legacy, kept for backward compat)
+const ONBOARDING_QUESTIONS_V1: { field: string; question: string }[] = [
   { field: "desiredPartnerServices", question: "what services would you love to bring in from a partner? Things you don't do in-house but your clients need?" },
   { field: "requiredPartnerIndustries", question: "what industry experience is critical when you're looking for a partner?" },
   { field: "idealPartnerClientSize", question: "what size companies do your ideal partners typically serve?" },
@@ -128,6 +138,9 @@ const ONBOARDING_QUESTIONS: { field: string; question: string }[] = [
   { field: "typicalHourlyRates", question: "what hourly rate ranges are typical for partner subcontractors in your world?" },
   { field: "partnershipRole", question: "are you looking to find work through partners, share opportunities with others, or both?" },
 ];
+
+// Active question set for new onboarding — use v2
+const ONBOARDING_QUESTIONS = ONBOARDING_QUESTIONS_V2;
 
 interface ChatPanelProps {
   isGuest?: boolean;
@@ -189,9 +202,13 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   >(null);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
 
-  // ─── Detect returning guest with all 9 prefs (read directly from localStorage) ───
+  // ─── Detect returning guest with all preferences complete (v2 or v1) ───
   // Must read from localStorage here because GuestDataProvider hasn't hydrated yet
-  const PREF_FIELDS = [
+  const V2_PREF_FIELDS = [
+    "partnershipPhilosophy", "capabilityGaps", "preferredPartnerTypes",
+    "dealBreaker", "geographyPreference",
+  ];
+  const V1_PREF_FIELDS = [
     "desiredPartnerServices", "requiredPartnerIndustries", "idealPartnerClientSize",
     "preferredPartnerLocations", "preferredPartnerTypes", "preferredPartnerSize",
     "idealProjectSize", "typicalHourlyRates", "partnershipRole",
@@ -202,11 +219,14 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       const raw = localStorage.getItem("cos_guest_preferences") || sessionStorage.getItem("cos_guest_preferences");
       if (!raw) return false;
       const prefs = JSON.parse(raw) as Record<string, unknown>;
-      const count = PREF_FIELDS.filter((f) => {
+      const hasPref = (f: string) => {
         const v = prefs[f];
         return v != null && (Array.isArray(v) ? v.length > 0 : v !== "");
-      }).length;
-      return count >= 9;
+      };
+      // Complete if ALL v2 fields filled OR ALL v1 fields filled
+      const v2Done = V2_PREF_FIELDS.every(hasPref);
+      const v1Done = V1_PREF_FIELDS.every(hasPref);
+      return v2Done || v1Done;
     } catch { return false; }
   });
 
@@ -214,7 +234,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
   // For guests, restore saved messages from sessionStorage synchronously
   // so they're available before useChat initializes on first render.
-  // BUT: if all 9 prefs are complete (returning guest), use a fixed welcome-back
+  // BUT: if all preferences are complete (returning guest), use a fixed welcome-back
   // message instead of trying to restore the old conversation.
   const welcomeBackMessages: UIMessage[] = [
     {
@@ -244,7 +264,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       text = `Welcome! I can see your firm data on the left. Let's set up your partner preferences -- just a few quick questions and you'll be all set.\n\nFirst up -- **${nextQ.question}**`;
     } else {
       // Returning user — acknowledge progress + next question
-      text = `Welcome back! I can see you've already answered ${answered} of 9 partner preference questions -- nice progress! Let's pick up where we left off.\n\n**${nextQ.question}**`;
+      text = `Welcome back! I can see you've already answered ${answered} of ${ONBOARDING_QUESTIONS.length} partner preference questions -- nice progress! Let's pick up where we left off.\n\n**${nextQ.question}**`;
     }
 
     return [{
@@ -285,7 +305,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   const enrichmentWasLoadingRef = useRef(enrichmentStatus === "loading");
   const enrichmentNudgeSentRef = useRef(false);
   // Whether we need to auto-continue (computed once on mount, never re-computed).
-  // SKIP auto-continue if all 9 prefs are complete — the welcome-back message handles it.
+  // SKIP auto-continue if all preferences are complete — the welcome-back message handles it.
   // Otherwise fires whenever there's a restored guest session with real conversation.
   const [needsAutoContinue] = useState(() => {
     if (!isGuest || allPrefsComplete) return false;
@@ -557,16 +577,18 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
               // Guest mode: cache client-side for migration after auth
               setGuestPreference(output.field, output.value);
 
-              // Auto-detect Q9 completion: if all 9 prefs are now filled,
+              // Auto-detect completion: if all preferences are now filled (v2 or v1),
               // trigger login prompt as client-side fallback (in case model
               // doesn't call request_login reliably after the tool result).
               const updatedPrefs = { ...guestPreferences, [output.field]: output.value };
-              const filledCount = PREF_FIELDS.filter((f) => {
+              const hasPref = (f: string) => {
                 const v = updatedPrefs[f];
                 return v != null && (Array.isArray(v) ? v.length > 0 : v !== "");
-              }).length;
-              if (filledCount >= 9 && !showLoginPrompt) {
-                console.log("[ChatPanel] All 9 guest preferences complete — auto-showing login prompt");
+              };
+              const allV2Done = V2_PREF_FIELDS.every(hasPref);
+              const allV1Done = V1_PREF_FIELDS.every(hasPref);
+              if ((allV2Done || allV1Done) && !showLoginPrompt) {
+                console.log("[ChatPanel] All guest preferences complete — auto-showing login prompt");
                 forceFlushToDb();
                 // Small delay so the congratulation text streams first
                 setTimeout(() => {

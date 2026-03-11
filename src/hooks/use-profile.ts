@@ -15,8 +15,14 @@ export interface ProfileData {
   markets?: string[];
   languages?: string[];
   industries?: string[];
-  // All partner preference fields (from partnerPreferences.rawOnboardingData JSONB)
+  // v2 partner preference fields (new 5-question flow)
+  partnershipPhilosophy?: string;
+  capabilityGaps?: string[];
+  dealBreaker?: string;
+  geographyPreference?: string;
+  // Shared between v1 & v2
   preferredPartnerTypes?: string[];
+  // v1 legacy partner preference fields (from partnerPreferences.rawOnboardingData JSONB)
   preferredPartnerSize?: string[];
   requiredPartnerIndustries?: string[];
   preferredPartnerLocations?: string[];

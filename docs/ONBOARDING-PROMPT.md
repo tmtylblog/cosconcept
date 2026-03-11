@@ -1,115 +1,149 @@
-# COS CONCEPT — Onboarding Prompt & Conversational Flow
+# COS CONCEPT — Onboarding Prompt & Conversational Flow (v2)
 
 ## Overview
-When a new firm joins Collective OS, Ossy conducts a conversational interview to understand their partnership preferences. This can happen via text chat or voice. The goal is to collect enough information to start generating matches — without overwhelming the user.
+When a new firm joins Collective OS, Ossy conducts a conversational interview to understand their partnership preferences. The goal is to collect **5 high-signal data points** that power the matching engine — without overwhelming the user.
 
-**Principle:** Progressive disclosure. Get the basics first, enrich over time.
+**Principle:** Progressive disclosure. Get the 5 things we can't infer first. Enrich everything else over time.
+
+**Target:** Under 90 seconds of input, 2-3 minute total experience.
 
 ---
 
-## The 8 Preference Dimensions
+## Pre-Population (Phase 1: Confirm, Don't Re-Ask)
 
-These are the core dimensions Ossy explores during onboarding. They form the firm's "partnership dating profile."
+Before question 1, the enrichment pipeline already knows:
+- Services offered (from website scraping)
+- Industry focus (from classification)
+- Geography / location (from PDL company data)
+- Company size (from PDL)
+- Skills (from classification)
+- Firm category (from classification)
 
-### 1. Service Offerings & Capabilities
-- What services does your firm provide?
-- What are your core competencies vs. things you can do but don't lead with?
-- What do you NOT do (and wish you had a partner for)?
+Ossy **confirms** this in 1-2 exchanges. It does NOT ask the user to re-state what the system already knows. Phase 1 should feel like: "I've done my homework."
 
-### 2. Industry & Vertical Focus
-- What industries do you primarily serve?
-- Are there industries you want to break into?
-- Are there industries you avoid?
+---
 
-### 3. Geographic Markets
-- Where do you operate?
-- Are you open to partners in different geographies?
-- Do you need local presence or can you work remotely?
+## The 5 Interview Questions (Phase 2)
 
-### 4. Ideal Partner Profile
-- What type of firm do you want to partner with? (agency, consultancy, fractional, etc.)
-- What size partner are you looking for?
-- What capabilities do you want in a partner?
-- Have you had successful partnerships before? What made them work?
+These are the 5 questions Ossy asks during onboarding. Each one creates data that pre-population cannot infer and that directly powers the matching engine.
 
-### 5. Client Profile & Deal Size
-- What type of clients do you serve? (size, industry, stage)
-- What's your typical project/contract size?
-- Do you work on retainers or project-based?
+### Q1. Partnership Philosophy
+**Field:** `partnershipPhilosophy` (string: "breadth" | "depth" | "opportunities")
 
-### 6. Partnership Model Preferences
-- How do you prefer to structure partnerships? (subcontracting, co-delivery, referral, white-label)
-- Revenue sharing preferences?
-- How do you handle client ownership?
+> "How do you see partnerships helping your business grow? Are you looking to **extend the breadth of services** you can offer clients, **deepen the capabilities** you already have, or **open doors to new opportunities** and client referrals?"
 
-### 7. Values & Working Style
-- What's your firm's culture like?
-- What values matter most in a partner?
-- What are deal-breakers?
-- How do you communicate? (Slack, email, calls, etc.)
+**Why it matters:** This is an algorithm selector, not just a stored preference. It determines which matching strategy runs:
+- **breadth** → cross-category matching (find firms in different categories)
+- **depth** → same-category-different-skills matching (find specialists in your domain)
+- **opportunities** → client-overlap matching (find firms serving similar clients who refer work)
 
-### 8. Growth Goals
-- What are you trying to achieve in the next 12 months?
-- Are you looking for more clients, better clients, or different types of work?
-- What's holding you back from growing faster?
+**Graph impact:** Stored in `rawOnboardingData`. Used as a query parameter at match time.
+
+### Q2. Capability Gaps (up to 3)
+**Field:** `capabilityGaps` (array of strings, max 3)
+
+> "What are the biggest gaps in your offering right now? **What's the #1 thing clients ask you for that you can't deliver in-house?** You can mention up to 3."
+
+**Why it matters:** This is the demand signal — what partner capabilities they actually need. It's the supply side of matching.
+
+**Graph impact:** Creates `PREFERS` edges from their Company node to Skill or FirmCategory nodes.
+
+**UX note:** Do NOT show a count of matching firms if there are fewer than 20 in the network. Showing a small number makes the network feel small.
+
+### Q3. Partner Types
+**Field:** `preferredPartnerTypes` (array of strings from 30 COS firm categories)
+
+> Based on Q2 answer, Ossy **suggests** types: "Based on what you just told me, I'd suggest looking at [suggested types]. **Does that sound right, or would you add anything?**"
+
+**Why it matters:** This should feel intelligent — Ossy connects their gap to the right partner types instead of asking them to pick from a list.
+
+**Graph impact:** Creates `PREFERS` edges from their Company node to FirmCategory nodes.
+
+### Q4. Deal-Breaker
+**Field:** `dealBreaker` (string, free-text)
+
+> "One last filter to make sure I don't waste your time — **is there anything that's an absolute deal-breaker in a partner?**"
+
+**Why it matters:** Eliminates bad matches fast. A single negative filter is worth more than 5 positive ones.
+
+**Graph impact:** Creates an `AVOIDS` edge in the knowledge graph.
+
+### Q5. Geography Preference
+**Field:** `geographyPreference` (string: "Global" | specific region)
+
+> "Last one — **do you need partners in your local market, or are you open to working with firms anywhere?**"
+
+**Why it matters:** Geography filters are high-impact but often obvious. If the firm is clearly remote-first, Ossy can skip this and default to "Global."
+
+**Graph impact:** Filters `OPERATES_IN` edges during structured search.
+
+---
+
+## What We Dropped (Moved to Progressive Enrichment)
+
+These dimensions from the original 8-dimension framework are now collected organically by Ossy during later conversations, not during onboarding:
+
+| Dimension | Why dropped | When collected instead |
+|-----------|-------------|----------------------|
+| Hourly rates | Low signal for matching | When they discuss a specific project |
+| Project size | Low signal for matching | When they discuss a specific project |
+| Partner size preference | Pre-population covers company size | When Ossy shows matches and they react |
+| Industry experience required | Pre-population covers industries | When they search for partners in a specific industry |
+| Client size preference | Low signal for matching | When they discuss their client base |
+| Partnership role | Too abstract without context | When they engage with a specific match |
 
 ---
 
 ## Conversational Flow Design
 
 ### Opening
-Ossy introduces itself and frames the conversation:
-> "Welcome to Collective OS. I'm Ossy, your AI growth consultant. I'd love to learn about your firm so I can start finding the right partners for you. This should take about 5-10 minutes — we can do it by text or voice, whichever you prefer. Ready?"
+Ossy frames the conversation around value, not data collection:
+> "I can see your firm data on the left — let's focus on finding you the right partners."
 
 ### Interview Style
-- **One question at a time** — don't overwhelm
-- **Acknowledge and reflect** — "So you're a brand strategy firm focused on D2C brands — that's great. Let me ask about..."
-- **Use their language** — if they say "shops" not "agencies," use "shops"
-- **Probe deeper when relevant** — "You mentioned Shopify — do you do custom development or just strategy?"
-- **Skip what we already know** — if website scraping already captured their services, confirm don't re-ask
-- **Allow tangents** — if they mention a great partnership story, let them tell it (it's data!)
+- **One question at a time** — never stack questions
+- **Frame positively** — COS is an opportunity to help them grow, not a form to fill out
+- **Question 3 should feel intelligent** — Ossy suggests partner types based on Q2 answer
+- **Skip Q5 if obvious** — remote-first firm = default to "Global"
+- **Bold the question** — always the last thing in the message
+- **Keep responses short** — 2 sentences of acknowledgment + the bolded question
+
+### The Ecosystem Discovery Feeling
+Each question should feel like it's unlocking the graph, not collecting data:
+> "You work with mid-market e-commerce brands — let me narrow down the network for you..."
+
+The user should feel like they're watching a massive ecosystem get filtered down to their perfect partners.
 
 ### Closing
-> "Thanks for sharing all that. Based on what you've told me, I'm already seeing some interesting potential matches. Give me a moment to analyze your profile, and I'll share my first recommendations."
+> "Great — I've got a clear picture of what you need. Let me start finding partners that complement your firm."
 
 ---
 
-## Pre-Population Strategy
-Before the interview, Ossy should already know:
-- Firm name, website, basic description (from global database)
-- Services listed on their website (from Jina scraping)
-- Case studies visible on their website
-- Key team members (from LinkedIn/Proxycurl)
-- Firm category classification (from our taxonomy)
+## Backward Compatibility
 
-The interview then CONFIRMS and ENRICHES rather than starting from scratch:
-> "I can see from your website that you focus on brand strategy and creative production for D2C brands. Is that still accurate, or has your focus shifted?"
+Users who completed the original 9-question flow (v1) are still considered "onboarded." The system checks:
+1. All 5 v2 fields are filled, **OR**
+2. All 9 v1 legacy fields are filled
 
----
-
-## Admin Export Mode
-The onboarding data should be exportable in a structured format for admin review:
-- JSON export of all 8 preference dimensions
-- Match readiness score (how complete is the profile?)
-- Flags for manual review (contradictions, unusual preferences, etc.)
-
----
-
-## Voice-Specific Considerations
-When onboarding happens via voice:
-- Ossy should speak in shorter sentences
-- Allow natural pauses for the user to think
-- Confirm understanding: "Just to make sure I got that right — you said..."
-- Handle interruptions gracefully (user corrects mid-sentence)
-- Offer to switch to text for complex lists ("Would you rather type out your service list? Sometimes that's easier.")
+Both sets of data are stored in `partnerPreferences.rawOnboardingData` JSONB.
 
 ---
 
 ## Data Output
+
 The onboarding produces:
-1. **Partner preferences** stored in `partner_preferences` table (Neon PostgreSQL)
-2. **Service/skill edges** created in Neo4j (OFFERS_SERVICE relationships)
-3. **Industry/market edges** created in Neo4j (HAS_EXPERTISE_IN, OPERATES_IN)
-4. **Partner type preferences** stored as SEEKS_PARTNER_TYPE edges
-5. **Abstraction profile** generated (triggers embedding computation via Inngest)
-6. **Initial matches** generated (triggers cascading search pipeline)
+1. **Partnership philosophy** stored in `rawOnboardingData` (algorithm selector)
+2. **PREFERS edges** in Neo4j (capability gaps → Skill/FirmCategory nodes)
+3. **PREFERS edges** in Neo4j (partner types → FirmCategory nodes)
+4. **AVOIDS edges** in Neo4j (deal-breaker → filter nodes)
+5. **Geography filter** stored in `rawOnboardingData` (used at query time)
+6. **Match readiness** flag set — triggers initial match generation
+
+---
+
+## Admin Analytics
+
+Onboarding events are tracked per-question in the `onboarding_events` table with `stage: "interview_answer"` and `event: "{fieldName}"`. The admin dashboard shows:
+- Per-question completion rates (for both v1 and v2 fields)
+- Drop-off analysis (which question do users abandon at?)
+- Funnel: domain submitted → enrichment → interview started → onboarding complete

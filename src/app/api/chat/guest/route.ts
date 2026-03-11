@@ -15,8 +15,17 @@ const openrouter = createOpenRouter({
 
 const profileFieldSchema = z.enum(ALL_PROFILE_FIELDS);
 
-/** Interview questions in order — used for Q9 completion detection */
-const INTERVIEW_FIELDS_GUEST = [
+/** v2 interview questions in order — used for completion detection */
+const INTERVIEW_FIELDS_GUEST_V2 = [
+  "partnershipPhilosophy",
+  "capabilityGaps",
+  "preferredPartnerTypes",
+  "dealBreaker",
+  "geographyPreference",
+];
+
+/** @deprecated v1 legacy interview fields — kept for backward-compat completion detection */
+const INTERVIEW_FIELDS_GUEST_V1 = [
   "desiredPartnerServices",
   "requiredPartnerIndustries",
   "idealPartnerClientSize",
@@ -27,6 +36,9 @@ const INTERVIEW_FIELDS_GUEST = [
   "typicalHourlyRates",
   "partnershipRole",
 ];
+
+/** Active interview fields for new onboarding — v2 */
+const INTERVIEW_FIELDS_GUEST = INTERVIEW_FIELDS_GUEST_V2;
 
 /**
  * Guest version of update_profile — does NOT write to DB.
@@ -57,15 +69,20 @@ const guestUpdateProfileTool = tool({
   execute: async ({ field, value }) => {
     // No DB write — just return the data for client-side caching
     // Generate contextual continuation hint based on question progress
-    const questionIndex = INTERVIEW_FIELDS_GUEST.indexOf(field);
+    // Check both v2 and v1 field lists for backward compat
+    const v2Index = INTERVIEW_FIELDS_GUEST_V2.indexOf(field);
+    const v1Index = INTERVIEW_FIELDS_GUEST_V1.indexOf(field);
+    const questionIndex = v2Index >= 0 ? v2Index : v1Index;
+    const activeFields = v2Index >= 0 ? INTERVIEW_FIELDS_GUEST_V2 : INTERVIEW_FIELDS_GUEST_V1;
+    const totalQuestions = activeFields.length;
     let nextAction: string;
 
-    if (questionIndex === INTERVIEW_FIELDS_GUEST.length - 1) {
-      // Q9 (last question) — tell model to congratulate and call request_login
-      nextAction = "All 9 onboarding questions are complete! Congratulate the user and call request_login to show the sign-up button.";
+    if (questionIndex === activeFields.length - 1) {
+      // Last question — tell model to congratulate and call request_login
+      nextAction = "All onboarding questions are complete! Congratulate the user and call request_login to show the sign-up button.";
     } else if (questionIndex >= 0) {
-      const nextField = INTERVIEW_FIELDS_GUEST[questionIndex + 1];
-      nextAction = `Saved question ${questionIndex + 1} of 9. Now immediately ask question ${questionIndex + 2} (${nextField}). Do NOT stop here — the next question must be in your response.`;
+      const nextField = activeFields[questionIndex + 1];
+      nextAction = `Saved question ${questionIndex + 1} of ${totalQuestions}. Now immediately ask question ${questionIndex + 2} (${nextField}). Do NOT stop here — the next question must be in your response.`;
     } else {
       nextAction = "Saved! Now respond with a brief acknowledgment AND the next onboarding question.";
     }
@@ -82,11 +99,11 @@ const guestUpdateProfileTool = tool({
 
 /**
  * Signals the client to show the login/signup modal.
- * Ossy calls this after completing all 9 partner preference questions.
+ * Ossy calls this after completing all partner preference questions.
  */
 const requestLoginTool = tool({
   description:
-    "Call this AFTER you have completed all 9 partner preference questions to prompt the user to sign in. " +
+    "Call this AFTER you have completed all partner preference questions to prompt the user to sign in. " +
     "This will show a login/signup form in the chat. Only call this once per conversation. " +
     "Your message should frame sign-in around VALUE — what you can do for them now that you know their preferences.",
   inputSchema: z.object({
@@ -99,7 +116,7 @@ const requestLoginTool = tool({
 
 /**
  * Guest chat endpoint — no auth required, no billing check.
- * Supports full onboarding: enrichment confirmation + all 9 preference questions.
+ * Supports full onboarding: enrichment confirmation + all preference questions (v2: 5, v1: 9 legacy).
  * Tools record data client-side; persisted to DB after sign-in.
  */
 export async function POST(req: Request) {

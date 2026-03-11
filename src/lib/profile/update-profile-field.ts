@@ -31,17 +31,24 @@ export const LEGACY_COLUMN_MAP: Record<string, string> = {
  * All partner preference fields — now ALL stored in rawOnboardingData JSONB.
  * Consolidates the former dedicated-column fields and JSONB-only fields into
  * a single storage path for Track A alignment.
+ *
+ * Includes BOTH new (v2) and legacy (v1) field names so that reads work
+ * for users onboarded under either flow.
  */
 export const PREFERENCE_FIELDS = new Set([
-  // Previously in dedicated columns (now JSONB)
-  "preferredPartnerTypes",
+  // ─── v2 interview fields (new 5-question flow) ───
+  "partnershipPhilosophy",
+  "capabilityGaps",
+  "preferredPartnerTypes",  // shared with v1
+  "dealBreaker",
+  "geographyPreference",
+  // ─── v1 legacy fields (old 9-question flow) ───
   "preferredPartnerSize",
   "requiredPartnerIndustries",
   "preferredPartnerLocations",
   "partnershipModels",
   "dealBreakers",
   "growthGoals",
-  // Always in JSONB
   "desiredPartnerServices",
   "idealPartnerClientSize",
   "idealProjectSize",
@@ -52,8 +59,17 @@ export const PREFERENCE_FIELDS = new Set([
 /** @deprecated Use PREFERENCE_FIELDS instead. Alias for backward compatibility. */
 export const RAW_ONBOARDING_FIELDS = PREFERENCE_FIELDS;
 
-/** The 9 partner preference fields collected during onboarding interview */
+/** The 5 partner preference fields collected during the v2 onboarding interview */
 export const INTERVIEW_FIELDS = [
+  "partnershipPhilosophy",
+  "capabilityGaps",
+  "preferredPartnerTypes",
+  "dealBreaker",
+  "geographyPreference",
+] as const;
+
+/** @deprecated The 9 fields from the original v1 interview. Kept for backward-compat completion checks. */
+export const LEGACY_INTERVIEW_FIELDS = [
   "desiredPartnerServices",
   "requiredPartnerIndustries",
   "idealPartnerClientSize",
@@ -65,6 +81,18 @@ export const INTERVIEW_FIELDS = [
   "partnershipRole",
 ] as const;
 
+/**
+ * Check whether a user's preferences indicate completed onboarding.
+ * Accepts EITHER the new 5-question v2 flow OR the legacy 9-question v1 flow.
+ */
+export function isOnboardingComplete(
+  prefs: Record<string, unknown>
+): boolean {
+  const v2Done = INTERVIEW_FIELDS.every((f) => prefs[f] != null);
+  const v1Done = LEGACY_INTERVIEW_FIELDS.every((f) => prefs[f] != null);
+  return v2Done || v1Done;
+}
+
 /** All valid profile field names */
 export const ALL_PROFILE_FIELDS = [
   // Firm profile (confirm enrichment)
@@ -75,8 +103,14 @@ export const ALL_PROFILE_FIELDS = [
   "markets",
   "languages",
   "industries",
-  // All partner preferences (stored in rawOnboardingData JSONB)
+  // v2 interview fields
+  "partnershipPhilosophy",
+  "capabilityGaps",
+  "dealBreaker",
+  "geographyPreference",
+  // Shared between v1 & v2
   "preferredPartnerTypes",
+  // v1 legacy preference fields
   "preferredPartnerSize",
   "requiredPartnerIndustries",
   "preferredPartnerLocations",

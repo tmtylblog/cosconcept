@@ -3,8 +3,17 @@ import { z } from "zod/v4";
 import { updateProfileField, ALL_PROFILE_FIELDS } from "@/lib/profile/update-profile-field";
 import { logOnboardingEvent } from "@/lib/onboarding/event-logger";
 
-/** Interview questions in order — used for funnel tracking */
-const INTERVIEW_FIELDS = [
+/** v2 interview fields (new 5-question flow) — used for funnel tracking */
+const INTERVIEW_FIELDS_V2 = [
+  "partnershipPhilosophy",
+  "capabilityGaps",
+  "preferredPartnerTypes",
+  "dealBreaker",
+  "geographyPreference",
+];
+
+/** @deprecated v1 legacy interview fields (old 9-question flow) — kept for backward compat */
+const INTERVIEW_FIELDS_V1 = [
   "desiredPartnerServices",
   "requiredPartnerIndustries",
   "idealPartnerClientSize",
@@ -76,7 +85,12 @@ export function createOssyTools(organizationId: string, firmId: string) {
           const result = await updateProfileField(firmId, field, value);
 
           // Log interview question completion for funnel tracking
-          const questionIndex = INTERVIEW_FIELDS.indexOf(field);
+          // Check both v2 and v1 field lists for backward compat
+          const v2Index = INTERVIEW_FIELDS_V2.indexOf(field);
+          const v1Index = INTERVIEW_FIELDS_V1.indexOf(field);
+          const questionIndex = v2Index >= 0 ? v2Index : v1Index;
+          const activeFields = v2Index >= 0 ? INTERVIEW_FIELDS_V2 : INTERVIEW_FIELDS_V1;
+          const totalQuestions = activeFields.length;
           let nextAction: string | undefined;
 
           if (questionIndex >= 0) {
@@ -88,21 +102,21 @@ export function createOssyTools(organizationId: string, firmId: string) {
               metadata: { questionNumber: questionIndex + 1, value },
             }).catch(() => {}); // fire-and-forget
 
-            // Check if all 9 interview questions are now answered
-            if (questionIndex === INTERVIEW_FIELDS.length - 1) {
+            // Check if all interview questions are now answered
+            if (questionIndex === activeFields.length - 1) {
               // Last question — emit onboarding_complete
               logOnboardingEvent({
                 organizationId,
                 firmId,
                 stage: "onboarding_complete",
                 event: "all_questions_done",
-                metadata: { questionsAnswered: INTERVIEW_FIELDS.length },
+                metadata: { questionsAnswered: totalQuestions },
               }).catch(() => {});
-              nextAction = "All 9 onboarding questions are complete! Congratulate the user and let them know their dashboard is unlocking.";
+              nextAction = "All onboarding questions are complete! Congratulate the user and let them know their dashboard is unlocking.";
             } else {
               // More questions remain — tell the model to continue
-              const nextField = INTERVIEW_FIELDS[questionIndex + 1];
-              nextAction = `Saved question ${questionIndex + 1} of 9. Now immediately ask the user onboarding question ${questionIndex + 2} (${nextField}). Do NOT stop here — the next question must be in your response.`;
+              const nextField = activeFields[questionIndex + 1];
+              nextAction = `Saved question ${questionIndex + 1} of ${totalQuestions}. Now immediately ask the user onboarding question ${questionIndex + 2} (${nextField}). Do NOT stop here — the next question must be in your response.`;
             }
           }
 
