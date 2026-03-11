@@ -68,9 +68,9 @@ async function findRecommendations(topics: string[]): Promise<{
       firmName: string;
       skill: string;
     }>(
-      `MATCH (e:Expert)-[:HAS_SKILL]->(s:Skill)
+      `MATCH (p:Person)-[:HAS_SKILL]->(s:Skill)
        WHERE ANY(topic IN $topics WHERE toLower(s.name) CONTAINS toLower(topic))
-       RETURN e.name AS expertName, e.firmName AS firmName, s.name AS skill
+       RETURN p.fullName AS expertName, p.firmId AS firmName, s.name AS skill
        LIMIT 6`,
       { topics: topicList }
     );

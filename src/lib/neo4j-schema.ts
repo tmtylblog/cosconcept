@@ -21,10 +21,10 @@
  *   SERVES_INDUSTRY (ServiceFirm→Industry)
  *   OFFERS_SERVICE (ServiceFirm→Service)
  *   HAS_CASE_STUDY (ServiceFirm→CaseStudy)
- *   EMPLOYS (ServiceFirm→Expert | Person)
- *   HAS_EXPERTISE (Expert→Skill)
+ *   CURRENTLY_AT (Person→ServiceFirm) — Track A replacement for EMPLOYS
+ *   HAS_SKILL (Person→Skill) — Track A: unified from HAS_EXPERTISE
  *   DEMONSTRATES_SKILL (CaseStudy→Skill)
- *   FOR_CLIENT (CaseStudy→Client | Company)
+ *   FOR_CLIENT (CaseStudy→Company) — Track A: Client merged into Company
  *   IN_INDUSTRY (CaseStudy→Industry)
  *   PARTNERS_WITH (Category→Category, FirmCategory→FirmCategory)
  *   IS_FIRM_TYPE (ServiceFirm→FirmType | DeliveryModel)

@@ -5,6 +5,9 @@ import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 /**
+ * @deprecated Track A: imported_companies table was truncated.
+ * Use enrichment pipeline → serviceFirms for new company data.
+ *
  * POST /api/admin/import/companies
  *
  * Receives a batch of companies from an n8n workflow and imports them

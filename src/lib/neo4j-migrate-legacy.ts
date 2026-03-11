@@ -1,9 +1,13 @@
 /**
- * Legacy Data Migration — Imports old Collective OS data into Neo4j.
+ * @deprecated — Track A migration obsoletes this file.
  *
- * Reads JSON exports from the old PostgreSQL/Hasura system and writes
- * them into the new Neo4j knowledge graph. This is an EVOLUTION, not
- * a 1:1 copy — we adapt old structures to the new schema.
+ * Legacy Data Migration — Imports old Collective OS data into Neo4j.
+ * Creates deprecated node types (Organization, User, Client, Expert,
+ * PartnershipPreferences). These are being replaced by Company:ServiceFirm,
+ * Person, Company, and PREFERS/AVOIDS edges in Track A.
+ *
+ * DO NOT RUN unless you need to reference legacy data during
+ * Track A Phase C-E (Person and relationship migration).
  *
  * Migration Steps (must run in order):
  * 1. System data — skills, professional services, industries, markets, languages

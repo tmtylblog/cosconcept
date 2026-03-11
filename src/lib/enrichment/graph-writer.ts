@@ -4,16 +4,17 @@
  * After enrichment (PDL + Jina + AI Classifier) completes for a firm,
  * this module creates/updates all the graph nodes and edges:
  *
- * ServiceFirm → IN_CATEGORY → Category
+ * Track A node/edge types:
+ * ServiceFirm → IN_CATEGORY → FirmCategory (was Category)
  * ServiceFirm → HAS_SKILL → Skill
  * ServiceFirm → OPERATES_IN → Market
  * ServiceFirm → SPEAKS → Language
  * ServiceFirm → SERVES_INDUSTRY → Industry
  * ServiceFirm → OFFERS_SERVICE → Service
  * ServiceFirm → HAS_CASE_STUDY → CaseStudy
- * ServiceFirm → EMPLOYS → Expert
+ * Person → CURRENTLY_AT → ServiceFirm (was Expert→EMPLOYS)
  * CaseStudy → DEMONSTRATES_SKILL → Skill
- * CaseStudy → FOR_CLIENT → Client
+ * CaseStudy → FOR_CLIENT → Company (was Client)
  * CaseStudy → IN_INDUSTRY → Industry
  */
 
@@ -33,6 +34,8 @@ export interface GraphFirmData {
   name: string;
   /** Website URL */
   website?: string;
+  /** Domain (e.g. chameleon.co) */
+  domain?: string;
   /** Logo URL (e.g. Clearbit) */
   logoUrl?: string;
   /** Description/about */
@@ -97,12 +100,14 @@ export async function writeFirmToGraph(
   };
 
   // 1. Create/update ServiceFirm node
+  // Track A: ServiceFirm is the canonical node for service provider companies
   await safe("ServiceFirm", async () => {
     await neo4jWrite(
       `MERGE (f:ServiceFirm {id: $id})
        SET f.name = $name,
            f.organizationId = $orgId,
            f.website = $website,
+           f.domain = $domain,
            f.description = $description,
            f.foundedYear = $foundedYear,
            f.employeeCount = $employeeCount,
@@ -111,12 +116,14 @@ export async function writeFirmToGraph(
            f.pdlLocation = $pdlLocation,
            f.logoUrl = $logoUrl,
            f.classifierConfidence = $confidence,
+           f.enrichmentStatus = "complete",
            f.updatedAt = datetime()`,
       {
         id: data.firmId,
         name: data.name,
         orgId: data.organizationId,
         website: data.website ?? null,
+        domain: data.domain ?? (data.website ? extractDomain(data.website) : null),
         logoUrl: data.logoUrl ?? null,
         description: data.description ?? data.groundTruth?.extracted.aboutPitch ?? null,
         foundedYear: data.foundedYear ?? data.pdl?.founded ?? null,
@@ -136,15 +143,16 @@ export async function writeFirmToGraph(
   const cls = data.classification;
   const gt = data.groundTruth;
 
-  // 2. Link to Categories
+  // 2. Link to FirmCategory (Track A: was Category)
   if (cls?.categories.length) {
     await safe("Categories", async () => {
       await neo4jWrite(
         `MATCH (f:ServiceFirm {id: $firmId})
          UNWIND $names AS catName
-         MERGE (c:Category {name: catName})
-         MERGE (f)-[:IN_CATEGORY]->(c)`,
-        { firmId, names: cls.categories }
+         MERGE (c:FirmCategory {name: catName})
+         MERGE (f)-[r:IN_CATEGORY]->(c)
+         SET r.source = "enrichment", r.confidence = $confidence`,
+        { firmId, names: cls.categories, confidence: cls.confidence ?? 0.8 }
       );
       result.categories = cls.categories.length;
     });
@@ -158,8 +166,9 @@ export async function writeFirmToGraph(
          UNWIND $names AS skillName
          MERGE (s:Skill {name: skillName})
          ON CREATE SET s.level = "L2"
-         MERGE (f)-[:HAS_SKILL]->(s)`,
-        { firmId, names: cls.skills }
+         MERGE (f)-[r:HAS_SKILL]->(s)
+         SET r.source = "enrichment", r.confidence = $confidence`,
+        { firmId, names: cls.skills, confidence: cls.confidence ?? 0.8 }
       );
       result.skills = cls.skills.length;
     });
@@ -172,8 +181,9 @@ export async function writeFirmToGraph(
         `MATCH (f:ServiceFirm {id: $firmId})
          UNWIND $names AS indName
          MERGE (i:Industry {name: indName})
-         MERGE (f)-[:SERVES_INDUSTRY]->(i)`,
-        { firmId, names: cls.industries }
+         MERGE (f)-[r:SERVES_INDUSTRY]->(i)
+         SET r.source = "enrichment", r.confidence = $confidence`,
+        { firmId, names: cls.industries, confidence: cls.confidence ?? 0.8 }
       );
       result.industries = cls.industries.length;
     });
@@ -186,7 +196,8 @@ export async function writeFirmToGraph(
         `MATCH (f:ServiceFirm {id: $firmId})
          UNWIND $names AS mktName
          MERGE (m:Market {name: mktName})
-         MERGE (f)-[:OPERATES_IN]->(m)`,
+         MERGE (f)-[r:OPERATES_IN]->(m)
+         SET r.source = "enrichment"`,
         { firmId, names: cls.markets }
       );
       result.markets = cls.markets.length;
@@ -214,28 +225,31 @@ export async function writeFirmToGraph(
         `MATCH (f:ServiceFirm {id: $firmId})
          UNWIND $names AS svcName
          MERGE (s:Service {name: svcName})
-         MERGE (f)-[:OFFERS_SERVICE]->(s)`,
+         MERGE (f)-[r:OFFERS_SERVICE]->(s)
+         SET r.source = "website_scrape"`,
         { firmId, names: gt!.extracted.services }
       );
       result.services = gt!.extracted.services.length;
     });
   }
 
-  // 8. Create Client nodes from extracted clients
+  // 8. Create Company nodes from extracted clients (Track A: was Client)
   if (gt?.extracted.clients.length) {
     await safe("Clients", async () => {
       await neo4jWrite(
         `MATCH (f:ServiceFirm {id: $firmId})
          UNWIND $names AS clientName
-         MERGE (c:Client {name: clientName})
-         MERGE (f)-[:HAS_CLIENT]->(c)`,
+         MERGE (c:Company {name: clientName})
+         MERGE (f)-[r:HAS_CLIENT]->(c)
+         SET r.source = "website_scrape"`,
         { firmId, names: gt!.extracted.clients }
       );
       result.clients = gt!.extracted.clients.length;
     });
   }
 
-  // 9. Create Expert stubs from team members (full enrichment happens later)
+  // 9. Create Person stubs from team members (Track A: was Expert)
+  // Full enrichment happens later via LinkedIn/PDL
   if (gt?.extracted.teamMembers.length) {
     await safe("TeamMembers", async () => {
       const members = gt!.extracted.teamMembers.map((name) => ({
@@ -245,9 +259,12 @@ export async function writeFirmToGraph(
       await neo4jWrite(
         `MATCH (f:ServiceFirm {id: $firmId})
          UNWIND $members AS m
-         MERGE (e:Expert {id: m.id})
-         SET e.fullName = m.fullName, e.firmId = $firmId
-         MERGE (f)-[:EMPLOYS]->(e)`,
+         MERGE (p:Person {id: m.id})
+         SET p.fullName = m.fullName,
+             p.firmId = $firmId,
+             p.enrichmentStatus = "stub"
+         MERGE (p)-[r:CURRENTLY_AT]->(f)
+         SET r.source = "website_scrape", r.isPrimary = true`,
         { firmId, members }
       );
       result.teamMembers = gt!.extracted.teamMembers.length;
@@ -284,7 +301,7 @@ export async function writeFirmToGraph(
   return result;
 }
 
-// ─── Expert Graph Writer ──────────────────────────────────
+// ─── Person Graph Writer (Track A: was Expert) ───────────
 
 export interface GraphExpertData {
   expertId: string;
@@ -298,7 +315,8 @@ export interface GraphExpertData {
 }
 
 /**
- * Write expert enrichment data to Neo4j.
+ * Write expert/person enrichment data to Neo4j.
+ * Track A: Creates Person nodes (was Expert).
  */
 export async function writeExpertToGraph(
   data: GraphExpertData
@@ -306,18 +324,21 @@ export async function writeExpertToGraph(
   const errors: string[] = [];
 
   try {
-    // Update expert node
+    // Create/update Person node and link to ServiceFirm
+    // Track A: Person → CURRENTLY_AT → ServiceFirm (was Expert → EMPLOYS)
     await neo4jWrite(
-      `MERGE (e:Expert {id: $id})
-       SET e.fullName = $fullName,
-           e.headline = $headline,
-           e.linkedinUrl = $linkedinUrl,
-           e.location = $location,
-           e.firmId = $firmId,
-           e.updatedAt = datetime()
-       WITH e
+      `MERGE (p:Person {id: $id})
+       SET p.fullName = $fullName,
+           p.headline = $headline,
+           p.linkedinUrl = $linkedinUrl,
+           p.location = $location,
+           p.firmId = $firmId,
+           p.enrichmentStatus = "enriched",
+           p.updatedAt = datetime()
+       WITH p
        MATCH (f:ServiceFirm {id: $firmId})
-       MERGE (f)-[:EMPLOYS]->(e)`,
+       MERGE (p)-[r:CURRENTLY_AT]->(f)
+       SET r.isPrimary = true, r.source = "enrichment"`,
       {
         id: data.expertId,
         fullName: data.fullName,
@@ -328,13 +349,14 @@ export async function writeExpertToGraph(
       }
     );
 
-    // Link skills
+    // Link skills (Track A: HAS_SKILL for consistency)
     if (data.skills?.length) {
       await neo4jWrite(
-        `MATCH (e:Expert {id: $id})
+        `MATCH (p:Person {id: $id})
          UNWIND $skills AS skillName
          MERGE (s:Skill {name: skillName})
-         MERGE (e)-[:HAS_EXPERTISE]->(s)`,
+         MERGE (p)-[r:HAS_SKILL]->(s)
+         SET r.source = "enrichment"`,
         { id: data.expertId, skills: data.skills }
       );
     }
@@ -342,10 +364,11 @@ export async function writeExpertToGraph(
     // Link industries
     if (data.industries?.length) {
       await neo4jWrite(
-        `MATCH (e:Expert {id: $id})
+        `MATCH (p:Person {id: $id})
          UNWIND $industries AS indName
          MERGE (i:Industry {name: indName})
-         MERGE (e)-[:SERVES_INDUSTRY]->(i)`,
+         MERGE (p)-[r:SERVES_INDUSTRY]->(i)
+         SET r.source = "enrichment"`,
         { id: data.expertId, industries: data.industries }
       );
     }
@@ -375,8 +398,9 @@ export interface GraphSpecialistProfileData {
 
 /**
  * Write a strong specialist profile to Neo4j.
- * Creates a SpecialistProfile node linked from the Expert node.
+ * Creates a SpecialistProfile node linked from the Person node.
  * Only call for profiles with qualityScore >= 80.
+ * Track A: Links to Person (was Expert).
  */
 export async function writeSpecialistProfileToGraph(
   data: GraphSpecialistProfileData
@@ -384,7 +408,7 @@ export async function writeSpecialistProfileToGraph(
   const errors: string[] = [];
 
   try {
-    // Create/update SpecialistProfile node and link to Expert
+    // Create/update SpecialistProfile node and link to Person
     await neo4jWrite(
       `MERGE (sp:SpecialistProfile {id: $id})
        SET sp.title = $title,
@@ -392,8 +416,8 @@ export async function writeSpecialistProfileToGraph(
            sp.expertId = $expertId,
            sp.updatedAt = datetime()
        WITH sp
-       MERGE (e:Expert {id: $expertId})
-       MERGE (e)-[:HAS_SPECIALIST_PROFILE]->(sp)`,
+       MERGE (p:Person {id: $expertId})
+       MERGE (p)-[:HAS_SPECIALIST_PROFILE]->(sp)`,
       {
         id: data.profileId,
         title: data.title ?? null,
@@ -409,7 +433,8 @@ export async function writeSpecialistProfileToGraph(
          UNWIND $skills AS skillName
          MERGE (s:Skill {name: skillName})
          ON CREATE SET s.level = "L2"
-         MERGE (sp)-[:HAS_EXPERTISE]->(s)`,
+         MERGE (sp)-[r:HAS_SKILL]->(s)
+         SET r.source = "specialist_profile"`,
         { id: data.profileId, skills: data.skills }
       );
     }
@@ -420,7 +445,8 @@ export async function writeSpecialistProfileToGraph(
         `MATCH (sp:SpecialistProfile {id: $id})
          UNWIND $industries AS indName
          MERGE (i:Industry {name: indName})
-         MERGE (sp)-[:SERVES_INDUSTRY]->(i)`,
+         MERGE (sp)-[r:SERVES_INDUSTRY]->(i)
+         SET r.source = "specialist_profile"`,
         { id: data.profileId, industries: data.industries }
       );
     }
@@ -453,6 +479,7 @@ export interface GraphCaseStudyData {
 
 /**
  * Write a fully ingested case study to Neo4j.
+ * Track A: Client → Company for client nodes.
  */
 export async function writeCaseStudyToGraph(
   data: GraphCaseStudyData
@@ -483,12 +510,13 @@ export async function writeCaseStudyToGraph(
       }
     );
 
-    // Link to client
+    // Link to client (Track A: Company instead of Client)
     if (data.clientName) {
       await neo4jWrite(
         `MATCH (cs:CaseStudy {id: $id})
-         MERGE (c:Client {name: $clientName})
-         MERGE (cs)-[:FOR_CLIENT]->(c)`,
+         MERGE (c:Company {name: $clientName})
+         MERGE (cs)-[r:FOR_CLIENT]->(c)
+         SET r.source = "case_study"`,
         { id: data.caseStudyId, clientName: data.clientName }
       );
     }
@@ -524,5 +552,16 @@ export async function writeCaseStudyToGraph(
     const msg = err instanceof Error ? err.message : String(err);
     errors.push(msg);
     return { skills: 0, industries: 0, errors };
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────
+
+function extractDomain(url: string): string | null {
+  try {
+    const hostname = new URL(url.startsWith("http") ? url : `https://${url}`).hostname;
+    return hostname.replace(/^www\./, "");
+  } catch {
+    return null;
   }
 }

@@ -10,6 +10,9 @@ import { nanoid } from "nanoid";
 import { classifyTitle } from "@/lib/enrichment/expert-classifier";
 
 /**
+ * @deprecated Track A: imported_contacts table was truncated.
+ * Contact/expert data now comes from expert_profiles table.
+ *
  * POST /api/admin/import/contacts
  *
  * Receives a batch of contacts from an n8n workflow and imports them

@@ -64,21 +64,21 @@ export async function structuredFilter(
     returnFields.push("[] AS matchedSkills");
   }
 
-  // Category filter
+  // FirmCategory filter
   if (filters.categories?.length) {
     conditions.push(
       `EXISTS {
-        MATCH (f)-[:IN_CATEGORY]->(c:Category)
+        MATCH (f)-[:IN_CATEGORY]->(c:FirmCategory)
         WHERE c.name IN $categories
       }`
     );
     params.categories = filters.categories;
     returnFields.push(
-      `[(f)-[:IN_CATEGORY]->(c:Category) | c.name] AS categories`
+      `[(f)-[:IN_CATEGORY]->(c:FirmCategory) | c.name] AS categories`
     );
   } else {
     returnFields.push(
-      `[(f)-[:IN_CATEGORY]->(c:Category) | c.name] AS categories`
+      `[(f)-[:IN_CATEGORY]->(c:FirmCategory) | c.name] AS categories`
     );
   }
 

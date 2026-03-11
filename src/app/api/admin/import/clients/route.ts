@@ -9,6 +9,9 @@ import { eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 /**
+ * @deprecated Track A: imported_clients table was truncated.
+ * Client data now comes from firm_case_studies.auto_tags.clientName.
+ *
  * POST /api/admin/import/clients
  *
  * Receives a batch of client records from legacy JSON data and imports them
