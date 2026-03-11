@@ -2,7 +2,8 @@ import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { serviceFirms, partnerPreferences, members } from "@/lib/db/schema";
+import { serviceFirms, members } from "@/lib/db/schema";
+import { readAllPreferences } from "@/lib/profile/update-profile-field";
 
 export const dynamic = "force-dynamic";
 
@@ -56,32 +57,10 @@ export async function GET(req: Request) {
     const enrichmentData = (firm?.enrichmentData as Record<string, unknown>) || {};
     const confirmed = (enrichmentData.confirmed as Record<string, unknown>) || {};
 
-    // Get partner preferences
-    let prefs: Record<string, unknown> = {};
+    // Get partner preferences (reads from JSONB with legacy column fallback)
+    let prefs: Record<string, string | string[]> = {};
     if (firm?.id) {
-      const [pref] = await db
-        .select()
-        .from(partnerPreferences)
-        .where(eq(partnerPreferences.firmId, firm.id))
-        .limit(1);
-
-      if (pref) {
-        const rawData = (pref.rawOnboardingData as Record<string, unknown>) || {};
-        prefs = {
-          preferredPartnerTypes: pref.preferredFirmTypes,
-          preferredPartnerSize: pref.preferredSizeBands,
-          requiredPartnerIndustries: pref.preferredIndustries,
-          preferredPartnerLocations: pref.preferredMarkets,
-          partnershipModels: pref.partnershipModels,
-          dealBreakers: pref.dealBreakers,
-          growthGoals: pref.growthGoals,
-          // Fields from rawOnboardingData
-          desiredPartnerServices: rawData.desiredPartnerServices,
-          idealPartnerClientSize: rawData.idealPartnerClientSize,
-          idealProjectSize: rawData.idealProjectSize,
-          typicalHourlyRates: rawData.typicalHourlyRates,
-        };
-      }
+      prefs = await readAllPreferences(firm.id);
     }
 
     // Merge confirmed firm data + partner preferences

@@ -9,6 +9,7 @@ import {
   partnerPreferences,
 } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
+import { readAllPreferences } from "@/lib/profile/update-profile-field";
 
 /**
  * GET /api/admin/onboarding/sessions/[domain]
@@ -86,8 +87,12 @@ export async function GET(
         .orderBy(asc(enrichmentAuditLog.createdAt))
     : [];
 
-  // 5. Partner preferences
-  const [prefs] = resolvedFirmId
+  // 5. Partner preferences (merged from JSONB + legacy columns)
+  const mergedPrefs = resolvedFirmId
+    ? await readAllPreferences(resolvedFirmId)
+    : {};
+  // Also fetch raw row for admin debug visibility
+  const [rawPrefRow] = resolvedFirmId
     ? await db
         .select()
         .from(partnerPreferences)
@@ -136,16 +141,16 @@ export async function GET(
 
     enrichmentData: (firm?.enrichmentData as Record<string, unknown>) ?? null,
 
-    partnerPreferences: prefs
+    // Merged preferences (JSONB-first with legacy column fallback)
+    partnerPreferences: Object.keys(mergedPrefs).length > 0 ? mergedPrefs : null,
+    // Raw DB row for admin debugging (shows legacy columns + JSONB separately)
+    _rawPrefRow: rawPrefRow
       ? {
-          preferredFirmTypes: prefs.preferredFirmTypes ?? [],
-          preferredSizeBands: prefs.preferredSizeBands ?? [],
-          preferredIndustries: prefs.preferredIndustries ?? [],
-          preferredMarkets: prefs.preferredMarkets ?? [],
-          partnershipModels: prefs.partnershipModels ?? [],
-          dealBreakers: prefs.dealBreakers ?? [],
-          growthGoals: prefs.growthGoals ?? null,
-          rawOnboardingData: prefs.rawOnboardingData as Record<string, unknown> | null,
+          preferredFirmTypes: rawPrefRow.preferredFirmTypes ?? [],
+          preferredSizeBands: rawPrefRow.preferredSizeBands ?? [],
+          preferredIndustries: rawPrefRow.preferredIndustries ?? [],
+          preferredMarkets: rawPrefRow.preferredMarkets ?? [],
+          rawOnboardingData: rawPrefRow.rawOnboardingData as Record<string, unknown> | null,
         }
       : null,
   });

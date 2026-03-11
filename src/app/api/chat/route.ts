@@ -9,7 +9,8 @@ import { getOrgPlan } from "@/lib/billing/usage-checker";
 import { PLAN_LIMITS } from "@/lib/billing/plan-limits";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { conversations, messages as messagesTable, serviceFirms, partnerPreferences, members, callRecordings, callTranscripts } from "@/lib/db/schema";
+import { conversations, messages as messagesTable, serviceFirms, members, callRecordings, callTranscripts } from "@/lib/db/schema";
+import { readAllPreferences, INTERVIEW_FIELDS } from "@/lib/profile/update-profile-field";
 import { inngest } from "@/inngest/client";
 import { logUsage } from "@/lib/ai/gateway";
 import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
@@ -118,55 +119,23 @@ export async function POST(req: Request) {
 
     // ─── Check for existing partner preferences (from guest migration or previous onboarding) ───
     // This prevents re-onboarding users who completed preferences as a guest and then signed up.
+    // Uses readAllPreferences() which reads from JSONB with legacy column fallback.
     let collectedPreferences: Record<string, string | string[]> | undefined;
-    let hasPartnerPrefs = false;
     if (firmId) {
       try {
-        const [prefRow] = await db
-          .select({
-            preferredFirmTypes: partnerPreferences.preferredFirmTypes,
-            preferredSizeBands: partnerPreferences.preferredSizeBands,
-            preferredIndustries: partnerPreferences.preferredIndustries,
-            preferredMarkets: partnerPreferences.preferredMarkets,
-            rawOnboardingData: partnerPreferences.rawOnboardingData,
-          })
-          .from(partnerPreferences)
-          .where(eq(partnerPreferences.firmId, firmId))
-          .limit(1);
-
-        if (prefRow) {
-          const prefs: Record<string, string | string[]> = {};
-          // Dedicated columns → preference field names
-          if (prefRow.preferredFirmTypes?.length) prefs.preferredPartnerTypes = prefRow.preferredFirmTypes;
-          if (prefRow.preferredSizeBands?.length) prefs.preferredPartnerSize = prefRow.preferredSizeBands;
-          if (prefRow.preferredIndustries?.length) prefs.requiredPartnerIndustries = prefRow.preferredIndustries;
-          if (prefRow.preferredMarkets?.length) prefs.preferredPartnerLocations = prefRow.preferredMarkets;
-          // Raw onboarding data (JSONB) → individual fields
-          const raw = prefRow.rawOnboardingData as Record<string, string | string[]> | null;
-          if (raw) {
-            for (const key of ["desiredPartnerServices", "idealPartnerClientSize", "idealProjectSize", "typicalHourlyRates", "partnershipRole"]) {
-              if (raw[key] != null) {
-                const v = raw[key];
-                if (Array.isArray(v) ? v.length > 0 : v !== "") {
-                  prefs[key] = v;
-                }
-              }
-            }
-          }
-          if (Object.keys(prefs).length > 0) {
-            collectedPreferences = prefs;
-            hasPartnerPrefs = true;
-            console.log(`[Ossy] Found ${Object.keys(prefs).length} existing partner preferences for ${firmId}`);
-          }
+        const prefs = await readAllPreferences(firmId);
+        if (Object.keys(prefs).length > 0) {
+          collectedPreferences = prefs;
+          console.log(`[Ossy] Found ${Object.keys(prefs).length} existing partner preferences for ${firmId}`);
         }
       } catch (err) {
         console.warn("[Ossy] Failed to load partner preferences:", err);
       }
     }
 
-    // Onboarding is "complete" only when ALL 9 partner preferences are stored
+    // Onboarding is "complete" only when ALL interview preference fields are stored
     const allPrefsCount = collectedPreferences ? Object.keys(collectedPreferences).length : 0;
-    const allPrefsComplete = allPrefsCount >= 9;
+    const allPrefsComplete = allPrefsCount >= INTERVIEW_FIELDS.length;
     const hasCompletedOnboarding = allPrefsComplete;
 
     const systemPrompt = getOssyPrompt({

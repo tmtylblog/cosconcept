@@ -15,7 +15,7 @@ export interface ProfileData {
   markets?: string[];
   languages?: string[];
   industries?: string[];
-  // Partner preference fields (from partnerPreferences table columns)
+  // All partner preference fields (from partnerPreferences.rawOnboardingData JSONB)
   preferredPartnerTypes?: string[];
   preferredPartnerSize?: string[];
   requiredPartnerIndustries?: string[];
@@ -23,7 +23,6 @@ export interface ProfileData {
   partnershipModels?: string[];
   dealBreakers?: string[];
   growthGoals?: string;
-  // Partner criteria (from rawOnboardingData)
   desiredPartnerServices?: string[];
   idealPartnerClientSize?: string | string[];
   idealProjectSize?: string | string[];
