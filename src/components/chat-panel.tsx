@@ -1172,8 +1172,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         </div>
       )}
 
-      {/* Transcript tip — visible to authenticated users until dismissed (after 2 uses) */}
-      {showTranscriptTip && !isGuest && !pendingTranscript && !transcriptResult && !pathname.startsWith("/firm") && (
+      {/* Transcript tip — visible to authenticated users after onboarding, until dismissed (after 2 uses) */}
+      {showTranscriptTip && !isGuest && !isOnboarding && !pendingTranscript && !transcriptResult && !pathname.startsWith("/firm") && (
         <div className="shrink-0 border-t border-cos-electric/20 bg-gradient-to-r from-cos-electric/5 to-cos-signal/5 px-4 py-3">
           <div className="flex items-start gap-2.5">
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-cos-full bg-cos-electric/10">
