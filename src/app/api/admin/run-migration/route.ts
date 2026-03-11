@@ -50,7 +50,7 @@ async function runClientNodesToCompany(): Promise<NextResponse> {
       `MATCH (c:Client) WHERE NOT c:Company RETURN count(c) AS total`,
       {}
     );
-    const total = countResult[0]?.total ?? 0;
+    const total = Number(countResult[0]?.total ?? 0);
 
     if (total === 0) {
       return NextResponse.json({ ok: true, message: "No legacy Client nodes to migrate", migrated: 0 });
@@ -111,7 +111,7 @@ async function runClientNodesToCompany(): Promise<NextResponse> {
         { limit: BATCH }
       );
 
-      const batchCount = nameResult[0]?.count ?? 0;
+      const batchCount = Number(nameResult[0]?.count ?? 0);
       migrated += batchCount;
       if (batchCount === 0) break;
     }
@@ -120,7 +120,7 @@ async function runClientNodesToCompany(): Promise<NextResponse> {
       `MATCH (c:Client) WHERE NOT c:Company RETURN count(c) AS remaining`,
       {}
     );
-    const remaining = remainingResult[0]?.remaining ?? 0;
+    const remaining = Number(remainingResult[0]?.remaining ?? 0);
 
     return NextResponse.json({ ok: true, message: "Migration complete", total, migrated, remaining });
   } catch (err) {
