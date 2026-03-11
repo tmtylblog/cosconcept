@@ -5,25 +5,31 @@
  * is ready for taxonomy data and enrichment results.
  *
  * Node Labels:
- *   ServiceFirm, Expert, Skill, SkillL1, Industry, Market,
- *   CaseStudy, Client, Service, Category, Language, FirmType
+ *   Company (multi-label base), ServiceFirm, SolutionPartner,
+ *   Person, Expert, WorkHistory,
+ *   Skill, SkillL1, Industry, IndustryL1, Market,
+ *   CaseStudy, Client, Service, ServiceCategory,
+ *   Category, FirmCategory, TechCategory, DeliveryModel,
+ *   Language, FirmType
  *
  * Relationship Types:
- *   BELONGS_TO (Skill→SkillL1, Skill→Skill parent)
- *   IN_CATEGORY (ServiceFirm→Category)
+ *   BELONGS_TO (Skill→SkillL1, Skill→Skill parent, Industry→IndustryL1, Service→ServiceCategory)
+ *   IN_CATEGORY (ServiceFirm→Category | FirmCategory)
  *   HAS_SKILL (ServiceFirm→Skill)
  *   OPERATES_IN (ServiceFirm→Market)
  *   SPEAKS (ServiceFirm→Language)
  *   SERVES_INDUSTRY (ServiceFirm→Industry)
  *   OFFERS_SERVICE (ServiceFirm→Service)
  *   HAS_CASE_STUDY (ServiceFirm→CaseStudy)
- *   EMPLOYS (ServiceFirm→Expert)
+ *   EMPLOYS (ServiceFirm→Expert | Person)
  *   HAS_EXPERTISE (Expert→Skill)
  *   DEMONSTRATES_SKILL (CaseStudy→Skill)
- *   FOR_CLIENT (CaseStudy→Client)
+ *   FOR_CLIENT (CaseStudy→Client | Company)
  *   IN_INDUSTRY (CaseStudy→Industry)
- *   PARTNERS_WITH (Category→Category, with properties from firm-relationships.csv)
- *   IS_FIRM_TYPE (ServiceFirm→FirmType)
+ *   PARTNERS_WITH (Category→Category, FirmCategory→FirmCategory)
+ *   IS_FIRM_TYPE (ServiceFirm→FirmType | DeliveryModel)
+ *   PARENT_REGION (Market→Market for country→region hierarchy)
+ *   WORKED_AT (Person→WorkHistory)
  */
 
 import { neo4jWrite } from "./neo4j";
@@ -44,6 +50,14 @@ const CONSTRAINTS = [
   `CREATE CONSTRAINT category_name IF NOT EXISTS FOR (n:Category) REQUIRE n.name IS UNIQUE`,
   `CREATE CONSTRAINT language_name IF NOT EXISTS FOR (n:Language) REQUIRE n.name IS UNIQUE`,
   `CREATE CONSTRAINT firm_type_name IF NOT EXISTS FOR (n:FirmType) REQUIRE n.name IS UNIQUE`,
+
+  // ── Track A: New node type constraints ───────────────────
+  `CREATE CONSTRAINT company_domain IF NOT EXISTS FOR (n:Company) REQUIRE n.domain IS UNIQUE`,
+  `CREATE CONSTRAINT person_linkedin IF NOT EXISTS FOR (n:Person) REQUIRE n.linkedinUrl IS UNIQUE`,
+  `CREATE CONSTRAINT firm_category_name IF NOT EXISTS FOR (n:FirmCategory) REQUIRE n.name IS UNIQUE`,
+  `CREATE CONSTRAINT tech_category_name IF NOT EXISTS FOR (n:TechCategory) REQUIRE n.name IS UNIQUE`,
+  `CREATE CONSTRAINT delivery_model_name IF NOT EXISTS FOR (n:DeliveryModel) REQUIRE n.name IS UNIQUE`,
+  `CREATE CONSTRAINT service_category_name IF NOT EXISTS FOR (n:ServiceCategory) REQUIRE n.name IS UNIQUE`,
 ];
 
 // ─── Indexes ──────────────────────────────────────────────
@@ -62,6 +76,16 @@ const INDEXES = [
   `CREATE INDEX category_theme IF NOT EXISTS FOR (n:Category) ON (n.theme)`,
   `CREATE INDEX expert_firm IF NOT EXISTS FOR (n:Expert) ON (n.firmId)`,
   `CREATE INDEX case_study_firm IF NOT EXISTS FOR (n:CaseStudy) ON (n.firmId)`,
+
+  // ── Track A: New Company + Person indexes ─────────────────
+  `CREATE INDEX company_name IF NOT EXISTS FOR (n:Company) ON (n.name)`,
+  `CREATE INDEX company_enrichment_status IF NOT EXISTS FOR (n:Company) ON (n.enrichmentStatus)`,
+  `CREATE INDEX company_is_cos_customer IF NOT EXISTS FOR (n:Company) ON (n.isCosCustomer)`,
+  `CREATE INDEX person_enrichment_status IF NOT EXISTS FOR (n:Person) ON (n.enrichmentStatus)`,
+  `CREATE INDEX work_history_title IF NOT EXISTS FOR (n:WorkHistory) ON (n.title)`,
+  `CREATE INDEX work_history_stage IF NOT EXISTS FOR (n:WorkHistory) ON (n.companyStageAtTime)`,
+  `CREATE FULLTEXT INDEX company_search IF NOT EXISTS FOR (n:Company) ON EACH [n.name, n.domain]`,
+  `CREATE FULLTEXT INDEX person_search IF NOT EXISTS FOR (n:Person) ON EACH [n.firstName, n.lastName, n.headline]`,
 ];
 
 // ─── Schema Setup ─────────────────────────────────────────

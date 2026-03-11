@@ -7,6 +7,7 @@ import {
   jsonb,
   real,
   pgEnum,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 // ─── Enums ───────────────────────────────────────────────
@@ -1366,6 +1367,173 @@ export const specialistProfileExamples = pgTable("specialist_profile_examples", 
 
   position: integer("position").notNull().default(1),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Track A: New Taxonomy Enums ─────────────────────────
+
+export const enrichmentStatusEnum = pgEnum("enrichment_status", [
+  "stub",
+  "pending",
+  "enriched",
+  "needs_linkedin",
+]);
+
+export const industryLevelEnum = pgEnum("industry_level", ["L1", "L2", "L3"]);
+
+export const marketLevelEnum = pgEnum("market_level", ["L1", "L2", "L3"]);
+
+export const companySourceEnum = pgEnum("company_source", [
+  "scraped",
+  "imported",
+  "pdl",
+  "user_created",
+  "self_registered",
+]);
+
+export const personSourceEnum = pgEnum("person_source", [
+  "scraped",
+  "imported",
+  "user_created",
+  "self_registered",
+]);
+
+export const engagementTypeEnum = pgEnum("engagement_type", [
+  "full_time",
+  "fractional",
+  "advisor",
+  "board",
+  "embedded",
+]);
+
+export const preferenceSourceEnum = pgEnum("preference_source", [
+  "stated",
+  "revealed",
+  "ai_inferred",
+]);
+
+// Note: leadStatusEnum already exists above (open | shared | claimed | won | lost | expired).
+// The Track A extended version adds "draft" — tracked separately as lead_status_v2 if needed
+// in a future migration. Do not redefine here.
+
+// ─── Track A: Taxonomy Mirror Tables ─────────────────────
+
+export const firmCategories = pgTable("firm_categories", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  definition: text("definition"),
+  theme: text("theme"),
+  sampleOrgs: text("sample_orgs"),
+  graphNodeId: text("graph_node_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const techCategories = pgTable("tech_categories", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  graphNodeId: text("graph_node_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const deliveryModels = pgTable("delivery_models", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  graphNodeId: text("graph_node_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const serviceCategories = pgTable("service_categories", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  graphNodeId: text("graph_node_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const services = pgTable("services", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  serviceCategoryId: text("service_category_id").references(
+    () => serviceCategories.id,
+    { onDelete: "set null" }
+  ),
+  description: text("description"),
+  graphNodeId: text("graph_node_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const industries = pgTable("industries", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  level: industryLevelEnum("level"),
+  parentId: text("parent_id").references((): AnyPgColumn => industries.id, {
+    onDelete: "set null",
+  }),
+  sector: text("sector"),
+  linkedinValue: text("linkedin_value"),
+  crunchbaseValue: text("crunchbase_value"),
+  cosLegacyId: text("cos_legacy_id"),
+  cosLegacyName: text("cos_legacy_name"),
+  graphNodeId: text("graph_node_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const industryMappings = pgTable("industry_mappings", {
+  id: text("id").primaryKey(),
+  canonicalIndustryId: text("canonical_industry_id")
+    .notNull()
+    .references(() => industries.id, { onDelete: "cascade" }),
+  source: text("source").notNull(), // linkedin | crunchbase | cos_legacy
+  externalValue: text("external_value").notNull(),
+  externalLabel: text("external_label"),
+  confidence: real("confidence"),
+  mappedBy: text("mapped_by"), // admin | ai | auto
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const unmappedIndustries = pgTable("unmapped_industries", {
+  id: text("id").primaryKey(),
+  rawValue: text("raw_value").notNull(),
+  source: text("source").notNull(),
+  occurrenceCount: integer("occurrence_count").notNull().default(1),
+  exampleCompany: text("example_company"),
+  status: text("status").notNull().default("pending"), // pending | mapped | ignored
+  mappedToId: text("mapped_to_id").references(() => industries.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const markets = pgTable("markets", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  level: marketLevelEnum("level"),
+  parentId: text("parent_id").references((): AnyPgColumn => markets.id, {
+    onDelete: "set null",
+  }),
+  isoCode: text("iso_code"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  radiusKm: real("radius_km"),
+  population: integer("population"),
+  graphNodeId: text("graph_node_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 // ─── Coaching Reports ─────────────────────────────────
