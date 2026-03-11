@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Building2,
   Globe,
@@ -13,6 +14,7 @@ import {
   CheckCircle2,
   Pencil,
   UserCheck,
+  AlertCircle,
 } from "lucide-react";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
@@ -40,6 +42,7 @@ export default function FirmOverviewPage() {
     addTag,
     removeTag,
     setFieldEdit,
+    saving,
   } = useFirmEdits(status === "done" && !!result, {
     categories: classification?.categories,
     skills: classification?.skills,
@@ -48,7 +51,9 @@ export default function FirmOverviewPage() {
     languages: classification?.languages,
     clients: extracted?.clients,
     aboutPitch: extracted?.aboutPitch,
-  });
+  }, activeOrg?.id);
+
+  const [showFullAbout, setShowFullAbout] = useState(false);
 
   const categories = edits.categories ?? classification?.categories ?? [];
   const skills = edits.skills ?? classification?.skills ?? [];
@@ -96,6 +101,15 @@ export default function FirmOverviewPage() {
         </div>
       )}
 
+      {(status === "failed" || status === "error") && (
+        <div className="flex items-center gap-2 rounded-cos-xl border border-cos-ember/20 bg-cos-ember/5 px-4 py-3">
+          <AlertCircle className="h-4 w-4 text-cos-ember" />
+          <p className="text-sm font-medium text-cos-ember">
+            Enrichment couldn&apos;t complete. Try refreshing, or tell Ossy your website URL.
+          </p>
+        </div>
+      )}
+
       {/* Firm header card */}
       <div className="rounded-cos-2xl border border-cos-border bg-cos-surface-raised p-5">
         <div className="flex items-start gap-3">
@@ -128,15 +142,27 @@ export default function FirmOverviewPage() {
                   value={edits.aboutPitch ?? aboutPitch}
                   onChange={(e) => setFieldEdit("aboutPitch", e.target.value)}
                   className="w-full rounded-cos-md border border-cos-border bg-white p-2 text-xs leading-relaxed text-cos-slate-dim focus:border-cos-electric focus:outline-none"
-                  rows={4}
+                  rows={6}
                 />
-                <button onClick={() => setEditingSection(null)} className="mt-1 text-[10px] text-cos-electric hover:underline">
-                  Done
-                </button>
+                <div className="mt-1 flex items-center gap-2">
+                  <button onClick={() => setEditingSection(null)} className="text-[10px] text-cos-electric hover:underline">
+                    Done
+                  </button>
+                  {saving && <Loader2 className="h-3 w-3 animate-spin text-cos-electric" />}
+                  {!saving && edits.aboutPitch && <CheckCircle2 className="h-3 w-3 text-cos-signal" />}
+                </div>
               </div>
             ) : (
               <div className="group relative">
-                <p className="text-xs leading-relaxed text-cos-slate-dim line-clamp-4">{aboutPitch}</p>
+                <p className={cn("text-xs leading-relaxed text-cos-slate-dim", !showFullAbout && "line-clamp-4")}>{aboutPitch}</p>
+                {aboutPitch.length > 250 && (
+                  <button
+                    onClick={() => setShowFullAbout(!showFullAbout)}
+                    className="mt-0.5 text-[10px] text-cos-electric hover:underline"
+                  >
+                    {showFullAbout ? "Show less" : "Show more"}
+                  </button>
+                )}
                 <button
                   onClick={() => setEditingSection("about")}
                   className="absolute -top-1 right-0 rounded-cos-md p-1 text-cos-slate-light opacity-0 transition-opacity hover:text-cos-electric group-hover:opacity-100"
@@ -160,6 +186,9 @@ export default function FirmOverviewPage() {
         <div className="mt-1.5 h-1.5 overflow-hidden rounded-cos-full bg-cos-cloud-dim">
           <div className={cn("h-full rounded-cos-full transition-all duration-700", completeness >= 70 ? "bg-cos-signal" : "bg-cos-electric")} style={{ width: `${completeness}%` }} />
         </div>
+        <p className="mt-1.5 text-[10px] text-cos-slate-dim">
+          {completedCount} of {completenessItems.length} data points — name, industry, size, location, categories, skills, industries, markets, languages, clients, about
+        </p>
       </div>
 
       {/* Firm Categories */}
@@ -274,6 +303,9 @@ export default function FirmOverviewPage() {
             </div>
             <span className="text-xs font-medium text-cos-slate">{Math.round(classification.confidence * 100)}%</span>
           </div>
+          <p className="mt-1 text-[10px] text-cos-slate-dim">
+            How confident the AI is in categorizing your firm based on your website content
+          </p>
         </div>
       )}
     </div>

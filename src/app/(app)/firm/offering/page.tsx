@@ -262,15 +262,20 @@ function ServiceCard({
 
         {/* Sub-services tags */}
         {service.subServices && service.subServices.length > 0 && (
-          <div className="mt-2 ml-12 flex flex-wrap gap-1.5">
-            {service.subServices.map((sub) => (
-              <span
-                key={sub}
-                className="rounded-cos-pill bg-cos-midnight/5 px-2 py-0.5 text-[10px] text-cos-slate"
-              >
-                {sub}
-              </span>
-            ))}
+          <div className="mt-2 ml-12">
+            <p className="mb-1 text-[10px] font-medium text-cos-slate-dim">
+              Specific capabilities:
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {service.subServices.map((sub) => (
+                <span
+                  key={sub}
+                  className="rounded-cos-pill bg-cos-midnight/5 px-2 py-0.5 text-[10px] text-cos-slate"
+                >
+                  {sub}
+                </span>
+              ))}
+            </div>
           </div>
         )}
 

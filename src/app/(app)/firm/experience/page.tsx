@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   FileText,
   Loader2,
@@ -22,6 +22,7 @@ import {
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useCaseStudies, type CaseStudy } from "@/hooks/use-case-studies";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 25;
 
@@ -224,9 +225,10 @@ function CaseStudyCard({
   const isPending = caseStudy.status === "pending" || caseStudy.status === "ingesting";
   const isFailed = caseStudy.status === "failed";
 
-  // Extract display URL
+  // Extract display URL (strip protocol and www.)
   const displayUrl = caseStudy.sourceUrl
     .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
     .replace(/\/$/, "");
 
   // Try to derive a title from URL slug if no title yet
@@ -322,7 +324,7 @@ function CaseStudyCard({
               {caseStudy.autoTags.languages?.slice(0, 2).map((l) => (
                 <span
                   key={l}
-                  className="rounded-cos-pill bg-purple-50 px-2 py-0.5 text-[10px] text-purple-600"
+                  className="rounded-cos-pill bg-cos-midnight/5 px-2 py-0.5 text-[10px] text-cos-midnight/60"
                 >
                   {l}
                 </span>
@@ -384,33 +386,59 @@ function AddCaseStudyForm({
   const [urlInput, setUrlInput] = useState("");
   const [textInput, setTextInput] = useState("");
   const [fileInput, setFileInput] = useState<File | null>(null);
+  const [showNotes, setShowNotes] = useState(false);
+  const [userNotes, setUserNotes] = useState("");
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+  const canSubmit = (() => {
+    if (isSubmitting) return false;
+    switch (mode) {
+      case "url": return urlInput.trim().length > 0;
+      case "text": return textInput.trim().length >= 100;
+      case "pdf": return fileInput !== null;
+    }
+  })();
 
   const handleSubmit = async () => {
+    const notes = userNotes.trim() || undefined;
     if (mode === "url" && urlInput.trim()) {
-      await onSubmitUrl(urlInput.trim());
+      await onSubmitUrl(urlInput.trim(), notes);
       setUrlInput("");
     } else if (mode === "text" && textInput.trim()) {
-      await onSubmitText(textInput.trim());
+      await onSubmitText(textInput.trim(), notes);
       setTextInput("");
     } else if (mode === "pdf" && fileInput) {
-      await onSubmitPdf(fileInput);
+      await onSubmitPdf(fileInput, notes);
       setFileInput(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
+    setUserNotes("");
+    setShowNotes(false);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   return (
     <div className="mt-3 rounded-cos-xl border border-cos-border/60 bg-cos-surface-raised p-4">
       <div className="flex items-center justify-between">
-        <div className="flex gap-2">
+        <div className="flex gap-1 rounded-cos-lg bg-cos-cloud-dim p-0.5">
           {(["url", "text", "pdf"] as const).map((m) => (
             <button
               key={m}
-              onClick={() => setMode(m)}
-              className={`flex items-center gap-1 rounded-cos-md px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+              onClick={() => { setMode(m); setFileError(null); }}
+              className={cn(
+                "flex items-center gap-1 rounded-cos-md px-2.5 py-1 text-[10px] font-semibold transition-all",
                 mode === m
-                  ? "bg-cos-electric/10 text-cos-electric"
-                  : "text-cos-slate-dim hover:bg-cos-cloud-dim hover:text-cos-midnight"
-              }`}
+                  ? "bg-white text-cos-midnight shadow-sm"
+                  : "text-cos-slate-dim hover:text-cos-midnight"
+              )}
             >
               {m === "url" && <LinkIcon className="h-3 w-3" />}
               {m === "text" && <Type className="h-3 w-3" />}
@@ -436,6 +464,7 @@ function AddCaseStudyForm({
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder="https://yoursite.com/case-study/acme"
               className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+              onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) handleSubmit(); }}
             />
             <p className="mt-1 text-[10px] text-cos-slate-light">
               Works with website URLs, Google Docs, Google Slides, and other cloud links.
@@ -443,26 +472,42 @@ function AddCaseStudyForm({
           </div>
         )}
         {mode === "text" && (
-          <textarea
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Paste case study text here (minimum 100 characters)..."
-            className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
-            rows={4}
-          />
+          <div className="space-y-1">
+            <textarea
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder="Paste case study text here (minimum 100 characters)..."
+              className="w-full resize-none rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-xs leading-relaxed text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+              rows={5}
+            />
+            <p className={cn(
+              "text-[10px]",
+              textInput.length >= 100 ? "text-cos-signal" : "text-cos-slate-light"
+            )}>
+              {textInput.length}/100 min characters
+            </p>
+          </div>
         )}
         {mode === "pdf" && (
-          <div>
+          <div className="space-y-2">
             <input
+              ref={fileInputRef}
               type="file"
               accept=".pdf"
               onChange={(e) => {
                 const file = e.target.files?.[0];
+                setFileError(null);
                 if (file) {
                   const ext = file.name.split(".").pop()?.toLowerCase();
                   const blocked = ["pptx", "ppt", "key", "keynote"];
                   if (blocked.includes(ext ?? "")) {
-                    alert("PowerPoint and Keynote files are not supported. Please export as PDF first.");
+                    setFileError("PowerPoint and Keynote files aren't supported directly. Export to PDF first (File → Save As → PDF), then upload the PDF here.");
+                    e.target.value = "";
+                    setFileInput(null);
+                    return;
+                  }
+                  if (file.size > MAX_FILE_SIZE) {
+                    setFileError(`File is too large (${formatFileSize(file.size)}). Maximum size is 10 MB.`);
                     e.target.value = "";
                     setFileInput(null);
                     return;
@@ -470,26 +515,93 @@ function AddCaseStudyForm({
                   setFileInput(file);
                 }
               }}
-              className="flex-1 text-xs text-cos-slate file:mr-2 file:rounded-cos-md file:border-0 file:bg-cos-electric/10 file:px-2.5 file:py-1 file:text-[10px] file:font-semibold file:text-cos-electric"
+              className="hidden"
             />
-            <p className="mt-1 text-[10px] text-cos-slate-light">
-              PDF files only. Export from PowerPoint or Keynote to PDF first.
-            </p>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                "flex w-full items-center justify-center gap-2 rounded-cos-lg border-2 border-dashed py-4 text-xs transition-colors",
+                fileInput
+                  ? "border-cos-signal bg-cos-signal/5 text-cos-signal"
+                  : "border-cos-border text-cos-slate-dim hover:border-cos-electric hover:text-cos-electric"
+              )}
+            >
+              <Upload className="h-4 w-4" />
+              {fileInput
+                ? `${fileInput.name} (${formatFileSize(fileInput.size)})`
+                : "Choose PDF file (max 10 MB)"}
+            </button>
+            {fileInput && (
+              <button
+                onClick={() => {
+                  setFileInput(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="text-[10px] text-cos-slate-dim hover:text-cos-ember"
+              >
+                Remove file
+              </button>
+            )}
+            {fileError && (
+              <div className="flex items-start gap-2 rounded-cos-md bg-cos-ember/5 px-3 py-2">
+                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-cos-ember" />
+                <p className="text-[11px] text-cos-ember">{fileError}</p>
+              </div>
+            )}
           </div>
         )}
       </div>
 
+      {/* Optional notes */}
+      {showNotes ? (
+        <div className="mt-3 space-y-1">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-medium text-cos-slate-dim">
+              Notes (optional)
+            </label>
+            <button
+              onClick={() => { setShowNotes(false); setUserNotes(""); }}
+              className="text-[10px] text-cos-slate-light hover:text-cos-slate-dim"
+            >
+              Hide
+            </button>
+          </div>
+          <input
+            type="text"
+            value={userNotes}
+            onChange={(e) => setUserNotes(e.target.value)}
+            placeholder="e.g., Focus on the AI/ML aspects..."
+            className="w-full rounded-cos-md border border-cos-border bg-white px-3 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+          />
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowNotes(true)}
+          className="mt-2 text-[10px] text-cos-slate-dim hover:text-cos-electric"
+        >
+          + Add notes
+        </button>
+      )}
+
       {submitError && (
-        <p className="mt-2 text-[10px] text-cos-ember">{submitError}</p>
+        <div className="mt-2 flex items-start gap-2 rounded-cos-md bg-cos-ember/5 px-3 py-2">
+          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-cos-ember" />
+          <p className="text-[11px] text-cos-ember">{submitError}</p>
+        </div>
       )}
 
       <button
         onClick={handleSubmit}
-        disabled={isSubmitting}
-        className="mt-3 flex items-center gap-1.5 rounded-cos-md bg-cos-electric px-3 py-1.5 text-[10px] font-semibold text-white transition-colors hover:bg-cos-electric/90 disabled:opacity-50"
+        disabled={!canSubmit}
+        className={cn(
+          "mt-3 flex w-full items-center justify-center gap-1.5 rounded-cos-md py-2 text-[10px] font-semibold transition-all",
+          canSubmit
+            ? "bg-cos-electric text-white hover:bg-cos-electric/90 active:scale-[0.98]"
+            : "bg-cos-cloud-dim text-cos-slate-light cursor-not-allowed"
+        )}
       >
         {isSubmitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-        Add Case Study
+        {isSubmitting ? "Submitting..." : "Add Case Study"}
       </button>
     </div>
   );
@@ -499,6 +611,16 @@ function AddCaseStudyForm({
 
 /** Derive a readable title from a URL slug (e.g., /work/acme-rebrand → "Acme Rebrand") */
 function deriveSlugTitle(url: string): string {
+  // Handle special prefixes
+  if (url.startsWith("manual:")) return "Manual Entry";
+  if (url.startsWith("uploaded:")) {
+    const filename = url.replace("uploaded:", "").split("/").pop() ?? "Uploaded File";
+    return filename
+      .replace(/\.[^.]+$/, "")
+      .replace(/[-_]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .trim();
+  }
   try {
     const pathname = new URL(url).pathname;
     const slug = pathname.split("/").filter(Boolean).pop() ?? "";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   Briefcase,
   Building2,
@@ -29,18 +29,23 @@ export default function FirmPreferencesPage() {
     async (field: string, value: string) => {
       if (!value.trim()) return;
       const existing = asArray((profileData as Record<string, unknown>)[field]);
-      if (existing.includes(value.trim())) return;
+      // Case-insensitive duplicate check
+      if (existing.some((e) => e.toLowerCase() === value.trim().toLowerCase())) return;
       const updated = [...existing, value.trim()];
       updateField(field, updated);
-      // Persist to server
+      // Persist to server — revert on failure
       try {
-        await fetch("/api/profile/update", {
+        const res = await fetch("/api/profile/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ field, value: updated }),
         });
+        if (!res.ok) {
+          console.error(`[Preferences] Failed to save ${field}`);
+          updateField(field, existing); // revert
+        }
       } catch {
-        // Optimistic update — ignore server errors for now
+        updateField(field, existing); // revert
       }
       setEditInput("");
     },
@@ -53,13 +58,16 @@ export default function FirmPreferencesPage() {
       const updated = existing.filter((v) => v !== value);
       updateField(field, updated);
       try {
-        await fetch("/api/profile/update", {
+        const res = await fetch("/api/profile/update", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ field, value: updated }),
         });
+        if (!res.ok) {
+          updateField(field, existing); // revert
+        }
       } catch {
-        // Optimistic update
+        updateField(field, existing); // revert
       }
     },
     [profileData, updateField]
@@ -165,7 +173,7 @@ export default function FirmPreferencesPage() {
         title="Partner Firm Types"
         field="preferredPartnerTypes"
         tags={asArray(profileData.preferredPartnerTypes)}
-        tagStyle="rounded-cos-pill bg-cos-electric/10 px-2.5 py-1 text-xs font-medium text-cos-electric"
+        tagStyle="rounded-cos-pill bg-cos-ember/8 px-2.5 py-1 text-xs font-medium text-cos-ember"
         emptyHint="Types of firms you want to partner with"
         editing={editingSection === "preferredPartnerTypes"}
         onEdit={() => setEditingSection(editingSection === "preferredPartnerTypes" ? null : "preferredPartnerTypes")}
@@ -181,7 +189,7 @@ export default function FirmPreferencesPage() {
         title="Preferred Partner Size"
         field="preferredPartnerSize"
         tags={asArray(profileData.preferredPartnerSize)}
-        tagStyle="rounded-cos-pill bg-cos-midnight/8 px-2.5 py-1 text-xs text-cos-slate"
+        tagStyle="rounded-cos-pill bg-cos-signal/8 px-2.5 py-1 text-xs text-cos-midnight"
         emptyHint="Size of partner firms you prefer"
         editing={editingSection === "preferredPartnerSize"}
         onEdit={() => setEditingSection(editingSection === "preferredPartnerSize" ? null : "preferredPartnerSize")}
@@ -217,14 +225,16 @@ export default function FirmPreferencesPage() {
         editing={editingSection === "typicalHourlyRates"}
         onEdit={() => setEditingSection(editingSection === "typicalHourlyRates" ? null : "typicalHourlyRates")}
         onSave={async (val) => {
+          const prev = typeof profileData.typicalHourlyRates === "string" ? profileData.typicalHourlyRates : "";
           updateField("typicalHourlyRates", val);
           try {
-            await fetch("/api/profile/update", {
+            const res = await fetch("/api/profile/update", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ field: "typicalHourlyRates", value: val }),
             });
-          } catch { /* optimistic */ }
+            if (!res.ok) { updateField("typicalHourlyRates", prev); return; }
+          } catch { updateField("typicalHourlyRates", prev); return; }
           setEditingSection(null);
         }}
       />
@@ -239,14 +249,16 @@ export default function FirmPreferencesPage() {
         editing={editingSection === "partnershipRole"}
         onEdit={() => setEditingSection(editingSection === "partnershipRole" ? null : "partnershipRole")}
         onSave={async (val) => {
+          const prev = typeof profileData.partnershipRole === "string" ? profileData.partnershipRole : "";
           updateField("partnershipRole", val);
           try {
-            await fetch("/api/profile/update", {
+            const res = await fetch("/api/profile/update", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ field: "partnershipRole", value: val }),
             });
-          } catch { /* optimistic */ }
+            if (!res.ok) { updateField("partnershipRole", prev); return; }
+          } catch { updateField("partnershipRole", prev); return; }
           setEditingSection(null);
         }}
       />
@@ -374,6 +386,11 @@ function EditableSinglePrefSection({
   onSave: (value: string) => void;
 }) {
   const [inputValue, setInputValue] = useState(value ?? "");
+
+  // Re-sync inputValue when prop changes (e.g., Ossy updates it via chat)
+  useEffect(() => {
+    if (!editing) setInputValue(value ?? "");
+  }, [value, editing]);
 
   return (
     <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4">
