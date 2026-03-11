@@ -25,6 +25,15 @@ import {
   getMarkets,
   getLanguages,
 } from "@/lib/taxonomy";
+import {
+  FIRM_TYPES,
+  TECH_CATEGORIES,
+  SERVICE_CATEGORIES,
+  SERVICES_BY_CATEGORY,
+  INDUSTRY_HIERARCHY,
+  MARKET_HIERARCHY,
+  BASE_INDUSTRIES,
+} from "@/lib/taxonomy-full";
 
 // ─── Firm relationship CSV parser ─────────────────────────
 
@@ -264,20 +273,7 @@ async function seedLanguages(): Promise<number> {
 }
 
 async function seedFirmTypes(): Promise<number> {
-  const firmTypes = [
-    { name: "Fractional & Interim", description: "Provides fractional or interim executive leadership" },
-    { name: "Staff Augmentation", description: "Supplements client teams with skilled professionals" },
-    { name: "Embedded Teams", description: "Places integrated teams within client organizations" },
-    { name: "Boutique Agency", description: "Specialized agency with focused expertise" },
-    { name: "Project Consulting", description: "Delivers scoped project-based consulting engagements" },
-    { name: "Managed Service Provider", description: "Operates ongoing managed services for clients" },
-    { name: "Advisory", description: "Provides strategic advisory and guidance" },
-    { name: "Global Consulting", description: "Large-scale consulting firm with global reach" },
-    { name: "Freelancer Network", description: "Curated network of independent professionals" },
-    { name: "Agency Collective", description: "Alliance of agencies collaborating on projects" },
-  ];
-
-  const items = firmTypes.map((ft) => ({
+  const items = FIRM_TYPES.map((ft) => ({
     name: ft.name,
     props: { description: ft.description },
   }));
@@ -285,24 +281,7 @@ async function seedFirmTypes(): Promise<number> {
 }
 
 async function seedIndustries(): Promise<number> {
-  // Seed common industries — this list grows as enrichment discovers new ones
-  const industries = [
-    "Technology", "SaaS", "E-commerce", "Financial Services", "Banking",
-    "Insurance", "Healthcare", "Pharmaceuticals", "Biotech", "Medical Devices",
-    "Retail", "Consumer Goods", "CPG", "Food & Beverage", "Hospitality",
-    "Travel & Tourism", "Real Estate", "Construction", "Manufacturing",
-    "Automotive", "Aerospace & Defense", "Energy", "Oil & Gas", "Renewables",
-    "Utilities", "Telecommunications", "Media & Entertainment", "Gaming",
-    "Education", "EdTech", "Government", "Public Sector", "Nonprofit",
-    "Legal Services", "Professional Services", "Logistics & Supply Chain",
-    "Agriculture", "Mining", "Fashion & Apparel", "Beauty & Cosmetics",
-    "Sports & Fitness", "Cannabis", "Crypto & Blockchain", "AI & Machine Learning",
-    "Cybersecurity", "Cloud Computing", "FinTech", "HealthTech", "PropTech",
-    "FoodTech", "CleanTech", "MarTech", "AdTech", "HRTech", "LegalTech",
-    "InsurTech", "RegTech", "WealthTech",
-  ];
-
-  const items = industries.map((name) => ({ name }));
+  const items = BASE_INDUSTRIES.map((name) => ({ name }));
   return batchMerge("Industry", items);
 }
 
@@ -358,23 +337,7 @@ async function seedFirmCategories(): Promise<number> {
 }
 
 async function seedTechCategories(): Promise<number> {
-  const techCategories = [
-    { name: "CRM", slug: "crm", description: "Customer relationship management platforms" },
-    { name: "Marketing Automation", slug: "marketing_automation", description: "Marketing automation and campaign platforms" },
-    { name: "E-Commerce", slug: "ecommerce", description: "E-commerce platforms and storefronts" },
-    { name: "Analytics & BI", slug: "analytics", description: "Analytics, business intelligence, and reporting tools" },
-    { name: "Project Management", slug: "project_management", description: "Project and work management platforms" },
-    { name: "Developer Tools", slug: "developer_tools", description: "Developer tooling, IDEs, and code platforms" },
-    { name: "Cloud Infrastructure", slug: "cloud_infrastructure", description: "Cloud platforms and infrastructure services" },
-    { name: "Communication & Collaboration", slug: "communication", description: "Team communication and collaboration tools" },
-    { name: "Design & Creative", slug: "design", description: "Design, creative, and prototyping tools" },
-    { name: "Payments & Fintech", slug: "payments", description: "Payment processing and financial technology platforms" },
-    { name: "Customer Support", slug: "customer_support", description: "Customer support and helpdesk platforms" },
-    { name: "Data Integration & ETL", slug: "data_integration", description: "Data integration, ETL, and pipeline tools" },
-    { name: "Other", slug: "other", description: "Other technology platforms and tools" },
-  ];
-
-  const items = techCategories.map((tc) => ({
+  const items = TECH_CATEGORIES.map((tc) => ({
     name: tc.name,
     props: { slug: tc.slug, description: tc.description },
   }));
@@ -382,20 +345,8 @@ async function seedTechCategories(): Promise<number> {
 }
 
 async function seedDeliveryModels(): Promise<number> {
-  const deliveryModels = [
-    { name: "Fractional & Interim", description: "Provides fractional or interim executive leadership" },
-    { name: "Staff Augmentation", description: "Supplements client teams with skilled professionals" },
-    { name: "Embedded Teams", description: "Places integrated teams within client organizations" },
-    { name: "Boutique Agency", description: "Specialized agency with focused expertise" },
-    { name: "Project Consulting", description: "Delivers scoped project-based consulting engagements" },
-    { name: "Managed Service Provider", description: "Operates ongoing managed services for clients" },
-    { name: "Advisory", description: "Provides strategic advisory and guidance" },
-    { name: "Global Consulting", description: "Large-scale consulting firm with global reach" },
-    { name: "Freelancer Network", description: "Curated network of independent professionals" },
-    { name: "Agency Collective", description: "Alliance of agencies collaborating on projects" },
-  ];
-
-  const items = deliveryModels.map((dm) => ({
+  // Same data as FIRM_TYPES — DeliveryModel is a dual label
+  const items = FIRM_TYPES.map((dm) => ({
     name: dm.name,
     props: { description: dm.description },
   }));
@@ -408,18 +359,7 @@ async function seedDeliveryModels(): Promise<number> {
 }
 
 async function seedServiceCategories(): Promise<number> {
-  const serviceCategories = [
-    { name: "Strategy & Advisory", description: "Strategic planning, advisory, and positioning services" },
-    { name: "Marketing & Growth", description: "Marketing, demand generation, and growth services" },
-    { name: "Technology & Engineering", description: "Software development, infrastructure, and engineering services" },
-    { name: "Design & Creative", description: "Brand design, UX, and creative production services" },
-    { name: "Sales & Revenue", description: "Sales enablement, revenue operations, and CRM services" },
-    { name: "Operations & Finance", description: "Financial management, process optimization, and operations services" },
-    { name: "People & Talent", description: "HR, talent acquisition, and people operations services" },
-    { name: "Data & Analytics", description: "Data strategy, BI, and analytics services" },
-  ];
-
-  const items = serviceCategories.map((sc) => ({
+  const items = SERVICE_CATEGORIES.map((sc) => ({
     name: sc.name,
     props: { description: sc.description },
   }));
@@ -427,44 +367,9 @@ async function seedServiceCategories(): Promise<number> {
 }
 
 async function seedServices(): Promise<number> {
-  const servicesByCat: Record<string, string[]> = {
-    "Strategy & Advisory": [
-      "Go-to-Market Strategy", "Business Strategy", "Brand Positioning",
-      "Market Research", "Competitive Analysis", "Product Strategy", "Partnership Strategy",
-    ],
-    "Marketing & Growth": [
-      "Content Marketing", "Demand Generation", "SEO & SEM", "Social Media Marketing",
-      "Email Marketing", "Performance Marketing", "Marketing Operations", "Account-Based Marketing",
-    ],
-    "Technology & Engineering": [
-      "Software Development", "Web Development", "Mobile Development", "DevOps & Infrastructure",
-      "System Integration", "API Development", "Data Engineering", "QA & Testing",
-    ],
-    "Design & Creative": [
-      "Brand Identity Design", "UI/UX Design", "Graphic Design", "Motion Design",
-      "Copywriting", "Photography & Video", "Design Systems",
-    ],
-    "Sales & Revenue": [
-      "Sales Enablement", "Sales Training", "Revenue Operations", "CRM Implementation",
-      "Sales Playbook Development", "Pipeline Management",
-    ],
-    "Operations & Finance": [
-      "Financial Planning & Analysis", "Accounting & Bookkeeping", "Process Optimization",
-      "Project Management", "Change Management", "Procurement",
-    ],
-    "People & Talent": [
-      "Talent Acquisition", "HR Strategy", "Learning & Development",
-      "Compensation & Benefits", "Culture & Engagement", "Executive Coaching",
-    ],
-    "Data & Analytics": [
-      "Data Strategy", "Business Intelligence", "Data Visualization",
-      "Analytics Implementation", "Data Governance", "Machine Learning & AI",
-    ],
-  };
-
   let totalCreated = 0;
 
-  for (const [catName, serviceNames] of Object.entries(servicesByCat)) {
+  for (const [catName, serviceNames] of Object.entries(SERVICES_BY_CATEGORY)) {
     // Merge Service nodes and link to ServiceCategory
     for (let i = 0; i < serviceNames.length; i += BATCH_SIZE) {
       const batch = serviceNames.slice(i, i + BATCH_SIZE);
@@ -484,26 +389,8 @@ async function seedServices(): Promise<number> {
 }
 
 async function seedIndustryHierarchy(): Promise<number> {
-  const hierarchy: Record<string, string[]> = {
-    "Technology": ["SaaS", "Enterprise Software", "Developer Tools", "Cybersecurity", "AI & Machine Learning", "Cloud Computing", "IoT", "AR/VR"],
-    "Financial Services": ["FinTech", "Banking", "Insurance", "InsurTech", "WealthTech", "Payments", "RegTech"],
-    "Healthcare": ["HealthTech", "Pharmaceuticals", "Biotech", "Medical Devices", "Digital Health", "Mental Health Tech"],
-    "E-Commerce & Retail": ["E-Commerce", "Retail", "Consumer Goods", "CPG", "Fashion & Apparel", "Beauty & Cosmetics", "Food & Beverage"],
-    "Media & Entertainment": ["Media", "Entertainment", "Gaming", "Sports", "Music", "Video & Streaming"],
-    "Education": ["EdTech", "Higher Education", "K-12", "Corporate Training", "Online Learning"],
-    "Real Estate & Construction": ["PropTech", "Real Estate", "Construction", "Facilities Management"],
-    "Energy & Environment": ["CleanTech", "Renewables", "Energy", "Oil & Gas", "Utilities", "Sustainability"],
-    "Transportation & Logistics": ["Logistics & Supply Chain", "Transportation", "Mobility", "Autonomous Vehicles"],
-    "Professional Services": ["Management Consulting", "Legal Services", "Accounting", "HR & Recruiting", "Marketing Services", "PR & Communications"],
-    "Government & Nonprofit": ["Government", "Public Sector", "Nonprofit", "Social Impact"],
-    "Food & Agriculture": ["FoodTech", "Agriculture", "Restaurant Tech"],
-    "Manufacturing & Industrial": ["Manufacturing", "Automotive", "Aerospace & Defense", "Industrial IoT"],
-    "Travel & Hospitality": ["Travel & Tourism", "Hospitality", "Short-Term Rentals"],
-    "Marketing Technology": ["MarTech", "AdTech", "Customer Experience", "Sales Technology"],
-  };
-
   // Create IndustryL1 nodes
-  const l1Names = Object.keys(hierarchy);
+  const l1Names = Object.keys(INDUSTRY_HIERARCHY);
   for (let i = 0; i < l1Names.length; i += BATCH_SIZE) {
     const batch = l1Names.slice(i, i + BATCH_SIZE);
     await neo4jWrite(
@@ -516,7 +403,7 @@ async function seedIndustryHierarchy(): Promise<number> {
 
   // Update existing Industry nodes with level: "L2" and create BELONGS_TO edges
   let totalL2 = 0;
-  for (const [l1Name, l2Names] of Object.entries(hierarchy)) {
+  for (const [l1Name, l2Names] of Object.entries(INDUSTRY_HIERARCHY)) {
     for (let i = 0; i < l2Names.length; i += BATCH_SIZE) {
       const batch = l2Names.slice(i, i + BATCH_SIZE);
       await neo4jWrite(
@@ -536,61 +423,8 @@ async function seedIndustryHierarchy(): Promise<number> {
 }
 
 async function seedMarketHierarchy(): Promise<number> {
-  const regionCountries: Record<string, { name: string; isoCode: string }[]> = {
-    "North America": [
-      { name: "United States", isoCode: "US" },
-      { name: "Canada", isoCode: "CA" },
-      { name: "Mexico", isoCode: "MX" },
-    ],
-    "Latin America": [
-      { name: "Brazil", isoCode: "BR" },
-      { name: "Argentina", isoCode: "AR" },
-      { name: "Colombia", isoCode: "CO" },
-      { name: "Chile", isoCode: "CL" },
-      { name: "Peru", isoCode: "PE" },
-    ],
-    "Europe": [
-      { name: "United Kingdom", isoCode: "GB" },
-      { name: "Germany", isoCode: "DE" },
-      { name: "France", isoCode: "FR" },
-      { name: "Netherlands", isoCode: "NL" },
-      { name: "Sweden", isoCode: "SE" },
-      { name: "Spain", isoCode: "ES" },
-      { name: "Italy", isoCode: "IT" },
-      { name: "Switzerland", isoCode: "CH" },
-      { name: "Belgium", isoCode: "BE" },
-      { name: "Denmark", isoCode: "DK" },
-      { name: "Norway", isoCode: "NO" },
-      { name: "Finland", isoCode: "FI" },
-      { name: "Austria", isoCode: "AT" },
-      { name: "Portugal", isoCode: "PT" },
-      { name: "Ireland", isoCode: "IE" },
-      { name: "Poland", isoCode: "PL" },
-    ],
-    "Asia Pacific": [
-      { name: "Australia", isoCode: "AU" },
-      { name: "Singapore", isoCode: "SG" },
-      { name: "Japan", isoCode: "JP" },
-      { name: "India", isoCode: "IN" },
-      { name: "South Korea", isoCode: "KR" },
-      { name: "New Zealand", isoCode: "NZ" },
-      { name: "Hong Kong", isoCode: "HK" },
-      { name: "China", isoCode: "CN" },
-      { name: "Taiwan", isoCode: "TW" },
-    ],
-    "Middle East & Africa": [
-      { name: "United Arab Emirates", isoCode: "AE" },
-      { name: "Saudi Arabia", isoCode: "SA" },
-      { name: "Israel", isoCode: "IL" },
-      { name: "South Africa", isoCode: "ZA" },
-      { name: "Nigeria", isoCode: "NG" },
-      { name: "Kenya", isoCode: "KE" },
-      { name: "Egypt", isoCode: "EG" },
-    ],
-  };
-
   // Tag region-level Market nodes with level: "L1"
-  const regionNames = Object.keys(regionCountries);
+  const regionNames = Object.keys(MARKET_HIERARCHY);
   for (let i = 0; i < regionNames.length; i += BATCH_SIZE) {
     const batch = regionNames.slice(i, i + BATCH_SIZE);
     await neo4jWrite(
@@ -603,7 +437,7 @@ async function seedMarketHierarchy(): Promise<number> {
 
   // Upsert country Market nodes with level: "L2", isoCode, and PARENT_REGION edges
   let totalCountries = 0;
-  for (const [regionName, countries] of Object.entries(regionCountries)) {
+  for (const [regionName, countries] of Object.entries(MARKET_HIERARCHY)) {
     for (let i = 0; i < countries.length; i += BATCH_SIZE) {
       const batch = countries.slice(i, i + BATCH_SIZE);
       await neo4jWrite(
