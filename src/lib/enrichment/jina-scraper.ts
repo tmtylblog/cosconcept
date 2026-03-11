@@ -256,12 +256,17 @@ export async function scrapeFirmWebsite(
       return true;
     });
 
-  // 3. Scrape top 5 priority subpages
+  // 3. Scrape top 5 priority subpages — sequential with small jitter to avoid CF detection
   const evidence: FirmGroundTruth["evidence"] = [];
   for (const candidate of unique.slice(0, 5)) {
+    await new Promise((r) => setTimeout(r, 2000 + Math.random() * 2000));
     try {
       const page = await scrapeUrl(candidate.url);
-      evidence.push({ category: candidate.category, page });
+      if (!isBlockedContent(page.content)) {
+        evidence.push({ category: candidate.category, page });
+      } else {
+        console.warn(`[Jina] Block detected at ${candidate.url}`);
+      }
     } catch (err) {
       console.warn(
         `[Jina] Failed: ${candidate.category} ${candidate.url}:`,

@@ -17,7 +17,7 @@ import { classifyPageType, type PageType } from "./page-classifier";
 import { extractCaseStudyDeep } from "./extractors/case-study-extractor";
 import { extractTeamMembers } from "./extractors/team-extractor";
 import { extractServicesDeep } from "./extractors/service-extractor";
-import { extractClientsWithConfidence } from "./client-extractor";
+import { extractClientsWithConfidence, type ClientSignal } from "./client-extractor";
 import { logEnrichmentStep } from "./audit-logger";
 
 /** Jitter delay between page requests to avoid CF bot-pattern detection. */
@@ -57,6 +57,8 @@ export interface DeepCrawlResult {
     teamMembers: ExtractedTeamMember[];
     services: ExtractedService[];
     clients: string[];
+    /** Confidence-scored signals behind each client name */
+    clientSignals: ClientSignal[];
     aboutPitch: string;
     caseStudyUrls: string[];
     /** True if the site explicitly states client names are confidential/NDA-protected */
@@ -288,6 +290,7 @@ export async function deepCrawlWebsite(params: {
     preSeededClients,
   });
   const clients = clientResult.clients;
+  const clientSignals = clientResult.clientSignals;
 
   // Extract about pitch
   const aboutContent =
@@ -332,6 +335,7 @@ export async function deepCrawlWebsite(params: {
       teamMembers,
       services,
       clients,
+      clientSignals,
       aboutPitch,
       caseStudyUrls,
       clientsNdaProtected,
@@ -556,6 +560,7 @@ function emptyResult(
       teamMembers: [],
       services: [],
       clients: [],
+      clientSignals: [],
       aboutPitch: "",
       caseStudyUrls: [],
       clientsNdaProtected: false,
