@@ -273,7 +273,12 @@ async function checkCandidatesWantSearcher(
 
   const searcherOffers = await neo4jRead<OfferRow>(
     `MATCH (f:ServiceFirm {id: $firmId})-[:HAS_SKILL|IN_CATEGORY|OPERATES_IN]->(t)
-     RETURN labels(t)[0] AS label, t.name AS name`,
+     RETURN CASE
+       WHEN t:Skill THEN 'Skill'
+       WHEN t:Category OR t:FirmCategory THEN 'Category'
+       WHEN t:Market THEN 'Market'
+       ELSE labels(t)[0]
+     END AS label, t.name AS name`,
     { firmId: searcherFirmId }
   );
 

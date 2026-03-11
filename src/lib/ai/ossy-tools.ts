@@ -3,6 +3,10 @@ import { z } from "zod/v4";
 import { updateProfileField, ALL_PROFILE_FIELDS } from "@/lib/profile/update-profile-field";
 import { logOnboardingEvent } from "@/lib/onboarding/event-logger";
 import { syncAllPreferencesToGraph } from "@/lib/enrichment/preference-writer";
+import { executeSearch } from "@/lib/matching/search";
+import { lookupFirmDetail } from "@/lib/matching/firm-lookup";
+import { searchExperts } from "@/lib/matching/expert-search";
+import { searchCaseStudies } from "@/lib/matching/case-study-search";
 
 /** v2 interview fields (new 5-question flow) — used for funnel tracking */
 const INTERVIEW_FIELDS_V2 = [
@@ -137,6 +141,142 @@ export function createOssyTools(organizationId: string, firmId: string) {
         } catch (err) {
           console.error(`[Ossy Tools] Failed to update ${field}:`, err);
           return { success: false as const, field, error: String(err) };
+        }
+      },
+    }),
+
+    // ─── Search & Discovery Tools ────────────────────────────
+
+    search_partners: tool({
+      description:
+        "Search for partner firms that complement the user's capabilities. " +
+        "Use when the user asks to find agencies, consultancies, or firms " +
+        "with specific skills, industries, or markets. " +
+        "Returns ranked matches with scores and explanations.",
+      inputSchema: z.object({
+        query: z.string().describe(
+          "Natural language search query describing what kind of partner the user needs. " +
+          "Be specific: include skills, industries, markets, or firm types mentioned."
+        ),
+        skipDeepRanking: z.boolean().optional().describe(
+          "Skip the LLM deep ranking layer for faster results. Default false."
+        ),
+      }),
+      execute: async ({ query, skipDeepRanking }) => {
+        try {
+          const result = await executeSearch({
+            rawQuery: query,
+            searcherFirmId: firmId,
+            skipLlmRanking: skipDeepRanking ?? false,
+          });
+
+          const candidates = result.candidates.slice(0, 10).map((c) => ({
+            firmId: c.firmId,
+            firmName: c.firmName,
+            matchScore: Math.round(c.totalScore * 100),
+            explanation: c.matchExplanation ?? "",
+            categories: c.preview.categories,
+            skills: c.preview.topSkills,
+            industries: c.preview.industries,
+            website: c.preview.website,
+            employeeCount: c.preview.employeeCount,
+          }));
+
+          return {
+            candidates,
+            totalFound: result.candidates.length,
+            stats: {
+              searchDurationMs: result.stats.totalDurationMs,
+              layersUsed: result.stats.layer3Ranked > 0 ? 3 : 2,
+            },
+          };
+        } catch (err) {
+          console.error("[Ossy Tools] search_partners failed:", err);
+          return { candidates: [], totalFound: 0, error: String(err) };
+        }
+      },
+    }),
+
+    search_experts: tool({
+      description:
+        "Search for individual experts or professionals with specific skills or titles. " +
+        "Use when the user asks to find a specific type of person " +
+        "(e.g., 'fractional CMO', 'Shopify developer', 'brand strategist').",
+      inputSchema: z.object({
+        query: z.string().describe("What kind of expert the user is looking for"),
+        skills: z.array(z.string()).optional().describe("Specific skill names to filter by"),
+        limit: z.number().optional().describe("Max results, default 10"),
+      }),
+      execute: async ({ query, skills, limit }) => {
+        try {
+          const experts = await searchExperts({
+            query,
+            skills,
+            limit: limit ?? 10,
+          });
+          return { experts, totalFound: experts.length };
+        } catch (err) {
+          console.error("[Ossy Tools] search_experts failed:", err);
+          return { experts: [], totalFound: 0, error: String(err) };
+        }
+      },
+    }),
+
+    search_case_studies: tool({
+      description:
+        "Search for real project case studies demonstrating specific capabilities or industries. " +
+        "Use when the user wants to see examples of work or proof of expertise.",
+      inputSchema: z.object({
+        query: z.string().describe("What kind of case study to find"),
+        skills: z.array(z.string()).optional().describe("Skills demonstrated"),
+        industries: z.array(z.string()).optional().describe("Industries served"),
+        limit: z.number().optional().describe("Max results, default 10"),
+      }),
+      execute: async ({ query, skills, industries, limit }) => {
+        try {
+          const caseStudies = await searchCaseStudies({
+            query,
+            skills,
+            industries,
+            limit: limit ?? 10,
+          });
+          return { caseStudies, totalFound: caseStudies.length };
+        } catch (err) {
+          console.error("[Ossy Tools] search_case_studies failed:", err);
+          return { caseStudies: [], totalFound: 0, error: String(err) };
+        }
+      },
+    }),
+
+    lookup_firm: tool({
+      description:
+        "Look up detailed information about a specific firm by name or domain. " +
+        "Use when the user mentions a specific company and wants to know more about it.",
+      inputSchema: z.object({
+        nameOrDomain: z.string().describe("The firm name or website domain to look up"),
+      }),
+      execute: async ({ nameOrDomain }) => {
+        try {
+          return await lookupFirmDetail(nameOrDomain);
+        } catch (err) {
+          console.error("[Ossy Tools] lookup_firm failed:", err);
+          return { found: false, message: "Failed to look up firm. Please try again." };
+        }
+      },
+    }),
+
+    get_my_profile: tool({
+      description:
+        "Get the user's own firm profile — what the platform knows about their capabilities, " +
+        "industries, skills, and partnership preferences. " +
+        "Use when the user asks 'what do you know about us?' or wants to review their profile.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        try {
+          return await lookupFirmDetail(firmId, { byId: true });
+        } catch (err) {
+          console.error("[Ossy Tools] get_my_profile failed:", err);
+          return { found: false, message: "Unable to load your firm profile." };
         }
       },
     }),
