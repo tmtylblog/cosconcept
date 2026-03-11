@@ -10,6 +10,9 @@ export const dynamic = "force-dynamic";
  * GET /api/admin/metrics
  * Platform-wide metrics for the admin dashboard.
  * Protected by middleware (superadmin only).
+ *
+ * Track A update: Counts now use canonical tables (serviceFirms, expertProfiles,
+ * firmCaseStudies) instead of truncated imported_* tables.
  */
 export async function GET() {
   try {
@@ -55,17 +58,33 @@ export async function GET() {
       (planDistribution.pro ?? 0) * PLAN_PRICES.pro.monthly +
       (planDistribution.enterprise ?? 0) * PLAN_PRICES.enterprise.monthly;
 
-    // Expert profiles (imported contacts classified as expert)
+    // Service firms (canonical source)
+    const firmCount = await db.execute(
+      sql`SELECT COUNT(*)::int AS count FROM "service_firms"`
+    );
+    const totalFirms = Number(firmCount.rows[0]?.count ?? 0);
+
+    // Expert profiles (canonical source — replaces imported_contacts count)
     const expertCount = await db.execute(
-      sql`SELECT COUNT(*)::int AS count FROM "imported_contacts" WHERE expert_classification = 'expert'`
+      sql`SELECT COUNT(*)::int AS count FROM "expert_profiles"`
     );
     const totalExperts = Number(expertCount.rows[0]?.count ?? 0);
 
-    // Client companies
-    const clientCount = await db.execute(
-      sql`SELECT COUNT(*)::int AS count FROM "imported_clients"`
+    // Case studies (from firm_case_studies — auto-discovered from websites)
+    const csCount = await db.execute(
+      sql`SELECT COUNT(*)::int AS count FROM "firm_case_studies" WHERE status != 'deleted'`
     );
-    const totalClients = Number(clientCount.rows[0]?.count ?? 0);
+    const totalCaseStudies = Number(csCount.rows[0]?.count ?? 0);
+
+    // Onboarding completion rate
+    const onboardingResult = await db.execute(sql`
+      SELECT
+        COUNT(DISTINCT domain) FILTER (WHERE event = 'domain_entered')::int AS started,
+        COUNT(DISTINCT domain) FILTER (WHERE event = 'all_questions_done')::int AS completed
+      FROM onboarding_events
+    `);
+    const onboardingStarted = Number(onboardingResult.rows[0]?.started ?? 0);
+    const onboardingCompleted = Number(onboardingResult.rows[0]?.completed ?? 0);
 
     return NextResponse.json({
       totalOrgs,
@@ -73,8 +92,14 @@ export async function GET() {
       activeSubscriptions,
       mrr,
       planDistribution,
+      totalFirms,
       totalExperts,
-      totalClients,
+      totalCaseStudies,
+      onboarding: {
+        started: onboardingStarted,
+        completed: onboardingCompleted,
+        rate: onboardingStarted > 0 ? onboardingCompleted / onboardingStarted : 0,
+      },
     });
   } catch (error) {
     console.error("[Admin] Metrics error:", error);

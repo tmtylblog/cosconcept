@@ -11,6 +11,9 @@ export const dynamic = "force-dynamic";
  *
  * Returns distinct attribute values with occurrence counts.
  * Supports search and pagination.
+ *
+ * Track A update: Now queries firm_case_studies.auto_tags (canonical)
+ * and taxonomy tables instead of truncated imported_* tables.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -52,27 +55,35 @@ export async function GET(req: NextRequest) {
     let countQuery: ReturnType<typeof sql>;
 
     if (type === "skills") {
+      // Skills from firm_case_studies auto_tags
       const searchCondition = search
-        ? sql`AND skill->>'name' ILIKE ${`%${search}%`}`
+        ? sql`AND skill ILIKE ${`%${search}%`}`
         : sql``;
 
       countQuery = sql`
         SELECT COUNT(*)::int AS total FROM (
-          SELECT DISTINCT skill->>'name' AS name
-          FROM imported_case_studies, jsonb_array_elements(skills) AS skill
-          WHERE skills IS NOT NULL ${searchCondition}
+          SELECT DISTINCT skill AS name
+          FROM firm_case_studies,
+               jsonb_array_elements_text(auto_tags->'skills') AS skill
+          WHERE auto_tags->'skills' IS NOT NULL
+            AND status != 'deleted'
+            ${searchCondition}
         ) sub
       `;
 
       dataQuery = sql`
-        SELECT skill->>'name' AS name, COUNT(*)::int AS count
-        FROM imported_case_studies, jsonb_array_elements(skills) AS skill
-        WHERE skills IS NOT NULL ${searchCondition}
-        GROUP BY skill->>'name'
+        SELECT skill AS name, COUNT(*)::int AS count
+        FROM firm_case_studies,
+             jsonb_array_elements_text(auto_tags->'skills') AS skill
+        WHERE auto_tags->'skills' IS NOT NULL
+          AND status != 'deleted'
+          ${searchCondition}
+        GROUP BY skill
         ORDER BY count DESC, name ASC
         LIMIT ${limit} OFFSET ${offset}
       `;
     } else if (type === "industries") {
+      // Industries from firm_case_studies auto_tags + industries taxonomy table
       const searchCondition = search
         ? sql`WHERE sub.name ILIKE ${`%${search}%`}`
         : sql``;
@@ -81,12 +92,14 @@ export async function GET(req: NextRequest) {
         SELECT COUNT(*)::int AS total FROM (
           SELECT DISTINCT name FROM (
             SELECT DISTINCT industry AS name
-            FROM imported_companies
-            WHERE industry IS NOT NULL
-            UNION ALL
-            SELECT DISTINCT ind->>'name' AS name
-            FROM imported_case_studies, jsonb_array_elements(industries) AS ind
-            WHERE industries IS NOT NULL
+            FROM firm_case_studies,
+                 jsonb_array_elements_text(auto_tags->'industries') AS industry
+            WHERE auto_tags->'industries' IS NOT NULL
+              AND status != 'deleted'
+            UNION
+            SELECT DISTINCT name
+            FROM industries
+            WHERE name IS NOT NULL
           ) raw
           WHERE name IS NOT NULL
           ${search ? sql`AND name ILIKE ${`%${search}%`}` : sql``}
@@ -97,14 +110,15 @@ export async function GET(req: NextRequest) {
         SELECT sub.name, SUM(sub.cnt)::int AS count
         FROM (
           SELECT industry AS name, COUNT(*)::int AS cnt
-          FROM imported_companies
-          WHERE industry IS NOT NULL
+          FROM firm_case_studies,
+               jsonb_array_elements_text(auto_tags->'industries') AS industry
+          WHERE auto_tags->'industries' IS NOT NULL
+            AND status != 'deleted'
           GROUP BY industry
           UNION ALL
-          SELECT ind->>'name' AS name, COUNT(*)::int AS cnt
-          FROM imported_case_studies, jsonb_array_elements(industries) AS ind
-          WHERE industries IS NOT NULL
-          GROUP BY ind->>'name'
+          SELECT name, 0::int AS cnt
+          FROM industries
+          WHERE name IS NOT NULL
         ) sub
         ${searchCondition}
         GROUP BY sub.name
@@ -112,25 +126,47 @@ export async function GET(req: NextRequest) {
         LIMIT ${limit} OFFSET ${offset}
       `;
     } else {
-      // markets
+      // Markets from firm_case_studies auto_tags + markets taxonomy table
       const searchCondition = search
         ? sql`AND market ILIKE ${`%${search}%`}`
         : sql``;
 
       countQuery = sql`
         SELECT COUNT(*)::int AS total FROM (
-          SELECT DISTINCT market AS name
-          FROM imported_case_studies, jsonb_array_elements_text(markets) AS market
-          WHERE markets IS NOT NULL ${searchCondition}
+          SELECT DISTINCT name FROM (
+            SELECT DISTINCT market AS name
+            FROM firm_case_studies,
+                 jsonb_array_elements_text(auto_tags->'markets') AS market
+            WHERE auto_tags->'markets' IS NOT NULL
+              AND status != 'deleted'
+              ${searchCondition}
+            UNION
+            SELECT DISTINCT name
+            FROM markets
+            WHERE name IS NOT NULL
+              ${search ? sql`AND name ILIKE ${`%${search}%`}` : sql``}
+          ) raw
         ) sub
       `;
 
       dataQuery = sql`
-        SELECT market AS name, COUNT(*)::int AS count
-        FROM imported_case_studies, jsonb_array_elements_text(markets) AS market
-        WHERE markets IS NOT NULL ${searchCondition}
-        GROUP BY market
-        ORDER BY count DESC, market ASC
+        SELECT sub.name, SUM(sub.cnt)::int AS count
+        FROM (
+          SELECT market AS name, COUNT(*)::int AS cnt
+          FROM firm_case_studies,
+               jsonb_array_elements_text(auto_tags->'markets') AS market
+          WHERE auto_tags->'markets' IS NOT NULL
+            AND status != 'deleted'
+            ${searchCondition}
+          GROUP BY market
+          UNION ALL
+          SELECT name, 0::int AS cnt
+          FROM markets
+          WHERE name IS NOT NULL
+            ${search ? sql`AND name ILIKE ${`%${search}%`}` : sql``}
+        ) sub
+        GROUP BY sub.name
+        ORDER BY count DESC, sub.name ASC
         LIMIT ${limit} OFFSET ${offset}
       `;
     }

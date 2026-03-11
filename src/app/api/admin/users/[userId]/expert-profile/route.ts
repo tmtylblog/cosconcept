@@ -9,8 +9,11 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/admin/users/[userId]/expert-profile
  *
- * Looks up the user by ID, then matches their email against
- * imported_contacts.email to find associated expert profiles.
+ * Looks up the user by ID, then matches against expert_profiles
+ * by userId or email to find associated expert profiles.
+ *
+ * Track A update: Now queries expert_profiles (canonical)
+ * instead of truncated imported_contacts.
  */
 export async function GET(
   _req: NextRequest,
@@ -40,30 +43,32 @@ export async function GET(
 
     const userEmail = userResult.rows[0].email as string;
 
-    // Match against imported_contacts by email
+    // Match against expert_profiles by userId first, then by email
     const matches = await db.execute(sql`
       SELECT
-        ic.id,
-        ic.name,
-        ic.first_name AS "firstName",
-        ic.last_name AS "lastName",
-        ic.email,
-        ic.title,
-        ic.expert_classification AS "expertClassification",
-        ic.photo_url AS "photoUrl",
-        ic.linkedin_url AS "linkedinUrl",
-        ic.headline,
-        ic.short_bio AS "shortBio",
-        ic.city,
-        ic.state,
-        ic.country,
-        ic.is_partner AS "isPartner",
-        comp.id AS "companyId",
-        comp.name AS "companyName",
-        comp.domain AS "companyDomain"
-      FROM imported_contacts ic
-      LEFT JOIN imported_companies comp ON comp.id = ic.company_id
-      WHERE LOWER(ic.email) = LOWER(${userEmail})
+        ep.id,
+        ep.full_name AS "name",
+        ep.first_name AS "firstName",
+        ep.last_name AS "lastName",
+        ep.email,
+        ep.title,
+        ep.division AS "expertClassification",
+        ep.photo_url AS "photoUrl",
+        ep.linkedin_url AS "linkedinUrl",
+        ep.headline,
+        ep.bio AS "shortBio",
+        ep.location AS "city",
+        NULL AS "state",
+        NULL AS "country",
+        ep.top_skills AS "topSkills",
+        ep.top_industries AS "topIndustries",
+        sf.id AS "companyId",
+        sf.name AS "companyName",
+        sf.website AS "companyDomain"
+      FROM expert_profiles ep
+      LEFT JOIN service_firms sf ON sf.id = ep.firm_id
+      WHERE ep.user_id = ${userId}
+         OR LOWER(ep.email) = LOWER(${userEmail})
       LIMIT 5
     `);
 
@@ -86,7 +91,8 @@ export async function GET(
       city: r.city,
       state: r.state,
       country: r.country,
-      isPartner: r.isPartner,
+      topSkills: r.topSkills,
+      topIndustries: r.topIndustries,
       company: r.companyId
         ? { id: r.companyId, name: r.companyName, domain: r.companyDomain }
         : null,

@@ -37,6 +37,11 @@ interface Neo4jFirm {
  * - source=platform (default): Only firms that are platform customers (PostgreSQL service_firms)
  * - source=graph: Only firms from Neo4j knowledge graph (not necessarily on platform)
  * - source=all: Combined view from both sources, deduplicated by firm ID
+ *
+ * Track A update:
+ * - Platform source no longer queries truncated imported_companies
+ * - Graph source queries both ServiceFirm (new) and Organization (legacy) nodes
+ * - WORKED_AT → CURRENTLY_AT, Category → FirmCategory, WORKED_WITH → HAS_CLIENT
  */
 export async function GET(req: NextRequest) {
   try {
@@ -56,22 +61,18 @@ export async function GET(req: NextRequest) {
   const offset = (page - 1) * limit;
 
   try {
-    // Platform firms from PostgreSQL (service_firms + optional imported_companies)
+    // Platform firms from PostgreSQL (service_firms only — imported_companies truncated)
     if (source === "platform" || source === "all") {
       const searchFilter = search
         ? sql` AND (sf.name ILIKE ${"%" + search + "%"} OR sf.website ILIKE ${"%" + search + "%"})`
         : sql``;
 
-      let totalPlatform: number;
-      let platformResult: { rows: Record<string, unknown>[] };
-
-      // Query service_firms first (always exists)
       const countResult = await db.execute(sql`
         SELECT COUNT(*)::int AS total FROM service_firms sf WHERE 1=1 ${searchFilter}
       `);
-      totalPlatform = Number(countResult.rows[0]?.total ?? 0);
+      const totalPlatform = Number(countResult.rows[0]?.total ?? 0);
 
-      platformResult = await db.execute(sql`
+      const platformResult = await db.execute(sql`
         SELECT
           sf.id, sf.name, sf.website, sf.description,
           sf.firm_type AS "firmType", sf.size_band AS "sizeBand",
@@ -88,43 +89,6 @@ export async function GET(req: NextRequest) {
         LIMIT ${limit} OFFSET ${offset}
       `);
 
-      // Try to also fetch imported_companies (may not exist or have column issues)
-      try {
-        const icSearchFilter = search
-          ? sql` WHERE (ic.name ILIKE ${"%" + search + "%"} OR ic.domain ILIKE ${"%" + search + "%"})`
-          : sql``;
-        const icCountResult = await db.execute(sql`
-          SELECT COUNT(*)::int AS total FROM imported_companies ic ${icSearchFilter}
-        `);
-        const icTotal = Number(icCountResult.rows[0]?.total ?? 0);
-
-        if (icTotal > 0) {
-          const icResult = await db.execute(sql`
-            SELECT
-              ic.id, ic.name, ic.domain AS "website", ic.description,
-              ic.icp_classification AS "firmType", ic.size AS "sizeBand",
-              NULL::real AS "profileCompleteness", false AS "isPlatformMember",
-              NULL::text AS "organizationId", ic.created_at AS "createdAt",
-              NULL::text AS "orgName", NULL::text AS "orgSlug",
-              'imported' AS "dataSource"
-            FROM imported_companies ic
-            ${icSearchFilter}
-            ORDER BY ic.created_at DESC
-            LIMIT ${limit} OFFSET ${Math.max(0, offset - totalPlatform)}
-          `);
-
-          // Only append imported companies if we've exhausted service_firms pages
-          if (offset >= totalPlatform) {
-            platformResult = { rows: icResult.rows };
-          } else if (platformResult.rows.length < limit) {
-            platformResult = { rows: [...platformResult.rows, ...icResult.rows].slice(0, limit) };
-          }
-          totalPlatform += icTotal;
-        }
-      } catch {
-        // imported_companies table doesn't exist or has issues — skip silently
-      }
-
       if (source === "platform") {
         return NextResponse.json({
           source: "platform",
@@ -136,7 +100,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Neo4j knowledge graph firms (ServiceFirm + Company + Organization nodes)
+    // Neo4j knowledge graph firms (ServiceFirm + Organization nodes)
     if (source === "graph" || source === "all") {
       const params: Record<string, unknown> = {
         skip: neo4jInt(offset),
@@ -146,14 +110,13 @@ export async function GET(req: NextRequest) {
         params.nameRegex = `(?i).*${escapeRegex(search)}.*`;
       }
 
-      // Count ServiceFirm (enriched) + Organization (legacy) nodes
-      // Note: Company nodes are client companies (Coca-Cola etc.), not service firms
+      // Count both ServiceFirm (new) and Organization (legacy) nodes
       const countQuery = search
         ? `
           CALL {
             MATCH (f:ServiceFirm) WHERE f.name =~ $nameRegex RETURN count(f) AS c
             UNION ALL
-            MATCH (o:Organization) WHERE o.name =~ $nameRegex RETURN count(o) AS c
+            MATCH (o:Organization) WHERE o.name =~ $nameRegex AND NOT o:ServiceFirm RETURN count(o) AS c
           }
           RETURN sum(c) AS total
         `
@@ -161,50 +124,66 @@ export async function GET(req: NextRequest) {
           CALL {
             MATCH (f:ServiceFirm) RETURN count(f) AS c
             UNION ALL
-            MATCH (o:Organization) RETURN count(o) AS c
+            MATCH (o:Organization) WHERE NOT o:ServiceFirm RETURN count(o) AS c
           }
           RETURN sum(c) AS total
         `;
       const countRows = await neo4jRead<{ total: { low: number } }>(countQuery, params);
       const totalGraph = countRows[0]?.total?.low ?? (typeof countRows[0]?.total === "number" ? countRows[0].total : 0);
 
-      // Main query: Organization nodes with association counts
-      // Neo4j Aura doesn't support WITH after CALL{UNION}, so we query directly
-      const searchWhere = search ? `WHERE o.name =~ $nameRegex` : "";
+      // Main query: ServiceFirm nodes (new) with association counts
+      // Falls back to Organization nodes for legacy data
+      const searchWhere = search ? `WHERE n.name =~ $nameRegex` : "";
       const query = `
-        MATCH (o:Organization)
-        ${searchWhere}
-        OPTIONAL MATCH (o)-[:IN_CATEGORY]->(c:Category)
-        OPTIONAL MATCH (o)-[:OPERATES_IN_INDUSTRY]->(i:Industry)
-        OPTIONAL MATCH (o)-[:LOCATED_IN]->(m:Market)
-        WITH o,
+        CALL {
+          MATCH (n:ServiceFirm)
+          ${searchWhere}
+          RETURN n, labels(n) AS nodeLabels
+          UNION
+          MATCH (n:Organization) WHERE NOT n:ServiceFirm
+          ${searchWhere}
+          RETURN n, labels(n) AS nodeLabels
+        }
+        WITH n, nodeLabels
+        OPTIONAL MATCH (n)-[:IN_CATEGORY|IN_FIRM_CATEGORY]->(c)
+        WHERE c:Category OR c:FirmCategory
+        OPTIONAL MATCH (n)-[:OPERATES_IN_INDUSTRY]->(i:Industry)
+        OPTIONAL MATCH (n)-[:LOCATED_IN]->(m:Market)
+        WITH n, nodeLabels,
              COLLECT(DISTINCT c.name) AS categories,
              COLLECT(DISTINCT i.name) AS industries,
              COLLECT(DISTINCT m.name) AS markets
-        OPTIONAL MATCH (o)<-[:WORKED_AT]-(expert:User)
-        WITH o, categories, industries, markets,
+        OPTIONAL MATCH (n)<-[:CURRENTLY_AT|WORKED_AT]-(expert)
+        WHERE expert:Person OR expert:User
+        WITH n, nodeLabels, categories, industries, markets,
              count(DISTINCT expert) AS expertCount
-        OPTIONAL MATCH (o)<-[:BY_FIRM]-(cs:CaseStudy)
-        WITH o, categories, industries, markets, expertCount,
+        OPTIONAL MATCH (n)<-[:BY_FIRM]-(cs:CaseStudy)
+        WITH n, nodeLabels, categories, industries, markets, expertCount,
              count(DISTINCT cs) AS caseStudyCount
-        OPTIONAL MATCH (o)-[:WORKED_WITH]->(client:Company)
-        RETURN coalesce(o.legacyId, o.name) AS id,
-               o.name AS name,
-               o.website AS website,
-               o.about AS description,
-               o.employees AS employeeCount,
+        OPTIONAL MATCH (n)-[:HAS_CLIENT|WORKED_WITH]->(client:Company)
+        WHERE NOT client:ServiceFirm
+        RETURN coalesce(n.id, n.legacyId, n.name) AS id,
+               n.name AS name,
+               n.website AS website,
+               coalesce(n.about, n.description) AS description,
+               n.employees AS employeeCount,
                null AS foundedYear,
                categories,
                industries,
                markets,
                null AS firmType,
-               'legacy' AS source,
-               o.isLegacy AS isLegacy,
-               o.isCollectiveOSCustomer AS isCustomer,
+               nodeLabels AS labels,
+               n.location AS location,
+               n.industry AS industry,
+               CASE WHEN 'Organization' IN nodeLabels AND NOT 'ServiceFirm' IN nodeLabels
+                 THEN 'legacy' ELSE 'enriched' END AS source,
+               CASE WHEN 'Organization' IN nodeLabels AND NOT 'ServiceFirm' IN nodeLabels
+                 THEN true ELSE false END AS isLegacy,
+               coalesce(n.isCollectiveOSCustomer, n.isCosCustomer, false) AS isCustomer,
                expertCount,
                caseStudyCount,
                count(DISTINCT client) AS clientCount
-        ORDER BY o.name ASC
+        ORDER BY n.name ASC
         SKIP $skip LIMIT $lim
       `;
 

@@ -9,8 +9,11 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/admin/knowledge-graph/case-studies?q=&status=&industry=&firmName=&page=1&limit=50
  *
- * Returns paginated case studies from the imported_case_studies table
+ * Returns paginated case studies from the firm_case_studies table
  * with search and filter support.
+ *
+ * Track A update: Now queries firm_case_studies (canonical)
+ * instead of truncated imported_case_studies.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -35,12 +38,17 @@ export async function GET(req: NextRequest) {
     // Build WHERE conditions
     const conditions: ReturnType<typeof sql>[] = [];
 
+    // Never show deleted case studies
+    conditions.push(sql`cs.status != 'deleted'`);
+
     if (search) {
       const pattern = `%${search}%`;
       conditions.push(sql`(
-        cs.content ILIKE ${pattern}
-        OR cs.author_org_name ILIKE ${pattern}
-        OR cs.client_companies::text ILIKE ${pattern}
+        cs.title ILIKE ${pattern}
+        OR cs.summary ILIKE ${pattern}
+        OR cs.source_url ILIKE ${pattern}
+        OR sf.name ILIKE ${pattern}
+        OR cs.auto_tags->>'clientName' ILIKE ${pattern}
       )`);
     }
 
@@ -50,12 +58,12 @@ export async function GET(req: NextRequest) {
 
     if (industry) {
       const industryPattern = `%${industry}%`;
-      conditions.push(sql`cs.industries::text ILIKE ${industryPattern}`);
+      conditions.push(sql`cs.auto_tags->'industries'::text ILIKE ${industryPattern}`);
     }
 
     if (firmName) {
       const firmPattern = `%${firmName}%`;
-      conditions.push(sql`cs.author_org_name ILIKE ${firmPattern}`);
+      conditions.push(sql`sf.name ILIKE ${firmPattern}`);
     }
 
     const whereClause =
@@ -66,7 +74,8 @@ export async function GET(req: NextRequest) {
     // Get filtered total
     const totalResult = await db.execute(sql`
       SELECT COUNT(*)::int AS total
-      FROM imported_case_studies cs
+      FROM firm_case_studies cs
+      LEFT JOIN service_firms sf ON sf.id = cs.firm_id
       ${whereClause}
     `);
     const total = Number(totalResult.rows[0]?.total ?? 0);
@@ -75,25 +84,56 @@ export async function GET(req: NextRequest) {
     const result = await db.execute(sql`
       SELECT
         cs.id,
-        cs.source_id AS "sourceId",
-        LEFT(cs.content, 300) AS content,
-        cs.author_org_name AS "authorOrgName",
+        cs.firm_id AS "firmId",
+        cs.title,
+        LEFT(cs.summary, 300) AS summary,
+        cs.source_url AS "sourceUrl",
+        cs.source_type AS "sourceType",
         cs.status,
-        cs.client_companies AS "clientCompanies",
-        cs.industries,
-        cs.skills,
-        cs.markets,
-        cs.links,
-        cs.expert_users AS "expertUsers",
-        cs.created_at AS "createdAt"
-      FROM imported_case_studies cs
+        cs.auto_tags AS "autoTags",
+        cs.thumbnail_url AS "thumbnailUrl",
+        cs.is_hidden AS "isHidden",
+        cs.ingested_at AS "ingestedAt",
+        cs.created_at AS "createdAt",
+        sf.name AS "firmName",
+        sf.website AS "firmWebsite"
+      FROM firm_case_studies cs
+      LEFT JOIN service_firms sf ON sf.id = cs.firm_id
       ${whereClause}
       ORDER BY cs.created_at DESC
       LIMIT ${limit} OFFSET ${offset}
     `);
 
+    // Transform to match expected shape (backward-compatible with frontend)
+    const caseStudies = result.rows.map((r) => {
+      const autoTags = r.autoTags as {
+        skills?: string[];
+        industries?: string[];
+        services?: string[];
+        markets?: string[];
+        clientName?: string | null;
+      } | null;
+
+      return {
+        id: r.id,
+        firmId: r.firmId,
+        title: r.title,
+        content: r.summary, // Map summary → content for backward compat
+        authorOrgName: r.firmName,
+        sourceUrl: r.sourceUrl,
+        status: r.status,
+        clientCompanies: autoTags?.clientName ? [autoTags.clientName] : [],
+        industries: autoTags?.industries?.map((name: string) => ({ name })) ?? [],
+        skills: autoTags?.skills?.map((name: string) => ({ name })) ?? [],
+        markets: autoTags?.markets ?? [],
+        thumbnailUrl: r.thumbnailUrl,
+        isHidden: r.isHidden,
+        createdAt: r.createdAt,
+      };
+    });
+
     return NextResponse.json({
-      caseStudies: result.rows,
+      caseStudies,
       total,
       page,
       limit,

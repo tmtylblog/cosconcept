@@ -9,8 +9,11 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/admin/firms/[firmId]/related
  *
- * Returns experts, clients, and case studies associated with a firm.
- * firmId can be an imported_companies.id, service_firms.id, or matched by name.
+ * Returns experts, clients (from case studies), and case studies associated with a firm.
+ * firmId is a service_firms.id.
+ *
+ * Track A update: Now queries expert_profiles and firm_case_studies (canonical)
+ * instead of truncated imported_contacts, imported_clients, imported_case_studies.
  */
 export async function GET(
   _req: NextRequest,
@@ -29,137 +32,109 @@ export async function GET(
   const { firmId } = await params;
 
   try {
-    // First, resolve the firmId to imported_companies.id(s)
-    // Try direct match on imported_companies.id
-    let companyIds: string[] = [];
-
-    const directMatch = await db.execute(sql`
-      SELECT id FROM imported_companies WHERE id = ${firmId} LIMIT 1
+    // Verify the firm exists
+    const firmCheck = await db.execute(sql`
+      SELECT id, name FROM service_firms WHERE id = ${firmId} LIMIT 1
     `);
 
-    if (directMatch.rows.length > 0) {
-      companyIds = [firmId];
-    } else {
-      // Try matching via service_firms → imported_companies.service_firm_id
-      const sfMatch = await db.execute(sql`
-        SELECT ic.id FROM imported_companies ic
-        WHERE ic.service_firm_id = ${firmId}
-      `);
-      if (sfMatch.rows.length > 0) {
-        companyIds = sfMatch.rows.map((r) => r.id as string);
-      } else {
-        // Try matching by name: service_firms.name → imported_companies.name
-        const sfNameResult = await db.execute(sql`
-          SELECT name FROM service_firms WHERE id = ${firmId} LIMIT 1
-        `);
-        if (sfNameResult.rows.length > 0) {
-          const firmName = sfNameResult.rows[0].name as string;
-          const nameMatch = await db.execute(sql`
-            SELECT id FROM imported_companies
-            WHERE LOWER(name) = LOWER(${firmName})
-          `);
-          companyIds = nameMatch.rows.map((r) => r.id as string);
-        }
-      }
+    if (firmCheck.rows.length === 0) {
+      return NextResponse.json({ error: "Firm not found" }, { status: 404 });
     }
 
-    // If no company IDs found, also try imported_companies matching by name for the given firmId
-    if (companyIds.length === 0) {
-      const icNameResult = await db.execute(sql`
-        SELECT name FROM imported_companies WHERE id = ${firmId} LIMIT 1
-      `);
-      if (icNameResult.rows.length > 0) {
-        companyIds = [firmId];
-      }
-    }
+    // Experts: expert_profiles for this firm
+    const expertResult = await db.execute(sql`
+      SELECT
+        id, full_name AS "name", first_name AS "firstName", last_name AS "lastName",
+        title, email, division AS "expertClassification",
+        linkedin_url AS "linkedinUrl", photo_url AS "photoUrl"
+      FROM expert_profiles
+      WHERE firm_id = ${firmId}
+      ORDER BY full_name ASC NULLS LAST
+      LIMIT 20
+    `);
+    const experts = expertResult.rows;
 
-    // Experts: imported_contacts WHERE company_id IN companyIds
-    let experts: Array<Record<string, unknown>> = [];
-    let expertCount = 0;
+    const expertCountResult = await db.execute(sql`
+      SELECT COUNT(*)::int AS count
+      FROM expert_profiles
+      WHERE firm_id = ${firmId}
+    `);
+    const expertCount = Number(expertCountResult.rows[0]?.count ?? 0);
 
-    if (companyIds.length > 0) {
-      const expertResult = await db.execute(sql`
-        SELECT
-          id, name, first_name AS "firstName", last_name AS "lastName",
-          title, email, expert_classification AS "expertClassification",
-          linkedin_url AS "linkedinUrl"
-        FROM imported_contacts
-        WHERE company_id = ANY(${companyIds})
-        ORDER BY name ASC NULLS LAST
-        LIMIT 20
-      `);
-      experts = expertResult.rows;
+    // Clients: distinct client names from firm_case_studies auto_tags
+    const clientResult = await db.execute(sql`
+      SELECT DISTINCT
+        auto_tags->>'clientName' AS name,
+        NULL AS industry,
+        NULL AS website,
+        NULL AS "employeeCount"
+      FROM firm_case_studies
+      WHERE firm_id = ${firmId}
+        AND auto_tags->>'clientName' IS NOT NULL
+        AND auto_tags->>'clientName' != ''
+        AND status != 'deleted'
+      ORDER BY name ASC
+      LIMIT 20
+    `);
+    const clients = clientResult.rows.map((r, i) => ({
+      id: `client-${i}`,
+      name: r.name,
+      industry: r.industry,
+      website: r.website,
+      employeeCount: r.employeeCount,
+    }));
 
-      const expertCountResult = await db.execute(sql`
-        SELECT COUNT(*)::int AS count
-        FROM imported_contacts
-        WHERE company_id = ANY(${companyIds})
-      `);
-      expertCount = Number(expertCountResult.rows[0]?.count ?? 0);
-    }
+    const clientCountResult = await db.execute(sql`
+      SELECT COUNT(DISTINCT auto_tags->>'clientName')::int AS count
+      FROM firm_case_studies
+      WHERE firm_id = ${firmId}
+        AND auto_tags->>'clientName' IS NOT NULL
+        AND auto_tags->>'clientName' != ''
+        AND status != 'deleted'
+    `);
+    const clientCount = Number(clientCountResult.rows[0]?.count ?? 0);
 
-    // Clients: imported_clients WHERE imported_company_id IN companyIds
-    let clients: Array<Record<string, unknown>> = [];
-    let clientCount = 0;
+    // Case Studies: firm_case_studies for this firm
+    const csResult = await db.execute(sql`
+      SELECT
+        cs.id, sf.name AS "authorOrgName", cs.status,
+        cs.auto_tags AS "autoTags",
+        cs.title,
+        LEFT(cs.summary, 300) AS "contentPreview",
+        cs.source_url AS "sourceUrl"
+      FROM firm_case_studies cs
+      LEFT JOIN service_firms sf ON sf.id = cs.firm_id
+      WHERE cs.firm_id = ${firmId}
+        AND cs.status != 'deleted'
+      ORDER BY cs.created_at DESC
+      LIMIT 20
+    `);
+    const caseStudies = csResult.rows.map((r) => {
+      const autoTags = r.autoTags as {
+        skills?: string[];
+        industries?: string[];
+        clientName?: string | null;
+      } | null;
+      return {
+        id: r.id,
+        authorOrgName: r.authorOrgName,
+        status: r.status,
+        title: r.title,
+        contentPreview: r.contentPreview,
+        sourceUrl: r.sourceUrl,
+        clientCompanies: autoTags?.clientName ? [autoTags.clientName] : [],
+        industries: autoTags?.industries ?? [],
+        skills: autoTags?.skills ?? [],
+      };
+    });
 
-    if (companyIds.length > 0) {
-      // Also match by service_firm_source_id or service_firm_name
-      const firmNameResult = await db.execute(sql`
-        SELECT name FROM imported_companies WHERE id = ANY(${companyIds}) LIMIT 1
-      `);
-      const firmName = firmNameResult.rows[0]?.name as string | undefined;
-
-      const clientResult = await db.execute(sql`
-        SELECT id, name, industry, website, employee_count AS "employeeCount"
-        FROM imported_clients
-        WHERE imported_company_id = ANY(${companyIds})
-          ${firmName ? sql`OR LOWER(service_firm_name) = LOWER(${firmName})` : sql``}
-        ORDER BY name ASC
-        LIMIT 20
-      `);
-      clients = clientResult.rows;
-
-      const clientCountResult = await db.execute(sql`
-        SELECT COUNT(*)::int AS count
-        FROM imported_clients
-        WHERE imported_company_id = ANY(${companyIds})
-          ${firmName ? sql`OR LOWER(service_firm_name) = LOWER(${firmName})` : sql``}
-      `);
-      clientCount = Number(clientCountResult.rows[0]?.count ?? 0);
-    }
-
-    // Case Studies: imported_case_studies WHERE imported_company_id IN companyIds
-    let caseStudies: Array<Record<string, unknown>> = [];
-    let caseStudyCount = 0;
-
-    if (companyIds.length > 0) {
-      const firmNameResult2 = await db.execute(sql`
-        SELECT name FROM imported_companies WHERE id = ANY(${companyIds}) LIMIT 1
-      `);
-      const firmName2 = firmNameResult2.rows[0]?.name as string | undefined;
-
-      const csResult = await db.execute(sql`
-        SELECT
-          id, author_org_name AS "authorOrgName", status,
-          client_companies AS "clientCompanies",
-          industries, skills, links,
-          SUBSTRING(content FROM 1 FOR 300) AS "contentPreview"
-        FROM imported_case_studies
-        WHERE imported_company_id = ANY(${companyIds})
-          ${firmName2 ? sql`OR LOWER(author_org_name) = LOWER(${firmName2})` : sql``}
-        ORDER BY created_at DESC
-        LIMIT 20
-      `);
-      caseStudies = csResult.rows;
-
-      const csCountResult = await db.execute(sql`
-        SELECT COUNT(*)::int AS count
-        FROM imported_case_studies
-        WHERE imported_company_id = ANY(${companyIds})
-          ${firmName2 ? sql`OR LOWER(author_org_name) = LOWER(${firmName2})` : sql``}
-      `);
-      caseStudyCount = Number(csCountResult.rows[0]?.count ?? 0);
-    }
+    const csCountResult = await db.execute(sql`
+      SELECT COUNT(*)::int AS count
+      FROM firm_case_studies
+      WHERE firm_id = ${firmId}
+        AND status != 'deleted'
+    `);
+    const caseStudyCount = Number(csCountResult.rows[0]?.count ?? 0);
 
     return NextResponse.json({
       experts,
