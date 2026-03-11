@@ -18,3 +18,10 @@ export { weeklyDigest } from "./weekly-digest";
 export { sendApprovedEmail } from "./send-approved-email";
 export { joinMeeting } from "./join-meeting";
 export { firmCaseStudyIngest } from "./firm-case-study-ingest";
+
+// ── Track A: Schema Migration & Background Jobs ──────────
+export { migrateClientNodesToCompany } from "./migrate-client-nodes-to-company";
+export { migratePartnershipPrefsToEdges } from "./migrate-partnership-prefs-to-edges";
+export { skillComputeStrength } from "./skill-compute-strength";
+export { preferenceUpdateRevealed } from "./preference-update-revealed";
+export { companyEnrichStub } from "./company-enrich-stub";

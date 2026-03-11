@@ -100,11 +100,13 @@ export async function writeFirmToGraph(
   };
 
   // 1. Create/update ServiceFirm node
-  // Track A: ServiceFirm is the canonical node for service provider companies
+  // Track A: ServiceFirm nodes also carry the Company label for canonical identity.
+  // SET f:Company applies the dual label idempotently.
   await safe("ServiceFirm", async () => {
     await neo4jWrite(
       `MERGE (f:ServiceFirm {id: $id})
-       SET f.name = $name,
+       SET f:Company,
+           f.name = $name,
            f.organizationId = $orgId,
            f.website = $website,
            f.domain = $domain,
@@ -116,6 +118,8 @@ export async function writeFirmToGraph(
            f.pdlLocation = $pdlLocation,
            f.logoUrl = $logoUrl,
            f.classifierConfidence = $confidence,
+           f.isCosCustomer = true,
+           f.source = "self_registered",
            f.enrichmentStatus = "complete",
            f.updatedAt = datetime()`,
       {
@@ -159,6 +163,8 @@ export async function writeFirmToGraph(
   }
 
   // 3. Link to Skills (L2 level from classifier)
+  // Track A: HAS_SKILL carries strength metrics recomputed by skill-compute-strength job.
+  // Initial write seeds strength = confidence, evidenceCount = 1; job updates later.
   if (cls?.skills.length) {
     await safe("Skills", async () => {
       await neo4jWrite(
@@ -167,7 +173,14 @@ export async function writeFirmToGraph(
          MERGE (s:Skill {name: skillName})
          ON CREATE SET s.level = "L2"
          MERGE (f)-[r:HAS_SKILL]->(s)
-         SET r.source = "enrichment", r.confidence = $confidence`,
+         SET r.source = "enrichment",
+             r.confidence = $confidence,
+             r.strength = coalesce(r.strength, $confidence),
+             r.evidenceCount = coalesce(r.evidenceCount, 1),
+             r.caseStudyCount = coalesce(r.caseStudyCount, 0),
+             r.expertCount = coalesce(r.expertCount, 0),
+             r.serviceCount = coalesce(r.serviceCount, 0),
+             r.lastComputedAt = coalesce(r.lastComputedAt, datetime())`,
         { firmId, names: cls.skills, confidence: cls.confidence ?? 0.8 }
       );
       result.skills = cls.skills.length;
@@ -205,13 +218,17 @@ export async function writeFirmToGraph(
   }
 
   // 6. Link to Languages
+  // Track A: SPEAKS edge carries proficiency + speakerCount for matching quality.
   if (cls?.languages.length) {
     await safe("Languages", async () => {
       await neo4jWrite(
         `MATCH (f:ServiceFirm {id: $firmId})
          UNWIND $names AS langName
          MERGE (l:Language {name: langName})
-         MERGE (f)-[:SPEAKS]->(l)`,
+         MERGE (f)-[r:SPEAKS]->(l)
+         SET r.source = "enrichment",
+             r.proficiency = coalesce(r.proficiency, "conversational"),
+             r.speakerCount = coalesce(r.speakerCount, 1)`,
         { firmId, names: cls.languages }
       );
       result.languages = cls.languages.length;
@@ -219,6 +236,7 @@ export async function writeFirmToGraph(
   }
 
   // 7. Create Service nodes from extracted services
+  // Track A: OFFERS_SERVICE carries strength metrics recomputed by service-compute-strength.
   if (gt?.extracted.services.length) {
     await safe("Services", async () => {
       await neo4jWrite(
@@ -226,20 +244,32 @@ export async function writeFirmToGraph(
          UNWIND $names AS svcName
          MERGE (s:Service {name: svcName})
          MERGE (f)-[r:OFFERS_SERVICE]->(s)
-         SET r.source = "website_scrape"`,
+         SET r.source = "website_scrape",
+             r.strength = coalesce(r.strength, 0.5),
+             r.evidenceCount = coalesce(r.evidenceCount, 1),
+             r.websiteMentionCount = coalesce(r.websiteMentionCount, 1),
+             r.caseStudyCount = coalesce(r.caseStudyCount, 0),
+             r.expertCount = coalesce(r.expertCount, 0),
+             r.lastComputedAt = coalesce(r.lastComputedAt, datetime())`,
         { firmId, names: gt!.extracted.services }
       );
       result.services = gt!.extracted.services.length;
     });
   }
 
-  // 8. Create Company nodes from extracted clients (Track A: was Client)
+  // 8. Create Company stubs from extracted client names (Track A: was Client)
+  // Merged by name since we have no domain at this point.
+  // enrichmentStatus = "stub" queues them for company-enrich-stub job (PDL domain lookup).
   if (gt?.extracted.clients.length) {
     await safe("Clients", async () => {
       await neo4jWrite(
         `MATCH (f:ServiceFirm {id: $firmId})
          UNWIND $names AS clientName
          MERGE (c:Company {name: clientName})
+         ON CREATE SET c.enrichmentStatus = "stub",
+                       c.isCosCustomer = false,
+                       c.source = "website_scrape",
+                       c.createdAt = datetime()
          MERGE (f)-[r:HAS_CLIENT]->(c)
          SET r.source = "website_scrape"`,
         { firmId, names: gt!.extracted.clients }
@@ -249,22 +279,34 @@ export async function writeFirmToGraph(
   }
 
   // 9. Create Person stubs from team members (Track A: was Expert)
-  // Full enrichment happens later via LinkedIn/PDL
+  // Keyed by composite firm:name id — no LinkedIn URL yet.
+  // Full enrichment (PDL/LinkedIn) happens later via expert-linkedin Inngest job.
   if (gt?.extracted.teamMembers.length) {
     await safe("TeamMembers", async () => {
-      const members = gt!.extracted.teamMembers.map((name) => ({
-        id: `${firmId}:${name.toLowerCase().replace(/\s+/g, "-")}`,
-        fullName: name,
-      }));
+      const members = gt!.extracted.teamMembers.map((fullName) => {
+        const parts = fullName.trim().split(/\s+/);
+        return {
+          id: `${firmId}:${fullName.toLowerCase().replace(/\s+/g, "-")}`,
+          fullName,
+          firstName: parts[0] ?? "",
+          lastName: parts.slice(1).join(" ") || "",
+        };
+      });
       await neo4jWrite(
         `MATCH (f:ServiceFirm {id: $firmId})
          UNWIND $members AS m
          MERGE (p:Person {id: m.id})
          SET p.fullName = m.fullName,
+             p.firstName = m.firstName,
+             p.lastName = m.lastName,
              p.firmId = $firmId,
-             p.enrichmentStatus = "stub"
+             p.enrichmentStatus = "stub",
+             p.source = "website_scrape",
+             p.emails = coalesce(p.emails, [])
          MERGE (p)-[r:CURRENTLY_AT]->(f)
-         SET r.source = "website_scrape", r.isPrimary = true`,
+         SET r.source = "website_scrape",
+             r.isPrimary = true,
+             r.engagementType = "full_time"`,
         { firmId, members }
       );
       result.teamMembers = gt!.extracted.teamMembers.length;
@@ -326,22 +368,33 @@ export async function writeExpertToGraph(
   try {
     // Create/update Person node and link to ServiceFirm
     // Track A: Person → CURRENTLY_AT → ServiceFirm (was Expert → EMPLOYS)
+    // Person is keyed by Postgres expertId; linkedinUrl is set so the
+    // person_linkedin constraint can dedup if the same person appears elsewhere.
+    const parts = data.fullName.trim().split(/\s+/);
     await neo4jWrite(
       `MERGE (p:Person {id: $id})
        SET p.fullName = $fullName,
+           p.firstName = $firstName,
+           p.lastName = $lastName,
            p.headline = $headline,
            p.linkedinUrl = $linkedinUrl,
            p.location = $location,
            p.firmId = $firmId,
            p.enrichmentStatus = "enriched",
+           p.source = "pdl",
+           p.emails = coalesce(p.emails, []),
            p.updatedAt = datetime()
        WITH p
        MATCH (f:ServiceFirm {id: $firmId})
        MERGE (p)-[r:CURRENTLY_AT]->(f)
-       SET r.isPrimary = true, r.source = "enrichment"`,
+       SET r.isPrimary = true,
+           r.source = "enrichment",
+           r.engagementType = "full_time"`,
       {
         id: data.expertId,
         fullName: data.fullName,
+        firstName: parts[0] ?? "",
+        lastName: parts.slice(1).join(" ") || "",
         headline: data.headline ?? null,
         linkedinUrl: data.linkedinUrl ?? null,
         location: data.location ?? null,
@@ -510,11 +563,16 @@ export async function writeCaseStudyToGraph(
       }
     );
 
-    // Link to client (Track A: Company instead of Client)
+    // Link to client Company (Track A: Company instead of Client)
+    // Merged by name stub; enrichmentStatus = "stub" queues PDL domain lookup.
     if (data.clientName) {
       await neo4jWrite(
         `MATCH (cs:CaseStudy {id: $id})
          MERGE (c:Company {name: $clientName})
+         ON CREATE SET c.enrichmentStatus = "stub",
+                       c.isCosCustomer = false,
+                       c.source = "case_study",
+                       c.createdAt = datetime()
          MERGE (cs)-[r:FOR_CLIENT]->(c)
          SET r.source = "case_study"`,
         { id: data.caseStudyId, clientName: data.clientName }

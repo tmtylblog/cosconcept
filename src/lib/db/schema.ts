@@ -247,6 +247,8 @@ export const partnerPreferences = pgTable("partner_preferences", {
   firmId: text("firm_id")
     .notNull()
     .references(() => serviceFirms.id, { onDelete: "cascade" }),
+  // Legacy taxonomy arrays — deprecated in Track A; data lives in Neo4j PREFERS edges.
+  // Kept for backward compat until migrate-partnership-prefs-to-edges confirms full coverage.
   preferredFirmTypes: jsonb("preferred_firm_types").$type<string[]>(),
   preferredSizeBands: jsonb("preferred_size_bands").$type<string[]>(),
   preferredIndustries: jsonb("preferred_industries").$type<string[]>(),
@@ -255,6 +257,10 @@ export const partnerPreferences = pgTable("partner_preferences", {
   dealBreakers: jsonb("deal_breakers").$type<string[]>(),
   growthGoals: text("growth_goals"),
   rawOnboardingData: jsonb("raw_onboarding_data"),
+  // Track A: rate range for deal sizing preferences
+  rateStart: integer("rate_start"), // min hourly/daily rate preference (USD)
+  rateEnd: integer("rate_end"), // max hourly/daily rate preference (USD)
+  projectSizeRanges: jsonb("project_size_ranges").$type<string[]>(), // e.g. ["10k-50k", "50k-250k"]
   // Track A: tracks when Neo4j PREFERS/AVOIDS edges were last written from this data
   preferencesSyncedAt: timestamp("preferences_synced_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -505,8 +511,9 @@ export const opportunityStatusEnum = pgEnum("opportunity_status", [
 ]);
 
 // Lead = shareable with partner network, promoted from an opportunity
-// Status lifecycle: open → shared → claimed → won | lost | expired
+// Status lifecycle: draft → open → shared → claimed → won | lost | expired
 export const leadStatusEnum = pgEnum("lead_status", [
+  "draft",
   "open",
   "shared",
   "claimed",
@@ -807,6 +814,8 @@ export const importedCompanies = pgTable("imported_companies", {
   serviceFirmId: text("service_firm_id").references(() => serviceFirms.id, {
     onDelete: "set null",
   }),
+  // Track A: canonical Neo4j Company node id (set by migrate-client-nodes-to-company job)
+  canonicalCompanyId: text("canonical_company_id"),
 
   // ── Enrichment tracking ──
   enrichedAt: timestamp("enriched_at"),
@@ -861,6 +870,8 @@ export const importedContacts = pgTable("imported_contacts", {
 
   // Graph sync
   graphNodeId: text("graph_node_id"),
+  // Track A: canonical Neo4j Person node id (set by migrate-legacy-user-to-person job)
+  canonicalPersonId: text("canonical_person_id"),
 
   // Provenance
   reviewTags: jsonb("review_tags").$type<string[]>().default([]),
@@ -968,6 +979,10 @@ export const importedClients = pgTable("imported_clients", {
   // ── Enrichment tracking ──
   enrichedAt: timestamp("enriched_at"), // When last enriched
   enrichmentSources: jsonb("enrichment_sources").$type<Record<string, string>>(), // { pdl: "2024-01-15", clearbit: "2024-01-15" }
+
+  // ── Graph sync ──
+  // Track A: canonical Neo4j Company node id (set by migrate-client-nodes-to-company job)
+  canonicalCompanyId: text("canonical_company_id"),
 
   // ── Provenance ──
   legacyData: jsonb("legacy_data"),
@@ -1422,9 +1437,7 @@ export const preferenceSourceEnum = pgEnum("preference_source", [
   "ai_inferred",
 ]);
 
-// Note: leadStatusEnum already exists above (open | shared | claimed | won | lost | expired).
-// The Track A extended version adds "draft" — tracked separately as lead_status_v2 if needed
-// in a future migration. Do not redefine here.
+// Note: leadStatusEnum above includes "draft" (added Track A). All new leads start as "draft".
 
 // ─── Track A: Taxonomy Mirror Tables ─────────────────────
 

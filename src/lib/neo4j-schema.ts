@@ -91,6 +91,10 @@ const INDEXES = [
   `CREATE INDEX firm_philosophy IF NOT EXISTS FOR (n:ServiceFirm) ON (n.partnershipPhilosophy)`,
   `CREATE INDEX firm_deal_breaker IF NOT EXISTS FOR (n:ServiceFirm) ON (n.dealBreaker)`,
   `CREATE INDEX firm_geo_pref IF NOT EXISTS FOR (n:ServiceFirm) ON (n.geographyPreference)`,
+
+  // ── Track A: Person + WorkHistory indexes ─────────────
+  `CREATE INDEX person_email IF NOT EXISTS FOR (n:Person) ON (n.emails)`,
+  `CREATE INDEX work_history_dates IF NOT EXISTS FOR (n:WorkHistory) ON (n.startAt, n.endAt)`,
 ];
 
 // ─── Schema Setup ─────────────────────────────────────────
