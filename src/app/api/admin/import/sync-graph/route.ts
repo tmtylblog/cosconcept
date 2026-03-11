@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { importedCompanies, importedContacts } from "@/lib/db/schema";
 import { eq, isNull, sql } from "drizzle-orm";
@@ -9,7 +11,7 @@ import { neo4jWrite } from "@/lib/neo4j";
  *
  * Syncs imported companies and contacts to the Neo4j knowledge graph.
  * Creates Company and Person nodes with appropriate edges.
- * Protected by ADMIN_SECRET header.
+ * Protected by superadmin session or ADMIN_SECRET header.
  *
  * Body: {
  *   entityType: "companies" | "contacts",
@@ -20,14 +22,26 @@ import { neo4jWrite } from "@/lib/neo4j";
  * Uses MERGE (upsert) so it's safe to run multiple times.
  */
 
+export const dynamic = "force-dynamic";
+
 const BATCH_SIZE = 100;
 
 export async function POST(req: NextRequest) {
-  // Verify admin secret
+  // Accept superadmin session OR legacy ADMIN_SECRET header
   const secret = req.headers.get("x-admin-secret");
   const expectedSecret = process.env.ADMIN_SECRET;
-  if (!expectedSecret || secret !== expectedSecret) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const secretOk = expectedSecret && secret === expectedSecret;
+
+  if (!secretOk) {
+    try {
+      const headersList = await headers();
+      const session = await auth.api.getSession({ headers: headersList });
+      if (!session?.user || session.user.role !== "superadmin") {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   try {

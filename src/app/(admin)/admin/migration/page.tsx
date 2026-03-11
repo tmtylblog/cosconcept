@@ -136,23 +136,10 @@ export default function MigrationDashboard() {
     }
   }
 
-  const adminSecret =
-    typeof window !== "undefined"
-      ? localStorage.getItem("cos_admin_secret") || ""
-      : "";
-
   const fetchStats = useCallback(async () => {
-    if (!adminSecret) {
-      setError("Set admin secret in localStorage: cos_admin_secret");
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
-      const res = await fetch("/api/admin/import/stats", {
-        headers: { "x-admin-secret": adminSecret },
-      });
+      const res = await fetch("/api/admin/import/stats");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setStats(data);
@@ -162,7 +149,7 @@ export default function MigrationDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [adminSecret]);
+  }, []);
 
   useEffect(() => {
     fetchStats();
@@ -173,10 +160,7 @@ export default function MigrationDashboard() {
     try {
       const res = await fetch("/api/admin/import/sync-graph", {
         method: "POST",
-        headers: {
-          "x-admin-secret": adminSecret,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entityType, limit: 500 }),
       });
       const data = await res.json();
@@ -210,12 +194,6 @@ export default function MigrationDashboard() {
             <span className="font-semibold">Error</span>
           </div>
           <p className="mt-2 text-sm text-cos-midnight/70">{error}</p>
-          <p className="mt-2 text-xs text-cos-midnight/50">
-            Set your admin secret:{" "}
-            <code className="rounded bg-cos-midnight/10 px-1 py-0.5">
-              localStorage.setItem(&quot;cos_admin_secret&quot;, &quot;your-secret&quot;)
-            </code>
-          </p>
         </div>
       </div>
     );
