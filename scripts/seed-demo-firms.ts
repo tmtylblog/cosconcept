@@ -16,7 +16,6 @@ import {
   organizations,
   serviceFirms,
   partnerPreferences,
-  abstractionProfiles,
 } from "../src/lib/db/schema";
 
 const sql = neon(process.env.DATABASE_URL!);
@@ -239,7 +238,6 @@ interface DemoFirm {
   orgId: string;
   firmId: string;
   prefId: string;
-  absId: string;
   name: string;
   slug: string;
   website: string;
@@ -347,7 +345,6 @@ function generateFirms(count: number): DemoFirm[] {
       orgId: nanoid(),
       firmId,
       prefId: `pref_${nanoid()}`,
-      absId: `abs_${firmId}`, // Convention: abs_${firmId} for vector search lookup
       name,
       slug,
       website: `https://${domain}`,
@@ -459,6 +456,16 @@ async function seed() {
         const otherCats = CATEGORIES.filter(c => !f.categories.includes(c));
         const desiredServices = pickN(otherCats, 2 + Math.floor(Math.random() * 3));
 
+        const growthGoal = pick([
+          "Expand into new verticals and geographies",
+          "Build a reliable bench of specialist partners",
+          "Increase project capacity without hiring",
+          "Offer broader service bundles to existing clients",
+        ]);
+        const partnershipModelChoices = pickN(["co-delivery", "subcontracting", "referral", "white-label"], 1 + Math.floor(Math.random() * 2));
+
+        // Track A: All 9 onboarding fields live in rawOnboardingData (canonical store)
+        // Legacy columns also populated for backward compat during transition
         return {
           id: f.prefId,
           firmId: f.firmId,
@@ -466,17 +473,16 @@ async function seed() {
           preferredSizeBands: partnerSizes,
           preferredIndustries: partnerIndustries,
           preferredMarkets: partnerMarkets,
-          partnershipModels: pickN(["co-delivery", "subcontracting", "referral", "white-label"], 1 + Math.floor(Math.random() * 2)),
+          partnershipModels: partnershipModelChoices,
           dealBreakers: [],
-          growthGoals: pick([
-            "Expand into new verticals and geographies",
-            "Build a reliable bench of specialist partners",
-            "Increase project capacity without hiring",
-            "Offer broader service bundles to existing clients",
-          ]),
+          growthGoals: growthGoal,
           rawOnboardingData: {
             desiredPartnerServices: desiredServices,
+            requiredPartnerIndustries: partnerIndustries,
             idealPartnerClientSize: f.clientSizes,
+            preferredPartnerTypes: partnerTypes,
+            preferredPartnerSize: partnerSizes,
+            preferredPartnerLocations: partnerMarkets,
             idealProjectSize: f.projectSize,
             typicalHourlyRates: f.rate,
             partnershipRole: f.partnerRole,
@@ -485,38 +491,8 @@ async function seed() {
       })
     );
 
-    // 4. Abstraction Profiles (needed for text-based search)
-    await db.insert(abstractionProfiles).values(
-      chunk.map((f) => ({
-        id: f.absId,
-        entityType: "firm",
-        entityId: f.firmId,
-        hiddenNarrative: f.narrative,
-        topServices: f.services,
-        topSkills: f.skills.slice(0, 10),
-        topIndustries: f.industries,
-        typicalClientProfile: `${f.clientSizes.join(", ")} companies in ${f.industries.slice(0, 2).join(" and ")}`,
-        partnershipReadiness: {
-          openToPartnerships: true,
-          preferredPartnerTypes: [f.firmType],
-          partnershipGoals: ["Expand service offerings", "Geographic expansion"],
-        },
-        confidenceScores: {
-          services: 0.75 + Math.random() * 0.2,
-          skills: 0.7 + Math.random() * 0.2,
-          industries: 0.8 + Math.random() * 0.15,
-          clientProfile: 0.6 + Math.random() * 0.3,
-          overall: 0.72 + Math.random() * 0.2,
-        },
-        evidenceSources: {
-          caseStudyCount: Math.floor(Math.random() * 5),
-          expertCount: Math.floor(Math.random() * 8) + 1,
-          websitePages: 3 + Math.floor(Math.random() * 5),
-          pdlAvailable: true,
-        },
-        enrichmentVersion: 1,
-      }))
-    );
+    // Note: abstractionProfiles table was truncated in Track A.
+    // Abstraction data is now derived from enrichmentData on serviceFirms.
 
     inserted += chunk.length;
     console.log(`  Inserted batch ${Math.floor(batch / 10) + 1}/10 (${inserted} firms)`);

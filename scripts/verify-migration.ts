@@ -22,11 +22,17 @@ async function main() {
   if (labelCounts.length === 0) {
     // Manual label counts
     const labels = [
-      "Skill", "SkillL1", "LegacySkill", "Category", "ProfessionalService",
-      "Industry", "Market", "Language", "FirmType", "FirmRelationship",
-      "Organization", "Company", "User", "CaseStudy", "OrgService",
-      "Opportunity", "PartnershipPreferences", "WorkHistory",
-      "MatchRecommendation", "MatchActivity"
+      // Track A canonical types
+      "Company", "ServiceFirm", "Person", "Skill", "SkillL1",
+      "FirmCategory", "TechCategory", "DeliveryModel",
+      "ServiceCategory", "Service",
+      "Industry", "Market", "Language", "CaseStudy",
+      // Legacy types (may still exist during transition)
+      "LegacySkill", "Category", "ProfessionalService",
+      "FirmType", "FirmRelationship",
+      "Organization", "User", "OrgService", "Expert",
+      "Client", "Opportunity", "PartnershipPreferences",
+      "WorkHistory", "MatchRecommendation", "MatchActivity",
     ];
 
     for (const label of labels) {
@@ -47,13 +53,18 @@ async function main() {
   // Count all relationship types
   console.log("\n--- Relationship Types ---");
   const relTypes = [
-    "BELONGS_TO", "BELONGS_TO_CATEGORY", "OPERATES_IN_INDUSTRY", "IN_CATEGORY",
-    "LOCATED_IN", "HAS_CLIENT", "OWNED_BY", "AUTHORED_BY",
+    // Track A canonical edge types
+    "IN_CATEGORY", "HAS_SKILL", "OFFERS_SERVICE", "SERVES_INDUSTRY",
+    "OPERATES_IN", "HAS_CLIENT", "FOR_CLIENT", "CURRENTLY_AT",
+    "PREFERS", "AVOIDS",
+    // Legacy edge types (may still exist during transition)
+    "BELONGS_TO", "BELONGS_TO_CATEGORY", "OPERATES_IN_INDUSTRY",
+    "LOCATED_IN", "OWNED_BY", "AUTHORED_BY",
     "BELONGS_TO_INDUSTRY", "DEMONSTRATES_SKILL", "TARGETS_MARKET",
-    "FEATURES_CLIENT", "HAS_PREFERENCES", "HAS_SKILL",
+    "FEATURES_CLIENT", "HAS_PREFERENCES", "EMPLOYS",
     "HAS_INDUSTRY_EXPERIENCE", "HAS_MARKET_EXPERIENCE", "SPEAKS",
     "HAS_WORK_HISTORY", "WORKED_AT", "MATCHED", "RESPONDED_TO",
-    "FOR_RECOMMENDATION", "PARTNERS_WITH"
+    "FOR_RECOMMENDATION", "PARTNERS_WITH",
   ];
 
   for (const type of relTypes) {
