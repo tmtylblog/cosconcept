@@ -368,6 +368,33 @@ No authentication required. Optional `x-api-key` header (configurable). CORS ena
 
 ---
 
+## Partner Sync API
+
+Server-to-server API for bi-directional data sync with partner platforms (e.g., Chameleon Collective CORE). All routes require `x-api-key` and `x-partner-id` headers. Auth is validated by `src/app/api/partner-sync/lib/auth.ts` against the `PARTNER_SYNC_API_KEY` env var and an allow-list of partner IDs.
+
+### Taxonomy & Schema
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/api/partner-sync/taxonomy` | Returns the full COS taxonomy (skills L1/L2/L3, categories, industries, markets, languages, firm types, services, tech categories, firm relationship edges). Called daily by CORE's `graph_taxonomy` sync job. Uses `src/lib/taxonomy-full.ts`. | Partner key |
+| GET | `/api/partner-sync/schema-manifest` | Returns the COS knowledge graph schema: node labels, edge types, property lists, and uniqueness constraints. CORE checks this to detect schema version drift. Includes a `version` and `lastChanged` timestamp. | Partner key |
+
+### Entity Sync
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | `/api/partner-sync/entities` | Accepts a batch of entity pushes from the partner. Body: `{ entities: [{ type, id, data, source }] }`. Supported types: `Company`, `Person`, `CaseStudy`, `ServiceFirm`. Upserts into PostgreSQL. Logs a `migrationBatches` record per batch. | Partner key |
+| GET | `/api/partner-sync/entities` | Returns entities previously synced for a partner. Query params: `type` (required, one of Company/Person/CaseStudy/ServiceFirm), `partnerId` (required), `limit` (default 1000, max 5000). | Partner key |
+
+### User Provisioning
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | `/api/partner-sync/provision-user` | Creates a COS user account and adds them to the matching org (resolved via email domain). Body: `{ name?, email }`. If user already exists, returns existing userId and orgId. | Partner key |
+| POST | `/api/partner-sync/deprovision-user` | Removes a user from the partner's organization (does not delete the user account). Body: `{ email }`. Org resolved via email domain matching against `serviceFirms.website`. | Partner key |
+
+---
+
 ## Route Count Summary
 
 | Domain | Routes |
@@ -390,4 +417,5 @@ No authentication required. Optional `x-api-key` header (configurable). CORS ena
 | Webhooks | 4 |
 | Inngest | 1 |
 | Public API | 5 |
-| **Total** | **91 route files** |
+| Partner Sync | 5 |
+| **Total** | **96 route files** |

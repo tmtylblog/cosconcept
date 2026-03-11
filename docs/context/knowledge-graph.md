@@ -280,6 +280,16 @@ Target: <$0.10 per search, <3 seconds latency.
 
 ---
 
+## Partner Sync Taxonomy Export
+
+The full COS taxonomy is served to partner platforms (e.g., Chameleon Collective CORE) via `GET /api/partner-sync/taxonomy`. This endpoint returns skills (L1/L2/L3), categories, industries (L1 + L2 hierarchy), markets, languages, firm types, service categories, services, tech categories, and PARTNERS_WITH edges. CORE calls this daily to seed its own graph with the COS taxonomy, ensuring both platforms share the same reference data.
+
+The taxonomy data is sourced from `src/lib/taxonomy-full.ts`, which re-exports CSV-based helpers from `src/lib/taxonomy.ts` and adds static reference data (firm types, tech categories, service categories, industry hierarchy, market hierarchy, language ISO codes). Both the Neo4j seed script and the partner-sync taxonomy endpoint consume this module.
+
+The schema manifest endpoint (`GET /api/partner-sync/schema-manifest`) returns node labels, edge types, and constraints so CORE can detect schema drift.
+
+---
+
 ## Key Files Reference
 
 | File | Purpose |
@@ -303,6 +313,13 @@ Target: <$0.10 per search, <3 seconds latency.
 | `src/inngest/functions/case-study-ingest.ts` | Inngest: case study ingestion |
 | `src/inngest/functions/firm-case-study-ingest.ts` | Inngest: firm case study full pipeline |
 | `src/inngest/functions/expert-linkedin.ts` | Inngest: expert enrichment + graph write |
+| `src/lib/taxonomy-full.ts` | Full taxonomy data: firm types, tech categories, services, industry/market hierarchy, language ISO codes |
+| `src/app/api/partner-sync/taxonomy/route.ts` | Partner sync: serves full taxonomy to CORE |
+| `src/app/api/partner-sync/schema-manifest/route.ts` | Partner sync: serves graph schema manifest to CORE |
+| `src/app/api/partner-sync/entities/route.ts` | Partner sync: bi-directional entity push/pull |
+| `src/app/api/partner-sync/provision-user/route.ts` | Partner sync: create COS user from CORE |
+| `src/app/api/partner-sync/deprovision-user/route.ts` | Partner sync: remove user org membership from CORE |
+| `src/app/api/partner-sync/lib/auth.ts` | Partner sync: x-api-key + x-partner-id auth helper |
 | `docs/KNOWLEDGE-GRAPH.md` | Original design document (canonical reference) |
 | `data/categories.csv` | 30 firm categories |
 | `data/skills-L1.csv` | L1 -> L2 skill mapping |

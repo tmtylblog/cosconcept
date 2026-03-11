@@ -122,6 +122,9 @@ INNGEST_SIGNING_KEY         # Inngest job auth
 INNGEST_EVENT_KEY           # Inngest event publishing
 SENTRY_DSN                  # Error tracking
 BLOB_READ_WRITE_TOKEN       # Vercel Blob storage
+
+# Partner Sync
+PARTNER_SYNC_API_KEY        # Shared secret for server-to-server partner sync API (x-api-key header)
 ```
 
 ## Key Design Principles

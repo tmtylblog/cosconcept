@@ -51,6 +51,8 @@ src/lib/matching/     → Search & matching engine
 src/lib/billing/      → Stripe & feature gates
 src/lib/email/        → Email client
 src/lib/voice/        → Voice I/O
+src/lib/taxonomy-full.ts → Full taxonomy data (firm types, services, industries, markets, languages)
+src/app/api/partner-sync/ → Partner sync API (taxonomy, schema, entities, user provisioning)
 data/                 → Reference CSVs (taxonomy, relationships)
 docs/                 → Architecture docs & specs
 docs/context/         → THIS — living knowledge files
