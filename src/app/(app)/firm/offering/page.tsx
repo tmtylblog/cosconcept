@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Briefcase,
   Loader2,
@@ -17,7 +17,6 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { useEffect } from "react";
 import { useActiveOrganization, useSession } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useFirmServices, type FirmService } from "@/hooks/use-firm-services";
@@ -27,21 +26,6 @@ export default function FirmOfferingPage() {
   const { data: session } = useSession();
   const { status: enrichmentStatus, result: enrichmentResult, triggerEnrichment } = useEnrichment();
 
-  // If enrichment hasn't run yet and we have an org, kick it off from the firm's website
-  // Falls back to the user's email domain if no website is stored yet
-  useEffect(() => {
-    if (enrichmentStatus !== "idle" || !activeOrg?.id) return;
-    fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        const website = data?.enrichmentData?.url || data?.website;
-        const emailDomain = session?.user?.email?.split("@")[1];
-        const fallback = emailDomain ? `https://${emailDomain}` : null;
-        const target = website || fallback;
-        if (target) triggerEnrichment(target);
-      })
-      .catch(() => {});
-  }, [enrichmentStatus, activeOrg?.id, session?.user?.email, triggerEnrichment]);
   const {
     services,
     total,
@@ -51,7 +35,41 @@ export default function FirmOfferingPage() {
     updateDescription,
     addService,
     deleteService,
+    refresh,
   } = useFirmServices(activeOrg?.id);
+
+  // Once the initial services load completes and we have 0 services,
+  // trigger enrichment (force re-run even if status is "done") so persist
+  // can seed firm_services. Runs at most once per mount.
+  const enrichmentTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (!activeOrg?.id || isLoading || total > 0) return;
+    if (enrichmentStatus === "loading") return;
+    if (enrichmentTriggeredRef.current) return;
+    enrichmentTriggeredRef.current = true;
+    fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        const website = data?.enrichmentData?.url || data?.website;
+        const emailDomain = session?.user?.email?.split("@")[1];
+        const fallback = emailDomain ? `https://${emailDomain}` : null;
+        const target = website || fallback;
+        if (target) triggerEnrichment(target, true); // forceGapFill — runs even if already "done"
+      })
+      .catch(() => {});
+  }, [activeOrg?.id, isLoading, total, enrichmentStatus, session?.user?.email, triggerEnrichment]);
+
+  // After enrichment finishes, re-fetch services so newly-seeded rows appear.
+  // Persist is fire-and-forget so we poll at 2s, 5s, 10s to catch it.
+  const servicesRefreshedRef = useRef(false);
+  useEffect(() => {
+    if (enrichmentStatus !== "done" || servicesRefreshedRef.current) return;
+    servicesRefreshedRef.current = true;
+    const t1 = setTimeout(() => refresh(), 2000);
+    const t2 = setTimeout(() => refresh(), 5000);
+    const t3 = setTimeout(() => refresh(), 10000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [enrichmentStatus, refresh]);
 
   const [showHidden, setShowHidden] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);

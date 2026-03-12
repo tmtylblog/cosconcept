@@ -31,21 +31,6 @@ export default function FirmExperiencePage() {
   const { data: session } = useSession();
   const { status: enrichmentStatus, result: enrichmentResult, triggerEnrichment } = useEnrichment();
 
-  // If enrichment hasn't run yet and we have an org, kick it off from the firm's website
-  // Falls back to the user's email domain if no website is stored yet
-  useEffect(() => {
-    if (enrichmentStatus !== "idle" || !activeOrg?.id) return;
-    fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        const website = data?.enrichmentData?.url || data?.website;
-        const emailDomain = session?.user?.email?.split("@")[1];
-        const fallback = emailDomain ? `https://${emailDomain}` : null;
-        const target = website || fallback;
-        if (target) triggerEnrichment(target);
-      })
-      .catch(() => {});
-  }, [enrichmentStatus, activeOrg?.id, session?.user?.email, triggerEnrichment]);
   const {
     caseStudies,
     total,
@@ -57,7 +42,41 @@ export default function FirmExperiencePage() {
     submitText,
     submitPdf,
     toggleHidden,
+    refresh,
   } = useCaseStudies(activeOrg?.id);
+
+  // Once the initial case-study load completes and we have 0 entries,
+  // trigger enrichment (force re-run even if status is "done") so persist
+  // can seed firm_case_studies. Runs at most once per mount.
+  const enrichmentTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (!activeOrg?.id || isLoading || total > 0) return;
+    if (enrichmentStatus === "loading") return;
+    if (enrichmentTriggeredRef.current) return;
+    enrichmentTriggeredRef.current = true;
+    fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        const website = data?.enrichmentData?.url || data?.website;
+        const emailDomain = session?.user?.email?.split("@")[1];
+        const fallback = emailDomain ? `https://${emailDomain}` : null;
+        const target = website || fallback;
+        if (target) triggerEnrichment(target, true); // forceGapFill — runs even if already "done"
+      })
+      .catch(() => {});
+  }, [activeOrg?.id, isLoading, total, enrichmentStatus, session?.user?.email, triggerEnrichment]);
+
+  // After enrichment finishes, re-fetch case studies so newly-seeded rows appear.
+  // Persist is fire-and-forget so we poll at 2s, 5s, 10s to catch it.
+  const caseStudiesRefreshedRef = useRef(false);
+  useEffect(() => {
+    if (enrichmentStatus !== "done" || caseStudiesRefreshedRef.current) return;
+    caseStudiesRefreshedRef.current = true;
+    const t1 = setTimeout(() => refresh(), 2000);
+    const t2 = setTimeout(() => refresh(), 5000);
+    const t3 = setTimeout(() => refresh(), 10000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [enrichmentStatus, refresh]);
 
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [showHidden, setShowHidden] = useState(false);
