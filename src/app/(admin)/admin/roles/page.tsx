@@ -5,165 +5,339 @@ import {
   Users,
   Search,
   Loader2,
-  Building2,
   Shield,
-  Upload,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
+  UserPlus,
+  ChevronDown,
+  X,
   CheckCircle,
-  XCircle,
-  Filter,
-  BarChart3,
+  AlertCircle,
+  Mail,
+  Crown,
+  TrendingUp,
+  HeartPulse,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /* ── Types ────────────────────────────────────────────────────────── */
 
-interface LegacyUser {
+interface StaffUser {
   id: string;
-  legacyUserId: string;
-  legacyOrgId: string | null;
-  legacyOrgName: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  email: string | null;
-  title: string | null;
-  legacyRoles: string[];
-  firmId: string | null;
-  firmName: string | null;
-  firmWebsite: string | null;
-  userId: string | null;
+  name: string | null;
+  email: string;
+  role: string | null;
+  banned: boolean | null;
+  jobTitle: string | null;
   createdAt: string;
+  emailVerified: boolean | null;
 }
 
-interface RoleStat {
-  role: string;
-  count: number;
+const ROLES = [
+  {
+    value: "superadmin",
+    label: "Super Admin",
+    description: "Full platform access — all admin sections",
+    color: "bg-cos-ember/10 text-cos-ember border-cos-ember/20",
+    icon: <Crown className="h-3.5 w-3.5" />,
+  },
+  {
+    value: "growth_ops",
+    label: "Growth Ops",
+    description: "LinkedIn inbox, campaigns, target lists, attribution",
+    color: "bg-cos-electric/10 text-cos-electric border-cos-electric/20",
+    icon: <TrendingUp className="h-3.5 w-3.5" />,
+  },
+  {
+    value: "customer_success",
+    label: "Customer Success",
+    description: "CIO dashboard and customer health tracking",
+    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    icon: <HeartPulse className="h-3.5 w-3.5" />,
+  },
+  {
+    value: "user",
+    label: "User (no admin)",
+    description: "Standard platform user — no admin access",
+    color: "bg-cos-cloud text-cos-slate border-cos-border",
+    icon: <Users className="h-3.5 w-3.5" />,
+  },
+];
+
+function roleMeta(role: string | null) {
+  return ROLES.find((r) => r.value === role) ?? ROLES[ROLES.length - 1];
 }
 
-interface Stats {
-  total: number;
-  matchedCount: number;
-  unmatchedCount: number;
-  uniqueOrgs: number;
-  uniqueFirms: number;
+/* ── Invite Modal ─────────────────────────────────────────────────── */
+
+function InviteModal({
+  onClose,
+  onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("growth_ops");
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, role }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResult({ ok: true, message: data.message });
+        onSuccess();
+      } else {
+        setResult({ ok: false, message: data.error ?? "Invite failed" });
+      }
+    } catch {
+      setResult({ ok: false, message: "Network error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-md rounded-cos-xl border border-cos-border bg-white shadow-xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-cos-border px-6 py-4">
+          <div className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-cos-electric" />
+            <h2 className="font-heading text-base font-bold text-cos-midnight">
+              Invite Staff Member
+            </h2>
+          </div>
+          <button onClick={onClose} className="text-cos-slate hover:text-cos-midnight">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-cos-slate uppercase tracking-wide">
+              Full Name
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Jane Smith"
+              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-cos-slate uppercase tracking-wide">
+              Work Email
+            </label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="jane@company.com"
+              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-cos-slate uppercase tracking-wide">
+              Access Level
+            </label>
+            <div className="space-y-2">
+              {ROLES.filter((r) => r.value !== "user").map((r) => (
+                <label
+                  key={r.value}
+                  className={`flex cursor-pointer items-start gap-3 rounded-cos-lg border p-3 transition-all ${
+                    role === r.value
+                      ? "border-cos-electric bg-cos-electric/5"
+                      : "border-cos-border hover:border-cos-electric/40"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="role"
+                    value={r.value}
+                    checked={role === r.value}
+                    onChange={() => setRole(r.value)}
+                    className="mt-0.5 accent-cos-electric"
+                  />
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`inline-flex items-center gap-1 rounded-cos-pill border px-2 py-0.5 text-[10px] font-semibold ${r.color}`}>
+                        {r.icon}
+                        {r.label}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-cos-slate">{r.description}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Result */}
+          {result && (
+            <div className={`flex items-start gap-2 rounded-cos-lg border p-3 text-sm ${
+              result.ok
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-cos-ember/20 bg-cos-ember/5 text-cos-ember"
+            }`}>
+              {result.ok ? (
+                <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              ) : (
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              )}
+              <span>{result.message}</span>
+            </div>
+          )}
+
+          {!result?.ok && (
+            <p className="text-[11px] text-cos-slate">
+              <Mail className="mr-1 inline h-3 w-3" />
+              They will receive an email to set their password and log in.
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+              {result?.ok ? "Done" : "Cancel"}
+            </Button>
+            {!result?.ok && (
+              <Button
+                type="submit"
+                size="sm"
+                disabled={saving}
+                className="bg-cos-electric hover:bg-cos-electric/90"
+              >
+                {saving ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Send Invite
+              </Button>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
-const ROLE_COLORS: Record<string, string> = {
-  Admin: "bg-cos-electric/10 text-cos-electric",
-  "Deal Maker": "bg-cos-warm/10 text-cos-warm",
-  Expert: "bg-cos-signal/10 text-cos-signal",
-  "Collective Manager": "bg-purple-100 text-purple-700",
-  "Internal Viewer": "bg-cos-cloud text-cos-slate",
-  "Partnership Admin": "bg-emerald-100 text-emerald-700",
-  "Super Admin": "bg-cos-ember/10 text-cos-ember",
-  Advisor: "bg-blue-100 text-blue-700",
-  Viewer: "bg-cos-cloud text-cos-slate-light",
-};
+/* ── Role Change Dropdown ─────────────────────────────────────────── */
 
-/* ── Component ────────────────────────────────────────────────────── */
+function RoleDropdown({
+  userId,
+  currentRole,
+  onChanged,
+}: {
+  userId: string;
+  currentRole: string | null;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const meta = roleMeta(currentRole);
 
-export default function RolesPage() {
-  const [users, setUsers] = useState<LegacyUser[]>([]);
+  async function changeRole(role: string) {
+    setOpen(false);
+    setSaving(true);
+    await fetch("/api/admin/staff", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, role }),
+    });
+    setSaving(false);
+    onChanged();
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        disabled={saving}
+        className={`inline-flex items-center gap-1 rounded-cos-pill border px-2.5 py-1 text-[11px] font-semibold transition-all hover:opacity-80 ${meta.color}`}
+      >
+        {saving ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          meta.icon
+        )}
+        {meta.label}
+        <ChevronDown className="h-3 w-3 opacity-60" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-20 mt-1 w-52 rounded-cos-lg border border-cos-border bg-white shadow-lg">
+            {ROLES.map((r) => (
+              <button
+                key={r.value}
+                onClick={() => changeRole(r.value)}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors hover:bg-cos-cloud first:rounded-t-cos-lg last:rounded-b-cos-lg"
+              >
+                <span className={`inline-flex items-center gap-1 rounded-cos-pill border px-2 py-0.5 text-[10px] font-semibold ${r.color}`}>
+                  {r.icon}
+                  {r.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Main Page ────────────────────────────────────────────────────── */
+
+export default function StaffAccessPage() {
+  const [staff, setStaff] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
-  const [matchedFilter, setMatchedFilter] = useState<"" | "true" | "false">("");
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [roles, setRoles] = useState<RoleStat[]>([]);
+  const [showInvite, setShowInvite] = useState(false);
 
-  // Import state
-  const [importing, setImporting] = useState(false);
-  const [rematching, setRematching] = useState(false);
-  const [importResult, setImportResult] = useState<Record<string, unknown> | null>(null);
-
-  const limit = 50;
-
-  // Fetch users
-  const fetchUsers = useCallback(async () => {
+  const fetchStaff = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
-      if (roleFilter) params.set("role", roleFilter);
-      if (matchedFilter) params.set("matched", matchedFilter);
-      params.set("page", String(page));
-      params.set("limit", String(limit));
-
-      const res = await fetch(`/api/admin/legacy-users?${params}`);
+      const res = await fetch(`/api/admin/staff?${params}`);
       const data = await res.json();
-
-      setUsers(data.users ?? []);
-      setTotal(data.total ?? 0);
-      setTotalPages(data.totalPages ?? 0);
-      setStats(data.stats ?? null);
-      setRoles(data.roles ?? []);
-    } catch (err) {
-      console.error("Failed to load legacy users:", err);
+      setStaff(data.staff ?? []);
     } finally {
       setLoading(false);
     }
-  }, [search, roleFilter, matchedFilter, page]);
+  }, [search]);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    fetchStaff();
+  }, [fetchStaff]);
 
-  // Reset page when filters change
-  useEffect(() => {
-    setPage(1);
-  }, [search, roleFilter, matchedFilter]);
-
-  // Run import
-  async function handleImport(dryRun: boolean) {
-    setImporting(true);
-    setImportResult(null);
-    try {
-      const res = await fetch(
-        `/api/admin/import/legacy-users${dryRun ? "?dryRun=true" : ""}`,
-        { method: "POST" }
-      );
-      const data = await res.json();
-      setImportResult(data);
-      if (!dryRun && data.success) {
-        fetchUsers();
-      }
-    } catch (err) {
-      console.error("Import failed:", err);
-      setImportResult({ error: "Import request failed" });
-    } finally {
-      setImporting(false);
-    }
+  async function revokeAccess(userId: string) {
+    if (!confirm("Remove admin access for this user?")) return;
+    await fetch(`/api/admin/staff?userId=${userId}`, { method: "DELETE" });
+    fetchStaff();
   }
 
-  // Re-match existing users by domain
-  async function handleRematch(dryRun: boolean) {
-    setRematching(true);
-    setImportResult(null);
-    try {
-      const params = new URLSearchParams({ rematch: "true" });
-      if (dryRun) params.set("dryRun", "true");
-      const res = await fetch(
-        `/api/admin/import/legacy-users?${params}`,
-        { method: "POST" }
-      );
-      const data = await res.json();
-      setImportResult(data);
-      if (!dryRun && data.success) {
-        fetchUsers();
-      }
-    } catch (err) {
-      console.error("Re-match failed:", err);
-      setImportResult({ error: "Re-match request failed" });
-    } finally {
-      setRematching(false);
-    }
-  }
+  // Count by role for the summary bar
+  const roleCounts = ROLES.reduce<Record<string, number>>((acc, r) => {
+    acc[r.value] = staff.filter((u) => u.role === r.value).length;
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6">
@@ -171,243 +345,64 @@ export default function RolesPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
-            Role Management
+            Staff Access
           </h1>
           <p className="mt-1 text-sm text-cos-slate">
-            Legacy user roles imported from the original Collective OS platform.
-            Manage user-to-firm associations and role assignments.
+            Invite team members and manage their admin access levels.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleImport(true)}
-            disabled={importing}
-            className="text-xs"
-          >
-            {importing ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Search className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            Preview Import
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => handleImport(false)}
-            disabled={importing}
-            className="bg-cos-electric hover:bg-cos-electric/90 text-xs"
-          >
-            {importing ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Upload className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            Run Import
-          </Button>
-          <div className="h-6 w-px bg-cos-border" />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleRematch(true)}
-            disabled={rematching}
-            className="text-xs"
-          >
-            {rematching ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Search className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            Preview Re-match
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => handleRematch(false)}
-            disabled={rematching}
-            className="bg-cos-signal hover:bg-cos-signal/90 text-white text-xs"
-          >
-            {rematching ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            Re-match by Domain
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          onClick={() => setShowInvite(true)}
+          className="bg-cos-electric hover:bg-cos-electric/90"
+        >
+          <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+          Invite Staff
+        </Button>
       </div>
 
-      {/* Import Result */}
-      {importResult && (
-        <div className="rounded-cos-lg border border-cos-border bg-white p-4">
-          <div className="flex items-center gap-2 mb-3">
-            {importResult.error ? (
-              <XCircle className="h-4 w-4 text-cos-ember" />
-            ) : (
-              <CheckCircle className="h-4 w-4 text-emerald-500" />
-            )}
-            <h3 className="text-sm font-semibold text-cos-midnight">
-              {importResult.dryRun ? "Import Preview" : importResult.error ? "Import Failed" : "Import Complete"}
-            </h3>
-            <button
-              onClick={() => setImportResult(null)}
-              className="ml-auto text-xs text-cos-slate hover:text-cos-midnight"
-            >
-              Dismiss
-            </button>
+      {/* Role summary */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {ROLES.filter((r) => r.value !== "user").map((r) => (
+          <div key={r.value} className="rounded-cos-lg border border-cos-border bg-white px-4 py-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`inline-flex items-center gap-1 rounded-cos-pill border px-2 py-0.5 text-[10px] font-semibold ${r.color}`}>
+                {r.icon}
+                {r.label}
+              </span>
+            </div>
+            <div className="text-2xl font-bold text-cos-midnight">{roleCounts[r.value] ?? 0}</div>
+            <div className="text-[10px] text-cos-slate mt-0.5">{r.description}</div>
           </div>
-          <pre className="max-h-64 overflow-auto rounded-cos bg-cos-cloud/50 p-3 text-xs font-mono text-cos-midnight">
-            {JSON.stringify(importResult, null, 2)}
-          </pre>
-        </div>
-      )}
-
-      {/* Stats */}
-      {stats && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <div className="rounded-cos-lg border border-cos-border bg-white px-4 py-3 text-center">
-            <div className="text-xl font-bold text-cos-electric">{stats.total.toLocaleString()}</div>
-            <div className="text-[10px] font-medium uppercase tracking-wide text-cos-slate">Total Users</div>
-          </div>
-          <div className="rounded-cos-lg border border-cos-border bg-white px-4 py-3 text-center">
-            <div className="text-xl font-bold text-emerald-600">{stats.matchedCount.toLocaleString()}</div>
-            <div className="text-[10px] font-medium uppercase tracking-wide text-cos-slate">Matched to Firm</div>
-          </div>
-          <div className="rounded-cos-lg border border-cos-border bg-white px-4 py-3 text-center">
-            <div className="text-xl font-bold text-cos-warm">{stats.unmatchedCount.toLocaleString()}</div>
-            <div className="text-[10px] font-medium uppercase tracking-wide text-cos-slate">Unmatched</div>
-          </div>
-          <div className="rounded-cos-lg border border-cos-border bg-white px-4 py-3 text-center">
-            <div className="text-xl font-bold text-cos-signal">{stats.uniqueOrgs.toLocaleString()}</div>
-            <div className="text-[10px] font-medium uppercase tracking-wide text-cos-slate">Legacy Orgs</div>
-          </div>
-          <div className="rounded-cos-lg border border-cos-border bg-white px-4 py-3 text-center">
-            <div className="text-xl font-bold text-purple-600">{stats.uniqueFirms}</div>
-            <div className="text-[10px] font-medium uppercase tracking-wide text-cos-slate">Linked Firms</div>
-          </div>
-        </div>
-      )}
-
-      {/* Role Distribution */}
-      {roles.length > 0 && (
-        <div className="rounded-cos-lg border border-cos-border bg-white p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <BarChart3 className="h-4 w-4 text-cos-electric" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
-              Role Distribution
-            </h3>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {roles.map((r) => (
-              <button
-                key={r.role}
-                onClick={() => setRoleFilter(roleFilter === r.role ? "" : r.role)}
-                className={`rounded-cos-pill px-3 py-1.5 text-xs font-medium transition-all ${
-                  roleFilter === r.role
-                    ? "ring-2 ring-cos-electric ring-offset-1"
-                    : ""
-                } ${ROLE_COLORS[r.role] ?? "bg-cos-cloud text-cos-slate"}`}
-              >
-                {r.role}
-                <span className="ml-1.5 opacity-70">({r.count.toLocaleString()})</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
-          <input
-            type="text"
-            placeholder="Search by name, email, or company..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-cos-lg border border-cos-border bg-white py-2 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
-          />
-        </div>
-        <div className="flex gap-1">
-          {(
-            [
-              { key: "", label: "All" },
-              { key: "true", label: "Matched" },
-              { key: "false", label: "Unmatched" },
-            ] as { key: "" | "true" | "false"; label: string }[]
-          ).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setMatchedFilter(key)}
-              className={`rounded-cos-pill px-3 py-1.5 text-xs font-medium transition-colors ${
-                matchedFilter === key
-                  ? "bg-cos-electric text-white"
-                  : "bg-cos-cloud text-cos-slate hover:bg-cos-cloud-dim"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {(search || roleFilter || matchedFilter) && (
-          <button
-            onClick={() => {
-              setSearch("");
-              setRoleFilter("");
-              setMatchedFilter("");
-            }}
-            className="text-xs text-cos-slate hover:text-cos-electric"
-          >
-            Clear filters
-          </button>
-        )}
+        ))}
       </div>
 
-      {/* Results count + pagination header */}
-      <div className="flex items-center justify-between text-xs text-cos-slate">
-        <span>
-          {total.toLocaleString()} user{total !== 1 ? "s" : ""}
-          {search || roleFilter || matchedFilter ? " (filtered)" : ""}
-        </span>
-        {totalPages > 1 && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="rounded-cos p-1 hover:bg-cos-cloud disabled:opacity-30"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span>
-              Page {page} of {totalPages}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="rounded-cos p-1 hover:bg-cos-cloud disabled:opacity-30"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+      {/* Search */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
+        <input
+          type="text"
+          placeholder="Search by name or email..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full rounded-cos-lg border border-cos-border bg-white py-2 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+        />
       </div>
 
-      {/* User Table */}
+      {/* Table */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
         </div>
-      ) : users.length === 0 ? (
+      ) : staff.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-16">
-          <Users className="h-10 w-10 text-cos-slate-light" />
+          <Shield className="h-10 w-10 text-cos-slate-light" />
           <p className="mt-3 text-sm font-medium text-cos-midnight">
-            {stats?.total === 0
-              ? "No legacy users imported yet"
-              : "No users match your filters"}
+            {search ? "No staff match your search" : "No staff users yet"}
           </p>
-          {stats?.total === 0 && (
+          {!search && (
             <p className="mt-1 text-xs text-cos-slate">
-              Click &quot;Run Import&quot; to import users from the legacy platform.
+              Click &quot;Invite Staff&quot; to add team members.
             </p>
           )}
         </div>
@@ -417,126 +412,123 @@ export default function RolesPage() {
             <thead>
               <tr className="border-b border-cos-border bg-cos-cloud/50">
                 <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  User
+                  Name
                 </th>
                 <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                   Email
                 </th>
                 <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  Title
+                  Access Level
                 </th>
                 <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  Legacy Org
+                  Status
                 </th>
                 <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  Linked Firm
+                  Joined
                 </th>
                 <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  Roles
+                  Actions
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-cos-border/60">
-              {users.map((user) => (
-                <tr
-                  key={user.id}
-                  className="transition-colors hover:bg-cos-electric/[0.02]"
-                >
-                  {/* Name */}
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-[10px] font-semibold text-cos-electric">
-                        {(user.firstName ?? "?").charAt(0).toUpperCase()}
-                        {(user.lastName ?? "").charAt(0).toUpperCase()}
+              {staff.map((user) => {
+                const meta = roleMeta(user.role);
+                const initials = (user.name ?? user.email)
+                  .split(" ")
+                  .map((w) => w[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase();
+
+                return (
+                  <tr key={user.id} className="transition-colors hover:bg-cos-electric/[0.02]">
+                    {/* Name */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-[10px] font-semibold text-cos-electric">
+                          {initials}
+                        </div>
+                        <div>
+                          <div className="font-medium text-cos-midnight text-sm">
+                            {user.name ?? "—"}
+                          </div>
+                          {user.jobTitle && (
+                            <div className="text-[10px] text-cos-slate">{user.jobTitle}</div>
+                          )}
+                        </div>
                       </div>
-                      <span className="font-medium text-cos-midnight text-sm">
-                        {[user.firstName, user.lastName].filter(Boolean).join(" ") || "—"}
-                      </span>
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* Email */}
-                  <td className="px-4 py-2.5">
-                    <span className="font-mono text-xs text-cos-slate">
-                      {user.email ?? "—"}
-                    </span>
-                  </td>
+                    {/* Email */}
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs text-cos-slate">{user.email}</span>
+                    </td>
 
-                  {/* Title */}
-                  <td className="px-4 py-2.5">
-                    <span className="text-xs text-cos-slate">
-                      {user.title ?? "—"}
-                    </span>
-                  </td>
+                    {/* Role */}
+                    <td className="px-4 py-3">
+                      <RoleDropdown
+                        userId={user.id}
+                        currentRole={user.role}
+                        onChanged={fetchStaff}
+                      />
+                    </td>
 
-                  {/* Legacy Org */}
-                  <td className="px-4 py-2.5">
-                    <span className="text-xs text-cos-slate">
-                      {user.legacyOrgName ?? "—"}
-                    </span>
-                  </td>
-
-                  {/* Linked Firm */}
-                  <td className="px-4 py-2.5">
-                    {user.firmName ? (
-                      <a
-                        href={`/admin/customers`}
-                        className="flex items-center gap-1 text-xs font-medium text-cos-electric hover:underline"
-                      >
-                        <Building2 className="h-3 w-3" />
-                        {user.firmName}
-                      </a>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-cos-slate-light italic">
-                        <XCircle className="h-3 w-3" />
-                        Unmatched
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Roles */}
-                  <td className="px-4 py-2.5">
-                    <div className="flex flex-wrap gap-1">
-                      {(user.legacyRoles ?? []).map((role) => (
-                        <span
-                          key={role}
-                          className={`rounded-cos-pill px-2 py-0.5 text-[9px] font-medium ${
-                            ROLE_COLORS[role] ?? "bg-cos-cloud text-cos-slate"
-                          }`}
-                        >
-                          {role}
+                    {/* Status */}
+                    <td className="px-4 py-3">
+                      {user.banned ? (
+                        <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-ember/10 px-2 py-0.5 text-[10px] font-medium text-cos-ember">
+                          Banned
                         </span>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      ) : user.emailVerified ? (
+                        <span className="inline-flex items-center gap-1 rounded-cos-pill bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
+                          <CheckCircle className="h-2.5 w-2.5" />
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-warm/10 px-2 py-0.5 text-[10px] font-medium text-cos-warm">
+                          <Mail className="h-2.5 w-2.5" />
+                          Invite Pending
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Joined */}
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-cos-slate">
+                        {new Date(user.createdAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-4 py-3">
+                      {user.role !== "superadmin" && (
+                        <button
+                          onClick={() => revokeAccess(user.id)}
+                          className="text-xs text-cos-slate hover:text-cos-ember transition-colors"
+                        >
+                          Revoke access
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* Bottom Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 text-xs text-cos-slate">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="flex items-center gap-1 rounded-cos px-3 py-1.5 hover:bg-cos-cloud disabled:opacity-30"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" /> Previous
-          </button>
-          <span className="px-2">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            className="flex items-center gap-1 rounded-cos px-3 py-1.5 hover:bg-cos-cloud disabled:opacity-30"
-          >
-            Next <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
+      {/* Invite modal */}
+      {showInvite && (
+        <InviteModal
+          onClose={() => setShowInvite(false)}
+          onSuccess={fetchStaff}
+        />
       )}
     </div>
   );
