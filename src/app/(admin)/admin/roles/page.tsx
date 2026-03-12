@@ -8,6 +8,7 @@ import {
   Building2,
   Shield,
   Upload,
+  RefreshCw,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -78,6 +79,7 @@ export default function RolesPage() {
 
   // Import state
   const [importing, setImporting] = useState(false);
+  const [rematching, setRematching] = useState(false);
   const [importResult, setImportResult] = useState<Record<string, unknown> | null>(null);
 
   const limit = 50;
@@ -129,7 +131,6 @@ export default function RolesPage() {
       const data = await res.json();
       setImportResult(data);
       if (!dryRun && data.success) {
-        // Refresh the list
         fetchUsers();
       }
     } catch (err) {
@@ -137,6 +138,30 @@ export default function RolesPage() {
       setImportResult({ error: "Import request failed" });
     } finally {
       setImporting(false);
+    }
+  }
+
+  // Re-match existing users by domain
+  async function handleRematch(dryRun: boolean) {
+    setRematching(true);
+    setImportResult(null);
+    try {
+      const params = new URLSearchParams({ rematch: "true" });
+      if (dryRun) params.set("dryRun", "true");
+      const res = await fetch(
+        `/api/admin/import/legacy-users?${params}`,
+        { method: "POST" }
+      );
+      const data = await res.json();
+      setImportResult(data);
+      if (!dryRun && data.success) {
+        fetchUsers();
+      }
+    } catch (err) {
+      console.error("Re-match failed:", err);
+      setImportResult({ error: "Re-match request failed" });
+    } finally {
+      setRematching(false);
     }
   }
 
@@ -180,6 +205,34 @@ export default function RolesPage() {
               <Upload className="mr-1.5 h-3.5 w-3.5" />
             )}
             Run Import
+          </Button>
+          <div className="h-6 w-px bg-cos-border" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleRematch(true)}
+            disabled={rematching}
+            className="text-xs"
+          >
+            {rematching ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Search className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Preview Re-match
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => handleRematch(false)}
+            disabled={rematching}
+            className="bg-cos-signal hover:bg-cos-signal/90 text-white text-xs"
+          >
+            {rematching ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Re-match by Domain
           </Button>
         </div>
       </div>
