@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { useActiveOrganization } from "@/lib/auth-client";
+import { authClient, useActiveOrganization } from "@/lib/auth-client";
 import { usePlan } from "@/hooks/use-plan";
 import {
   PLAN_LIMITS,
@@ -13,7 +13,7 @@ import {
   type PlanId,
 } from "@/lib/billing/plan-limits";
 import { cn } from "@/lib/utils";
-import { CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react";
 
 const plans: PlanId[] = ["free", "pro", "enterprise"];
 
@@ -29,6 +29,26 @@ export default function BillingPage() {
 
   const orgId = activeOrg?.id ?? "";
   const [syncing, setSyncing] = useState(false);
+  const orgActivationAttempted = useRef(false);
+
+  // Self-healing: if no active org, try to activate one
+  useEffect(() => {
+    if (orgId || orgActivationAttempted.current) return;
+    orgActivationAttempted.current = true;
+
+    (async () => {
+      try {
+        const { data: orgs } = await authClient.organization.list();
+        const orgList = (orgs as { id: string }[]) ?? [];
+        if (orgList.length > 0) {
+          console.log("[Billing] No active org — auto-activating", orgList[0].id);
+          await authClient.organization.setActive({ organizationId: orgList[0].id });
+        }
+      } catch (err) {
+        console.error("[Billing] Failed to auto-activate org:", err);
+      }
+    })();
+  }, [orgId]);
 
   // Sync subscription state from Stripe after checkout or portal return
   async function syncFromStripe() {
