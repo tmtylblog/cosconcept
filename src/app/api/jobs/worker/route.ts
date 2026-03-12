@@ -18,12 +18,13 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes — for long enrichment pipelines
 
 function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.JOBS_SECRET;
+  const secret = process.env.JOBS_SECRET?.trim(); // trim() guards against Vercel \n suffix
   if (!secret) return false; // require secret to be set
 
-  const header =
+  const header = (
     req.headers.get("x-jobs-secret") ??
-    req.headers.get("authorization")?.replace(/^bearer\s+/i, "");
+    req.headers.get("authorization")?.replace(/^bearer\s+/i, "")
+  )?.trim();
 
   return header === secret;
 }

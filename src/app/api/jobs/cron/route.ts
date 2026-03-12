@@ -21,10 +21,10 @@ export const maxDuration = 300;
 function isAuthorized(req: NextRequest): boolean {
   // Vercel Cron sends: Authorization: Bearer <CRON_SECRET>
   // We also accept the jobs secret for manual triggers
-  const cronSecret = process.env.CRON_SECRET;
-  const jobsSecret = process.env.JOBS_SECRET;
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  const jobsSecret = process.env.JOBS_SECRET?.trim();
 
-  const header = req.headers.get("authorization")?.replace(/^bearer\s+/i, "");
+  const header = req.headers.get("authorization")?.replace(/^bearer\s+/i, "").trim();
 
   if (!header) return false;
   if (cronSecret && header === cronSecret) return true;

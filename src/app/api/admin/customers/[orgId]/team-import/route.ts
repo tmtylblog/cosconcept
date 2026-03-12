@@ -100,7 +100,7 @@ export async function POST(
     const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
     fetch(`${baseUrl}/api/jobs/worker`, {
       method: "POST",
-      headers: { "x-jobs-secret": process.env.JOBS_SECRET || "" },
+      headers: { "x-jobs-secret": (process.env.JOBS_SECRET || "").trim() },
     }).catch((err) => console.error("[TeamImport] Failed to trigger worker:", err));
 
     return NextResponse.json({
