@@ -92,8 +92,8 @@ export async function GET(
 
   // Exchange code for tokens
   const redirectUri = `${baseUrl}/api/settings/network/callback/${provider}`;
-  const clientId = provider === "google" ? process.env.GOOGLE_CLIENT_ID! : process.env.MICROSOFT_CLIENT_ID!;
-  const clientSecret = provider === "google" ? process.env.GOOGLE_CLIENT_SECRET! : process.env.MICROSOFT_CLIENT_SECRET!;
+  const clientId = provider === "google" ? process.env.NETWORK_GOOGLE_CLIENT_ID! : process.env.NETWORK_MICROSOFT_CLIENT_ID!;
+  const clientSecret = provider === "google" ? process.env.NETWORK_GOOGLE_CLIENT_SECRET! : process.env.NETWORK_MICROSOFT_CLIENT_SECRET!;
 
   const tokenRes = await fetch(TOKEN_ENDPOINTS[provider], {
     method: "POST",

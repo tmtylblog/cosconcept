@@ -82,8 +82,13 @@ function ProviderCard({
     window.location.href = `/api/settings/network/connect/${provider}`;
   };
 
+  const disabled = !isGoogle && !isMsConfigured;
+
   return (
-    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-5 flex flex-col gap-4">
+    <div className={cn(
+      "rounded-cos-xl border border-cos-border bg-cos-surface p-5 flex flex-col gap-4",
+      disabled && "opacity-60"
+    )}>
       {/* Header */}
       <div className="flex items-start gap-3">
         <div className={cn(
@@ -115,8 +120,13 @@ function ProviderCard({
         )}
       </div>
 
+      {/* Not configured placeholder */}
+      {disabled && (
+        <p className="text-xs text-cos-slate italic">Coming soon — Microsoft integration in progress.</p>
+      )}
+
       {/* Connected state */}
-      {isConnected && connection ? (
+      {!disabled && isConnected && connection ? (
         <div className="space-y-3">
           <div className="rounded-cos-lg bg-cos-cloud-dim px-3 py-2 text-xs text-cos-slate">
             <span className="font-medium text-cos-midnight">{connection.providerEmail ?? "Account connected"}</span>
@@ -155,14 +165,14 @@ function ProviderCard({
             </button>
           </div>
         </div>
-      ) : (
+      ) : !disabled ? (
         <button
           onClick={handleConnect}
           className="flex w-full items-center justify-center gap-2 rounded-cos-lg border border-cos-border bg-cos-cloud-dim px-4 py-2.5 text-sm font-medium text-cos-midnight transition-colors hover:border-cos-electric/30 hover:bg-cos-electric/5"
         >
           Connect {isGoogle ? "Gmail" : "Outlook"}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

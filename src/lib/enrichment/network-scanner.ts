@@ -302,8 +302,8 @@ export async function refreshGoogleToken(refreshToken: string): Promise<{
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      client_id: process.env.NETWORK_GOOGLE_CLIENT_ID!,
+      client_secret: process.env.NETWORK_GOOGLE_CLIENT_SECRET!,
     }),
   });
   if (!res.ok) return null;
@@ -324,8 +324,8 @@ export async function refreshMicrosoftToken(refreshToken: string): Promise<{
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      client_id: process.env.MICROSOFT_CLIENT_ID!,
-      client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
+      client_id: process.env.NETWORK_MICROSOFT_CLIENT_ID!,
+      client_secret: process.env.NETWORK_MICROSOFT_CLIENT_SECRET!,
       scope: "Mail.ReadBasic offline_access",
     }),
   });

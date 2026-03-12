@@ -16,12 +16,12 @@ const PROVIDER_CONFIG = {
   google: {
     authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
     scopes: "https://www.googleapis.com/auth/gmail.metadata",
-    clientId: process.env.GOOGLE_CLIENT_ID!,
+    clientId: process.env.NETWORK_GOOGLE_CLIENT_ID!,
   },
   microsoft: {
     authUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     scopes: "Mail.ReadBasic offline_access",
-    clientId: process.env.MICROSOFT_CLIENT_ID!,
+    clientId: process.env.NETWORK_MICROSOFT_CLIENT_ID!,
   },
 } as const;
 
@@ -48,6 +48,11 @@ export async function GET(
 
   const config = PROVIDER_CONFIG[provider as Provider];
   const baseUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+
+  // Guard: provider not configured yet
+  if (!config.clientId) {
+    return NextResponse.redirect(`${baseUrl}/settings/network?error=provider_not_configured`);
+  }
   const redirectUri = `${baseUrl}/api/settings/network/callback/${provider}`;
 
   // Build CSRF state: nonce + userId, signed with HMAC
