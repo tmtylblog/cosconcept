@@ -13,6 +13,58 @@ import { firmCaseStudies, serviceFirms, members } from "@/lib/db/schema";
 import { enqueue } from "@/lib/jobs/queue";
 import { runNextJob } from "@/lib/jobs/runner";
 
+// ─── Seed from enrichment data (silent, first-load only) ─
+// Also re-queues any URLs stuck in pending/failed for over 48 hours.
+async function seedCaseStudiesIfEmpty(firmId: string, organizationId: string) {
+  const [firmRow] = await db
+    .select({ enrichmentData: serviceFirms.enrichmentData })
+    .from(serviceFirms)
+    .where(eq(serviceFirms.id, firmId))
+    .limit(1);
+
+  const extracted = (firmRow?.enrichmentData as Record<string, unknown> | null)?.extracted as Record<string, unknown> | null;
+  const urls = (extracted?.caseStudyUrls as string[] | undefined) ?? [];
+  if (urls.length === 0) return;
+
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  let queued = 0;
+
+  for (const csUrl of urls.slice(0, 30)) {
+    const [existing] = await db
+      .select({ id: firmCaseStudies.id, status: firmCaseStudies.status, createdAt: firmCaseStudies.createdAt })
+      .from(firmCaseStudies)
+      .where(and(eq(firmCaseStudies.firmId, firmId), eq(firmCaseStudies.sourceUrl, csUrl)))
+      .limit(1);
+
+    if (existing) {
+      // Re-queue if stuck pending/failed for over 48h
+      const isStuck = (existing.status === "pending" || existing.status === "failed") &&
+        new Date(existing.createdAt) < cutoff;
+      if (isStuck) {
+        await db.update(firmCaseStudies)
+          .set({ status: "pending", statusMessage: "Retrying — previous attempt may have timed out", updatedAt: new Date() })
+          .where(eq(firmCaseStudies.id, existing.id));
+        await enqueue("firm-case-study-ingest", {
+          caseStudyId: existing.id, firmId, organizationId, sourceUrl: csUrl, sourceType: "url",
+        });
+        queued++;
+      }
+      continue;
+    }
+
+    // New — create and queue
+    const csId = `cs_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+    await db.insert(firmCaseStudies).values({
+      id: csId, firmId, organizationId, sourceUrl: csUrl, sourceType: "url", status: "pending",
+    });
+    await enqueue("firm-case-study-ingest", {
+      caseStudyId: csId, firmId, organizationId, sourceUrl: csUrl, sourceType: "url",
+    });
+    queued++;
+  }
+  if (queued > 0) after(runNextJob().catch(() => {}));
+}
+
 export const dynamic = "force-dynamic";
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -84,7 +136,7 @@ export async function GET(req: NextRequest) {
     conditions.push(eq(firmCaseStudies.isHidden, false));
   }
 
-  const rows = await db
+  let rows = await db
     .select({
       id: firmCaseStudies.id,
       sourceUrl: firmCaseStudies.sourceUrl,
@@ -103,6 +155,30 @@ export async function GET(req: NextRequest) {
     .from(firmCaseStudies)
     .where(and(...conditions))
     .orderBy(desc(firmCaseStudies.createdAt));
+
+  // If empty, seed from enrichment data then re-fetch
+  if (rows.length === 0) {
+    await seedCaseStudiesIfEmpty(firm.id, organizationId);
+    rows = await db
+      .select({
+        id: firmCaseStudies.id,
+        sourceUrl: firmCaseStudies.sourceUrl,
+        sourceType: firmCaseStudies.sourceType,
+        status: firmCaseStudies.status,
+        statusMessage: firmCaseStudies.statusMessage,
+        title: firmCaseStudies.title,
+        summary: firmCaseStudies.summary,
+        thumbnailUrl: firmCaseStudies.thumbnailUrl,
+        autoTags: firmCaseStudies.autoTags,
+        userNotes: firmCaseStudies.userNotes,
+        isHidden: firmCaseStudies.isHidden,
+        createdAt: firmCaseStudies.createdAt,
+        ingestedAt: firmCaseStudies.ingestedAt,
+      })
+      .from(firmCaseStudies)
+      .where(and(...conditions))
+      .orderBy(desc(firmCaseStudies.createdAt));
+  }
 
   // Count hidden separately
   const hiddenRows = includeHidden

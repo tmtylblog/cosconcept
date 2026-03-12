@@ -11,6 +11,37 @@ import { db } from "@/lib/db";
 import { firmServices, serviceFirms, members } from "@/lib/db/schema";
 import { randomBytes } from "crypto";
 
+// ─── Seed from enrichment data (silent, first-load only) ─
+async function seedServicesIfEmpty(firmId: string, organizationId: string) {
+  const [firmRow] = await db
+    .select({ enrichmentData: serviceFirms.enrichmentData, website: serviceFirms.website })
+    .from(serviceFirms)
+    .where(eq(serviceFirms.id, firmId))
+    .limit(1);
+
+  const extracted = (firmRow?.enrichmentData as Record<string, unknown> | null)?.extracted as Record<string, unknown> | null;
+  const discoveredServices = (extracted?.services as string[] | undefined) ?? [];
+  if (discoveredServices.length === 0) return;
+
+  const now = new Date();
+  await db.insert(firmServices).values(
+    discoveredServices.map((name, i) => ({
+      id: `svc_${Date.now().toString(36)}_${i.toString(36)}_${randomBytes(3).toString("hex")}`,
+      firmId,
+      organizationId,
+      name: name.trim(),
+      description: null,
+      sourceUrl: firmRow?.website ?? null,
+      sourcePageTitle: "Auto-discovered from website",
+      subServices: [] as string[],
+      isHidden: false,
+      displayOrder: i,
+      createdAt: now,
+      updatedAt: now,
+    }))
+  ).onConflictDoNothing();
+}
+
 export const dynamic = "force-dynamic";
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -64,7 +95,7 @@ export async function GET(req: NextRequest) {
     conditions.push(eq(firmServices.isHidden, false));
   }
 
-  const rows = await db
+  let rows = await db
     .select({
       id: firmServices.id,
       name: firmServices.name,
@@ -79,6 +110,26 @@ export async function GET(req: NextRequest) {
     .from(firmServices)
     .where(and(...conditions))
     .orderBy(asc(firmServices.displayOrder), asc(firmServices.createdAt));
+
+  // If empty, try seeding from enrichment data then re-fetch
+  if (rows.length === 0) {
+    await seedServicesIfEmpty(firm.id, organizationId);
+    rows = await db
+      .select({
+        id: firmServices.id,
+        name: firmServices.name,
+        description: firmServices.description,
+        sourceUrl: firmServices.sourceUrl,
+        sourcePageTitle: firmServices.sourcePageTitle,
+        subServices: firmServices.subServices,
+        isHidden: firmServices.isHidden,
+        displayOrder: firmServices.displayOrder,
+        createdAt: firmServices.createdAt,
+      })
+      .from(firmServices)
+      .where(and(...conditions))
+      .orderBy(asc(firmServices.displayOrder), asc(firmServices.createdAt));
+  }
 
   // Count hidden separately
   const hiddenRows = includeHidden
