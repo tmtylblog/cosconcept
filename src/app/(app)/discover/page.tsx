@@ -1,44 +1,68 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { ArrowRight, Building2, Sparkles, X, ExternalLink } from "lucide-react";
+import { useState } from "react";
+import { ArrowRight, Building2, User, BookOpen, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useDiscoverResults } from "@/hooks/use-discover-results";
-import { useActiveOrganization } from "@/lib/auth-client";
+import { useDiscoverResults, type DiscoverCandidate } from "@/hooks/use-discover-results";
 import { cn } from "@/lib/utils";
 
 // ─── Conversation starters ───────────────────────────────────
-// Clicking injects text into Ossy's chat via a custom event
+// Problem-framed prompts that inject into Ossy's chat via custom event
 
 const STARTERS = [
-  "Find me a Shopify agency in APAC",
-  "Who complements our services in B2B SaaS?",
-  "Looking for a fractional CFO to refer clients to",
-  "Find UX design partners for healthcare projects",
+  "We keep getting requests outside our core — we need referral partners",
+  "We're trying to break into a new industry but lack the credibility",
+  "I need to find firms who complement us for a bigger client pitch",
+  "We're a boutique losing deals to larger competitors — who can we team up with?",
 ];
 
 function injectIntoChat(text: string) {
-  // Dispatch a custom event the ChatPanel listens for
   window.dispatchEvent(new CustomEvent("cos:inject-chat", { detail: { text } }));
 }
 
-// ─── Match Card ──────────────────────────────────────────────
+// ─── Fit tier logic ───────────────────────────────────────────
 
-function MatchCard({
-  match,
-  onRequestPartnership,
-  requesting,
-  requested,
-  index,
-}: {
-  match: NonNullable<ReturnType<typeof useDiscoverResults>>["results"][number];
-  onRequestPartnership: (firmId: string) => void;
-  requesting: boolean;
-  requested: boolean;
-  index: number;
-}) {
-  const score = match.matchScore;
+type FitTier = "strong" | "good" | "exploring";
+
+function getFitTier(score: number): FitTier {
+  if (score >= 75) return "strong";
+  if (score >= 50) return "good";
+  return "exploring";
+}
+
+const FIT_TIER_CONFIG: Record<FitTier, { label: string; className: string }> = {
+  strong: {
+    label: "Strong Fit",
+    className: "border-green-200 bg-green-50 text-green-700",
+  },
+  good: {
+    label: "Good Fit",
+    className: "border-cos-electric/20 bg-cos-electric/5 text-cos-electric",
+  },
+  exploring: {
+    label: "Worth Exploring",
+    className: "border-cos-border bg-cos-cloud text-cos-slate",
+  },
+};
+
+// ─── Entity config ────────────────────────────────────────────
+
+const ENTITY_CONFIG = {
+  firm: { Icon: Building2, iconCls: "bg-cos-electric/10 text-cos-electric" },
+  expert: { Icon: User, iconCls: "bg-cos-warm/10 text-cos-warm" },
+  case_study: { Icon: BookOpen, iconCls: "bg-cos-signal/10 text-cos-signal" },
+} as const;
+
+// ─── Result Card ─────────────────────────────────────────────
+
+function ResultCard({ match, index }: { match: DiscoverCandidate; index: number }) {
+  const tier = getFitTier(match.matchScore);
+  const tierCfg = FIT_TIER_CONFIG[tier];
+  const entityCfg = ENTITY_CONFIG[match.entityType ?? "firm"];
+  const { Icon, iconCls } = entityCfg;
+
+  const profileUrl = `/discover/${match.firmId}${match.explanation ? `?context=${encodeURIComponent(match.explanation)}` : ""}`;
 
   return (
     <div
@@ -47,30 +71,30 @@ function MatchCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-cos-lg bg-cos-electric/10">
-            <Building2 className="h-5 w-5 text-cos-electric" />
+          <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-cos-lg", iconCls)}>
+            <Icon className="h-5 w-5" />
           </div>
           <div className="min-w-0">
             <h3 className="font-heading text-sm font-semibold text-cos-midnight truncate">
-              {match.firmName}
+              {match.displayName}
             </h3>
-            <p className="mt-0.5 text-xs text-cos-slate truncate">
-              {match.categories.slice(0, 2).join(" · ") || "Professional Services"}
-            </p>
+            {match.entityType === "firm" ? (
+              <p className="mt-0.5 text-xs text-cos-slate truncate">
+                {match.categories.slice(0, 2).join(" · ") || "Professional Services"}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-xs text-cos-slate truncate">{match.firmName}</p>
+            )}
           </div>
         </div>
-        <div
+        <span
           className={cn(
-            "shrink-0 inline-flex items-center rounded-cos-full px-2 py-0.5 text-xs font-medium",
-            score >= 80
-              ? "bg-green-100 text-green-700"
-              : score >= 60
-                ? "bg-cos-electric/10 text-cos-electric"
-                : "bg-cos-cloud text-cos-slate"
+            "shrink-0 inline-flex items-center rounded-cos-full border px-2.5 py-0.5 text-xs font-medium",
+            tierCfg.className
           )}
         >
-          {score}% match
-        </div>
+          {tierCfg.label}
+        </span>
       </div>
 
       {match.explanation && (
@@ -81,45 +105,30 @@ function MatchCard({
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {match.skills.slice(0, 4).map((skill) => (
-          <span
-            key={skill}
-            className="rounded-cos-full bg-cos-cloud px-2 py-0.5 text-xs text-cos-slate"
-          >
+          <span key={skill} className="rounded-cos-full bg-cos-cloud px-2 py-0.5 text-xs text-cos-slate">
             {skill}
           </span>
         ))}
         {match.industries.slice(0, 2).map((industry) => (
-          <span
-            key={industry}
-            className="rounded-cos-full bg-cos-warm/10 px-2 py-0.5 text-xs text-cos-warm"
-          >
+          <span key={industry} className="rounded-cos-full bg-cos-warm/10 px-2 py-0.5 text-xs text-cos-warm">
             {industry}
           </span>
         ))}
       </div>
 
-      <div className="mt-4 flex items-center gap-2">
+      <div className="mt-4">
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/discover/${match.firmId}`}>
+          <Link href={profileUrl}>
             View Profile
-            <ExternalLink className="ml-1 h-3 w-3" />
+            <ArrowRight className="ml-1 h-3 w-3" />
           </Link>
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={requested ? "text-cos-signal" : "text-cos-slate"}
-          disabled={requesting || requested}
-          onClick={() => onRequestPartnership(match.firmId)}
-        >
-          {requested ? "Requested ✓" : requesting ? "Requesting..." : "Request Partnership"}
         </Button>
       </div>
     </div>
   );
 }
 
-// ─── Skeleton Card ───────────────────────────────────────────
+// ─── Skeleton Card ────────────────────────────────────────────
 
 function SkeletonCard({ index }: { index: number }) {
   return (
@@ -133,7 +142,7 @@ function SkeletonCard({ index }: { index: number }) {
           <div className="h-4 w-36 rounded bg-cos-cloud" />
           <div className="h-3 w-24 rounded bg-cos-cloud" />
         </div>
-        <div className="h-5 w-16 rounded-full bg-cos-cloud" />
+        <div className="h-5 w-24 rounded-full bg-cos-cloud" />
       </div>
       <div className="mt-3 space-y-2">
         <div className="h-3 w-full rounded bg-cos-cloud" />
@@ -148,7 +157,7 @@ function SkeletonCard({ index }: { index: number }) {
   );
 }
 
-// ─── Empty / Idle State ──────────────────────────────────────
+// ─── Idle State ───────────────────────────────────────────────
 
 function IdleState() {
   return (
@@ -158,14 +167,14 @@ function IdleState() {
       </div>
 
       <h2 className="mt-5 font-heading text-lg font-bold text-cos-midnight">
-        Tell Ossy what you&apos;re looking for
+        I know this network inside out
       </h2>
       <p className="mt-2 max-w-sm text-sm text-cos-slate leading-relaxed">
-        Ask Ossy in the panel on the right. She&apos;ll ask a couple of questions
-        and find the best-fit partners from the network.
+        I understand the case studies, experts, and firms here — and I&apos;m standing by
+        to help. Tell me about a challenge you&apos;re facing or a problem you&apos;re
+        trying to solve, and I&apos;ll find the right people.
       </p>
 
-      {/* Arrow hint */}
       <div className="mt-6 flex items-center gap-2 rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-5 py-3">
         <span className="text-sm font-medium text-cos-electric">
           Start a conversation with Ossy
@@ -173,10 +182,9 @@ function IdleState() {
         <ArrowRight className="h-4 w-4 text-cos-electric" />
       </div>
 
-      {/* Conversation starters */}
       <div className="mt-6 w-full max-w-lg">
-        <p className="mb-3 text-xs font-medium text-cos-slate uppercase tracking-wide">
-          Try asking
+        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-cos-slate">
+          Try sharing a challenge
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {STARTERS.map((starter) => (
@@ -194,36 +202,10 @@ function IdleState() {
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────
 
 export default function DiscoverPage() {
   const discover = useDiscoverResults();
-  const { data: activeOrg } = useActiveOrganization();
-  const [requestingPartnership, setRequestingPartnership] = useState<string | null>(null);
-  const [partnershipRequested, setPartnershipRequested] = useState<Set<string>>(new Set());
-
-  const handleRequestPartnership = useCallback(
-    async (targetFirmId: string) => {
-      if (!activeOrg?.id) return;
-      const firmId = `firm_${activeOrg.id}`;
-      setRequestingPartnership(targetFirmId);
-      try {
-        const res = await fetch("/api/partnerships", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ firmId, targetFirmId }),
-        });
-        if (res.ok || res.status === 409) {
-          setPartnershipRequested((prev) => new Set(prev).add(targetFirmId));
-        }
-      } catch {
-        /* ignore */
-      } finally {
-        setRequestingPartnership(null);
-      }
-    },
-    [activeOrg?.id]
-  );
 
   if (!discover) return null;
 
@@ -236,16 +218,16 @@ export default function DiscoverPage() {
       <div className="flex items-start justify-between">
         <div>
           <h2 className="font-heading text-lg font-semibold text-cos-midnight">
-            Discover Partners
+            Discover
           </h2>
           {hasResults ? (
             <p className="mt-0.5 text-sm text-cos-slate">
-              {results.length} match{results.length === 1 ? "" : "es"}
+              {results.length} result{results.length === 1 ? "" : "s"}
               {searchQuery ? ` for "${searchQuery}"` : ""}
             </p>
           ) : (
             <p className="mt-0.5 text-sm text-cos-slate">
-              AI-powered partner matching — just ask Ossy →
+              Explore the network — tell Ossy about a challenge →
             </p>
           )}
         </div>
@@ -262,7 +244,7 @@ export default function DiscoverPage() {
         )}
       </div>
 
-      {/* Content area */}
+      {/* Content */}
       <div className="mt-6">
         {searching ? (
           <div className="space-y-3">
@@ -273,13 +255,10 @@ export default function DiscoverPage() {
         ) : hasResults ? (
           <div className="space-y-3">
             {results.map((match, i) => (
-              <MatchCard
-                key={match.firmId}
+              <ResultCard
+                key={`${match.entityType}-${match.entityId}-${i}`}
                 match={match}
                 index={i}
-                onRequestPartnership={handleRequestPartnership}
-                requesting={requestingPartnership === match.firmId}
-                requested={partnershipRequested.has(match.firmId)}
               />
             ))}
           </div>

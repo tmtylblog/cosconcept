@@ -66,6 +66,11 @@ Extract structured filters from the query. Map user intent to our taxonomy.
 - For industries: use standard industry names
 - For services: extract 1-3 word service phrases (e.g. "brand strategy", "SEO", "content marketing", "web development"). These are partial-matched against service listings so keep them short and specific.
 - For size: use "micro" (<10), "small" (10-50), "medium" (50-200), "large" (200+)
+- For entityType: detect if the user is explicitly looking for a specific type:
+  - "firm" — mentions agency, firm, company, consultancy, partner
+  - "expert" — mentions expert, consultant, specialist, freelancer, fractional, person, individual
+  - "case_study" — mentions case study, example, project, portfolio, proof, success story
+  - null — no strong signal (search all types)
 
 Only extract what the query explicitly or strongly implies. Don't over-extract.`,
       schema: z.object({
@@ -88,6 +93,10 @@ Only extract what the query explicitly or strongly implies. Don't over-extract.`
           .string()
           .optional()
           .describe("Firm size: micro, small, medium, large"),
+        entityType: z
+          .enum(["firm", "expert", "case_study"])
+          .optional()
+          .describe("Entity type the user is looking for, if explicitly stated"),
       }),
       maxOutputTokens: 256,
     });
@@ -122,6 +131,7 @@ Only extract what the query explicitly or strongly implies. Don't over-extract.`
       // Services are free-form — no taxonomy validation, matched via CONTAINS in Neo4j
       services: result.object.services ?? [],
       sizeBand: result.object.sizeBand,
+      entityType: result.object.entityType,
     };
   } catch (err) {
     console.error("[QueryParser] Parse failed:", err);

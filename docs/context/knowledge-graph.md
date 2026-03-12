@@ -8,6 +8,25 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 
 ---
 
+## Canonical Node Model: Company is the Base
+
+**`Company` is the single canonical node type for all organizations in the graph.** There is no separate `ServiceFirm` node type — `ServiceFirm` is an **additional role label** applied on top of `Company` to identify COS platform member firms.
+
+```
+:Company                        → any organization (8.55M+ nodes)
+:Company:ServiceFirm            → COS platform member firm (~1,050 nodes)
+```
+
+Platform member companies (`[:Company:ServiceFirm]`) are identified by:
+- Having the `ServiceFirm` label in addition to `Company`
+- `isCosCustomer: true` property
+- `neonId` property (UUID linking to the PostgreSQL `service_firms` table)
+- `enrichmentStatus: "enriched"` after enrichment pipeline completes
+
+**Never write queries that match only on `:ServiceFirm`**. Always use `:Company:ServiceFirm` or `:Company` depending on scope. The legacy codebase and some docs incorrectly refer to `ServiceFirm` as a standalone node type — the ground truth is multi-label `Company`.
+
+---
+
 ## Neo4j Driver Setup
 
 **File:** `src/lib/neo4j.ts`
@@ -33,7 +52,6 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 | `Expert` | `id` (composite: `firmId:name-slug`) | Individual professional. Properties: `fullName`, `headline`, `linkedinUrl`, `location`, `firmId`, `updatedAt` | Enrichment pipeline (graph-writer.ts) |
 | `SpecialistProfile` | `id` (generated) | AI-generated specialist niche profile for an expert. Properties: `title`, `firmId`, `expertId`, `updatedAt`. Only created for profiles with qualityScore >= 80. | expert-linkedin.ts |
 | `CaseStudy` | `id` (composite: `firmId:cs:index`) | Published case study. Properties: `title`, `description`, `sourceUrl`, `firmId`, `status` (pending/ingested), `outcomes[]`, `updatedAt` | graph-writer.ts, case-study-ingest.ts |
-| `Client` | `name` (unique) | Company served by firms. Platform-owned, not firm-owned. | graph-writer.ts |
 | `Service` | `name` (unique) | Named service offering extracted from firm websites. | graph-writer.ts (from Jina scrape) |
 
 ### Taxonomy/Reference Nodes
@@ -54,7 +72,6 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 |-------|-------------|-------------|--------|
 | `Organization` | `legacyId` | Old COS orgs. Properties: `name`, `legalName`, `about`, `website`, `linkedinUrl`, `employees`, `city`, `state`, `countryCode`, `isLegacy=true`, `isCollectiveOSCustomer` | neo4j-migrate-legacy.ts |
 | `User` | `legacyId` | Old COS users. Properties: `firstName`, `lastName`, `fullName`, `email`, `title`, `roles[]` | neo4j-migrate-legacy.ts |
-| `Company` | `legacyId` or `{sourceId, source}` | Client companies (legacy + imported). Properties: `name`, `website`, `employees`, `domain`, `industry`, `location`, `country`, `size`, `foundedYear`, `linkedinUrl`, `websiteUrl`, `revenue`, `isIcp`, `icpClassification`, `updatedAt` | neo4j-migrate-legacy.ts, sync-graph route |
 | `Person` | `{sourceId, source}` | Imported contacts. Properties: `name`, `firstName`, `lastName`, `email`, `title`, `linkedinUrl`, `city`, `state`, `country`, `expertClassification`, `updatedAt` | sync-graph route |
 | `LegacySkill` | `legacyId` | Old skill taxonomy nodes. Properties: `name`, `level` | neo4j-migrate-legacy.ts |
 | `ProfessionalService` | `legacyId` | Old professional service specializations. Properties: `name`, `level` | neo4j-migrate-legacy.ts |
@@ -87,7 +104,7 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 | `HAS_EXPERTISE` | SpecialistProfile | Skill | Expert LinkedIn enrichment |
 | `SERVES_INDUSTRY` | SpecialistProfile | Industry | Expert LinkedIn enrichment |
 | `DEMONSTRATES_SKILL` | CaseStudy | Skill | Case study ingest |
-| `FOR_CLIENT` | CaseStudy | Client | Case study ingest |
+| `FOR_CLIENT` | CaseStudy | Company | Case study ingest |
 | `IN_INDUSTRY` | CaseStudy | Industry | Case study ingest |
 
 ### Taxonomy Edges (neo4j-seed.ts)
@@ -250,7 +267,7 @@ firm_type_A -> [firm-relationships.csv lookup] -> firm_type_B
 
 The matching engine uses Neo4j as Layer 1 (structured filtering) in a three-layer cascade:
 
-1. **Layer 1 -- Neo4j** (`structured-filter.ts`): Cypher queries filter `Company:ServiceFirm` nodes by skills, categories, industries, markets. Returns ~500 candidates with structured match scores. Queries use `HAS_SKILL`, `IN_CATEGORY`, `SERVES_INDUSTRY`, `OPERATES_IN` edges.
+1. **Layer 1 -- Neo4j** (`structured-filter.ts`): Cypher queries filter `Company:ServiceFirm` nodes by skills, categories, industries, markets. Returns ~500 candidates with structured match scores. Queries use `HAS_SKILL`, `IN_CATEGORY`, `SERVES_INDUSTRY`, `OPERATES_IN` edges. Pattern: `MATCH (f:Company:ServiceFirm)` — never `MATCH (f:ServiceFirm)` alone.
 
 2. **Layer 2 -- pgvector**: Vector similarity re-ranking on abstraction profile embeddings (~50 candidates).
 

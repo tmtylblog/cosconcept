@@ -11,7 +11,7 @@
  */
 
 import { parseSearchQuery } from "./query-parser";
-import { structuredFilter, bidirectionalStructuredFilter, toMatchCandidates } from "./structured-filter";
+import { structuredFilter, bidirectionalStructuredFilter, toMatchCandidates, universalStructuredFilter } from "./structured-filter";
 import { pgStructuredFilter } from "./pg-structured-filter";
 import { vectorRerank } from "./vector-search";
 import { deepRank } from "./deep-ranker";
@@ -75,9 +75,8 @@ export async function executeSearch(params: {
     layer1Candidates = toMatchCandidates(biCandidates);
     layer1Count = biCandidates.length;
   } else {
-    const structuredCandidates = await structuredFilter(filters, 500);
-    layer1Candidates = toMatchCandidates(structuredCandidates);
-    layer1Count = structuredCandidates.length;
+    layer1Candidates = await universalStructuredFilter(filters, 500);
+    layer1Count = layer1Candidates.length;
   }
 
   // Step 3: Layer 2 — Vector similarity re-ranking

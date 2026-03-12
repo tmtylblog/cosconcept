@@ -157,7 +157,10 @@ const ONBOARDING_QUESTIONS_V1: { field: string; question: string }[] = [
 const ONBOARDING_QUESTIONS = ONBOARDING_QUESTIONS_V2;
 
 interface DiscoverResult {
+  entityType: "firm" | "expert" | "case_study";
+  entityId: string;
   firmId: string;
+  displayName: string;
   firmName: string;
   matchScore: number;
   explanation: string;
@@ -165,6 +168,7 @@ interface DiscoverResult {
   skills: string[];
   industries: string[];
   website?: string;
+  caseStudyCount?: number;
 }
 
 interface ChatPanelProps {
@@ -647,8 +651,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           }, 4000);
         }
 
-        // Handle search_partners tool results — push to discover panel if on /discover
-        if (toolName === "search_partners" && onSearchResults) {
+        // Handle discover_search tool results — push to discover panel if on /discover
+        if (toolName === "discover_search" && onSearchResults) {
           const output = (part as { output?: unknown }).output as
             | { candidates?: DiscoverResult[]; totalFound?: number }
             | undefined;
@@ -959,7 +963,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
                     // On the discover page, search_partners results go to the middle panel.
                     // Show a compact "results in panel" indicator instead of full card list.
-                    if (firmSection === "discover" && toolName === "search_partners") {
+                    if (firmSection === "discover" && toolName === "discover_search") {
                       if (toolPart.state === "output-available") {
                         const output = toolPart.output as { candidates?: unknown[]; totalFound?: number } | undefined;
                         const count = output?.candidates?.length ?? 0;

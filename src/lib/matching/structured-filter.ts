@@ -43,9 +43,11 @@ export async function structuredFilter(
   // Base: match all service-provider firms (Company nodes with ServiceFirm role label)
   const matchClause = "MATCH (f:Company:ServiceFirm)";
   const returnFields = [
-    "f.id AS firmId",
+    // Enrichment-pipeline nodes use f.id (firm_xxx), legacy nodes use f.neonId (UUID).
+    // Fallback to legacyOrgId for nodes with neither.
+    "coalesce(f.id, f.neonId, 'legacy:' + f.legacyOrgId) AS firmId",
     "f.name AS firmName",
-    "f.website AS website",
+    "coalesce(f.website, f.websiteUrl) AS website",
   ];
 
   // Skills filter
@@ -225,6 +227,9 @@ export function toMatchCandidates(
   candidates: StructuredCandidate[]
 ): MatchCandidate[] {
   return candidates.map((c) => ({
+    entityType: "firm" as const,
+    entityId: c.firmId,
+    displayName: c.firmName,
     firmId: c.firmId,
     firmName: c.firmName,
     totalScore: c.structuredScore,
@@ -455,4 +460,268 @@ export async function bidirectionalStructuredFilter(
   boosted.sort((a, b) => b.structuredScore - a.structuredScore);
 
   return boosted.slice(0, limit);
+}
+
+// ─── Universal Multi-Entity Filter ────────────────────────
+
+/**
+ * Layer 1: Universal structured filter across firms, experts, and case studies.
+ *
+ * Queries all three entity types in parallel and returns a unified, score-sorted list.
+ */
+export async function universalStructuredFilter(
+  filters: SearchFilters,
+  limit = 500
+): Promise<MatchCandidate[]> {
+  // If an entity type filter is set, only run that query
+  const et = filters.entityType;
+  const [firms, experts, caseStudies] = await Promise.all([
+    !et || et === "firm"
+      ? structuredFilter(filters, et ? limit : Math.ceil(limit * 0.5))
+      : Promise.resolve([] as ReturnType<typeof structuredFilter> extends Promise<infer T> ? T : never),
+    !et || et === "expert"
+      ? expertFilter(filters, et ? limit : Math.ceil(limit * 0.3))
+      : Promise.resolve([] as MatchCandidate[]),
+    !et || et === "case_study"
+      ? caseStudyFilter(filters, et ? limit : Math.ceil(limit * 0.2))
+      : Promise.resolve([] as MatchCandidate[]),
+  ]);
+
+  const all: MatchCandidate[] = [
+    ...toMatchCandidates(firms as StructuredCandidate[]),
+    ...(experts as MatchCandidate[]),
+    ...(caseStudies as MatchCandidate[]),
+  ];
+
+  all.sort((a, b) => b.structuredScore - a.structuredScore);
+  return all.slice(0, limit);
+}
+
+/**
+ * Query Person:Expert nodes with skill/industry/market matching.
+ * Only runs when at least one expert-relevant filter signal exists.
+ */
+async function expertFilter(
+  filters: SearchFilters,
+  limit: number
+): Promise<MatchCandidate[]> {
+  // No signals that apply to experts — skip entirely to avoid noise
+  const hasExpertSignals =
+    (filters.skills?.length ?? 0) > 0 ||
+    (filters.industries?.length ?? 0) > 0 ||
+    (filters.markets?.length ?? 0) > 0;
+
+  if (!hasExpertSignals) return [];
+
+  const params: Record<string, unknown> = { limit };
+  const conditions: string[] = [];
+
+  if (filters.skills?.length) {
+    conditions.push(
+      `EXISTS { MATCH (p)-[:HAS_SKILL|HAS_EXPERTISE]->(s:Skill) WHERE s.name IN $skills }`
+    );
+    params.skills = filters.skills;
+  }
+  if (filters.industries?.length) {
+    conditions.push(
+      `EXISTS { MATCH (p)-[:SERVES_INDUSTRY]->(i:Industry) WHERE i.name IN $industries }`
+    );
+    params.industries = filters.industries;
+  }
+  if (filters.markets?.length) {
+    conditions.push(
+      `EXISTS { MATCH (p)-[:OPERATES_IN]->(m:Market) WHERE m.name IN $markets }`
+    );
+    params.markets = filters.markets;
+  }
+
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const query = `
+    MATCH (p:Person)
+    WHERE p.enrichmentStatus <> "stub"
+    ${whereClause ? "AND " + whereClause.replace(/^WHERE /, "") : ""}
+    OPTIONAL MATCH (p)-[:WORKS_AT]->(sf:Company:ServiceFirm)
+    WITH p, sf,
+      [(p)-[:HAS_SKILL|HAS_EXPERTISE]->(s:Skill) | s.name][0..8] AS skills,
+      [(p)-[:SERVES_INDUSTRY]->(i:Industry) | i.name][0..5] AS industries,
+      [(p)-[:OPERATES_IN]->(m:Market) | m.name][0..5] AS markets,
+      [(p)-[:SPEAKS_LANGUAGE]->(l:Language) | l.name][0..3] AS languages,
+      size([(p)-[:HAS_SPECIALIST_PROFILE]->(:SpecialistProfile) | 1]) AS specialistProfileCount,
+      size([(p)-[:CONTRIBUTED_TO]->(:CaseStudy) | 1]) AS caseStudyCount,
+      [(p)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | sp.title][0] AS primarySpecialistTitle
+    RETURN
+      coalesce(p.id, p.legacyId) AS entityId,
+      coalesce(p.fullName, p.firstName + ' ' + p.lastName, p.name, 'Expert') AS displayName,
+      sf.name AS firmName,
+      skills,
+      industries,
+      markets,
+      languages,
+      specialistProfileCount,
+      caseStudyCount,
+      primarySpecialistTitle
+    LIMIT $limit
+  `;
+
+  interface ExpertRow {
+    entityId: string;
+    displayName: string;
+    firmName?: string;
+    skills: string[];
+    industries: string[];
+    markets: string[];
+    languages: string[];
+    specialistProfileCount: number;
+    caseStudyCount: number;
+    primarySpecialistTitle?: string;
+  }
+
+  const records = await neo4jRead<ExpertRow>(query, params);
+
+  return records.map((r) => {
+    // Score based on how many filter criteria matched
+    let score = 0;
+    let maxScore = 0;
+    if (filters.skills?.length) {
+      score += r.skills.filter((s) => filters.skills!.includes(s)).length / filters.skills.length;
+      maxScore += 1;
+    }
+    if (filters.industries?.length) {
+      score += r.industries.filter((i) => filters.industries!.includes(i)).length / filters.industries.length;
+      maxScore += 1;
+    }
+    if (filters.markets?.length) {
+      score += r.markets.filter((m) => filters.markets!.includes(m)).length / filters.markets.length;
+      maxScore += 1;
+    }
+    const structuredScore = maxScore > 0 ? score / maxScore : 0.4;
+
+    return {
+      entityType: "expert" as const,
+      entityId: r.entityId,
+      displayName: r.displayName,
+      firmId: r.entityId,
+      firmName: r.displayName,
+      totalScore: structuredScore,
+      structuredScore,
+      vectorScore: 0,
+      preview: {
+        categories: [],
+        topServices: [],
+        topSkills: r.skills,
+        industries: r.industries,
+        markets: r.markets,
+        subtitle: r.firmName,
+        firmName: r.firmName,
+        languages: r.languages,
+        specialistProfileCount: r.specialistProfileCount,
+        caseStudyCount: r.caseStudyCount,
+        primarySpecialistTitle: r.primarySpecialistTitle ?? undefined,
+      },
+    };
+  });
+}
+
+/**
+ * Query CaseStudy nodes matching skills and industries.
+ * Only runs when at least one case-study-relevant filter signal exists.
+ */
+async function caseStudyFilter(
+  filters: SearchFilters,
+  limit: number
+): Promise<MatchCandidate[]> {
+  const hasCaseStudySignals =
+    (filters.skills?.length ?? 0) > 0 ||
+    (filters.industries?.length ?? 0) > 0;
+
+  if (!hasCaseStudySignals) return [];
+
+  const params: Record<string, unknown> = { limit };
+  const conditions: string[] = [];
+
+  if (filters.skills?.length) {
+    conditions.push(
+      `EXISTS { MATCH (cs)-[:DEMONSTRATES_SKILL]->(s:Skill) WHERE s.name IN $skills }`
+    );
+    params.skills = filters.skills;
+  }
+  if (filters.industries?.length) {
+    conditions.push(
+      `EXISTS { MATCH (cs)-[:IN_INDUSTRY]->(i:Industry) WHERE i.name IN $industries }`
+    );
+    params.industries = filters.industries;
+  }
+
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const query = `
+    MATCH (cs:CaseStudy)
+    ${whereClause}
+    OPTIONAL MATCH (cs)<-[:HAS_CASE_STUDY]-(sf:Company:ServiceFirm)
+    WITH cs, sf,
+      [(cs)-[:DEMONSTRATES_SKILL]->(s:Skill) | s.name][0..8] AS skills,
+      [(cs)-[:IN_INDUSTRY]->(i:Industry) | i.name][0..5] AS industries,
+      size([(p:Person)-[:CONTRIBUTED_TO]->(cs) | 1]) AS contributorCount
+    RETURN
+      coalesce(cs.id, cs.legacyId) AS entityId,
+      coalesce(cs.title, cs.summary, 'Case Study') AS displayName,
+      sf.name AS firmName,
+      skills,
+      industries,
+      contributorCount
+    LIMIT $limit
+  `;
+
+  interface CaseStudyRow {
+    entityId: string;
+    displayName: string;
+    firmName?: string;
+    skills: string[];
+    industries: string[];
+    contributorCount: number;
+  }
+
+  const records = await neo4jRead<CaseStudyRow>(query, params);
+
+  return records.map((r) => {
+    let score = 0;
+    let maxScore = 0;
+    if (filters.skills?.length) {
+      score += r.skills.filter((s) => filters.skills!.includes(s)).length / filters.skills.length;
+      maxScore += 1;
+    }
+    if (filters.industries?.length) {
+      score += r.industries.filter((i) => filters.industries!.includes(i)).length / filters.industries.length;
+      maxScore += 1;
+    }
+    const structuredScore = maxScore > 0 ? score / maxScore : 0.3;
+
+    // Truncate long summaries used as displayName
+    const displayName = r.displayName?.length > 80
+      ? r.displayName.slice(0, 77) + "…"
+      : r.displayName;
+
+    return {
+      entityType: "case_study" as const,
+      entityId: r.entityId,
+      displayName,
+      firmId: r.entityId,
+      firmName: displayName,
+      totalScore: structuredScore,
+      structuredScore,
+      vectorScore: 0,
+      preview: {
+        categories: [],
+        topServices: [],
+        topSkills: r.skills,
+        industries: r.industries,
+        subtitle: r.firmName,
+        firmName: r.firmName,
+        contributorCount: r.contributorCount,
+      },
+    };
+  });
 }

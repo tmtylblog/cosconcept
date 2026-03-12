@@ -7,25 +7,47 @@ The knowledge graph is the backbone of COS CONCEPT. It maps the entire professio
 
 ---
 
+## Canonical Node Model
+
+**`Company` is the single base node type for all organizations.** There is no separate `ServiceFirm` node — `ServiceFirm` is a **role label** added on top of `Company` to identify COS platform members.
+
+```
+:Company                  → any organization in the graph (8.55M+ nodes)
+:Company:ServiceFirm      → COS platform member firm (~1,050 nodes)
+```
+
+All Cypher queries that target platform members must use `MATCH (f:Company:ServiceFirm)`, never `MATCH (f:ServiceFirm)` alone.
+
 ## Node Types
 
-### 1. ServiceFirm
-Represents an agency, consultancy, or professional services firm.
+### 1. Company (base node for all organizations)
+Represents any company — client, target, competitor, or platform member.
 
-**Properties:**
-- `firm_id` (unique)
+**Properties (all Company nodes):**
 - `name`
-- `website`
-- `description`
-- `founded_year`
-- `size_band` (enum: Individual Experts, Micro 1-10, Small 11-50, Emerging 51-200, Mid Sized 201-500, Upper Middle Market 501-1000, Large Enterprise 1001-5000, Major Enterprise 5001-10000, Global Corporation 10000+)
-- `firm_type` (enum: Fractional/Interim, Staff Augmentation, Embedded Teams, Boutique Agency, Project Based Consulting, Managed Service Provider, Advisory, Global Consulting, Freelancer Network, Agency Collective)
-- `headquarters_market` → Market node
-- `partnership_readiness_score` (computed)
-- `response_velocity` (avg time to respond to partnership requests)
-- `is_platform_member` (boolean — global vs claimed)
-- `profile_completeness` (percentage)
-- `claimed_by_user_id` (null if unclaimed)
+- `domain`
+- `websiteUrl`
+- `industry`
+- `size` / `employeeRange`
+- `location`, `country`, `countryCode`
+- `source` (prophet, n8n, pdl_work_history, self_registered, website_scrape)
+- `sourceOrigin` (CC, COS, Both)
+- `sourceId`, `sourceCompanyId`
+- `is_firm_icp` (boolean — is this an ICP for COS?)
+- `is_icp_cos` (boolean)
+- `neonId` (UUID — present only on platform members, links to PostgreSQL `service_firms.id`)
+- `updatedAt`
+
+**Additional properties on `Company:ServiceFirm` (platform members only):**
+- `id` (PG firm ID: `firm_xxx`)
+- `isCosCustomer: true`
+- `enrichmentStatus` (enriched / pending)
+- `employeeCount`
+- `partnershipPhilosophy`
+- `classifierConfidence`
+- `pdlIndustry`, `pdlHeadline`, `pdlLocation`
+- `logoUrl`
+- `legacyOrgId`, `legacyId`
 
 ### 2. Expert
 Represents an individual professional (employee, freelancer, fractional leader).

@@ -3,7 +3,10 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 
 export interface DiscoverCandidate {
+  entityType: "firm" | "expert" | "case_study";
+  entityId: string;
   firmId: string;
+  displayName: string;
   firmName: string;
   matchScore: number; // 0–100
   explanation: string;
@@ -11,7 +14,7 @@ export interface DiscoverCandidate {
   skills: string[];
   industries: string[];
   website?: string;
-  employeeCount?: number;
+  caseStudyCount?: number;
 }
 
 interface DiscoverState {

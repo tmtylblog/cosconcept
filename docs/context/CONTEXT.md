@@ -26,6 +26,7 @@
 | 18 | Roadmap & Status | [roadmap.md](roadmap.md) | Build phases, what's done, gaps, TODOs |
 | 19 | Growth Operations | [growth-ops.md](growth-ops.md) | Unipile/LinkedIn, Instantly, HubSpot, invite scheduler, attribution |
 | 20 | CRM & Acquisition | [crm-acquisition.md](crm-acquisition.md) | HubSpot sync, acquisition pipeline vs marketplace pipeline, attribution |
+| 21 | Discover Page | [discover.md](discover.md) | /discover route, search bar, drawer, entity APIs, merge conflict status |
 
 ## Rules for Claude Agents
 

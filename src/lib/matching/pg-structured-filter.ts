@@ -37,7 +37,9 @@ export async function pgStructuredFilter(
   limit = 500,
   excludeFirmId?: string,
 ): Promise<MatchCandidate[]> {
-  // Fetch all enriched firms (we search classification JSONB in-app for flexibility)
+  // Fetch all enriched firms and filter in JS for now.
+  // SCALE LIMIT: at ~10k+ firms this becomes a multi-MB fetch. Fix: push filters into
+  // PostgreSQL using JSONB GIN index on (enrichment_data->'classification') with @> operator.
   const conditions = [eq(serviceFirms.enrichmentStatus, "enriched")];
 
   if (excludeFirmId) {
@@ -167,6 +169,9 @@ export async function pgStructuredFilter(
 
   // Convert to MatchCandidate format
   return topCandidates.map((c) => ({
+    entityType: "firm" as const,
+    entityId: c.firmId,
+    displayName: c.firmName,
     firmId: c.firmId,
     firmName: c.firmName,
     totalScore: c.structuredScore,

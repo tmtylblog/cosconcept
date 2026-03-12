@@ -35,6 +35,8 @@ export interface SearchFilters {
   sizeBand?: string;
   /** Minimum match score threshold (0-1) */
   minScore?: number;
+  /** Restrict results to a specific entity type */
+  entityType?: "firm" | "expert" | "case_study";
 }
 
 // ─── Abstraction Profile ───────────────────────────────────
@@ -81,7 +83,15 @@ export interface AbstractionProfile {
 // ─── Match Result ──────────────────────────────────────────
 
 export interface MatchCandidate {
+  /** What kind of entity this result represents */
+  entityType: "firm" | "expert" | "case_study";
+  /** Neo4j node ID for the entity */
+  entityId: string;
+  /** Human-readable name / title */
+  displayName: string;
+  /** @deprecated use entityId — kept for backward compatibility */
   firmId: string;
+  /** @deprecated use displayName — kept for backward compatibility */
   firmName: string;
   /** Combined score from all layers */
   totalScore: number;
@@ -104,8 +114,23 @@ export interface MatchCandidate {
     topServices: string[];
     topSkills: string[];
     industries: string[];
+    markets?: string[];
+    /** For firm: website URL; for expert: firm they work at; for case_study: client name */
+    subtitle?: string;
     employeeCount?: number;
     website?: string;
+    /** Expert + firm: number of associated case studies */
+    caseStudyCount?: number;
+    /** Expert: number of specialist profiles */
+    specialistProfileCount?: number;
+    /** Expert: title from first specialist profile */
+    primarySpecialistTitle?: string;
+    /** Expert + case study: name of associated firm */
+    firmName?: string;
+    /** Expert: spoken languages */
+    languages?: string[];
+    /** Case study: number of contributing persons */
+    contributorCount?: number;
   };
 }
 

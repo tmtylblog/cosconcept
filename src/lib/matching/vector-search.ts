@@ -6,8 +6,7 @@
  * and each firm's abstraction profile embedding.
  *
  * Uses pgvector for efficient similarity search on Neon.
- * When pgvector is not yet enabled, falls back to scoring
- * based on text overlap.
+ * When a profile has no embedding, falls back to text overlap scoring.
  */
 
 import { db } from "@/lib/db";
@@ -94,16 +93,11 @@ export async function generateFirmEmbedding(
 /**
  * Layer 2: Re-rank candidates using vector similarity.
  *
- * For each candidate, computes cosine similarity between
- * the query embedding and the firm's abstraction embedding.
+ * Generates a query embedding, then computes cosine similarity against
+ * each candidate's stored abstraction profile embedding via pgvector.
  *
- * When pgvector is fully enabled, this uses SQL:
- *   SELECT * FROM abstraction_profiles
- *   WHERE entity_id = ANY($firmIds)
- *   ORDER BY embedding <=> $queryEmbedding
- *
- * Currently uses a text-based fallback since pgvector
- * columns need manual setup on Neon.
+ * For candidates with no embedding stored, falls back to text-overlap scoring.
+ * Final score: 60% structured score + 40% vector score.
  */
 export async function vectorRerank(
   candidates: MatchCandidate[],
@@ -173,7 +167,7 @@ export async function vectorRerank(
   const profiles = await db
     .select({ entityId: abstractionProfiles.entityId, hiddenNarrative: abstractionProfiles.hiddenNarrative })
     .from(abstractionProfiles)
-    .where(inArray(abstractionProfiles.id, entityIds));
+    .where(inArray(abstractionProfiles.id, absIds));
 
   const profileMap = new Map(profiles.map((p) => [p.entityId, p.hiddenNarrative]));
   const queryTerms = rawQuery.toLowerCase().split(/\s+/).filter((t) => t.length > 2);

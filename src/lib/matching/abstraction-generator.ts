@@ -199,7 +199,10 @@ Be specific and factual. Avoid generic language.`,
     },
   };
 
-  // Persist to database (all AI-generated fields)
+  // Generate embedding for the hidden narrative (powers cosine similarity in Layer 2)
+  const embeddingVector = await generateQueryEmbedding(profile.hiddenNarrative);
+
+  // Persist to database (all AI-generated fields + embedding)
   await db
     .insert(abstractionProfiles)
     .values({
@@ -214,6 +217,7 @@ Be specific and factual. Avoid generic language.`,
       partnershipReadiness: profile.partnershipReadiness,
       confidenceScores: profile.confidenceScores,
       evidenceSources: profile.evidenceSources,
+      embedding: embeddingVector.length > 0 ? embeddingVector : undefined,
       lastEnrichedAt: new Date(),
       enrichmentVersion: 1,
     })
@@ -228,6 +232,9 @@ Be specific and factual. Avoid generic language.`,
         partnershipReadiness: profile.partnershipReadiness,
         confidenceScores: profile.confidenceScores,
         evidenceSources: profile.evidenceSources,
+        embedding: embeddingVector.length > 0
+          ? sql`excluded.embedding`
+          : undefined,
         lastEnrichedAt: new Date(),
         enrichmentVersion: 1,
         updatedAt: new Date(),

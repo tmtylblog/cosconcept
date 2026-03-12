@@ -79,6 +79,59 @@ export function createOssyTools(organizationId: string, firmId?: string) {
       },
     }),
 
+    discover_search: tool({
+      description:
+        "Search the Collective OS knowledge graph for firms, experts, or case studies. " +
+        "Use when the user wants to find partners, experts, agencies, consultants, or see case study examples. " +
+        "Always use this tool when the user asks to find, search, or discover anything in the network — never say you can't search.",
+      inputSchema: z.object({
+        query: z.string().describe("Natural language search query, e.g. 'Shopify agency in APAC' or 'fractional CMO for SaaS'"),
+        entityType: z
+          .enum(["firm", "expert", "case_study"])
+          .optional()
+          .describe("Restrict to a specific entity type. Omit to search all types."),
+      }),
+      execute: async ({ query, entityType }) => {
+        try {
+          const result = await executeSearch({
+            rawQuery: query,
+            searcherFirmId: firmId,
+            explicitFilters: entityType ? { entityType } : undefined,
+            skipLlmRanking: false,
+          });
+
+          const candidates = result.candidates.slice(0, 8).map((c) => ({
+            entityType: c.entityType,
+            entityId: c.entityId,
+            firmId: c.firmId,
+            displayName: c.displayName,
+            firmName: c.firmName ?? c.preview.firmName ?? c.preview.subtitle ?? c.displayName,
+            matchScore: Math.round(c.totalScore * 100),
+            explanation: c.matchExplanation ?? "",
+            categories: c.preview.categories.slice(0, 3),
+            skills: c.preview.topSkills.slice(0, 5),
+            industries: c.preview.industries.slice(0, 3),
+            website: c.preview.website ?? undefined,
+            caseStudyCount: c.preview.caseStudyCount ?? undefined,
+          }));
+
+          return {
+            success: true,
+            query,
+            totalFound: result.candidates.length,
+            candidates,
+            stats: {
+              durationMs: result.stats.totalDurationMs,
+              layer1: result.stats.layer1Candidates,
+            },
+          };
+        } catch (err) {
+          console.error("[Ossy] discover_search failed:", err);
+          return { success: false, error: String(err), candidates: [] };
+        }
+      },
+    }),
+
     update_profile: tool({
       description:
         "Update the user's firm profile or partner preferences when they confirm a data point. " +

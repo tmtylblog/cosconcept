@@ -16,6 +16,7 @@ COS CONCEPT (Collective OS) is a growth platform for professional services firms
 ## Critical Context
 - This is a SEPARATE project from Sanctum SOS. They are completely unrelated.
 - All project documentation is in the `docs/` folder
+- **Neo4j node model:** `Company` is the canonical base node for ALL organizations. COS platform member firms are `[:Company:ServiceFirm]` multi-label nodes — never use `MATCH (f:ServiceFirm)` alone. Always `MATCH (f:Company:ServiceFirm)`. There is no standalone `ServiceFirm` node type.
 - All reference data is in the `data/` folder
 - Read `docs/ARCHITECTURE.md` for the full technical architecture plan
 - Read `docs/PRODUCT-VISION.md` for detailed feature descriptions

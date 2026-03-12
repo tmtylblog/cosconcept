@@ -41,17 +41,40 @@ export async function deepRank(input: RankingInput): Promise<MatchCandidate[]> {
 
   if (candidates.length === 0) return [];
 
-  // Build candidate summaries for the LLM
+  // Build entity-aware candidate summaries for the LLM
   const candidateSummaries = candidates
     .slice(0, 50)
-    .map(
-      (c, i) =>
-        `[${i}] ${c.firmName} (ID: ${c.firmId})
+    .map((c, i) => {
+      const type = c.entityType ?? "firm";
+      if (type === "expert") {
+        const sp = c.preview.specialistProfileCount ?? 0;
+        const cs = c.preview.caseStudyCount ?? 0;
+        const title = c.preview.primarySpecialistTitle ?? "";
+        const firm = c.preview.firmName ?? c.preview.subtitle ?? "";
+        return `[${i}] EXPERT: ${c.displayName}${title ? ` (${title})` : ""}${firm ? ` @ ${firm}` : ""}
+Skills: ${c.preview.topSkills.join(", ") || "N/A"}
+Industries: ${c.preview.industries.join(", ") || "N/A"}
+Markets: ${c.preview.markets?.join(", ") || "N/A"}
+Evidence: ${sp} specialist profile${sp !== 1 ? "s" : ""}, ${cs} case stud${cs !== 1 ? "ies" : "y"}
+Pre-score: ${c.totalScore.toFixed(2)}`;
+      }
+      if (type === "case_study") {
+        const contrib = c.preview.contributorCount ?? 0;
+        const firm = c.preview.firmName ?? c.preview.subtitle ?? "";
+        return `[${i}] CASE STUDY: "${c.displayName}"${firm ? ` by ${firm}` : ""}
+Skills Demonstrated: ${c.preview.topSkills.join(", ") || "N/A"}
+Industries: ${c.preview.industries.join(", ") || "N/A"}
+Contributors: ${contrib}
+Pre-score: ${c.totalScore.toFixed(2)}`;
+      }
+      // firm (default)
+      const cs = c.preview.caseStudyCount ?? 0;
+      return `[${i}] FIRM: ${c.displayName}
 Categories: ${c.preview.categories.join(", ") || "N/A"}
 Skills: ${c.preview.topSkills.join(", ") || "N/A"}
 Industries: ${c.preview.industries.join(", ") || "N/A"}
-Pre-score: ${c.totalScore.toFixed(2)}`
-    )
+${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
+    })
     .join("\n\n");
 
   const searcherContext = searcherProfile
@@ -86,8 +109,11 @@ ${candidateSummaries}
    - weWantThem: how much the searcher would want this candidate (0-1)
 4. Give each a final llmScore (0-1) combining relevance + bidirectional fit
 
-Focus on COMPLEMENTARY capabilities — firms that fill gaps, not duplicates.
-Prioritize firms that have PROVEN work in the relevant areas (case studies > claims).`,
+Results may include FIRMS, EXPERTS, and CASE STUDIES — rank all together by relevance.
+Focus on COMPLEMENTARY capabilities — entities that fill gaps, not duplicates.
+For experts: weight case study evidence > specialist profiles > listed skills.
+For case studies: weight demonstrated skills and industry match.
+For firms: weight proven work (case studies) over self-described categories.`,
       schema: z.object({
         rankedMatches: z.array(
           z.object({
