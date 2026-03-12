@@ -167,7 +167,7 @@ export async function vectorRerank(
   const profiles = await db
     .select({ entityId: abstractionProfiles.entityId, hiddenNarrative: abstractionProfiles.hiddenNarrative })
     .from(abstractionProfiles)
-    .where(inArray(abstractionProfiles.id, absIds));
+    .where(inArray(abstractionProfiles.id, entityIds));
 
   const profileMap = new Map(profiles.map((p) => [p.entityId, p.hiddenNarrative]));
   const queryTerms = rawQuery.toLowerCase().split(/\s+/).filter((t) => t.length > 2);

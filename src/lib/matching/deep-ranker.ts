@@ -102,18 +102,19 @@ ${searcherContext}
 ${candidateSummaries}
 
 ## INSTRUCTIONS
-1. Rank the top ${topK} candidates by relevance to the search query
-2. For each, provide a 1-2 sentence explanation of WHY this is a good match
+1. ALWAYS return the top ${topK} candidates — never return an empty list, even if matches are imperfect
+2. For each, provide a 1-2 sentence explanation of WHY this could be relevant (honest about fit quality)
 3. Score bidirectional fit:
    - theyWantUs: how much the candidate would want to partner with the searcher (0-1)
    - weWantThem: how much the searcher would want this candidate (0-1)
-4. Give each a final llmScore (0-1) combining relevance + bidirectional fit
+4. Give each a final llmScore (0-1) — use lower scores (0.2-0.4) for partial matches rather than excluding them
 
 Results may include FIRMS, EXPERTS, and CASE STUDIES — rank all together by relevance.
 Focus on COMPLEMENTARY capabilities — entities that fill gaps, not duplicates.
 For experts: weight case study evidence > specialist profiles > listed skills.
 For case studies: weight demonstrated skills and industry match.
-For firms: weight proven work (case studies) over self-described categories.`,
+For firms: weight proven work (case studies) over self-described categories.
+IMPORTANT: Always return something. A partial match with a low score is better than no result.`,
       schema: z.object({
         rankedMatches: z.array(
           z.object({
@@ -172,6 +173,13 @@ For firms: weight proven work (case studies) over self-described categories.`,
 
     // Sort by final score
     rankedCandidates.sort((a, b) => b.totalScore - a.totalScore);
+
+    // Safety net: if LLM returned 0 matches despite having candidates, fall back to Layer 2
+    if (rankedCandidates.length === 0 && candidates.length > 0) {
+      console.warn("[DeepRanker] LLM returned 0 matches — falling back to Layer 2 results");
+      return candidates.slice(0, topK);
+    }
+
     return rankedCandidates.slice(0, topK);
   } catch (err) {
     console.error("[DeepRanker] LLM ranking failed:", err);
