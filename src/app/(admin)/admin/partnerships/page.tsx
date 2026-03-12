@@ -41,6 +41,8 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> =
   inactive: { bg: "bg-cos-slate/8", text: "text-cos-slate-dim", dot: "bg-cos-slate-dim" },
 };
 
+const PAGE_SIZE = 100;
+
 export default function AdminPartnershipsPage() {
   const [partnerships, setPartnerships] = useState<Partnership[]>([]);
   const [stats, setStats] = useState<PartnershipStats | null>(null);
@@ -48,6 +50,7 @@ export default function AdminPartnershipsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [introSending, setIntroSending] = useState<string | null>(null);
   const [introFeedback, setIntroFeedback] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
 
   async function sendIntro(partnershipId: string) {
     setIntroSending(partnershipId);
@@ -87,6 +90,9 @@ export default function AdminPartnershipsPage() {
     statusFilter === "all"
       ? partnerships
       : partnerships.filter((p) => p.status === statusFilter);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   if (loading) {
     return (
@@ -174,7 +180,7 @@ export default function AdminPartnershipsPage() {
         {["all", "suggested", "requested", "accepted", "declined"].map((s) => (
           <button
             key={s}
-            onClick={() => setStatusFilter(s)}
+            onClick={() => { setStatusFilter(s); setPage(1); }}
             className={`rounded-cos-md px-3.5 py-1.5 text-xs font-medium capitalize transition-all ${
               statusFilter === s
                 ? "bg-cos-surface text-cos-midnight shadow-sm"
@@ -216,7 +222,7 @@ export default function AdminPartnershipsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-cos-border/60">
-            {filtered.map((p) => {
+            {paginated.map((p) => {
               const style = STATUS_STYLES[p.status] ?? STATUS_STYLES.inactive;
               return (
                 <tr
@@ -294,6 +300,32 @@ export default function AdminPartnershipsPage() {
             )}
           </tbody>
         </table>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
+            <span className="text-xs text-cos-slate">
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="text-xs text-cos-slate">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

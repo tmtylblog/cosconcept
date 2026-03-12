@@ -97,6 +97,8 @@ const PHASE_COLORS: Record<string, string> = {
   deep_crawl: "bg-orange-100 text-orange-700",
 };
 
+const PAGE_SIZE = 100;
+
 /* ── Component ────────────────────────────────────────────────────── */
 
 export default function CustomersPage() {
@@ -115,7 +117,10 @@ export default function CustomersPage() {
   const [pendingPlan, setPendingPlan] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
+  const [companyPage, setCompanyPage] = useState(1);
+
   // ── Users tab state ──
+  const [userPage, setUserPage] = useState(1);
   const [customerUsers, setCustomerUsers] = useState<CustomerUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersLoaded, setUsersLoaded] = useState(false);
@@ -398,7 +403,7 @@ export default function CustomersPage() {
                 type="text"
                 placeholder="Search companies..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setCompanyPage(1); }}
                 className="w-full rounded-cos-lg border border-cos-border bg-white py-2 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
               />
             </div>
@@ -413,7 +418,7 @@ export default function CustomersPage() {
               ).map(({ key, label }) => (
                 <button
                   key={key}
-                  onClick={() => setFilterStatus(key)}
+                  onClick={() => { setFilterStatus(key); setCompanyPage(1); }}
                   className={`rounded-cos-pill px-3 py-1.5 text-xs font-medium transition-colors ${
                     filterStatus === key
                       ? "bg-cos-electric text-white"
@@ -438,7 +443,9 @@ export default function CustomersPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {filtered.map((org) => {
+              {filtered
+                .slice((companyPage - 1) * PAGE_SIZE, companyPage * PAGE_SIZE)
+                .map((org) => {
                 const isExpanded = expandedOrg === org.id;
                 const details = orgDetails[org.id];
                 const isLoadingDetails = detailsLoading === org.id;
@@ -688,6 +695,18 @@ export default function CustomersPage() {
                   </div>
                 );
               })}
+              {Math.ceil(filtered.length / PAGE_SIZE) > 1 && (
+                <div className="flex items-center justify-between rounded-cos-lg border border-cos-border bg-white px-5 py-3">
+                  <span className="text-xs text-cos-slate">
+                    Showing {(companyPage - 1) * PAGE_SIZE + 1}–{Math.min(companyPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setCompanyPage((p) => Math.max(1, p - 1))} disabled={companyPage === 1} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Previous</button>
+                    <span className="text-xs text-cos-slate">Page {companyPage} of {Math.ceil(filtered.length / PAGE_SIZE)}</span>
+                    <button onClick={() => setCompanyPage((p) => Math.min(Math.ceil(filtered.length / PAGE_SIZE), p + 1))} disabled={companyPage === Math.ceil(filtered.length / PAGE_SIZE)} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Next</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>
@@ -703,7 +722,7 @@ export default function CustomersPage() {
               type="text"
               placeholder="Search users by name, email, or company..."
               value={userSearch}
-              onChange={(e) => setUserSearch(e.target.value)}
+              onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
               className="w-full rounded-cos-lg border border-cos-border bg-white py-2.5 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
             />
             {userSearch && (
@@ -754,7 +773,9 @@ export default function CustomersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cos-border/60">
-                  {filteredUsers.map((user) => (
+                  {filteredUsers
+                    .slice((userPage - 1) * PAGE_SIZE, userPage * PAGE_SIZE)
+                    .map((user) => (
                     <tr
                       key={user.id}
                       className="transition-colors hover:bg-cos-electric/[0.02]"
@@ -854,6 +875,18 @@ export default function CustomersPage() {
                   ))}
                 </tbody>
               </table>
+              {Math.ceil(filteredUsers.length / PAGE_SIZE) > 1 && (
+                <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
+                  <span className="text-xs text-cos-slate">
+                    Showing {(userPage - 1) * PAGE_SIZE + 1}–{Math.min(userPage * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setUserPage((p) => Math.max(1, p - 1))} disabled={userPage === 1} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Previous</button>
+                    <span className="text-xs text-cos-slate">Page {userPage} of {Math.ceil(filteredUsers.length / PAGE_SIZE)}</span>
+                    <button onClick={() => setUserPage((p) => Math.min(Math.ceil(filteredUsers.length / PAGE_SIZE), p + 1))} disabled={userPage === Math.ceil(filteredUsers.length / PAGE_SIZE)} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Next</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>

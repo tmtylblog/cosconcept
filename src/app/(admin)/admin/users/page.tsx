@@ -69,10 +69,13 @@ const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
   admin: { bg: "bg-cos-electric/10", text: "text-cos-electric" },
 };
 
+const PAGE_SIZE = 100;
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [impersonating, setImpersonating] = useState<string | null>(null);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [expertProfiles, setExpertProfiles] = useState<
@@ -182,6 +185,9 @@ export default function AdminUsersPage() {
       )
     : users;
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   if (loading) {
     return (
       <div className="space-y-6 animate-pulse">
@@ -237,7 +243,7 @@ export default function AdminUsersPage() {
         <input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search staff by name or email..."
           className="w-full rounded-cos-xl border border-cos-border bg-cos-surface py-3 pl-11 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light transition-colors focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
         />
@@ -275,7 +281,7 @@ export default function AdminUsersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-cos-border/60">
-            {filtered.map((user) => {
+            {paginated.map((user) => {
               const isExpanded = expandedUserId === user.id;
               const expertData = expertProfiles[user.id];
               const roleColor =
@@ -544,6 +550,32 @@ export default function AdminUsersPage() {
             )}
           </tbody>
         </table>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
+            <span className="text-xs text-cos-slate">
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="text-xs text-cos-slate">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

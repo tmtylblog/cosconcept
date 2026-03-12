@@ -72,6 +72,8 @@ interface AbstractionStats {
 
 // ─── Main Page ──────────────────────────────────────────────
 
+const PAGE_SIZE = 100;
+
 export default function AdminSearchPage() {
   // Search tool state
   const [query, setQuery] = useState("");
@@ -88,6 +90,7 @@ export default function AdminSearchPage() {
   const [abstractionsLoading, setAbstractionsLoading] = useState(false);
   const [showMissingOnly, setShowMissingOnly] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [absPage, setAbsPage] = useState(1);
 
   // ─── Search handlers ──────────────────────────────────────
 
@@ -426,7 +429,9 @@ export default function AdminSearchPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-cos-border">
-                {abstractions.map((firm) => {
+                {abstractions
+                  .slice((absPage - 1) * PAGE_SIZE, absPage * PAGE_SIZE)
+                  .map((firm) => {
                   const overallConf = firm.confidenceScores?.overall;
                   const isRegen = regeneratingId === firm.firmId;
                   return (
@@ -491,6 +496,21 @@ export default function AdminSearchPage() {
                 })}
               </tbody>
             </table>
+            {abstractions.length > PAGE_SIZE && (() => {
+              const totalPages = Math.ceil(abstractions.length / PAGE_SIZE);
+              return (
+                <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
+                  <span className="text-xs text-cos-slate">
+                    Showing {(absPage - 1) * PAGE_SIZE + 1}–{Math.min(absPage * PAGE_SIZE, abstractions.length)} of {abstractions.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setAbsPage((p) => Math.max(1, p - 1))} disabled={absPage === 1} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Previous</button>
+                    <span className="text-xs text-cos-slate">Page {absPage} of {totalPages}</span>
+                    <button onClick={() => setAbsPage((p) => Math.min(totalPages, p + 1))} disabled={absPage === totalPages} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Next</button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 

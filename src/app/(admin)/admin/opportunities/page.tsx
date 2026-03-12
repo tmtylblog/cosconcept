@@ -117,11 +117,15 @@ function StatCard({
   );
 }
 
+const PAGE_SIZE = 100;
+
 export default function AdminOpportunitiesPage() {
   const router = useRouter();
   const [data, setData] = useState<OppData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>("30d");
+  const [oppPage, setOppPage] = useState(1);
+  const [leadPage, setLeadPage] = useState(1);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -329,7 +333,9 @@ export default function AdminOpportunitiesPage() {
                       ))}
                     </tr>
                   ))
-                : (data?.recentOpportunities ?? []).map((opp) => (
+                : (data?.recentOpportunities ?? [])
+                    .slice((oppPage - 1) * PAGE_SIZE, oppPage * PAGE_SIZE)
+                    .map((opp) => (
                     <tr
                       key={opp.id}
                       className="cursor-pointer hover:bg-cos-cloud/30"
@@ -375,6 +381,22 @@ export default function AdminOpportunitiesPage() {
             </tbody>
           </table>
         </div>
+        {(data?.recentOpportunities.length ?? 0) > PAGE_SIZE && (() => {
+          const total = data?.recentOpportunities.length ?? 0;
+          const totalPages = Math.ceil(total / PAGE_SIZE);
+          return (
+            <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
+              <span className="text-xs text-cos-slate">
+                Showing {(oppPage - 1) * PAGE_SIZE + 1}–{Math.min(oppPage * PAGE_SIZE, total)} of {total}
+              </span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setOppPage((p) => Math.max(1, p - 1))} disabled={oppPage === 1} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Previous</button>
+                <span className="text-xs text-cos-slate">Page {oppPage} of {totalPages}</span>
+                <button onClick={() => setOppPage((p) => Math.min(totalPages, p + 1))} disabled={oppPage === totalPages} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Next</button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Recent Leads table */}
@@ -410,7 +432,9 @@ export default function AdminOpportunitiesPage() {
                       ))}
                     </tr>
                   ))
-                : (data?.recentLeads ?? []).map((lead) => (
+                : (data?.recentLeads ?? [])
+                    .slice((leadPage - 1) * PAGE_SIZE, leadPage * PAGE_SIZE)
+                    .map((lead) => (
                     <tr key={lead.id} className="hover:bg-cos-cloud/30">
                       <td className="px-4 py-3">
                         <p className="max-w-[200px] truncate font-medium text-cos-midnight">{lead.title}</p>
@@ -447,6 +471,22 @@ export default function AdminOpportunitiesPage() {
             </tbody>
           </table>
         </div>
+        {(data?.recentLeads.length ?? 0) > PAGE_SIZE && (() => {
+          const total = data?.recentLeads.length ?? 0;
+          const totalPages = Math.ceil(total / PAGE_SIZE);
+          return (
+            <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
+              <span className="text-xs text-cos-slate">
+                Showing {(leadPage - 1) * PAGE_SIZE + 1}–{Math.min(leadPage * PAGE_SIZE, total)} of {total}
+              </span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setLeadPage((p) => Math.max(1, p - 1))} disabled={leadPage === 1} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Previous</button>
+                <span className="text-xs text-cos-slate">Page {leadPage} of {totalPages}</span>
+                <button onClick={() => setLeadPage((p) => Math.min(totalPages, p + 1))} disabled={leadPage === totalPages} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Next</button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

@@ -174,10 +174,13 @@ function TranscriptRow({ t }: { t: Transcript }) {
   );
 }
 
+const PAGE_SIZE = 100;
+
 export default function AdminCallsPage() {
   const [data, setData] = useState<TranscriptData | null>(null);
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState<"all" | "manual" | "recall">("all");
+  const [page, setPage] = useState(1);
 
   const fetchData = async (src: typeof source) => {
     setLoading(true);
@@ -244,7 +247,7 @@ export default function AdminCallsPage() {
             key={s}
             variant={source === s ? "default" : "outline"}
             size="sm"
-            onClick={() => setSource(s)}
+            onClick={() => { setSource(s); setPage(1); }}
             className="capitalize"
           >
             {s === "recall" ? "Recall.ai" : s}
@@ -272,6 +275,7 @@ export default function AdminCallsPage() {
             </p>
           </div>
         ) : (
+          <>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--cos-border)] bg-slate-50/50">
@@ -300,11 +304,43 @@ export default function AdminCallsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--cos-border)]">
-              {data.transcripts.map((t) => (
-                <TranscriptRow key={t.id} t={t} />
-              ))}
+              {data.transcripts
+                .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+                .map((t) => (
+                  <TranscriptRow key={t.id} t={t} />
+                ))}
             </tbody>
           </table>
+          {data.transcripts.length > PAGE_SIZE && (() => {
+            const totalPages = Math.ceil(data.transcripts.length / PAGE_SIZE);
+            return (
+              <div className="flex items-center justify-between border-t border-[var(--cos-border)] px-5 py-3">
+                <span className="text-xs text-[var(--cos-text-muted)]">
+                  Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, data.transcripts.length)} of {data.transcripts.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="rounded-lg border border-[var(--cos-border)] px-3 py-1.5 text-xs font-medium text-[var(--cos-text-muted)] transition-colors hover:bg-slate-50 disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs text-[var(--cos-text-muted)]">
+                    Page {page} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="rounded-lg border border-[var(--cos-border)] px-3 py-1.5 text-xs font-medium text-[var(--cos-text-muted)] transition-colors hover:bg-slate-50 disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+          </>
         )}
       </div>
     </div>

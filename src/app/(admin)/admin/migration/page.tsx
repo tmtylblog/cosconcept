@@ -105,6 +105,8 @@ function StatCard({
 
 type JobStatus = "idle" | "running" | "done" | "error";
 
+const PAGE_SIZE = 100;
+
 export default function MigrationDashboard() {
   const [stats, setStats] = useState<MigrationStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -112,6 +114,7 @@ export default function MigrationDashboard() {
   const [syncing, setSyncing] = useState<string | null>(null);
   const [jobStatuses, setJobStatuses] = useState<Record<string, JobStatus>>({});
   const [jobResults, setJobResults] = useState<Record<string, string>>({});
+  const [batchPage, setBatchPage] = useState(1);
 
   async function runTrackAJob(jobId: string) {
     setJobStatuses((s) => ({ ...s, [jobId]: "running" }));
@@ -433,7 +436,9 @@ export default function MigrationDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {stats.batches.map((b, i) => (
+                {stats.batches
+                  .slice((batchPage - 1) * PAGE_SIZE, batchPage * PAGE_SIZE)
+                  .map((b, i) => (
                   <tr
                     key={i}
                     className="border-b border-cos-border/10 last:border-0"
@@ -474,6 +479,21 @@ export default function MigrationDashboard() {
                 ))}
               </tbody>
             </table>
+            {stats.batches.length > PAGE_SIZE && (() => {
+              const totalPages = Math.ceil(stats.batches.length / PAGE_SIZE);
+              return (
+                <div className="flex items-center justify-between border-t border-cos-border/20 px-5 py-3">
+                  <span className="text-xs text-cos-midnight/50">
+                    Showing {(batchPage - 1) * PAGE_SIZE + 1}–{Math.min(batchPage * PAGE_SIZE, stats.batches.length)} of {stats.batches.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setBatchPage((p) => Math.max(1, p - 1))} disabled={batchPage === 1} className="rounded-lg border border-cos-border/30 px-3 py-1.5 text-xs font-medium text-cos-midnight/50 transition-colors hover:bg-cos-cloud/50 disabled:opacity-40">Previous</button>
+                    <span className="text-xs text-cos-midnight/50">Page {batchPage} of {totalPages}</span>
+                    <button onClick={() => setBatchPage((p) => Math.min(totalPages, p + 1))} disabled={batchPage === totalPages} className="rounded-lg border border-cos-border/30 px-3 py-1.5 text-xs font-medium text-cos-midnight/50 transition-colors hover:bg-cos-cloud/50 disabled:opacity-40">Next</button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

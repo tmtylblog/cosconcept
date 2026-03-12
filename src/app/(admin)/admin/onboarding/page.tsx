@@ -234,10 +234,13 @@ function SessionStatusBadge({ session }: { session: RecentSession }) {
 
 // ─── Main Page ────────────────────────────────────────
 
+const PAGE_SIZE = 100;
+
 export default function AdminOnboardingPage() {
   const [data, setData] = useState<OnboardingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>("30d");
+  const [sessionsPage, setSessionsPage] = useState(1);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -593,7 +596,9 @@ export default function AdminOnboardingPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-cos-border/50">
-                {data.recentSessions.map((s, i) => (
+                {data.recentSessions
+                  .slice((sessionsPage - 1) * PAGE_SIZE, sessionsPage * PAGE_SIZE)
+                  .map((s, i) => (
                   <tr key={`${s.domain}-${i}`} className="text-cos-midnight">
                     <td className="py-2 pr-4 font-medium">{s.domain}</td>
                     <td className="py-2 pr-4">
@@ -651,6 +656,35 @@ export default function AdminOnboardingPage() {
                 ))}
               </tbody>
             </table>
+            {data.recentSessions.length > PAGE_SIZE && (() => {
+              const totalPages = Math.ceil(data.recentSessions.length / PAGE_SIZE);
+              return (
+                <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
+                  <span className="text-xs text-cos-slate">
+                    Showing {(sessionsPage - 1) * PAGE_SIZE + 1}–{Math.min(sessionsPage * PAGE_SIZE, data.recentSessions.length)} of {data.recentSessions.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSessionsPage((p) => Math.max(1, p - 1))}
+                      disabled={sessionsPage === 1}
+                      className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs text-cos-slate">
+                      Page {sessionsPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setSessionsPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={sessionsPage === totalPages}
+                      className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <p className="text-center text-sm text-cos-slate py-8">
