@@ -259,7 +259,8 @@ type TabId =
   | "activity"
   | "billing"
   | "partnerships"
-  | "admin";
+  | "admin"
+  | "communications";
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <BarChart3 className="h-4 w-4" /> },
@@ -269,6 +270,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" /> },
   { id: "partnerships", label: "Partnerships", icon: <Handshake className="h-4 w-4" /> },
   { id: "admin", label: "Admin", icon: <Shield className="h-4 w-4" /> },
+  { id: "communications", label: "Communications", icon: <Mail className="h-4 w-4" /> },
 ];
 
 const PLAN_COLORS: Record<string, string> = {
@@ -415,6 +417,27 @@ export default function CustomerDetailPage() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingLoaded, setBillingLoaded] = useState(false);
 
+  // Communications (Customer.io) state
+  const [commsData, setCommsData] = useState<{
+    messages: Array<{
+      id: string;
+      recipient: string;
+      subject: string;
+      type: string;
+      campaign_id: number | null;
+      created: number;
+      metrics: Record<string, number | undefined>;
+      failure_message: string | null;
+      userEmail: string;
+      userName: string;
+    }>;
+    configured: boolean;
+    found: number;
+    total: number;
+  } | null>(null);
+  const [commsLoading, setCommsLoading] = useState(false);
+  const [commsLoaded, setCommsLoaded] = useState(false);
+
   const [impersonating, setImpersonating] = useState<string | null>(null);
 
   // Expert roster state
@@ -509,6 +532,20 @@ export default function CustomerDetailPage() {
       .catch(console.error)
       .finally(() => setBillingLoading(false));
   }, [activeTab, billingLoaded, orgId]);
+
+  // Lazy load communications (Customer.io)
+  useEffect(() => {
+    if (activeTab !== "communications" || commsLoaded) return;
+    setCommsLoading(true);
+    fetch(`/api/admin/customers/${orgId}/communications`)
+      .then((r) => r.json())
+      .then((d) => {
+        setCommsData(d);
+        setCommsLoaded(true);
+      })
+      .catch(console.error)
+      .finally(() => setCommsLoading(false));
+  }, [activeTab, commsLoaded, orgId]);
 
   // Lazy load experts when Users & Team tab is active
   const loadExperts = useCallback(() => {
@@ -2445,6 +2482,106 @@ export default function CustomerDetailPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ── COMMUNICATIONS TAB ── */}
+        {activeTab === "communications" && (
+          <div className="space-y-5">
+            {commsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+              </div>
+            ) : !commsData?.configured ? (
+              <div className="rounded-cos-lg border border-cos-border bg-white p-10 text-center">
+                <Mail className="mx-auto h-8 w-8 text-cos-slate-light" />
+                <p className="mt-3 text-sm font-medium text-cos-midnight">Customer.io not configured</p>
+                <p className="mt-1 text-xs text-cos-slate">Set CUSTOMERIO_APP_API_KEY to enable communications history.</p>
+              </div>
+            ) : (
+              <>
+                {/* Summary bar */}
+                <div className="flex items-center gap-4 rounded-cos-lg border border-cos-border bg-white px-5 py-3">
+                  <Mail className="h-4 w-4 text-cos-electric shrink-0" />
+                  <p className="text-sm text-cos-slate">
+                    <span className="font-semibold text-cos-midnight">{commsData.messages.length}</span> emails found
+                    {commsData.found > 0 && (
+                      <> across <span className="font-semibold text-cos-midnight">{commsData.found}</span> of{" "}
+                      <span className="font-semibold text-cos-midnight">{commsData.total}</span> members matched in Customer.io</>
+                    )}
+                  </p>
+                  {commsData.found === 0 && (
+                    <span className="ml-auto rounded-cos-pill bg-cos-cloud px-2.5 py-0.5 text-[10px] font-medium text-cos-slate">
+                      No CIO records for this org's members
+                    </span>
+                  )}
+                </div>
+
+                {commsData.messages.length === 0 ? (
+                  <div className="rounded-cos-lg border border-cos-border bg-white p-10 text-center">
+                    <Mail className="mx-auto h-8 w-8 text-cos-slate-light" />
+                    <p className="mt-3 text-sm font-medium text-cos-midnight">No messages found</p>
+                    <p className="mt-1 text-xs text-cos-slate">
+                      {commsData.found === 0
+                        ? "None of this org's members have a Customer.io record yet."
+                        : "No emails have been sent to this org's members."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-cos-lg border border-cos-border bg-white overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-cos-border bg-cos-cloud/40">
+                          <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-cos-slate">Subject</th>
+                          <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-cos-slate">Recipient</th>
+                          <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-cos-slate">Status</th>
+                          <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-wider text-cos-slate">Sent</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-cos-border">
+                        {commsData.messages.map((msg) => {
+                          const m = msg.metrics;
+                          const failed = !!msg.failure_message || m.bounced || m.failed;
+                          const opened = m.human_opened || m.opened;
+                          const delivered = m["secondary:delivered"] || m.delivered;
+                          const status = failed ? "failed" : opened ? "opened" : delivered ? "delivered" : m.sent ? "sent" : "queued";
+                          const statusColors: Record<string, string> = {
+                            opened: "bg-emerald-100 text-emerald-700",
+                            delivered: "bg-cos-electric/10 text-cos-electric",
+                            sent: "bg-cos-cloud text-cos-slate",
+                            queued: "bg-cos-cloud text-cos-slate-light",
+                            failed: "bg-cos-ember/10 text-cos-ember",
+                          };
+                          return (
+                            <tr key={msg.id} className="hover:bg-cos-cloud/30 transition-colors">
+                              <td className="px-4 py-3">
+                                <p className="max-w-md truncate font-medium text-cos-midnight text-sm">
+                                  {msg.subject || <span className="text-cos-slate-light italic">No subject</span>}
+                                </p>
+                                {msg.campaign_id && (
+                                  <p className="text-[10px] text-cos-slate mt-0.5">Campaign #{msg.campaign_id}</p>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <p className="text-xs text-cos-midnight">{msg.userEmail}</p>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-block rounded-cos-pill px-2 py-0.5 text-[10px] font-semibold uppercase ${statusColors[status]}`}>
+                                  {status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-xs text-cos-slate whitespace-nowrap">
+                                {formatDateTime(new Date(msg.created * 1000).toISOString())}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>

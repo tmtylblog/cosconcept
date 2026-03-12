@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>[COS CONCEPT] Partnership Accepted</title>
+</head>
+<body style="margin:0;padding:0;background:#F8FAFC;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;">
+<tr><td align="center" style="padding:32px 16px;">
+
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;border:1px solid #E2E8F0;">
+
+  <!-- Header — signal green stripe for success -->
+  <tr>
+    <td style="background:#0A0F1E;padding:4px 0 0;">
+      <div style="height:4px;background:linear-gradient(90deg,#10B981,#2563EB);"></div>
+    </td>
+  </tr>
+  <tr>
+    <td style="background:#0A0F1E;padding:24px 40px 20px;">
+      <span style="font-size:16px;font-weight:700;color:#FFFFFF;">Collective OS</span>
+    </td>
+  </tr>
+
+  <!-- Hero -->
+  <tr>
+    <td style="background:#0A0F1E;padding:8px 40px 36px;">
+      <p style="margin:0;font-size:13px;font-weight:600;color:#10B981;text-transform:uppercase;letter-spacing:1px;">Partnership confirmed</p>
+      <p style="margin:8px 0 0;font-size:26px;font-weight:700;color:#FFFFFF;line-height:1.3;letter-spacing:-0.4px;">
+        {{data.firm_name | default: "Your firm"}} ×<br>
+        {{data.partner_name | default: "Your new partner"}}
+      </p>
+      <p style="margin:12px 0 0;font-size:14px;color:#94A3B8;line-height:1.6;">
+        Both sides have accepted. Your shared workspace is ready.
+      </p>
+    </td>
+  </tr>
+
+  <!-- Body -->
+  <tr>
+    <td style="background:#FFFFFF;padding:32px 40px;">
+
+      <!-- Firms -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+        <tr>
+          <td style="width:45%;border:1px solid #E2E8F0;border-radius:12px;padding:16px;text-align:center;vertical-align:top;">
+            <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);text-align:center;line-height:40px;font-size:16px;font-weight:700;color:#2563EB;margin:0 auto 10px;">
+              {{data.firm_name | truncate: 1, "" | upcase | default: "Y"}}
+            </div>
+            <p style="margin:0;font-size:13px;font-weight:600;color:#0A0F1E;">{{data.firm_name | default: "Your Firm"}}</p>
+          </td>
+          <td style="width:10%;text-align:center;vertical-align:middle;font-size:18px;color:#94A3B8;">↔</td>
+          <td style="width:45%;border:1px solid #E2E8F0;border-radius:12px;padding:16px;text-align:center;vertical-align:top;">
+            <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#F0FDF4,#DCFCE7);text-align:center;line-height:40px;font-size:16px;font-weight:700;color:#10B981;margin:0 auto 10px;">
+              {{data.partner_name | truncate: 1, "" | upcase | default: "P"}}
+            </div>
+            <p style="margin:0;font-size:13px;font-weight:600;color:#0A0F1E;">{{data.partner_name | default: "Partner Firm"}}</p>
+          </td>
+        </tr>
+      </table>
+
+      <!-- What's in the workspace -->
+      <p style="margin:0 0 16px;font-size:13px;font-weight:600;color:#0A0F1E;">Your shared workspace includes:</p>
+
+      <!-- Feature list -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+        <tr>
+          <td style="padding:8px 0;border-bottom:1px solid #F1F5F9;">
+            <table role="presentation" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="color:#10B981;font-size:14px;width:20px;vertical-align:top;">✓</td>
+                <td style="padding-left:10px;font-size:14px;color:#374151;">Shared messaging thread with full history</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;border-bottom:1px solid #F1F5F9;">
+            <table role="presentation" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="color:#10B981;font-size:14px;width:20px;vertical-align:top;">✓</td>
+                <td style="padding-left:10px;font-size:14px;color:#374151;">Referral tracking — log opportunities you pass each other</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;border-bottom:1px solid #F1F5F9;">
+            <table role="presentation" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="color:#10B981;font-size:14px;width:20px;vertical-align:top;">✓</td>
+                <td style="padding-left:10px;font-size:14px;color:#374151;">Joint opportunity board — collaborate on shared pitches</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="color:#10B981;font-size:14px;width:20px;vertical-align:top;">✓</td>
+                <td style="padding-left:10px;font-size:14px;color:#374151;">Ossy available as a shared advisor in your workspace</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- CTA -->
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="border-radius:10px;background:#10B981;">
+            <a href="{{data.workspace_url | default: 'https://cos-concept.vercel.app/dashboard'}}" style="display:inline-block;padding:14px 28px;font-size:14px;font-weight:600;color:#FFFFFF;text-decoration:none;">
+              Open your shared workspace →
+            </a>
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+
+  <!-- Footer -->
+  <tr>
+    <td style="background:#F1F5F9;padding:20px 40px;border-top:1px solid #E2E8F0;">
+      <p style="margin:0;font-size:12px;color:#94A3B8;line-height:1.6;">
+        Partnerships on Collective OS are private and voluntary — either party can end a partnership at any time.<br>
+        <a href="{{unsubscribe_url}}" style="color:#64748B;text-decoration:underline;">Manage notification preferences</a>
+        &nbsp;·&nbsp;
+        <a href="https://joincollectiveos.com" style="color:#64748B;text-decoration:underline;">joincollectiveos.com</a>
+      </p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+
+</body>
+</html>

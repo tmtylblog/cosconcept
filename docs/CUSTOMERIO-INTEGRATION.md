@@ -61,6 +61,44 @@ These are plain boolean attributes. Campaigns in Customer.io should filter on th
 
 ---
 
+## Phase 1b — Communications History in Admin (Live)
+
+**What's built:**
+- `GET /api/admin/customers/[orgId]/communications` — fetches Customer.io message history for all org members
+- New "Communications" tab on the admin customer detail page
+- Shows subject, recipient, status (queued/sent/delivered/opened/failed), and sent time
+- Status derived from `metrics` timestamps in the message object
+
+**How it works:**
+1. Looks up each org member's `cio_id` via `GET /v1/customers?email=...`
+2. Calls `GET /v1/customers/{cio_id}/messages` for each CIO customer found (parallel)
+3. Merges all messages, sorted newest-first, capped at 200 total
+
+---
+
+## Phase 1c — Email Template Designs (Ready to import)
+
+Five COS-branded email templates have been designed in `docs/email-templates/`. These follow COS
+design principles: dark midnight header, electric blue CTAs, clean white body, Liquid variables.
+
+**Templates:**
+| File | Customer.io name | Status |
+|------|-----------------|--------|
+| `welcome.html` | `[COS CONCEPT] Welcome to Collective OS` | Ready to paste |
+| `new-match.html` | `[COS CONCEPT] New Match Alert` | Ready to paste |
+| `partnership-request.html` | `[COS CONCEPT] Partnership Request` | Ready to paste |
+| `partnership-accepted.html` | `[COS CONCEPT] Partnership Accepted` | Ready to paste |
+| `weekly-digest.html` | `[COS CONCEPT] Weekly Digest` | Ready to paste |
+
+**API limitation note:** Customer.io's App API does not expose template creation endpoints
+(`POST /v1/transactional` returns 404). Templates must be created manually in the Customer.io UI:
+> Journeys → Content → Transactional Messages → New → paste HTML → set queue_drafts = true
+
+**DO NOT connect a trigger** to any `[COS CONCEPT]` template until the account owner has reviewed it
+and explicitly approved the send criteria.
+
+---
+
 ## Phase 2 — Subscription Topics (Planned)
 
 Customer.io has a native **Subscription Topics** system that is more structured than raw attributes. When ready:
@@ -162,15 +200,32 @@ All of these require the Track API (or Pipelines API) to be activated. **This mu
 src/
 ├── lib/
 │   └── customerio.ts                        # App API client (Phase 1 live)
+│                                            # - getCioCustomerByEmail(email)
+│                                            # - getNotificationPreferences(email)
+│                                            # - updateNotificationPreferences(email, prefs)
+│                                            # - getCioMessages(cioId)
 ├── app/
 │   ├── (app)/settings/notifications/
 │   │   └── page.tsx                         # Notification preference toggles
+│   ├── (admin)/admin/customers/[orgId]/
+│   │   └── page.tsx                         # "Communications" tab added
 │   └── api/
 │       ├── settings/notifications/
 │       │   └── route.ts                     # GET + PATCH preferences
+│       ├── admin/customers/[orgId]/
+│       │   └── communications/
+│       │       └── route.ts                 # GET message history for org members
 │       └── webhooks/
 │           └── customerio/                  # Phase 5 — not yet built
 │               └── route.ts
+docs/
+└── email-templates/
+    ├── README.md                            # Instructions + design system
+    ├── welcome.html                         # [COS CONCEPT] Welcome to Collective OS
+    ├── new-match.html                       # [COS CONCEPT] New Match Alert
+    ├── partnership-request.html             # [COS CONCEPT] Partnership Request
+    ├── partnership-accepted.html            # [COS CONCEPT] Partnership Accepted
+    └── weekly-digest.html                   # [COS CONCEPT] Weekly Digest
 ```
 
 ---

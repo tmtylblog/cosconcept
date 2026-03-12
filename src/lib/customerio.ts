@@ -17,11 +17,32 @@ function authHeader() {
 }
 
 export interface CioCustomer {
-  id: string;
+  id: string;       // customer's external ID (may be empty)
+  cio_id: string;   // Customer.io internal ID — use this for /customers/{cio_id}/messages
   email: string;
   attributes: Record<string, unknown>;
   // Subscription preferences stored as attributes:
   // pref_new_matches, pref_partnership_updates, pref_weekly_digest, pref_product_updates
+}
+
+export interface CioMessage {
+  id: string;
+  recipient: string;
+  subject: string;
+  type: string;         // "email" | "push" | "sms" etc.
+  campaign_id: number | null;
+  created: number;      // Unix timestamp
+  metrics: {
+    sent?: number;
+    delivered?: number;
+    opened?: number;
+    human_opened?: number;
+    "secondary:delivered"?: number;
+    bounced?: number;
+    failed?: number;
+    unsubscribed?: number;
+  };
+  failure_message: string | null;
 }
 
 export interface NotificationPreferences {
@@ -50,11 +71,11 @@ export async function getCioCustomerByEmail(email: string): Promise<CioCustomer 
   if (!res.ok) return null;
 
   const data = await res.json() as {
-    results?: { id: string; email: string; attributes: Record<string, unknown> }[];
+    results?: { id: string; cio_id: string; email: string; attributes: Record<string, unknown> }[];
   };
   const customer = data.results?.[0];
   if (!customer) return null;
-  return customer;
+  return { ...customer, cio_id: customer.cio_id ?? customer.id };
 }
 
 /**
@@ -123,4 +144,20 @@ export async function updateNotificationPreferences(
   }
 
   return { ok: true };
+}
+
+/**
+ * Get messages sent to a specific Customer.io customer.
+ * Uses the customer's cio_id (internal ID) — not the external customer id.
+ * Returns up to 50 most recent messages. Safe: read-only App API call.
+ */
+export async function getCioMessages(cioId: string): Promise<CioMessage[]> {
+  const res = await fetch(
+    `${BASE}/customers/${encodeURIComponent(cioId)}/messages?limit=50`,
+    { headers: authHeader() }
+  );
+  if (!res.ok) return [];
+
+  const data = await res.json() as { messages?: CioMessage[] };
+  return data.messages ?? [];
 }
