@@ -8,16 +8,15 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { after } from "next/server";
 import { headers } from "next/headers";
 import { eq, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { expertProfiles, serviceFirms } from "@/lib/db/schema";
 import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob } from "@/lib/jobs/runner";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300; // 5 minutes — PDL enrichment can be slow
 
 export async function POST(
   _req: NextRequest,
@@ -101,8 +100,12 @@ export async function POST(
       { priority: 10 } // High priority for manual enrichment
     );
 
-    // Trigger job worker immediately (runs after response is sent)
-    after(runNextJob().catch(() => {}));
+    // Fire-and-forget: trigger worker as a separate serverless function
+    const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
+    fetch(`${baseUrl}/api/jobs/worker`, {
+      method: "POST",
+      headers: { "x-jobs-secret": process.env.JOBS_SECRET || "" },
+    }).catch((err) => console.error("[ExpertEnrich] Failed to trigger worker:", err));
 
     return NextResponse.json({
       jobId,

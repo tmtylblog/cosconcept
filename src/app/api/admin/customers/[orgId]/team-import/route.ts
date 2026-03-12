@@ -13,16 +13,15 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { after } from "next/server";
 import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serviceFirms } from "@/lib/db/schema";
 import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob } from "@/lib/jobs/runner";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300; // 5 minutes — team-ingest can be slow
 
 function extractDomain(website: string): string {
   return website
@@ -96,8 +95,13 @@ export async function POST(
       { priority: 5 } // Higher priority than batch jobs
     );
 
-    // Trigger job worker immediately (runs after response is sent)
-    after(runNextJob().catch(() => {}));
+    // Fire-and-forget: trigger worker as a separate serverless function
+    // More reliable than after() which shares this function's timeout
+    const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
+    fetch(`${baseUrl}/api/jobs/worker`, {
+      method: "POST",
+      headers: { "x-jobs-secret": process.env.JOBS_SECRET || "" },
+    }).catch((err) => console.error("[TeamImport] Failed to trigger worker:", err));
 
     return NextResponse.json({
       jobId,

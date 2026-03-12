@@ -35,6 +35,10 @@ const envSchema = z.object({
   STRIPE_ENTERPRISE_MONTHLY_PRICE_ID: z.string().optional(),
   STRIPE_ENTERPRISE_YEARLY_PRICE_ID: z.string().optional(),
 
+  // Jobs / Cron
+  JOBS_SECRET: z.string().optional(),
+  CRON_SECRET: z.string().optional(),
+
   // Optional in Phase 0, required later
   OPENAI_API_KEY: z.string().optional(),
   GOOGLE_AI_API_KEY: z.string().optional(),

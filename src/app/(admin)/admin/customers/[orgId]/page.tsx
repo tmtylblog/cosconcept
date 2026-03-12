@@ -234,6 +234,9 @@ interface TeamImportStatus {
   jobId?: string;
   jobStatus?: string;
   jobError?: string;
+  jobResult?: Record<string, unknown>;
+  startedAt?: string | null;
+  completedAt?: string | null;
   searchResults: {
     total: number;
     experts: number;
@@ -525,6 +528,25 @@ export default function CustomerDetailPage() {
     loadExperts();
   }, [activeTab, expertsLoaded, loadExperts]);
 
+  // Auto-check import status when Users tab loads (picks up in-progress imports)
+  useEffect(() => {
+    if (activeTab !== "users" || importPolling || importStatus) return;
+    fetch(`/api/admin/customers/${orgId}/team-import/status`)
+      .then((r) => r.json())
+      .then((status: TeamImportStatus) => {
+        if (status.phase && status.phase !== "idle") {
+          setImportStatus(status);
+          // Resume polling if still in progress
+          if (status.phase === "queued" || status.phase === "searching" || status.phase === "enriching") {
+            setImportPolling(true);
+            pollImportStatus();
+          }
+        }
+      })
+      .catch(() => {}); // Silently fail — not critical
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, orgId]);
+
   // Add expert handler
   async function handleAddExpert() {
     if (!addExpertForm.firstName && !addExpertForm.lastName) return;
@@ -609,17 +631,18 @@ export default function CustomerDetailPage() {
     }
   }
 
-  async function handleTeamImport(tier: "free" | "pro") {
+  async function handleTeamImport(tier: "free" | "pro", force = false) {
     setImportLoading(true);
     setShowImportConfirm(null);
     try {
       const res = await fetch(`/api/admin/customers/${orgId}/team-import`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier, force: false }),
+        body: JSON.stringify({ tier, force }),
       });
       if (res.ok) {
         // Start polling for status
+        setImportStatus(null); // Reset previous status
         setImportPolling(true);
         pollImportStatus();
       }
@@ -1408,21 +1431,54 @@ export default function CustomerDetailPage() {
                     <h4 className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
                       Import Progress
                     </h4>
-                    <span className={`inline-flex items-center gap-1.5 rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
-                      importStatus?.phase === "done" ? "bg-emerald-50 text-emerald-600" :
-                      importStatus?.phase === "error" ? "bg-cos-ember/10 text-cos-ember" :
-                      "bg-cos-electric/10 text-cos-electric"
-                    }`}>
-                      {importPolling && <Loader2 className="h-3 w-3 animate-spin" />}
-                      {importStatus?.phase === "done" ? "Complete" :
-                       importStatus?.phase === "error" ? "Error" :
-                       importStatus?.phase === "enriching" ? "Enriching..." :
-                       importStatus?.phase === "searching" ? "Searching..." :
-                       importStatus?.phase === "queued" ? "Queued..." : importStatus?.phase}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1.5 rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
+                        importStatus?.phase === "done" ? "bg-emerald-50 text-emerald-600" :
+                        importStatus?.phase === "error" ? "bg-cos-ember/10 text-cos-ember" :
+                        "bg-cos-electric/10 text-cos-electric"
+                      }`}>
+                        {importPolling && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {importStatus?.phase === "done" ? "Complete" :
+                         importStatus?.phase === "error" ? "Error" :
+                         importStatus?.phase === "enriching" ? "Enriching..." :
+                         importStatus?.phase === "searching" ? "Searching..." :
+                         importStatus?.phase === "queued" ? "Queued..." : importStatus?.phase}
+                      </span>
+                      {/* Retry button for stuck/failed jobs */}
+                      {(importStatus?.phase === "error" || importStatus?.phase === "queued") && !importLoading && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] px-2"
+                          onClick={() => handleTeamImport("free", true)}
+                        >
+                          <Zap className="h-3 w-3 mr-1" />
+                          Retry
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
-                  {importStatus?.searchResults && (
+                  {/* Debug info for queued/error states */}
+                  {importStatus?.phase === "queued" && (
+                    <div className="mb-2 flex items-start gap-2 rounded bg-amber-50 p-2">
+                      <Clock className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                      <div className="text-[10px] text-amber-700">
+                        <p>Job is waiting to be processed.</p>
+                        {importStatus.jobStatus && (
+                          <p className="text-amber-600/70 mt-0.5">
+                            DB status: {importStatus.jobStatus}
+                            {importStatus.startedAt && <> | Last started: {new Date(importStatus.startedAt).toLocaleTimeString()}</>}
+                          </p>
+                        )}
+                        {importStatus.jobError && (
+                          <p className="text-cos-ember mt-0.5">Last error: {importStatus.jobError}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {importStatus?.searchResults && importStatus.searchResults.total > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2">
                       <span className="rounded-cos-pill bg-white border border-cos-border px-2.5 py-1 text-[10px]">
                         <span className="font-semibold text-cos-midnight">{importStatus.searchResults.total}</span>{" "}
@@ -1468,6 +1524,13 @@ export default function CustomerDetailPage() {
                       <AlertCircle className="h-3.5 w-3.5 text-cos-ember mt-0.5 shrink-0" />
                       <p className="text-[10px] text-cos-ember">{importStatus.jobError}</p>
                     </div>
+                  )}
+
+                  {/* Job ID for debugging */}
+                  {importStatus?.jobId && (
+                    <p className="mt-2 text-[9px] text-cos-slate/50 font-mono">
+                      Job: {importStatus.jobId}
+                    </p>
                   )}
                 </div>
               )}
