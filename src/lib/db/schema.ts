@@ -8,6 +8,7 @@ import {
   real,
   pgEnum,
   customType,
+  uniqueIndex,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
@@ -1476,6 +1477,60 @@ export const engagementTypeEnum = pgEnum("engagement_type", [
   "advisor",
   "board",
   "embedded",
+]);
+
+// ─── Network Scan ────────────────────────────────────────────────────────────
+
+/**
+ * networkConnections — OAuth tokens for Gmail/Outlook network scanning.
+ * One row per user per provider. Separate from Better Auth accounts table
+ * so login OAuth and scanning OAuth have independent scope/token lifecycles.
+ */
+export const networkConnections = pgTable("network_connections", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").notNull(),
+  provider: text("provider").notNull(), // "google" | "microsoft"
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  expiresAt: timestamp("expires_at"),
+  scope: text("scope"),
+  providerEmail: text("provider_email"), // which email account was connected
+  lastScanAt: timestamp("last_scan_at"),
+  scanStatus: text("scan_status").default("idle"), // idle | scanning | done | error
+  scanError: text("scan_error"),
+  emailsProcessed: integer("emails_processed").default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * networkRelationships — scored relationship between a user's org and a firm domain.
+ * Populated by the network-scan background job after processing email headers.
+ */
+export const networkRelationships = pgTable("network_relationships", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  organizationId: text("organization_id").notNull(),
+  firmDomain: text("firm_domain").notNull(),
+  firmName: text("firm_name").notNull(),
+  firmId: text("firm_id"), // null if firm is not yet on COS
+  firmWebsite: text("firm_website"),
+  tier: text("tier").notNull(), // "weak" | "fair" | "strong"
+  strength: real("strength").notNull().default(0),
+  emailCount: integer("email_count").default(0),
+  sentCount: integer("sent_count").default(0),
+  receivedCount: integer("received_count").default(0),
+  lastContactAt: timestamp("last_contact_at"),
+  bidirectional: boolean("bidirectional").default(false),
+  provider: text("provider").notNull(), // "google" | "microsoft"
+  scannedAt: timestamp("scanned_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("net_rel_user_domain_provider_idx").on(t.userId, t.firmDomain, t.provider),
 ]);
 
 export const preferenceSourceEnum = pgEnum("preference_source", [

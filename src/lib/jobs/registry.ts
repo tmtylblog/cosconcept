@@ -10,6 +10,10 @@ export type JobHandler = (payload: Record<string, unknown>) => Promise<unknown>;
 type HandlerLoader = () => Promise<JobHandler>;
 
 const registry: Record<string, HandlerLoader> = {
+  // ── Network scan ─────────────────────────────────────
+  "network-scan": () =>
+    import("./handlers/network-scan").then((m) => m.handleNetworkScan),
+
   // ── Enrichment pipeline ──────────────────────────────
   "team-ingest": () =>
     import("./handlers/team-ingest").then((m) => m.handleTeamIngest),

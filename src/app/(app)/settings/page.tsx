@@ -8,6 +8,7 @@ import {
   User,
   Bell,
   Shield,
+  Network,
   ChevronRight,
 } from "lucide-react";
 import { useActiveOrganization } from "@/lib/auth-client";
@@ -43,6 +44,12 @@ const settingSections = [
     label: "Security",
     description: "Password, two-factor, and API keys",
     href: "/settings/security",
+  },
+  {
+    icon: Network,
+    label: "Scan My Network",
+    description: "Discover who you know in the industry",
+    href: "/settings/network",
   },
 ];
 
