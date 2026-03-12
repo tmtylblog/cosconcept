@@ -34,7 +34,8 @@ export default function LinkedInAccountsPage() {
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
-    const d = await fetch("/api/admin/growth-ops/linkedin-accounts").then((r) => r.json());
+    // ?sync=true imports any Unipile accounts not yet in our DB
+    const d = await fetch("/api/admin/growth-ops/linkedin-accounts?sync=true").then((r) => r.json());
     setAccounts(d.accounts ?? []);
     if (!silent) setLoading(false); else setRefreshing(false);
   }, []);

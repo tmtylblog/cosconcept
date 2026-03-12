@@ -41,14 +41,39 @@ export async function POST(req: NextRequest) {
   const event = (body.event ?? body.status ?? "") as string;
 
   try {
-    // ── Account status changes ─────────────────────────────────────────────
+    // ── Account status changes (including new connections) ────────────────
     if (["OK", "CREDENTIALS", "ERROR", "CONNECTING", "STOPPED"].includes(event)) {
       const unipileAccountId = (body.account_id ?? body.id) as string;
+      const displayName = (body.name ?? body.display_name ?? body.username ?? "") as string;
+      const linkedinUsername = (body.username ?? body.linkedin_username ?? null) as string | null;
+
       if (unipileAccountId) {
-        await db
+        // Try update first; if no rows affected, this is a new account — insert it
+        const updated = await db
           .update(growthOpsLinkedInAccounts)
           .set({ status: event, updatedAt: new Date() })
           .where(eq(growthOpsLinkedInAccounts.unipileAccountId, unipileAccountId));
+
+        // @ts-expect-error — rowCount is available on the underlying result
+        if ((updated?.rowCount ?? updated?.length ?? 0) === 0) {
+          // New account connected — create the row
+          await db
+            .insert(growthOpsLinkedInAccounts)
+            .values({
+              id: randomId(),
+              unipileAccountId,
+              displayName: displayName || unipileAccountId,
+              linkedinUsername,
+              status: event,
+            })
+            .onConflictDoNothing();
+        } else if (displayName) {
+          // Update name too if provided
+          await db
+            .update(growthOpsLinkedInAccounts)
+            .set({ displayName, linkedinUsername, updatedAt: new Date() })
+            .where(eq(growthOpsLinkedInAccounts.unipileAccountId, unipileAccountId));
+        }
       }
       return NextResponse.json({ ok: true });
     }
