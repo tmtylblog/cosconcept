@@ -1243,13 +1243,17 @@ export default function CustomerDetailPage() {
                           : null;
 
                         return (
-                          <tr key={m.id} className="transition-colors hover:bg-cos-electric/[0.02]">
+                          <tr
+                            key={m.id}
+                            className="cursor-pointer transition-colors hover:bg-cos-electric/5"
+                            onClick={() => router.push(`/admin/users/${m.userId}`)}
+                          >
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
                                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
                                   {(m.userName ?? "?").charAt(0).toUpperCase()}
                                 </div>
-                                <span className="font-medium text-cos-midnight">{m.userName ?? "Unnamed"}</span>
+                                <span className="font-medium text-cos-midnight group-hover:text-cos-electric">{m.userName ?? "Unnamed"}</span>
                               </div>
                             </td>
                             <td className="px-4 py-3 font-mono text-xs text-cos-slate">{m.userEmail}</td>
@@ -1272,7 +1276,7 @@ export default function CustomerDetailPage() {
                                 </span>
                               ) : suggestedExpert ? (
                                 <button
-                                  onClick={() => handleLinkUser(suggestedExpert.id, m.userId)}
+                                  onClick={(e) => { e.stopPropagation(); handleLinkUser(suggestedExpert.id, m.userId); }}
                                   disabled={linkingUser === suggestedExpert.id}
                                   className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-electric/5 px-2.5 py-0.5 text-[10px] font-medium text-cos-electric hover:bg-cos-electric/10 transition-colors"
                                 >
@@ -1305,7 +1309,7 @@ export default function CustomerDetailPage() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => router.push(`/admin/users/${m.userId}`)}
+                                  onClick={(e) => { e.stopPropagation(); router.push(`/admin/users/${m.userId}`); }}
                                   title="View user detail"
                                   className="h-8 gap-1.5 px-2.5 text-xs text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
                                 >
@@ -1315,7 +1319,7 @@ export default function CustomerDetailPage() {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleImpersonate(m.userId)}
+                                  onClick={(e) => { e.stopPropagation(); handleImpersonate(m.userId); }}
                                   disabled={impersonating === m.userId}
                                   title="Simulate as this user"
                                   className="h-8 gap-1.5 px-2.5 text-xs text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
