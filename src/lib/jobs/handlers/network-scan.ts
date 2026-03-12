@@ -76,7 +76,7 @@ export async function handleNetworkScan(
 
   try {
     const since = new Date();
-    since.setMonth(since.getMonth() - 6); // last 6 months
+    since.setFullYear(since.getFullYear() - 3); // last 3 years
 
     const ownEmail = connection.providerEmail ?? "";
 
@@ -109,8 +109,8 @@ export async function handleNetworkScan(
 
     for (const contact of contacts) {
       const scored = scoreContact(contact);
-      // Only store weak+ (strength >= 0.1)
-      if (scored.strength < 0.1) continue;
+      // null = failed hard gates (not bidirectional, or < 3 exchanges)
+      if (!scored) continue;
 
       const firmMatch = firmDomainMap.get(contact.domain);
       if (firmMatch) matched++;

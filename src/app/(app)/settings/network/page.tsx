@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Network, Mail, RefreshCw, Unlink, ExternalLink, Users, Zap } from "lucide-react";
+import { Network, Mail, RefreshCw, Unlink, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -183,27 +183,53 @@ function RelationshipCard({ rel }: { rel: Relationship }) {
   const tier = TIER_CONFIG[rel.tier];
   const isOnCos = !!rel.firmId;
 
+  const handleInvite = () => {
+    const subject = encodeURIComponent("You should check out Collective OS");
+    const body = encodeURIComponent(
+      `Hi,\n\nI've been using Collective OS to build and manage industry partnerships, and I think your firm would be a great fit.\n\nIt's a platform that helps professional services firms grow through partnerships — matching, intros, and shared deal flow. You can learn more at joincollectiveos.com.\n\nWould love to connect there!`
+    );
+    window.location.href = `mailto:hello@${rel.firmDomain}?subject=${subject}&body=${body}`;
+  };
+
+  const websiteHref = rel.firmWebsite
+    ? rel.firmWebsite.startsWith("http") ? rel.firmWebsite : `https://${rel.firmWebsite}`
+    : null;
+
   return (
-    <div className="flex items-center gap-4 rounded-cos-xl border border-cos-border bg-cos-surface px-4 py-3 transition-shadow hover:shadow-sm">
+    <div className="flex items-start gap-4 rounded-cos-xl border border-cos-border bg-cos-surface px-4 py-3 transition-shadow hover:shadow-sm">
       {/* Tier dot */}
-      <span className={cn("h-2 w-2 shrink-0 rounded-full", tier.dot)} />
+      <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", tier.dot)} />
 
       {/* Firm info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm font-semibold text-cos-midnight truncate">{rel.firmName}</p>
-          {isOnCos && (
-            <span className="shrink-0 rounded-full bg-cos-electric/10 px-1.5 py-0.5 text-[10px] font-medium text-cos-electric">
+          {isOnCos ? (
+            <span className="shrink-0 rounded-full bg-cos-electric/10 px-1.5 py-0.5 text-[10px] font-semibold text-cos-electric">
               on COS
+            </span>
+          ) : (
+            <span className="shrink-0 rounded-full bg-cos-slate/10 px-1.5 py-0.5 text-[10px] font-medium text-cos-slate-light">
+              not on COS
             </span>
           )}
         </div>
-        <p className="text-xs text-cos-slate">
-          {rel.firmDomain}
-          {rel.emailCount ? ` · ${rel.emailCount} emails` : ""}
-          {rel.lastContactAt ? ` · ${formatRelativeTime(rel.lastContactAt)}` : ""}
-          {rel.bidirectional ? " · bidirectional" : ""}
-        </p>
+        <div className="mt-0.5 flex items-center gap-2 text-xs text-cos-slate flex-wrap">
+          {websiteHref ? (
+            <a href={websiteHref} target="_blank" rel="noopener noreferrer"
+              className="hover:text-cos-electric transition-colors">
+              {rel.firmDomain}
+            </a>
+          ) : (
+            <span>{rel.firmDomain}</span>
+          )}
+          {rel.sentCount !== null && rel.receivedCount !== null && (
+            <span title={`${rel.sentCount} sent · ${rel.receivedCount} received`}>
+              ↑{rel.sentCount} ↓{rel.receivedCount}
+            </span>
+          )}
+          {rel.lastContactAt && <span>{formatRelativeTime(rel.lastContactAt)}</span>}
+        </div>
       </div>
 
       {/* Tier badge */}
@@ -214,15 +240,18 @@ function RelationshipCard({ rel }: { rel: Relationship }) {
       {/* CTA */}
       {isOnCos ? (
         <a
-          href={`/firm/offering`}
+          href={`/discover/${rel.firmId}`}
           className="shrink-0 flex items-center gap-1 rounded-cos-lg bg-cos-electric/10 px-3 py-1.5 text-xs font-medium text-cos-electric hover:bg-cos-electric/20 transition-colors"
         >
           <Users className="h-3 w-3" />
-          Partner
+          View
         </a>
       ) : (
-        <button className="shrink-0 flex items-center gap-1 rounded-cos-lg border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate hover:border-cos-electric/30 hover:text-cos-electric transition-colors">
-          <Zap className="h-3 w-3" />
+        <button
+          onClick={handleInvite}
+          className="shrink-0 flex items-center gap-1 rounded-cos-lg border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate hover:border-cos-electric/30 hover:text-cos-electric transition-colors"
+        >
+          <Mail className="h-3 w-3" />
           Invite
         </button>
       )}
@@ -307,6 +336,7 @@ export default function NetworkScanPage() {
   const fairCount = relationships.filter(r => r.tier === "fair").length;
   const weakCount = relationships.filter(r => r.tier === "weak").length;
   const cosMatches = relationships.filter(r => r.firmId).length;
+  const toInvite = relationships.filter(r => !r.firmId).length;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
@@ -351,11 +381,10 @@ export default function NetworkScanPage() {
               <p className="text-sm font-semibold text-cos-midnight">
                 {relationships.length} relationships found
               </p>
-              {cosMatches > 0 && (
-                <p className="text-xs text-cos-slate">
-                  {cosMatches} already on COS — ready to connect as partners
-                </p>
-              )}
+              <p className="text-xs text-cos-slate">
+                {cosMatches > 0 && `${cosMatches} already on COS · `}
+                {toInvite > 0 && `${toInvite} to invite`}
+              </p>
             </div>
 
             {/* Tier filter */}
@@ -412,7 +441,7 @@ export default function NetworkScanPage() {
           <div>
             <p className="text-sm font-medium text-cos-electric">Scanning your inbox…</p>
             <p className="text-xs text-cos-slate">
-              Reading email headers from the last 6 months. This takes about 30–60 seconds.
+              Reading email headers from the last 3 years. This takes about 30–60 seconds.
             </p>
           </div>
         </div>

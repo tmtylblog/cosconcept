@@ -261,20 +261,68 @@ export async function scanMicrosoftHeaders(
 }
 
 // ─── Scoring ──────────────────────────────────────────────────────────────────
+//
+// A relationship requires real two-way communication over time.
+// One-directional contact (newsletters, cold outreach with no reply) is not a
+// relationship. A single exchange is not a relationship.
+//
+// Three signals:
+//   balance  — how evenly two-way is the conversation? (2·min / total → 0–1)
+//   depth    — volume of exchanges, log-scaled so 20 ≈ saturation
+//   recency  — exponential decay, half-life 60 days
+//
+// Hard gates (fail = return null, contact is discarded entirely):
+//   1. Both sentCount > 0 AND receivedCount > 0   (must be bidirectional)
+//   2. total exchanges ≥ 3                         (not just a single ping-pong)
+//
+// Tier floors enforce minimum raw counts beyond the score:
+//   strong → score ≥ 0.65 AND total ≥ 12 AND balance ≥ 0.25
+//   fair   → score ≥ 0.40 AND total ≥ 5  AND balance ≥ 0.15
+//   weak   → everything else that passed the hard gates
+//
+// Recency cap (applied after scoring):
+//   contacts older than 3 years are clamped to "weak" regardless of score —
+//   good back-and-forth from years ago is a dormant relationship, not an active one
 
-export function scoreContact(contact: DomainContact): ScoredContact {
+export function scoreContact(contact: DomainContact): ScoredContact | null {
+  // Hard gate 1: must be genuinely bidirectional
+  if (contact.sentCount === 0 || contact.receivedCount === 0) return null;
+
+  // Hard gate 2: at least 3 total exchanges
+  const total = contact.sentCount + contact.receivedCount;
+  if (total < 3) return null;
+
+  // Signal 1: Balance — 2·min/total, equals 1.0 when perfectly 50/50,
+  // collapses toward 0 for very lopsided conversations (e.g. 1 sent, 20 received)
+  const balance = (2 * Math.min(contact.sentCount, contact.receivedCount)) / total;
+
+  // Signal 2: Depth — log scale so each doubling of volume adds equal weight;
+  // fully saturated at ~20 total exchanges
+  const depth = Math.min(Math.log2(total + 1) / Math.log2(21), 1.0);
+
+  // Signal 3: Recency — half-life 18 months (~540 days)
+  // Good relationships within 3 years still score well:
+  // 7d ≈ 1.00 · 6mo ≈ 0.79 · 1yr ≈ 0.63 · 2yr ≈ 0.40 · 3yr ≈ 0.25
   const daysSince = Math.max(
     0,
-    (Date.now() - contact.lastContactAt.getTime()) / 86400000
+    (Date.now() - contact.lastContactAt.getTime()) / 86_400_000
   );
-  const recency = Math.exp(-0.02 * daysSince); // half-life ~35 days
-  const frequency = Math.min(contact.emailCount / 20, 1.0);
-  const biBonus = contact.sentCount > 0 && contact.receivedCount > 0 ? 0.15 : 0;
-  const strength = Math.min(recency * 0.35 + frequency * 0.50 + biBonus, 1.0);
+  const recency = Math.exp(-0.001284 * daysSince); // ln(2)/540
 
-  const tier: RelationshipTier =
-    strength >= 0.65 ? "strong" :
-    strength >= 0.35 ? "fair" : "weak";
+  const strength = Math.min(
+    balance * 0.30 +
+    depth   * 0.40 +
+    recency * 0.30,
+    1.0
+  );
+
+  // Score-based tier (with minimum count floors)
+  const scoredTier: RelationshipTier =
+    strength >= 0.65 && total >= 12 && balance >= 0.25 ? "strong" :
+    strength >= 0.40 && total >= 5  && balance >= 0.15 ? "fair"   : "weak";
+
+  // Recency cap: contacts older than 3 years are at most "weak"
+  const tier: RelationshipTier = daysSince > 3 * 365 ? "weak" : scoredTier;
 
   return { ...contact, tier, strength };
 }
