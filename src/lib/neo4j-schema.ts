@@ -5,8 +5,10 @@
  * is ready for taxonomy data and enrichment results.
  *
  * Node Labels:
- *   Company (multi-label base), ServiceFirm, SolutionPartner,
- *   Person (base), Person:Expert, Person:Contact, Person:PlatformUser,
+ *   Company (primary base node for all companies).
+ *   ServiceFirm is a role label added to Company — identifies COS service-provider members.
+ *   MERGE always on Company {id}; ServiceFirm is SET afterward. Never MERGE on ServiceFirm.
+ *   Person (personTypes: ['expert'|'contact'|'platform_user'] — array, can have multiple),
  *   WorkHistory,
  *   Skill (level: L1/L2/L3 — single label, hierarchy via BELONGS_TO edges),
  *   Industry, IndustryL1, Market,
@@ -39,8 +41,12 @@ import { neo4jWrite } from "./neo4j";
 // ─── Constraints ──────────────────────────────────────────
 
 const CONSTRAINTS = [
-  // Unique ID constraints for all node types
-  `CREATE CONSTRAINT firm_id IF NOT EXISTS FOR (n:ServiceFirm) REQUIRE n.id IS UNIQUE`,
+  // ── Company is the base node for all companies.
+  // ServiceFirm is a role label added to Company nodes that are COS service providers.
+  // company_id is the primary key — used for all id-based MERGE and MATCH operations.
+  `CREATE CONSTRAINT company_id IF NOT EXISTS FOR (n:Company) REQUIRE n.id IS UNIQUE`,
+  `CREATE CONSTRAINT company_domain IF NOT EXISTS FOR (n:Company) REQUIRE n.domain IS UNIQUE`,
+
   `CREATE CONSTRAINT expert_id IF NOT EXISTS FOR (n:Expert) REQUIRE n.id IS UNIQUE`,
   // Single Skill label for all levels (L1/L2/L3) — name is globally unique across all levels
   `CREATE CONSTRAINT skill_name IF NOT EXISTS FOR (n:Skill) REQUIRE n.name IS UNIQUE`,
@@ -54,7 +60,6 @@ const CONSTRAINTS = [
   `CREATE CONSTRAINT firm_type_name IF NOT EXISTS FOR (n:FirmType) REQUIRE n.name IS UNIQUE`,
 
   // ── Track A: New node type constraints ───────────────────
-  `CREATE CONSTRAINT company_domain IF NOT EXISTS FOR (n:Company) REQUIRE n.domain IS UNIQUE`,
   `CREATE CONSTRAINT person_linkedin IF NOT EXISTS FOR (n:Person) REQUIRE n.linkedinUrl IS UNIQUE`,
   `CREATE CONSTRAINT firm_category_name IF NOT EXISTS FOR (n:FirmCategory) REQUIRE n.name IS UNIQUE`,
   `CREATE CONSTRAINT tech_category_name IF NOT EXISTS FOR (n:TechCategory) REQUIRE n.name IS UNIQUE`,
@@ -66,13 +71,14 @@ const CONSTRAINTS = [
 
 const INDEXES = [
   // Full-text search indexes
-  `CREATE FULLTEXT INDEX firm_search IF NOT EXISTS FOR (n:ServiceFirm) ON EACH [n.name, n.description]`,
+  // Company:ServiceFirm = service-provider role on a Company node
+  `CREATE FULLTEXT INDEX firm_search IF NOT EXISTS FOR (n:Company) ON EACH [n.name, n.description]`,
   `CREATE FULLTEXT INDEX expert_search IF NOT EXISTS FOR (n:Expert) ON EACH [n.fullName, n.headline]`,
   `CREATE FULLTEXT INDEX case_study_search IF NOT EXISTS FOR (n:CaseStudy) ON EACH [n.title, n.description]`,
 
-  // Property indexes for fast lookups
-  `CREATE INDEX firm_website IF NOT EXISTS FOR (n:ServiceFirm) ON (n.website)`,
-  `CREATE INDEX firm_org_id IF NOT EXISTS FOR (n:ServiceFirm) ON (n.organizationId)`,
+  // Property indexes for fast lookups on service-provider firms
+  `CREATE INDEX firm_website IF NOT EXISTS FOR (n:Company) ON (n.website)`,
+  `CREATE INDEX firm_org_id IF NOT EXISTS FOR (n:Company) ON (n.organizationId)`,
   `CREATE INDEX skill_l1 IF NOT EXISTS FOR (n:Skill) ON (n.l1)`,
   `CREATE INDEX skill_level IF NOT EXISTS FOR (n:Skill) ON (n.level)`,
   `CREATE INDEX category_theme IF NOT EXISTS FOR (n:Category) ON (n.theme)`,
@@ -89,26 +95,19 @@ const INDEXES = [
   `CREATE FULLTEXT INDEX company_search IF NOT EXISTS FOR (n:Company) ON EACH [n.name, n.domain]`,
   `CREATE FULLTEXT INDEX person_search IF NOT EXISTS FOR (n:Person) ON EACH [n.firstName, n.lastName, n.headline]`,
 
-  // ── Preference sync: ServiceFirm property indexes ───────
-  `CREATE INDEX firm_philosophy IF NOT EXISTS FOR (n:ServiceFirm) ON (n.partnershipPhilosophy)`,
-  `CREATE INDEX firm_deal_breaker IF NOT EXISTS FOR (n:ServiceFirm) ON (n.dealBreaker)`,
-  `CREATE INDEX firm_geo_pref IF NOT EXISTS FOR (n:ServiceFirm) ON (n.geographyPreference)`,
+  // ── Preference sync: Company (service-provider role) property indexes ───
+  `CREATE INDEX firm_philosophy IF NOT EXISTS FOR (n:Company) ON (n.partnershipPhilosophy)`,
+  `CREATE INDEX firm_deal_breaker IF NOT EXISTS FOR (n:Company) ON (n.dealBreaker)`,
+  `CREATE INDEX firm_geo_pref IF NOT EXISTS FOR (n:Company) ON (n.geographyPreference)`,
 
   // ── Track A: Person + WorkHistory indexes ─────────────
   `CREATE INDEX person_email IF NOT EXISTS FOR (n:Person) ON (n.emails)`,
   `CREATE INDEX work_history_dates IF NOT EXISTS FOR (n:WorkHistory) ON (n.startAt, n.endAt)`,
 
-  // ── Person sub-label indexes (Expert / Contact / PlatformUser) ──
-  // All three are sub-labels of Person (multi-label pattern: Person:Expert, Person:Contact, Person:PlatformUser)
-  // Expert    = professional employed at a COS member firm (CURRENTLY_AT ServiceFirm)
-  // Contact   = imported external contact from n8n / outreach (WORKS_AT Company)
-  // PlatformUser = COS account holder (has a pgUserId / was a legacy User node)
-  `CREATE INDEX expert_firm_id IF NOT EXISTS FOR (n:Expert) ON (n.firmId)`,
-  `CREATE INDEX expert_enrichment_status IF NOT EXISTS FOR (n:Expert) ON (n.enrichmentStatus)`,
-  `CREATE FULLTEXT INDEX expert_search IF NOT EXISTS FOR (n:Expert) ON EACH [n.fullName, n.headline]`,
-  `CREATE INDEX contact_source IF NOT EXISTS FOR (n:Contact) ON (n.source)`,
-  `CREATE INDEX contact_email IF NOT EXISTS FOR (n:Contact) ON (n.email)`,
-  `CREATE INDEX platform_user_pg_id IF NOT EXISTS FOR (n:PlatformUser) ON (n.pgUserId)`,
+  // ── Person type index ─────────────────────────────────────
+  // personTypes is an array property: ['expert', 'contact', 'platform_user']
+  // A person can have multiple types. Query with: WHERE 'expert' IN n.personTypes
+  `CREATE INDEX person_types IF NOT EXISTS FOR (n:Person) ON (n.personTypes)`,
 ];
 
 // ─── Schema Setup ─────────────────────────────────────────

@@ -29,6 +29,8 @@ export interface SearchFilters {
   markets?: string[];
   /** Firm categories (from 30 COS categories) */
   categories?: string[];
+  /** Service keywords — partial-matched against Service.name via OFFERS_SERVICE edges */
+  services?: string[];
   /** Firm size band (micro, small, medium, large) */
   sizeBand?: string;
   /** Minimum match score threshold (0-1) */

@@ -49,8 +49,8 @@ export const preferenceUpdateRevealed = inngest.createFunction(
       await step.run("write-prefers-from-acceptance", async () => {
         // Get the accepted partner's taxonomy tags, then write PREFERS edges
         await neo4jWrite(
-          `MATCH (myFirm:ServiceFirm {id: $myFirmId})
-           MATCH (partner:ServiceFirm {id: $partnerFirmId})
+          `MATCH (myFirm:Company {id: $myFirmId})
+           MATCH (partner:Company {id: $partnerFirmId})
            // PREFERS → FirmCategory (from partner's categories)
            OPTIONAL MATCH (partner)-[:IN_CATEGORY]->(cat:FirmCategory)
            WITH myFirm, collect(DISTINCT cat) AS cats
@@ -65,8 +65,8 @@ export const preferenceUpdateRevealed = inngest.createFunction(
         );
 
         await neo4jWrite(
-          `MATCH (myFirm:ServiceFirm {id: $myFirmId})
-           MATCH (partner:ServiceFirm {id: $partnerFirmId})
+          `MATCH (myFirm:Company {id: $myFirmId})
+           MATCH (partner:Company {id: $partnerFirmId})
            // PREFERS → Skill (from partner's top skills)
            OPTIONAL MATCH (partner)-[hs:HAS_SKILL]->(s:Skill)
            WHERE hs.strength >= 0.6
@@ -91,8 +91,8 @@ export const preferenceUpdateRevealed = inngest.createFunction(
       await step.run("write-avoids-from-decline", async () => {
         // Write AVOIDS edges to the declined firm's primary category
         await neo4jWrite(
-          `MATCH (myFirm:ServiceFirm {id: $myFirmId})
-           MATCH (partner:ServiceFirm {id: $partnerFirmId})
+          `MATCH (myFirm:Company {id: $myFirmId})
+           MATCH (partner:Company {id: $partnerFirmId})
            OPTIONAL MATCH (partner)-[ic:IN_CATEGORY]->(cat:FirmCategory)
            WHERE ic.confidence >= 0.7
            WITH myFirm, collect(DISTINCT cat) AS cats
@@ -116,7 +116,7 @@ export const preferenceUpdateRevealed = inngest.createFunction(
       await step.run("write-prefers-from-lead-claim", async () => {
         if (leadRequiredCategories.length > 0) {
           await neo4jWrite(
-            `MATCH (f:ServiceFirm {id: $firmId})
+            `MATCH (f:Company {id: $firmId})
              UNWIND $cats AS catName
              MERGE (c:FirmCategory {name: catName})
              MERGE (f)-[r:PREFERS]->(c)
@@ -130,7 +130,7 @@ export const preferenceUpdateRevealed = inngest.createFunction(
 
         if (leadRequiredSkills.length > 0) {
           await neo4jWrite(
-            `MATCH (f:ServiceFirm {id: $firmId})
+            `MATCH (f:Company {id: $firmId})
              UNWIND $skills AS skillName
              MERGE (s:Skill {name: skillName})
              ON CREATE SET s.level = "L2"

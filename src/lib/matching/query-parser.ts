@@ -64,6 +64,7 @@ Extract structured filters from the query. Map user intent to our taxonomy.
 - For categories: map to the closest firm categories
 - For markets: map to specific countries or regions
 - For industries: use standard industry names
+- For services: extract 1-3 word service phrases (e.g. "brand strategy", "SEO", "content marketing", "web development"). These are partial-matched against service listings so keep them short and specific.
 - For size: use "micro" (<10), "small" (10-50), "medium" (50-200), "large" (200+)
 
 Only extract what the query explicitly or strongly implies. Don't over-extract.`,
@@ -80,6 +81,9 @@ Only extract what the query explicitly or strongly implies. Don't over-extract.`
         markets: z
           .array(z.string())
           .describe("Geographic markets or regions"),
+        services: z
+          .array(z.string())
+          .describe("Specific service keywords the user is looking for (1-3 word phrases, e.g. 'brand strategy', 'SEO', 'content marketing', 'web development', 'digital transformation')"),
         sizeBand: z
           .string()
           .optional()
@@ -115,6 +119,8 @@ Only extract what the query explicitly or strongly implies. Don't over-extract.`
       markets: result.object.markets.filter((m) =>
         validMarkets.has(m.toLowerCase())
       ),
+      // Services are free-form — no taxonomy validation, matched via CONTAINS in Neo4j
+      services: result.object.services ?? [],
       sizeBand: result.object.sizeBand,
     };
   } catch (err) {

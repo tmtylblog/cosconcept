@@ -21,6 +21,7 @@ interface StructuredCandidate {
   matchedSkills: string[];
   matchedIndustries: string[];
   matchedMarkets: string[];
+  matchedServices: string[];
   structuredScore: number;
   bidirectionalFit?: { theyWantUs: number; weWantThem: number };
 }
@@ -39,8 +40,8 @@ export async function structuredFilter(
   const conditions: string[] = [];
   const params: Record<string, unknown> = { limit };
 
-  // Base: match all firms
-  const matchClause = "MATCH (f:ServiceFirm)";
+  // Base: match all service-provider firms (Company nodes with ServiceFirm role label)
+  const matchClause = "MATCH (f:Company:ServiceFirm)";
   const returnFields = [
     "f.id AS firmId",
     "f.name AS firmName",
@@ -115,6 +116,22 @@ export async function structuredFilter(
     returnFields.push("[] AS matchedMarkets");
   }
 
+  // Services filter — partial keyword match against Service.name
+  if (filters.services?.length) {
+    conditions.push(
+      `EXISTS {
+        MATCH (f)-[:OFFERS_SERVICE]->(s:Service)
+        WHERE ANY(kw IN $serviceKeywords WHERE toLower(s.name) CONTAINS toLower(kw))
+      }`
+    );
+    params.serviceKeywords = filters.services;
+    returnFields.push(
+      `[(f)-[:OFFERS_SERVICE]->(s:Service) WHERE ANY(kw IN $serviceKeywords WHERE toLower(s.name) CONTAINS toLower(kw)) | s.name] AS matchedServices`
+    );
+  } else {
+    returnFields.push("[] AS matchedServices");
+  }
+
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -132,6 +149,7 @@ export async function structuredFilter(
     matchedSkills?: string[];
     matchedIndustries?: string[];
     matchedMarkets?: string[];
+    matchedServices?: string[];
     categories?: string[];
   }
 
@@ -142,6 +160,7 @@ export async function structuredFilter(
     const matchedSkills: string[] = record.matchedSkills ?? [];
     const matchedIndustries: string[] = record.matchedIndustries ?? [];
     const matchedMarkets: string[] = record.matchedMarkets ?? [];
+    const matchedServices: string[] = record.matchedServices ?? [];
     const categories: string[] = record.categories ?? [];
 
     // Score based on how many criteria matched
@@ -167,6 +186,14 @@ export async function structuredFilter(
       score += matchedCats.length / filters.categories.length;
       maxScore += 1;
     }
+    if (filters.services?.length) {
+      // Score: how many of the service keywords produced at least one match?
+      const matchedKeywords = filters.services.filter((kw) =>
+        matchedServices.some((s) => s.toLowerCase().includes(kw.toLowerCase()))
+      );
+      score += matchedKeywords.length / filters.services.length;
+      maxScore += 1;
+    }
 
     const structuredScore = maxScore > 0 ? score / maxScore : 0.5;
 
@@ -178,6 +205,7 @@ export async function structuredFilter(
       matchedSkills,
       matchedIndustries,
       matchedMarkets,
+      matchedServices,
       structuredScore,
     };
   });
@@ -203,7 +231,7 @@ export function toMatchCandidates(
     ...(c.bidirectionalFit ? { bidirectionalFit: c.bidirectionalFit } : {}),
     preview: {
       categories: c.categories,
-      topServices: [],
+      topServices: c.matchedServices.slice(0, 5),
       topSkills: c.matchedSkills,
       industries: c.matchedIndustries,
       website: c.website,
@@ -232,7 +260,7 @@ async function readSearcherPreferences(
   }
 
   const rows = await neo4jRead<PrefRow>(
-    `MATCH (f:ServiceFirm {id: $firmId})-[r:PREFERS]->(t)
+    `MATCH (f:Company {id: $firmId})-[r:PREFERS]->(t)
      RETURN r.dimension AS dimension, t.name AS targetName`,
     { firmId }
   );
@@ -272,7 +300,7 @@ async function checkCandidatesWantSearcher(
   }
 
   const searcherOffers = await neo4jRead<OfferRow>(
-    `MATCH (f:ServiceFirm {id: $firmId})-[:HAS_SKILL|IN_CATEGORY|OPERATES_IN]->(t)
+    `MATCH (f:Company {id: $firmId})-[:HAS_SKILL|IN_CATEGORY|OPERATES_IN]->(t)
      RETURN CASE
        WHEN t:Skill THEN 'Skill'
        WHEN t:Category OR t:FirmCategory THEN 'Category'
@@ -305,7 +333,7 @@ async function checkCandidatesWantSearcher(
 
   const candidatePrefs = await neo4jRead<CandidatePrefRow>(
     `UNWIND $candidateIds AS cId
-     MATCH (f:ServiceFirm {id: cId})-[r:PREFERS]->(t)
+     MATCH (f:Company {id: cId})-[r:PREFERS]->(t)
      RETURN f.id AS candidateId, r.dimension AS dimension, t.name AS targetName`,
     { candidateIds }
   );

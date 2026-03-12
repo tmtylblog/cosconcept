@@ -410,6 +410,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const isNearBottomRef = useRef(true);
   const isLoading = status === "submitted" || status === "streaming";
   const [stalled, setStalled] = useState(false);
   const lastMessageSnapshotRef = useRef("");
@@ -500,13 +501,13 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   }, [isGuest, enrichmentStatus, status, sendMessage]);
 
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && isNearBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && isNearBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [transcriptResult, matchResult]);
@@ -685,6 +686,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
+    // Always scroll to bottom when user sends a message
+    isNearBottomRef.current = true;
     sendMessage({ text: input });
     setInput("");
   };
@@ -809,6 +812,10 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       <div
         ref={scrollRef}
         className="cos-scrollbar relative flex flex-1 flex-col justify-end overflow-y-auto bg-cos-midnight-light/30 px-4 py-4"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        }}
       >
         <div className="space-y-2">
         {messages.map((message, idx) => {

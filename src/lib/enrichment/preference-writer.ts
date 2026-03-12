@@ -45,7 +45,7 @@ async function replacePreferEdges(
 ): Promise<number> {
   // Step 1: Delete stale PREFERS edges for this firm + dimension
   await neo4jWrite(
-    `MATCH (f:ServiceFirm {id: $firmId})-[r:PREFERS]->()
+    `MATCH (f:Company {id: $firmId})-[r:PREFERS]->()
      WHERE r.dimension = $dimension
      DELETE r`,
     { firmId, dimension }
@@ -57,7 +57,7 @@ async function replacePreferEdges(
   // Use dynamic label via separate queries per label type (Cypher doesn't allow variable labels)
   const cypher =
     targetLabel === "Skill"
-      ? `MATCH (f:ServiceFirm {id: $firmId})
+      ? `MATCH (f:Company {id: $firmId})
          UNWIND $names AS targetName
          MERGE (t:Skill {name: targetName})
          ON CREATE SET t.level = "L2"
@@ -67,7 +67,7 @@ async function replacePreferEdges(
              r.source = "stated",
              r.updatedAt = datetime()`
       : targetLabel === "Category"
-        ? `MATCH (f:ServiceFirm {id: $firmId})
+        ? `MATCH (f:Company {id: $firmId})
            UNWIND $names AS targetName
            MERGE (t:Category {name: targetName})
            MERGE (f)-[r:PREFERS]->(t)
@@ -75,7 +75,7 @@ async function replacePreferEdges(
                r.weight = $weight,
                r.source = "stated",
                r.updatedAt = datetime()`
-        : `MATCH (f:ServiceFirm {id: $firmId})
+        : `MATCH (f:Company {id: $firmId})
            UNWIND $names AS targetName
            MERGE (t:Market {name: targetName})
            MERGE (f)-[r:PREFERS]->(t)
@@ -124,7 +124,7 @@ export async function syncPartnershipPhilosophy(
   const errors: string[] = [];
   try {
     await neo4jWrite(
-      `MERGE (f:ServiceFirm {id: $firmId})
+      `MATCH (f:Company {id: $firmId})
        SET f.partnershipPhilosophy = $philosophy,
            f.updatedAt = datetime()`,
       { firmId, philosophy }
@@ -184,7 +184,7 @@ export async function syncCapabilityGaps(
     // No skill gaps — still delete stale edges
     try {
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})-[r:PREFERS]->()
+        `MATCH (f:Company {id: $firmId})-[r:PREFERS]->()
          WHERE r.dimension = "skill" DELETE r`,
         { firmId }
       );
@@ -200,7 +200,7 @@ export async function syncCapabilityGaps(
   } else {
     try {
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})-[r:PREFERS]->()
+        `MATCH (f:Company {id: $firmId})-[r:PREFERS]->()
          WHERE r.dimension = "capability_gap_category" DELETE r`,
         { firmId }
       );
@@ -239,7 +239,7 @@ export async function syncDealBreaker(
   const errors: string[] = [];
   try {
     await neo4jWrite(
-      `MERGE (f:ServiceFirm {id: $firmId})
+      `MATCH (f:Company {id: $firmId})
        SET f.dealBreaker = $dealBreaker,
            f.updatedAt = datetime()`,
       { firmId, dealBreaker }
@@ -263,7 +263,7 @@ export async function syncGeographyPreference(
   // Always set the property
   try {
     await neo4jWrite(
-      `MERGE (f:ServiceFirm {id: $firmId})
+      `MATCH (f:Company {id: $firmId})
        SET f.geographyPreference = $geography,
            f.updatedAt = datetime()`,
       { firmId, geography }
@@ -275,7 +275,7 @@ export async function syncGeographyPreference(
   // Delete existing market preference edges
   try {
     await neo4jWrite(
-      `MATCH (f:ServiceFirm {id: $firmId})-[r:PREFERS]->()
+      `MATCH (f:Company {id: $firmId})-[r:PREFERS]->()
        WHERE r.dimension = "market"
        DELETE r`,
       { firmId }
@@ -292,7 +292,7 @@ export async function syncGeographyPreference(
   // Specific market: create PREFERS edge
   try {
     await neo4jWrite(
-      `MATCH (f:ServiceFirm {id: $firmId})
+      `MATCH (f:Company {id: $firmId})
        MERGE (m:Market {name: $market})
        MERGE (f)-[r:PREFERS]->(m)
        SET r.dimension = "market",

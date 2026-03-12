@@ -36,7 +36,7 @@ export const skillComputeStrength = inngest.createFunction(
     const result = await step.run("recompute-skill-strength", async () => {
       // For each HAS_SKILL edge from this firm, count evidence signals across node types
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})-[r:HAS_SKILL]->(s:Skill)
+        `MATCH (f:Company {id: $firmId})-[r:HAS_SKILL]->(s:Skill)
          // Count case studies demonstrating this skill
          OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs:CaseStudy)-[:DEMONSTRATES_SKILL]->(s)
          WITH f, r, s, count(DISTINCT cs) AS caseStudyCount
@@ -66,7 +66,7 @@ export const skillComputeStrength = inngest.createFunction(
 
       // Also recompute OFFERS_SERVICE strength
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})-[r:OFFERS_SERVICE]->(svc:Service)
+        `MATCH (f:Company {id: $firmId})-[r:OFFERS_SERVICE]->(svc:Service)
          OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs:CaseStudy)
          WHERE cs.title CONTAINS svc.name OR cs.description CONTAINS svc.name
          WITH f, r, svc, count(DISTINCT cs) AS caseStudyCount

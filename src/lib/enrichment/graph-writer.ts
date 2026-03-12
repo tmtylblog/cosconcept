@@ -100,13 +100,13 @@ export async function writeFirmToGraph(
     }
   };
 
-  // 1. Create/update ServiceFirm node
-  // Track A: ServiceFirm nodes also carry the Company label for canonical identity.
-  // SET f:Company applies the dual label idempotently.
+  // 1. Create/update Company node with ServiceFirm role label.
+  // Company is the canonical base node. ServiceFirm is a role label that marks this
+  // Company as a COS service-provider member. Always MERGE on Company {id}.
   await safe("ServiceFirm", async () => {
     await neo4jWrite(
-      `MERGE (f:ServiceFirm {id: $id})
-       SET f:Company,
+      `MERGE (f:Company {id: $id})
+       SET f:ServiceFirm,
            f.name = $name,
            f.organizationId = $orgId,
            f.website = $website,
@@ -152,7 +152,7 @@ export async function writeFirmToGraph(
   if (cls?.categories.length) {
     await safe("Categories", async () => {
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})
+        `MATCH (f:Company {id: $firmId})
          UNWIND $names AS catName
          MERGE (c:FirmCategory {name: catName})
          MERGE (f)-[r:IN_CATEGORY]->(c)
@@ -169,7 +169,7 @@ export async function writeFirmToGraph(
   if (cls?.skills.length) {
     await safe("Skills", async () => {
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})
+        `MATCH (f:Company {id: $firmId})
          UNWIND $names AS skillName
          MERGE (s:Skill {name: skillName})
          ON CREATE SET s.level = "L2"
@@ -192,7 +192,7 @@ export async function writeFirmToGraph(
   if (cls?.industries.length) {
     await safe("Industries", async () => {
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})
+        `MATCH (f:Company {id: $firmId})
          UNWIND $names AS indName
          MERGE (i:Industry {name: indName})
          MERGE (f)-[r:SERVES_INDUSTRY]->(i)
@@ -207,7 +207,7 @@ export async function writeFirmToGraph(
   if (cls?.markets.length) {
     await safe("Markets", async () => {
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})
+        `MATCH (f:Company {id: $firmId})
          UNWIND $names AS mktName
          MERGE (m:Market {name: mktName})
          MERGE (f)-[r:OPERATES_IN]->(m)
@@ -223,7 +223,7 @@ export async function writeFirmToGraph(
   if (cls?.languages.length) {
     await safe("Languages", async () => {
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})
+        `MATCH (f:Company {id: $firmId})
          UNWIND $names AS langName
          MERGE (l:Language {name: langName})
          MERGE (f)-[r:SPEAKS]->(l)
@@ -241,7 +241,7 @@ export async function writeFirmToGraph(
   if (gt?.extracted.services.length) {
     await safe("Services", async () => {
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})
+        `MATCH (f:Company {id: $firmId})
          UNWIND $names AS svcName
          MERGE (s:Service {name: svcName})
          MERGE (f)-[r:OFFERS_SERVICE]->(s)
@@ -264,7 +264,7 @@ export async function writeFirmToGraph(
   if (gt?.extracted.clients.length) {
     await safe("Clients", async () => {
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})
+        `MATCH (f:Company {id: $firmId})
          UNWIND $names AS clientName
          MERGE (c:Company {name: clientName})
          ON CREATE SET c.enrichmentStatus = "stub",
@@ -294,10 +294,10 @@ export async function writeFirmToGraph(
         };
       });
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})
+        `MATCH (f:Company {id: $firmId})
          UNWIND $members AS m
          MERGE (p:Person {id: m.id})
-         SET p:Expert,
+         SET p.personTypes = CASE WHEN p.personTypes IS NULL THEN ['expert'] WHEN NOT 'expert' IN p.personTypes THEN p.personTypes + ['expert'] ELSE p.personTypes END,
              p.fullName = m.fullName,
              p.firstName = m.firstName,
              p.lastName = m.lastName,
@@ -323,7 +323,7 @@ export async function writeFirmToGraph(
         url,
       }));
       await neo4jWrite(
-        `MATCH (f:ServiceFirm {id: $firmId})
+        `MATCH (f:Company {id: $firmId})
          UNWIND $studies AS cs
          MERGE (c:CaseStudy {id: cs.id})
          SET c.sourceUrl = cs.url, c.firmId = $firmId, c.status = "pending"
@@ -379,7 +379,7 @@ export async function writeExpertToGraph(
     const parts = data.fullName.trim().split(/\s+/);
     await neo4jWrite(
       `MERGE (p:Person {id: $id})
-       SET p:Expert,
+       SET p.personTypes = CASE WHEN p.personTypes IS NULL THEN ['expert'] WHEN NOT 'expert' IN p.personTypes THEN p.personTypes + ['expert'] ELSE p.personTypes END,
            p.fullName = $fullName,
            p.firstName = $firstName,
            p.lastName = $lastName,
@@ -394,7 +394,7 @@ export async function writeExpertToGraph(
            p.emails = coalesce(p.emails, []),
            p.updatedAt = datetime()
        WITH p
-       MATCH (f:ServiceFirm {id: $firmId})
+       MATCH (f:Company {id: $firmId})
        MERGE (p)-[r:CURRENTLY_AT]->(f)
        SET r.isPrimary = true,
            r.source = "enrichment",
@@ -562,7 +562,7 @@ export async function writeCaseStudyToGraph(
            cs.outcomes = $outcomes,
            cs.updatedAt = datetime()
        WITH cs
-       MATCH (f:ServiceFirm {id: $firmId})
+       MATCH (f:Company {id: $firmId})
        MERGE (f)-[:HAS_CASE_STUDY]->(cs)`,
       {
         id: data.caseStudyId,

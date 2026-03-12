@@ -28,7 +28,8 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 
 | Label | Key Property | Description | Source |
 |-------|-------------|-------------|--------|
-| `ServiceFirm` | `id` (PG firm ID) | Enriched firm from the platform. Properties: `name`, `organizationId`, `website`, `description`, `foundedYear`, `employeeCount`, `pdlIndustry`, `pdlHeadline`, `pdlLocation`, `logoUrl`, `classifierConfidence`, `updatedAt` | Enrichment pipeline (graph-writer.ts) |
+| `Company` | `id` (PG firm ID) or `domain` | **Primary node for all companies.** `ServiceFirm` is a role label added to `Company` nodes that are COS service-provider members. Always `MERGE (f:Company {id})` then `SET f:ServiceFirm`. Never merge on `ServiceFirm` directly. Properties: `name`, `organizationId`, `website`, `domain`, `description`, `foundedYear`, `employeeCount`, `pdlIndustry`, `pdlHeadline`, `pdlLocation`, `logoUrl`, `classifierConfidence`, `isCosCustomer`, `enrichmentStatus`, `updatedAt` | Enrichment pipeline (graph-writer.ts) |
+| `ServiceFirm` | *(role label on Company)* | Not a standalone node. Marks a `Company` as a COS service-provider. Query with `MATCH (f:Company:ServiceFirm)` or `MATCH (f:Company {id: $id})`. Constraint: `Company.id UNIQUE` (not ServiceFirm.id). | Applied via `SET f:ServiceFirm` in graph-writer.ts |
 | `Expert` | `id` (composite: `firmId:name-slug`) | Individual professional. Properties: `fullName`, `headline`, `linkedinUrl`, `location`, `firmId`, `updatedAt` | Enrichment pipeline (graph-writer.ts) |
 | `SpecialistProfile` | `id` (generated) | AI-generated specialist niche profile for an expert. Properties: `title`, `firmId`, `expertId`, `updatedAt`. Only created for profiles with qualityScore >= 80. | expert-linkedin.ts |
 | `CaseStudy` | `id` (composite: `firmId:cs:index`) | Published case study. Properties: `title`, `description`, `sourceUrl`, `firmId`, `status` (pending/ingested), `outcomes[]`, `updatedAt` | graph-writer.ts, case-study-ingest.ts |
@@ -72,15 +73,14 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 
 | Edge | From | To | Created By |
 |------|------|----|-----------|
-| `IN_CATEGORY` | ServiceFirm | Category | AI classifier |
-| `HAS_SKILL` | ServiceFirm | Skill | AI classifier (L2 level) |
-| `SERVES_INDUSTRY` | ServiceFirm | Industry | AI classifier |
-| `OPERATES_IN` | ServiceFirm | Market | AI classifier |
-| `SPEAKS` | ServiceFirm | Language | AI classifier |
-| `OFFERS_SERVICE` | ServiceFirm | Service | Jina website scrape |
-| `HAS_CLIENT` | ServiceFirm | Client | Jina website scrape |
-| `HAS_CASE_STUDY` | ServiceFirm | CaseStudy | Jina scrape + case study ingest |
-| `EMPLOYS` | ServiceFirm | Expert | Jina scrape (team members) |
+| `IN_CATEGORY` | Company:ServiceFirm | Category | AI classifier |
+| `HAS_SKILL` | Company:ServiceFirm | Skill | AI classifier (L2 level) |
+| `SERVES_INDUSTRY` | Company:ServiceFirm | Industry | AI classifier |
+| `OPERATES_IN` | Company:ServiceFirm | Market | AI classifier |
+| `SPEAKS` | Company:ServiceFirm | Language | AI classifier |
+| `OFFERS_SERVICE` | Company:ServiceFirm | Service | Jina website scrape |
+| `HAS_CLIENT` | Company:ServiceFirm | Client | Jina website scrape |
+| `HAS_CASE_STUDY` | Company:ServiceFirm | CaseStudy | Jina scrape + case study ingest |
 | `HAS_EXPERTISE` | Expert | Skill | Expert LinkedIn enrichment |
 | `SERVES_INDUSTRY` | Expert | Industry | Expert LinkedIn enrichment |
 | `HAS_SPECIALIST_PROFILE` | Expert | SpecialistProfile | Expert LinkedIn enrichment |
@@ -133,11 +133,11 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 
 | Edge | From | To | Properties | Created By |
 |------|------|----|-----------|-----------|
-| `PREFERS` | ServiceFirm | Skill | `dimension: "skill"`, `weight: 0.9`, `source: "stated"`, `updatedAt` | Onboarding Q2 (capabilityGaps) |
-| `PREFERS` | ServiceFirm | Category | `dimension: "capability_gap_category"`, `weight: 0.9` or `dimension: "firm_category"`, `weight: 0.8` | Onboarding Q2/Q3 |
-| `PREFERS` | ServiceFirm | Market | `dimension: "market"`, `weight: 0.7`, `source: "stated"`, `updatedAt` | Onboarding Q5 (geographyPreference) |
+| `PREFERS` | Company:ServiceFirm | Skill | `dimension: "skill"`, `weight: 0.9`, `source: "stated"`, `updatedAt` | Onboarding Q2 (capabilityGaps) |
+| `PREFERS` | Company:ServiceFirm | Category | `dimension: "capability_gap_category"`, `weight: 0.9` or `dimension: "firm_category"`, `weight: 0.8` | Onboarding Q2/Q3 |
+| `PREFERS` | Company:ServiceFirm | Market | `dimension: "market"`, `weight: 0.7`, `source: "stated"`, `updatedAt` | Onboarding Q5 (geographyPreference) |
 
-**ServiceFirm properties set by preference sync:**
+**Company:ServiceFirm properties set by preference sync:**
 - `partnershipPhilosophy` — Q1 answer, controls matching algorithm variant
 - `dealBreaker` — Q4 answer, free text stored as property
 - `geographyPreference` — Q5 answer, stored as property + optional Market edge
@@ -194,11 +194,14 @@ firm_type_A -> [firm-relationships.csv lookup] -> firm_type_B
 
 **File:** `src/lib/neo4j-schema.ts`
 
-### Constraints (12 uniqueness constraints)
-- `ServiceFirm.id`, `Expert.id`, `Skill.name`, `SkillL1.name`, `Industry.name`, `Market.name`, `CaseStudy.id`, `Client.name`, `Service.name`, `Category.name`, `Language.name`, `FirmType.name`
+### Constraints
+- `Company.id` (primary key for all Company nodes, including Company:ServiceFirm)
+- `Company.domain` (unique domain for deduplication)
+- `Expert.id`, `Skill.name`, `Industry.name`, `Market.name`, `CaseStudy.id`, `Client.name`, `Service.name`, `Category.name`, `Language.name`, `FirmType.name`, `Person.linkedinUrl`
+- **`ServiceFirm.id` constraint has been dropped** — the `Company.id` constraint covers service-provider firms.
 
 ### Indexes
-- **Full-text:** `firm_search` (ServiceFirm: name, description), `expert_search` (Expert: fullName, headline), `case_study_search` (CaseStudy: title, description)
+- **Full-text:** `firm_search` (Company: name, description — covers all Company nodes including Company:ServiceFirm), `expert_search` (Expert: fullName, headline), `case_study_search` (CaseStudy: title, description)
 - **Property:** `firm_website` (website), `firm_org_id` (organizationId), `skill_l1` (Skill.l1), `skill_level` (Skill.level), `category_theme` (Category.theme), `expert_firm` (Expert.firmId), `case_study_firm` (CaseStudy.firmId), `firm_philosophy` (partnershipPhilosophy), `firm_deal_breaker` (dealBreaker), `firm_geo_pref` (geographyPreference)
 
 ---
@@ -235,7 +238,7 @@ firm_type_A -> [firm-relationships.csv lookup] -> firm_type_B
 - Batch size: 100
 
 ### Enrichment Pipeline (ongoing)
-- **Firm enrichment:** `graph/sync-firm` Inngest event -> `writeFirmToGraph()` creates ServiceFirm + all edges
+- **Firm enrichment:** `graph/sync-firm` Inngest event -> `writeFirmToGraph()` creates Company:ServiceFirm node + all edges
 - **Expert enrichment:** `enrich/expert-linkedin` Inngest event -> `writeExpertToGraph()` + `writeSpecialistProfileToGraph()`
 - **Case study ingestion:** `enrich/case-study-ingest` and `enrich/firm-case-study-ingest` Inngest events -> `writeCaseStudyToGraph()`
 
@@ -247,7 +250,7 @@ firm_type_A -> [firm-relationships.csv lookup] -> firm_type_B
 
 The matching engine uses Neo4j as Layer 1 (structured filtering) in a three-layer cascade:
 
-1. **Layer 1 -- Neo4j** (`structured-filter.ts`): Cypher queries filter `ServiceFirm` nodes by skills, categories, industries, markets. Returns ~500 candidates with structured match scores. Queries use `HAS_SKILL`, `IN_CATEGORY`, `SERVES_INDUSTRY`, `OPERATES_IN` edges.
+1. **Layer 1 -- Neo4j** (`structured-filter.ts`): Cypher queries filter `Company:ServiceFirm` nodes by skills, categories, industries, markets. Returns ~500 candidates with structured match scores. Queries use `HAS_SKILL`, `IN_CATEGORY`, `SERVES_INDUSTRY`, `OPERATES_IN` edges.
 
 2. **Layer 2 -- pgvector**: Vector similarity re-ranking on abstraction profile embeddings (~50 candidates).
 
@@ -269,12 +272,12 @@ Target: <$0.10 per search, <3 seconds latency.
 
 ### Partially Implemented
 - **Symbiotic relationship queries:** PARTNERS_WITH edges are seeded between Categories but not yet queried by the matching engine
-- **IS_FIRM_TYPE edge:** FirmType nodes are seeded but `IS_FIRM_TYPE` edges from ServiceFirm are not created by the enrichment pipeline
+- **IS_FIRM_TYPE edge:** FirmType nodes are seeded but `IS_FIRM_TYPE` edges from Company:ServiceFirm are not created by the enrichment pipeline
 - **pgvector embeddings:** AbstractionProfile embedding field exists in types but pgvector is not live for search
 - **Abstraction profiles:** Auto-trigger from enrichment not fully wired; case study abstraction works, firm-level abstraction generation incomplete
 
 ### Data Gaps
-- **Global firm database:** Not loaded -- ServiceFirm nodes only exist for enriched platform members
+- **Global firm database:** Not loaded -- Company:ServiceFirm nodes only exist for enriched platform members
 - **Graph sync Inngest:** `graph-sync-firm` function exists but only passes basic data (firmId, name, website) without enrichment results -- needs full enrichment data piped through
 - **Bidirectional matching:** **Now implemented** via `bidirectionalStructuredFilter()` in `structured-filter.ts`. Reads PREFERS edges for both searcher and candidates, computes mutual fit, and applies up to +20% score boost. Wired into `search.ts` when `searcherFirmId` is provided and Neo4j is configured.
 
@@ -299,7 +302,7 @@ The schema manifest endpoint (`GET /api/partner-sync/schema-manifest`) returns n
 | `src/lib/neo4j-seed.ts` | Taxonomy seeding (categories, skills, markets, etc.) |
 | `src/lib/neo4j-migrate-legacy.ts` | Legacy JSON data migration (5 steps) |
 | `src/lib/enrichment/graph-writer.ts` | Enrichment -> Neo4j writer (firms, experts, case studies, specialist profiles) |
-| `src/lib/enrichment/preference-writer.ts` | Onboarding answers -> Neo4j PREFERS edges + ServiceFirm properties |
+| `src/lib/enrichment/preference-writer.ts` | Onboarding answers -> Neo4j PREFERS edges + Company:ServiceFirm properties |
 | `src/lib/taxonomy.ts` | CSV parsers for reference data |
 | `src/lib/matching/structured-filter.ts` | Layer 1 Neo4j Cypher queries for matching |
 | `src/lib/matching/search.ts` | Three-layer search orchestrator |
