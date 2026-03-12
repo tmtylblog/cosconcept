@@ -390,7 +390,7 @@ export default function NetworkScanPage() {
           <Mail className="mx-auto h-8 w-8 text-cos-slate-light mb-3" />
           <p className="text-sm font-medium text-cos-midnight">Ready to scan</p>
           <p className="mt-1 text-xs text-cos-slate">
-            Click "Scan Now" above to discover your industry relationships.
+            Click &quot;Scan Now&quot; above to discover your industry relationships.
           </p>
         </div>
       )}
