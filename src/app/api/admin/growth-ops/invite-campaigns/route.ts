@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { growthOpsInviteCampaigns, growthOpsInviteTargets, growthOpsInviteQueue } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import {
+  growthOpsInviteCampaigns,
+  growthOpsInviteTargets,
+  growthOpsInviteQueue,
+  growthOpsLinkedInAccounts,
+  growthOpsTargetLists,
+} from "@/lib/db/schema";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { buildInviteSchedule } from "@/lib/growth-ops/invite-scheduler";
 
@@ -18,7 +24,32 @@ async function checkAdmin() {
 
 export async function GET() {
   if (!await checkAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const campaigns = await db.select().from(growthOpsInviteCampaigns).orderBy(growthOpsInviteCampaigns.createdAt);
+
+  const rows = await db
+    .select({
+      campaign: growthOpsInviteCampaigns,
+      accountName: growthOpsLinkedInAccounts.displayName,
+      accountStatus: growthOpsLinkedInAccounts.status,
+      listName: growthOpsTargetLists.name,
+      queuedCount: sql<number>`(
+        SELECT count(*)::int FROM growth_ops_invite_queue
+        WHERE campaign_id = ${growthOpsInviteCampaigns.id}
+        AND status = 'queued'
+      )`,
+    })
+    .from(growthOpsInviteCampaigns)
+    .leftJoin(growthOpsLinkedInAccounts, eq(growthOpsLinkedInAccounts.id, growthOpsInviteCampaigns.linkedinAccountId))
+    .leftJoin(growthOpsTargetLists, eq(growthOpsTargetLists.id, growthOpsInviteCampaigns.targetListId))
+    .orderBy(desc(growthOpsInviteCampaigns.createdAt));
+
+  const campaigns = rows.map((r) => ({
+    ...r.campaign,
+    accountName: r.accountName ?? "",
+    accountStatus: r.accountStatus ?? "",
+    listName: r.listName ?? "",
+    queuedCount: r.queuedCount ?? 0,
+  }));
+
   return NextResponse.json({ campaigns });
 }
 
