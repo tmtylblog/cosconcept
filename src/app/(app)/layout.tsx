@@ -817,61 +817,90 @@ function AppLayoutInner({
 
       {/* ─── PHASE 4: AUTHENTICATED (onboarding complete, full app access) ─── */}
       {appPhase === "authenticated" && (
-        <div className="flex h-screen overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
-          {/* Left: Collapsible navigation */}
-          <NavBar
-            collapsed={navCollapsed}
-            onToggle={() => setNavCollapsed(!navCollapsed)}
-            isGuest={false}
-            onRequestLogin={handleRequestLogin}
-            onSimulateNewUser={handleSimulateNewUser}
-          />
-
-          {/* Center: Rich content area */}
-          <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-cos-cloud/60">
-            {children}
-          </main>
-
-          {/* Right: Chat panel — desktop */}
-          <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-midnight/20 lg:flex">
-            <ChatPanel
-              key={chatKey}
-              isGuest={false}
-              firmSection={firmSection}
-              onRequestLogin={handleRequestLogin}
-            />
-          </aside>
-
-          {/* Mobile: Floating Ossy button + full-screen chat overlay */}
-          {!mobileChat && (
-            <button
-              onClick={() => setMobileChat(true)}
-              className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-cos-electric text-white shadow-lg transition-transform hover:scale-105 lg:hidden"
-              aria-label="Open Ossy chat"
-            >
-              <MessageCircle className="h-5 w-5" />
-            </button>
-          )}
-          {mobileChat && (
-            <div className="fixed inset-0 z-50 flex flex-col bg-cos-cloud lg:hidden">
-              <div className="flex h-12 items-center justify-end border-b border-cos-border/30 px-4">
-                <button
-                  onClick={() => setMobileChat(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-cos-full text-cos-slate-dim hover:bg-cos-cloud-dim hover:text-cos-midnight"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+        <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
+          {/* Impersonation banner — shown when admin is simulating this user */}
+          {session?.session?.impersonatedBy && (
+            <div className="flex shrink-0 items-center justify-between bg-cos-ember px-4 py-2 shadow-sm">
+              <div className="flex items-center gap-2 text-white">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[10px]">
+                  👁
+                </span>
+                <span className="text-sm font-medium">
+                  Simulating as{" "}
+                  <span className="font-bold">
+                    {session.user?.name || session.user?.email || "Unknown user"}
+                  </span>
+                </span>
               </div>
-              <div className="flex-1 overflow-hidden">
-                <ChatPanel
-                  key={chatKey}
-                  isGuest={false}
-                  firmSection={firmSection}
-                  onRequestLogin={handleRequestLogin}
-                />
-              </div>
+              <button
+                onClick={() => {
+                  authClient.signOut().then(() => {
+                    window.close();
+                  });
+                }}
+                className="rounded-cos-pill border border-white/30 bg-white/10 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-white/20"
+              >
+                Stop Simulating
+              </button>
             </div>
           )}
+
+          <div className="flex flex-1 overflow-hidden">
+            {/* Left: Collapsible navigation */}
+            <NavBar
+              collapsed={navCollapsed}
+              onToggle={() => setNavCollapsed(!navCollapsed)}
+              isGuest={false}
+              onRequestLogin={handleRequestLogin}
+              onSimulateNewUser={handleSimulateNewUser}
+            />
+
+            {/* Center: Rich content area */}
+            <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-cos-cloud/60">
+              {children}
+            </main>
+
+            {/* Right: Chat panel — desktop */}
+            <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-midnight/20 lg:flex">
+              <ChatPanel
+                key={chatKey}
+                isGuest={false}
+                firmSection={firmSection}
+                onRequestLogin={handleRequestLogin}
+              />
+            </aside>
+
+            {/* Mobile: Floating Ossy button + full-screen chat overlay */}
+            {!mobileChat && (
+              <button
+                onClick={() => setMobileChat(true)}
+                className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-cos-electric text-white shadow-lg transition-transform hover:scale-105 lg:hidden"
+                aria-label="Open Ossy chat"
+              >
+                <MessageCircle className="h-5 w-5" />
+              </button>
+            )}
+            {mobileChat && (
+              <div className="fixed inset-0 z-50 flex flex-col bg-cos-cloud lg:hidden">
+                <div className="flex h-12 items-center justify-end border-b border-cos-border/30 px-4">
+                  <button
+                    onClick={() => setMobileChat(false)}
+                    className="flex h-8 w-8 items-center justify-center rounded-cos-full text-cos-slate-dim hover:bg-cos-cloud-dim hover:text-cos-midnight"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <ChatPanel
+                    key={chatKey}
+                    isGuest={false}
+                    firmSection={firmSection}
+                    onRequestLogin={handleRequestLogin}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
