@@ -1,0 +1,1599 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Building2,
+  Users,
+  Globe,
+  CreditCard,
+  Sparkles,
+  MessageSquare,
+  Activity,
+  Handshake,
+  Shield,
+  Loader2,
+  Eye,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Cpu,
+  FileText,
+  Lightbulb,
+  Search,
+  ExternalLink,
+  Ban,
+  UserCheck,
+  BarChart3,
+  Bot,
+  User,
+  Share2,
+} from "lucide-react";
+import { authClient } from "@/lib/auth-client";
+import { Button } from "@/components/ui/button";
+
+/* ── Types ────────────────────────────────────────────────────────── */
+
+interface CustomerData {
+  org: {
+    id: string;
+    name: string;
+    slug: string;
+    logo: string | null;
+    metadata: string | Record<string, unknown> | null;
+    createdAt: string;
+  };
+  firm: {
+    id: string;
+    name: string;
+    website: string | null;
+    description: string | null;
+    firmType: string | null;
+    sizeBand: string | null;
+    profileCompleteness: number | null;
+    enrichmentData: Record<string, unknown> | null;
+    enrichmentStatus: string | null;
+    graphNodeId: string | null;
+    isCosCustomer: boolean;
+    entityType: string | null;
+    createdAt: string;
+  } | null;
+  subscription: {
+    id: string;
+    plan: string;
+    status: string;
+    stripeCustomerId: string;
+    stripeSubscriptionId: string | null;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    trialStart: string | null;
+    trialEnd: string | null;
+    createdAt: string;
+  } | null;
+  members: {
+    id: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    userImage: string | null;
+    banned: boolean;
+    role: string;
+    createdAt: string;
+  }[];
+  stats: {
+    enrichmentCost: number;
+    aiCost: number;
+    messageCount: number;
+    conversationCount: number;
+    caseStudyCount: number;
+    opportunityCount: number;
+    partnershipCount: number;
+  };
+  enrichment: {
+    totalEntries: number;
+    totalCost: number;
+    phases: string[];
+    lastEnriched: string | null;
+  };
+}
+
+interface ConversationListItem {
+  id: string;
+  title: string | null;
+  mode: string;
+  userName: string;
+  userEmail: string;
+  messageCount: number;
+  lastMessageAt: string | null;
+  createdAt: string;
+}
+
+interface ConversationMessage {
+  id: string;
+  role: string;
+  content: string;
+  createdAt: string;
+}
+
+interface ActivityEvent {
+  type: string;
+  timestamp: string;
+  title: string;
+  detail: string;
+  userName: string | null;
+  metadata: Record<string, unknown>;
+}
+
+interface PartnershipRow {
+  id: string;
+  partnerFirmName: string;
+  partnerFirmWebsite: string | null;
+  status: string;
+  type: string;
+  matchScore: number | null;
+  matchExplanation: string | null;
+  createdAt: string;
+  acceptedAt: string | null;
+}
+
+interface OpportunityRow {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  estimatedValue: string | null;
+  signalType: string;
+  clientName: string | null;
+  createdAt: string;
+}
+
+interface LeadRow {
+  id: string;
+  title: string;
+  status: string;
+  estimatedValue: string | null;
+  clientName: string | null;
+  qualityScore: number;
+  createdAt: string;
+}
+
+interface BillingData {
+  subscription: CustomerData["subscription"];
+  usage: {
+    aiCost: number;
+    aiCalls: number;
+    aiInputTokens: number;
+    aiOutputTokens: number;
+    enrichmentCost: number;
+  };
+  billingEvents: {
+    id: string;
+    eventType: string;
+    data: unknown;
+    createdAt: string;
+  }[];
+}
+
+type TabId =
+  | "overview"
+  | "users"
+  | "firm-profile"
+  | "activity"
+  | "conversations"
+  | "billing"
+  | "partnerships"
+  | "admin";
+
+const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
+  { id: "overview", label: "Overview", icon: <BarChart3 className="h-4 w-4" /> },
+  { id: "users", label: "Users", icon: <Users className="h-4 w-4" /> },
+  { id: "firm-profile", label: "Firm Profile", icon: <Building2 className="h-4 w-4" /> },
+  { id: "activity", label: "Activity", icon: <Activity className="h-4 w-4" /> },
+  { id: "conversations", label: "Conversations", icon: <MessageSquare className="h-4 w-4" /> },
+  { id: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" /> },
+  { id: "partnerships", label: "Partnerships", icon: <Handshake className="h-4 w-4" /> },
+  { id: "admin", label: "Admin", icon: <Shield className="h-4 w-4" /> },
+];
+
+const PLAN_COLORS: Record<string, string> = {
+  free: "bg-cos-cloud text-cos-slate",
+  pro: "bg-cos-electric/10 text-cos-electric",
+  enterprise: "bg-cos-warm/10 text-cos-warm",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  active: "bg-emerald-100 text-emerald-700",
+  trialing: "bg-blue-100 text-blue-700",
+  past_due: "bg-cos-ember/10 text-cos-ember",
+  canceled: "bg-cos-slate-light/10 text-cos-slate",
+  unpaid: "bg-red-100 text-red-700",
+};
+
+const PHASE_COLORS: Record<string, string> = {
+  jina: "bg-cos-electric/10 text-cos-electric",
+  classifier: "bg-cos-signal/10 text-cos-signal",
+  pdl: "bg-purple-100 text-purple-700",
+  linkedin: "bg-blue-100 text-blue-700",
+  case_study: "bg-cos-warm/10 text-cos-warm",
+  onboarding: "bg-emerald-100 text-emerald-700",
+  memory: "bg-pink-100 text-pink-700",
+  deep_crawl: "bg-orange-100 text-orange-700",
+};
+
+const EVENT_ICONS: Record<string, React.ReactNode> = {
+  conversation: <MessageSquare className="h-3.5 w-3.5 text-cos-electric" />,
+  ai_usage: <Cpu className="h-3.5 w-3.5 text-purple-500" />,
+  enrichment: <Sparkles className="h-3.5 w-3.5 text-cos-warm" />,
+  onboarding: <FileText className="h-3.5 w-3.5 text-emerald-500" />,
+};
+
+/* ── Helpers ──────────────────────────────────────────────────────── */
+
+function formatDate(date: string | null) {
+  if (!date) return "—";
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatDateTime(date: string | null) {
+  if (!date) return "—";
+  return new Date(date).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatCurrency(amount: number) {
+  return `$${amount.toFixed(2)}`;
+}
+
+function Section({
+  title,
+  icon,
+  children,
+  className = "",
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-cos-lg border border-cos-border bg-white p-5 ${className}`}>
+      <div className="mb-4 flex items-center gap-2">
+        {icon}
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
+          {title}
+        </h3>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function StatPill({
+  label,
+  value,
+  color = "text-cos-electric",
+}: {
+  label: string;
+  value: string | number;
+  color?: string;
+}) {
+  return (
+    <div className="rounded-cos-lg bg-white border border-cos-border px-4 py-2.5 text-center min-w-[100px]">
+      <div className={`text-lg font-bold ${color}`}>{value}</div>
+      <div className="text-[10px] font-medium uppercase tracking-wide text-cos-slate">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+/* ── Main Component ──────────────────────────────────────────────── */
+
+export default function CustomerDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const orgId = params.orgId as string;
+
+  const [data, setData] = useState<CustomerData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
+
+  // Tab-specific state
+  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
+  const [convsLoading, setConvsLoading] = useState(false);
+  const [convsLoaded, setConvsLoaded] = useState(false);
+  const [selectedConv, setSelectedConv] = useState<string | null>(null);
+  const [convMessages, setConvMessages] = useState<ConversationMessage[]>([]);
+  const [convMsgsLoading, setConvMsgsLoading] = useState(false);
+  const [convSearch, setConvSearch] = useState("");
+
+  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityLoaded, setActivityLoaded] = useState(false);
+  const [activityFilter, setActivityFilter] = useState("all");
+
+  const [partnershipData, setPartnershipData] = useState<{
+    partnerships: PartnershipRow[];
+    opportunities: OpportunityRow[];
+    leads: LeadRow[];
+  } | null>(null);
+  const [partnershipsLoading, setPartnershipsLoading] = useState(false);
+  const [partnershipsLoaded, setPartnershipsLoaded] = useState(false);
+
+  const [billingData, setBillingData] = useState<BillingData | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingLoaded, setBillingLoaded] = useState(false);
+
+  const [impersonating, setImpersonating] = useState<string | null>(null);
+
+  // Primary data load
+  useEffect(() => {
+    fetch(`/api/admin/customers/${orgId}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        setData(d);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, [orgId]);
+
+  // Lazy load conversations
+  useEffect(() => {
+    if (activeTab !== "conversations" || convsLoaded) return;
+    setConvsLoading(true);
+    fetch(`/api/admin/customers/${orgId}/conversations`)
+      .then((r) => r.json())
+      .then((d) => {
+        setConversations(d.conversations ?? []);
+        setConvsLoaded(true);
+      })
+      .catch(console.error)
+      .finally(() => setConvsLoading(false));
+  }, [activeTab, convsLoaded, orgId]);
+
+  // Lazy load activity
+  useEffect(() => {
+    if (activeTab !== "activity" || activityLoaded) return;
+    setActivityLoading(true);
+    fetch(`/api/admin/customers/${orgId}/activity?type=${activityFilter}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setActivityEvents(d.events ?? []);
+        setActivityLoaded(true);
+      })
+      .catch(console.error)
+      .finally(() => setActivityLoading(false));
+  }, [activeTab, activityLoaded, orgId, activityFilter]);
+
+  // Lazy load partnerships
+  useEffect(() => {
+    if (activeTab !== "partnerships" || partnershipsLoaded) return;
+    setPartnershipsLoading(true);
+    fetch(`/api/admin/customers/${orgId}/partnerships`)
+      .then((r) => r.json())
+      .then((d) => {
+        setPartnershipData(d);
+        setPartnershipsLoaded(true);
+      })
+      .catch(console.error)
+      .finally(() => setPartnershipsLoading(false));
+  }, [activeTab, partnershipsLoaded, orgId]);
+
+  // Lazy load billing
+  useEffect(() => {
+    if (activeTab !== "billing" || billingLoaded) return;
+    setBillingLoading(true);
+    fetch(`/api/admin/customers/${orgId}/billing`)
+      .then((r) => r.json())
+      .then((d) => {
+        setBillingData(d);
+        setBillingLoaded(true);
+      })
+      .catch(console.error)
+      .finally(() => setBillingLoading(false));
+  }, [activeTab, billingLoaded, orgId]);
+
+  // Load conversation thread
+  const loadThread = useCallback(
+    async (convId: string) => {
+      setSelectedConv(convId);
+      setConvMsgsLoading(true);
+      try {
+        const res = await fetch(
+          `/api/admin/customers/${orgId}/conversations?mode=thread&conversationId=${convId}`
+        );
+        const d = await res.json();
+        setConvMessages(d.messages ?? []);
+      } catch (err) {
+        console.error("Failed to load thread:", err);
+      } finally {
+        setConvMsgsLoading(false);
+      }
+    },
+    [orgId]
+  );
+
+  // Reload activity when filter changes
+  useEffect(() => {
+    if (activeTab !== "activity" || !activityLoaded) return;
+    setActivityLoading(true);
+    fetch(`/api/admin/customers/${orgId}/activity?type=${activityFilter}`)
+      .then((r) => r.json())
+      .then((d) => setActivityEvents(d.events ?? []))
+      .catch(console.error)
+      .finally(() => setActivityLoading(false));
+  }, [activityFilter, activeTab, activityLoaded, orgId]);
+
+  // Search conversations
+  const searchConversations = useCallback(async () => {
+    if (!convSearch.trim()) {
+      setConvsLoaded(false); // trigger re-fetch
+      return;
+    }
+    setConvsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/admin/customers/${orgId}/conversations?search=${encodeURIComponent(convSearch)}`
+      );
+      const d = await res.json();
+      setConversations(d.conversations ?? []);
+    } catch (err) {
+      console.error("Search failed:", err);
+    } finally {
+      setConvsLoading(false);
+    }
+  }, [convSearch, orgId]);
+
+  // Impersonate user
+  async function handleImpersonate(userId: string) {
+    setImpersonating(userId);
+    try {
+      await authClient.admin.impersonateUser({ userId });
+      // Open in new tab so admin doesn't lose their session
+      window.open("/dashboard", "_blank");
+    } catch (err) {
+      console.error("Impersonation failed:", err);
+    } finally {
+      setImpersonating(null);
+    }
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-cos-electric" />
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !data) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => router.push("/admin/customers")}
+          className="flex items-center gap-2 text-sm text-cos-slate hover:text-cos-electric transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Customers
+        </button>
+        <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-16">
+          <Building2 className="h-10 w-10 text-cos-slate-light" />
+          <p className="mt-3 text-sm font-medium text-cos-midnight">Customer not found</p>
+          <p className="mt-1 text-xs text-cos-slate">{error ?? "Unable to load customer data"}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { org, firm, subscription, members, stats, enrichment } = data;
+
+  return (
+    <div className="space-y-6">
+      {/* Back button */}
+      <button
+        onClick={() => router.push("/admin/customers")}
+        className="flex items-center gap-2 text-sm text-cos-slate hover:text-cos-electric transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Customers
+      </button>
+
+      {/* Hero Header */}
+      <div className="rounded-cos-xl border border-cos-border bg-white overflow-hidden">
+        <div className="px-6 py-5">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-cos-lg bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xl font-bold text-cos-electric">
+                {org.name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <h1 className="font-heading text-xl font-bold tracking-tight text-cos-midnight">
+                  {firm?.name ?? org.name}
+                </h1>
+                <div className="mt-1 flex items-center gap-3 text-sm text-cos-slate">
+                  {firm?.website && (
+                    <a
+                      href={firm.website.startsWith("http") ? firm.website : `https://${firm.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-cos-electric hover:underline"
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      {firm.website}
+                    </a>
+                  )}
+                  {subscription && (
+                    <span
+                      className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                        PLAN_COLORS[subscription.plan] ?? PLAN_COLORS.free
+                      }`}
+                    >
+                      {subscription.plan}
+                    </span>
+                  )}
+                  {subscription && (
+                    <span
+                      className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
+                        STATUS_COLORS[subscription.status] ?? "bg-cos-cloud text-cos-slate"
+                      }`}
+                    >
+                      {subscription.status}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1 text-xs text-cos-slate-light">
+                    <Clock className="h-3 w-3" />
+                    Joined {formatDate(org.createdAt)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* KPI stat pills */}
+          <div className="mt-5 flex flex-wrap gap-3">
+            <StatPill
+              label="Profile"
+              value={firm?.profileCompleteness ? `${Math.round(firm.profileCompleteness)}%` : "0%"}
+              color="text-cos-electric"
+            />
+            <StatPill
+              label="Enrichment"
+              value={formatCurrency(stats.enrichmentCost)}
+              color="text-cos-warm"
+            />
+            <StatPill
+              label="AI Cost"
+              value={formatCurrency(stats.aiCost)}
+              color="text-purple-600"
+            />
+            <StatPill
+              label="Messages"
+              value={stats.messageCount}
+              color="text-cos-signal"
+            />
+            <StatPill label="Case Studies" value={stats.caseStudyCount} color="text-cos-warm" />
+            <StatPill label="Members" value={members.length} color="text-cos-electric" />
+            <StatPill label="Partnerships" value={stats.partnershipCount} color="text-emerald-600" />
+          </div>
+        </div>
+
+        {/* Tab navigation */}
+        <div className="border-t border-cos-border bg-cos-cloud/30 px-6">
+          <div className="flex gap-1 overflow-x-auto">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                  activeTab === tab.id
+                    ? "border-cos-electric text-cos-electric"
+                    : "border-transparent text-cos-slate hover:text-cos-midnight"
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div>
+        {/* ── OVERVIEW TAB ── */}
+        {activeTab === "overview" && (
+          <div className="grid gap-5 lg:grid-cols-3">
+            <div className="space-y-5 lg:col-span-2">
+              {/* Members preview */}
+              <Section title="Team Members" icon={<Users className="h-4 w-4 text-cos-electric" />}>
+                {members.length === 0 ? (
+                  <p className="text-xs text-cos-slate-light">No members</p>
+                ) : (
+                  <div className="space-y-2">
+                    {members.slice(0, 5).map((m) => (
+                      <div key={m.id} className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-3 py-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cos-electric/10 text-xs font-bold text-cos-electric">
+                          {(m.userName ?? m.userEmail ?? "?").charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-cos-midnight">
+                            {m.userName ?? "Unnamed"}
+                          </p>
+                          <p className="truncate text-xs text-cos-slate">{m.userEmail}</p>
+                        </div>
+                        <span
+                          className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
+                            m.role === "owner"
+                              ? "bg-cos-warm/10 text-cos-warm"
+                              : m.role === "admin"
+                              ? "bg-cos-electric/10 text-cos-electric"
+                              : "bg-cos-cloud text-cos-slate"
+                          }`}
+                        >
+                          {m.role}
+                        </span>
+                      </div>
+                    ))}
+                    {members.length > 5 && (
+                      <button
+                        onClick={() => setActiveTab("users")}
+                        className="text-xs text-cos-electric hover:underline"
+                      >
+                        View all {members.length} members →
+                      </button>
+                    )}
+                  </div>
+                )}
+              </Section>
+
+              {/* Subscription */}
+              <Section title="Subscription" icon={<CreditCard className="h-4 w-4 text-cos-signal" />}>
+                {subscription ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`rounded-cos-pill px-3 py-1 text-xs font-bold uppercase ${
+                          PLAN_COLORS[subscription.plan] ?? PLAN_COLORS.free
+                        }`}
+                      >
+                        {subscription.plan}
+                      </span>
+                      <span
+                        className={`rounded-cos-pill px-2.5 py-0.5 text-xs font-medium ${
+                          STATUS_COLORS[subscription.status] ?? "bg-cos-cloud text-cos-slate"
+                        }`}
+                      >
+                        {subscription.status}
+                      </span>
+                      {subscription.cancelAtPeriodEnd && (
+                        <span className="text-xs text-cos-ember font-medium">
+                          Cancels at period end
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-xs text-cos-slate">
+                      <div>
+                        <p className="font-medium text-cos-midnight">Current Period</p>
+                        <p>{formatDate(subscription.currentPeriodStart)} — {formatDate(subscription.currentPeriodEnd)}</p>
+                      </div>
+                      {subscription.trialEnd && (
+                        <div>
+                          <p className="font-medium text-cos-midnight">Trial Ends</p>
+                          <p>{formatDate(subscription.trialEnd)}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-cos-slate-light">No subscription found</p>
+                )}
+              </Section>
+            </div>
+
+            <div className="space-y-5">
+              {/* Firm Snapshot */}
+              <Section title="Firm Snapshot" icon={<Building2 className="h-4 w-4 text-cos-signal" />}>
+                {firm ? (
+                  <div className="space-y-3 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-cos-slate">Type</span>
+                      <span className="font-medium text-cos-midnight">
+                        {firm.firmType?.replace(/_/g, " ") ?? "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-cos-slate">Size Band</span>
+                      <span className="font-medium text-cos-midnight">
+                        {firm.sizeBand?.replace(/_/g, " ") ?? "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-cos-slate">Entity Type</span>
+                      <span className="font-medium text-cos-midnight">
+                        {firm.entityType ?? "service_firm"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-cos-slate">COS Customer</span>
+                      <span className={`font-medium ${firm.isCosCustomer ? "text-emerald-600" : "text-cos-slate-light"}`}>
+                        {firm.isCosCustomer ? "Yes" : "No"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-cos-slate">Enrichment</span>
+                      <span className="font-medium text-cos-midnight">
+                        {firm.enrichmentStatus ?? "pending"}
+                      </span>
+                    </div>
+                    {firm.graphNodeId && (
+                      <a
+                        href={`/admin/knowledge-graph`}
+                        className="flex items-center gap-1 text-cos-electric hover:underline mt-2"
+                      >
+                        <Share2 className="h-3 w-3" />
+                        View in Knowledge Graph
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-cos-slate-light">No firm linked</p>
+                )}
+              </Section>
+
+              {/* Enrichment Summary */}
+              <Section title="Enrichment" icon={<Sparkles className="h-4 w-4 text-cos-warm" />}>
+                <div className="space-y-3 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-cos-slate">Total Cost</span>
+                    <span className="font-bold text-cos-warm">{formatCurrency(enrichment.totalCost)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-cos-slate">Steps Run</span>
+                    <span className="font-medium text-cos-midnight">{enrichment.totalEntries}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-cos-slate">Last Enriched</span>
+                    <span className="font-medium text-cos-midnight">{formatDate(enrichment.lastEnriched)}</span>
+                  </div>
+                  {enrichment.phases.length > 0 && (
+                    <div>
+                      <p className="text-cos-slate mb-1.5">Phases</p>
+                      <div className="flex flex-wrap gap-1">
+                        {enrichment.phases.map((phase) => (
+                          <span
+                            key={phase}
+                            className={`rounded-cos-pill px-2 py-0.5 text-[9px] font-medium ${
+                              PHASE_COLORS[phase] ?? "bg-cos-cloud text-cos-slate"
+                            }`}
+                          >
+                            {phase}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Section>
+
+              {/* Quick Actions */}
+              <Section title="Quick Actions" icon={<Lightbulb className="h-4 w-4 text-cos-electric" />}>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setActiveTab("billing")}
+                    className="flex w-full items-center gap-2 rounded-cos px-3 py-2 text-xs font-medium text-cos-slate hover:bg-cos-electric/5 hover:text-cos-electric transition-colors"
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    Manage Subscription
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("conversations")}
+                    className="flex w-full items-center gap-2 rounded-cos px-3 py-2 text-xs font-medium text-cos-slate hover:bg-cos-electric/5 hover:text-cos-electric transition-colors"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    View Conversations
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("firm-profile")}
+                    className="flex w-full items-center gap-2 rounded-cos px-3 py-2 text-xs font-medium text-cos-slate hover:bg-cos-electric/5 hover:text-cos-electric transition-colors"
+                  >
+                    <Building2 className="h-3.5 w-3.5" />
+                    View Firm Profile
+                  </button>
+                </div>
+              </Section>
+            </div>
+          </div>
+        )}
+
+        {/* ── USERS TAB ── */}
+        {activeTab === "users" && (
+          <Section title={`Team Members (${members.length})`} icon={<Users className="h-4 w-4 text-cos-electric" />}>
+            {members.length === 0 ? (
+              <p className="text-xs text-cos-slate-light">No members in this organization</p>
+            ) : (
+              <div className="overflow-hidden rounded-cos-lg border border-cos-border">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-cos-border bg-cos-cloud/50">
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">User</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Email</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Role</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Status</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Joined</th>
+                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cos-border/60">
+                    {members.map((m) => (
+                      <tr key={m.id} className="transition-colors hover:bg-cos-electric/[0.02]">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
+                              {(m.userName ?? "?").charAt(0).toUpperCase()}
+                            </div>
+                            <span className="font-medium text-cos-midnight">{m.userName ?? "Unnamed"}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-cos-slate">{m.userEmail}</td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
+                            m.role === "owner"
+                              ? "bg-cos-warm/10 text-cos-warm"
+                              : m.role === "admin"
+                              ? "bg-cos-electric/10 text-cos-electric"
+                              : "bg-cos-cloud text-cos-slate"
+                          }`}>
+                            {m.role}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {m.banned ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-ember/8 px-2.5 py-0.5 text-xs font-medium text-cos-ember">
+                              <span className="h-1.5 w-1.5 rounded-full bg-cos-ember" />
+                              Banned
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-600">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              Active
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-cos-slate">{formatDate(m.createdAt)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleImpersonate(m.userId)}
+                              disabled={impersonating === m.userId}
+                              title="Simulate as this user"
+                              className="h-8 gap-1.5 px-2.5 text-xs text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
+                            >
+                              {impersonating === m.userId ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Eye className="h-3.5 w-3.5" />
+                              )}
+                              Simulate
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Section>
+        )}
+
+        {/* ── FIRM PROFILE TAB ── */}
+        {activeTab === "firm-profile" && (
+          <div className="space-y-5">
+            {firm ? (
+              <>
+                {/* About */}
+                {firm.description && (
+                  <Section title="About" icon={<Building2 className="h-4 w-4 text-cos-signal" />}>
+                    <p className="text-sm text-cos-midnight leading-relaxed">{firm.description}</p>
+                  </Section>
+                )}
+
+                {/* Enrichment Data */}
+                {firm.enrichmentData && (
+                  <>
+                    {/* Services */}
+                    {(firm.enrichmentData as Record<string, unknown>)?.services && (
+                      <Section title="Services" icon={<Sparkles className="h-4 w-4 text-cos-electric" />}>
+                        <div className="space-y-2">
+                          {(
+                            (firm.enrichmentData as Record<string, unknown>)
+                              .services as { name: string; description?: string }[]
+                          )?.map((svc, i) => (
+                            <div key={i} className="rounded-cos bg-cos-cloud/50 px-3 py-2">
+                              <p className="text-sm font-medium text-cos-midnight">{svc.name}</p>
+                              {svc.description && (
+                                <p className="mt-0.5 text-xs text-cos-slate">{svc.description}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </Section>
+                    )}
+
+                    {/* Taxonomy (skills, industries, markets) */}
+                    {(() => {
+                      const ed = firm.enrichmentData as Record<string, unknown>;
+                      const skills = ed?.skills as string[] | undefined;
+                      const industries = ed?.industries as string[] | undefined;
+                      const markets = ed?.markets as string[] | undefined;
+                      const categories = ed?.categories as string[] | undefined;
+
+                      const hasTaxonomy =
+                        (skills?.length ?? 0) > 0 ||
+                        (industries?.length ?? 0) > 0 ||
+                        (markets?.length ?? 0) > 0 ||
+                        (categories?.length ?? 0) > 0;
+
+                      if (!hasTaxonomy) return null;
+
+                      return (
+                        <Section title="Taxonomy" icon={<Share2 className="h-4 w-4 text-cos-signal" />}>
+                          <div className="space-y-4">
+                            {categories && categories.length > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold text-cos-warm mb-1.5">Categories</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {categories.map((c) => (
+                                    <span key={c} className="rounded-cos-pill bg-cos-warm/10 px-2.5 py-0.5 text-xs text-cos-warm">
+                                      {c}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {skills && skills.length > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold text-cos-signal mb-1.5">Skills</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {skills.slice(0, 30).map((s) => (
+                                    <span key={s} className="rounded-cos-pill bg-cos-signal/10 px-2.5 py-0.5 text-xs text-cos-signal">
+                                      {s}
+                                    </span>
+                                  ))}
+                                  {skills.length > 30 && (
+                                    <span className="text-xs text-cos-slate-light">
+                                      +{skills.length - 30} more
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {industries && industries.length > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold text-cos-ember mb-1.5">Industries</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {industries.map((ind) => (
+                                    <span key={ind} className="rounded-cos-pill bg-cos-ember/10 px-2.5 py-0.5 text-xs text-cos-ember">
+                                      {ind}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {markets && markets.length > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold text-cos-warm mb-1.5">Markets</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {markets.map((mkt) => (
+                                    <span key={mkt} className="rounded-cos-pill bg-cos-warm/10 px-2.5 py-0.5 text-xs text-cos-warm">
+                                      {mkt}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </Section>
+                      );
+                    })()}
+
+                    {/* Case Studies */}
+                    {(firm.enrichmentData as Record<string, unknown>)?.caseStudies && (
+                      <Section title="Case Studies" icon={<FileText className="h-4 w-4 text-cos-warm" />}>
+                        <div className="space-y-3">
+                          {(
+                            (firm.enrichmentData as Record<string, unknown>)
+                              .caseStudies as { title: string; client?: string; outcome?: string }[]
+                          )?.map((cs, i) => (
+                            <div key={i} className="rounded-cos bg-cos-cloud/50 p-3">
+                              <p className="text-sm font-medium text-cos-midnight">{cs.title}</p>
+                              {cs.client && (
+                                <p className="mt-0.5 text-xs text-cos-slate">Client: {cs.client}</p>
+                              )}
+                              {cs.outcome && (
+                                <p className="mt-1 text-xs text-cos-slate">{cs.outcome}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </Section>
+                    )}
+                  </>
+                )}
+
+                {/* Raw enrichment data (collapsed) */}
+                <details className="rounded-cos-lg border border-cos-border bg-white">
+                  <summary className="cursor-pointer px-5 py-3 text-xs font-semibold uppercase tracking-wider text-cos-slate hover:text-cos-midnight">
+                    Raw Enrichment Data
+                  </summary>
+                  <div className="border-t border-cos-border px-5 py-4">
+                    <pre className="max-h-96 overflow-auto rounded-cos bg-cos-cloud/50 p-4 text-[11px] text-cos-midnight font-mono leading-relaxed">
+                      {JSON.stringify(firm.enrichmentData, null, 2)}
+                    </pre>
+                  </div>
+                </details>
+              </>
+            ) : (
+              <Section title="Firm Profile" icon={<Building2 className="h-4 w-4 text-cos-signal" />}>
+                <p className="text-xs text-cos-slate-light">No firm linked to this organization</p>
+              </Section>
+            )}
+          </div>
+        )}
+
+        {/* ── ACTIVITY TAB ── */}
+        {activeTab === "activity" && (
+          <div className="space-y-4">
+            {/* Filters */}
+            <div className="flex gap-2">
+              {["all", "conversation", "ai_usage", "enrichment", "onboarding"].map((type) => (
+                <button
+                  key={type}
+                  onClick={() => {
+                    setActivityFilter(type);
+                    setActivityLoaded(false);
+                  }}
+                  className={`rounded-cos-pill px-3 py-1.5 text-xs font-medium transition-colors ${
+                    activityFilter === type
+                      ? "bg-cos-electric text-white"
+                      : "bg-cos-cloud text-cos-slate hover:bg-cos-cloud-dim"
+                  }`}
+                >
+                  {type === "all" ? "All" : type.replace(/_/g, " ")}
+                </button>
+              ))}
+            </div>
+
+            {activityLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+              </div>
+            ) : activityEvents.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
+                <Activity className="h-8 w-8 text-cos-slate-light" />
+                <p className="mt-2 text-sm text-cos-slate">No activity found</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {activityEvents.map((evt, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-3 rounded-cos-lg border border-cos-border bg-white px-4 py-3"
+                  >
+                    <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-cos-cloud">
+                      {EVENT_ICONS[evt.type] ?? <Activity className="h-3.5 w-3.5 text-cos-slate" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-cos-midnight">{evt.title}</span>
+                        <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[9px] font-medium text-cos-slate uppercase">
+                          {evt.type.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-cos-slate">{evt.detail}</p>
+                      {evt.userName && (
+                        <p className="mt-0.5 text-[10px] text-cos-slate-light">by {evt.userName}</p>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[10px] text-cos-slate-light">
+                      {formatDateTime(evt.timestamp)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── CONVERSATIONS TAB ── */}
+        {activeTab === "conversations" && (
+          <div className="space-y-4">
+            {/* Search */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
+                <input
+                  type="text"
+                  placeholder="Search within conversations..."
+                  value={convSearch}
+                  onChange={(e) => setConvSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && searchConversations()}
+                  className="w-full rounded-cos-lg border border-cos-border bg-white py-2 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+                />
+              </div>
+              <Button
+                onClick={searchConversations}
+                variant="outline"
+                size="sm"
+                className="h-[38px] px-4 text-xs"
+              >
+                Search
+              </Button>
+            </div>
+
+            {convsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+              </div>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-5">
+                {/* Conversation list */}
+                <div className="space-y-1 lg:col-span-2 max-h-[600px] overflow-y-auto">
+                  {conversations.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
+                      <MessageSquare className="h-8 w-8 text-cos-slate-light" />
+                      <p className="mt-2 text-sm text-cos-slate">No conversations found</p>
+                    </div>
+                  ) : (
+                    conversations.map((conv) => (
+                      <button
+                        key={conv.id}
+                        onClick={() => loadThread(conv.id)}
+                        className={`w-full text-left rounded-cos-lg border px-4 py-3 transition-colors ${
+                          selectedConv === conv.id
+                            ? "border-cos-electric bg-cos-electric/5"
+                            : "border-cos-border bg-white hover:border-cos-electric/30"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="truncate text-sm font-medium text-cos-midnight">
+                            {conv.title ?? "Untitled"}
+                          </p>
+                          <span className={`rounded-cos-pill px-2 py-0.5 text-[9px] font-medium ${
+                            conv.mode === "onboarding"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-cos-cloud text-cos-slate"
+                          }`}>
+                            {conv.mode}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-3 text-[10px] text-cos-slate">
+                          <span className="flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            {conv.userName}
+                          </span>
+                          <span>{conv.messageCount} msgs</span>
+                          <span>{formatDate(conv.lastMessageAt ?? conv.createdAt)}</span>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* Message thread */}
+                <div className="lg:col-span-3">
+                  {selectedConv ? (
+                    <div className="rounded-cos-lg border border-cos-border bg-white overflow-hidden">
+                      <div className="border-b border-cos-border bg-cos-cloud/30 px-4 py-3">
+                        <p className="text-sm font-semibold text-cos-midnight">
+                          {conversations.find((c) => c.id === selectedConv)?.title ?? "Conversation"}
+                        </p>
+                        <p className="text-xs text-cos-slate">
+                          {convMessages.length} messages
+                        </p>
+                      </div>
+                      <div className="max-h-[500px] overflow-y-auto p-4 space-y-3">
+                        {convMsgsLoading ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
+                          </div>
+                        ) : (
+                          convMessages.map((msg) => (
+                            <div
+                              key={msg.id}
+                              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                            >
+                              <div
+                                className={`max-w-[80%] rounded-cos-lg px-4 py-2.5 ${
+                                  msg.role === "user"
+                                    ? "bg-cos-electric text-white"
+                                    : "bg-cos-cloud text-cos-midnight"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 mb-1">
+                                  {msg.role === "assistant" ? (
+                                    <Bot className="h-3 w-3 text-cos-electric" />
+                                  ) : (
+                                    <User className="h-3 w-3" />
+                                  )}
+                                  <span className="text-[10px] font-medium opacity-70">
+                                    {msg.role === "assistant" ? "Ossy" : "User"} · {formatDateTime(msg.createdAt)}
+                                  </span>
+                                </div>
+                                <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                                  {msg.content}
+                                </p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-24">
+                      <MessageSquare className="h-10 w-10 text-cos-slate-light" />
+                      <p className="mt-3 text-sm text-cos-slate">
+                        Select a conversation to view messages
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── BILLING TAB ── */}
+        {activeTab === "billing" && (
+          <div className="space-y-5">
+            {billingLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+              </div>
+            ) : billingData ? (
+              <>
+                {/* Current Plan */}
+                <Section title="Current Plan" icon={<CreditCard className="h-4 w-4 text-cos-electric" />}>
+                  {billingData.subscription ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <span className={`rounded-cos-pill px-4 py-1.5 text-sm font-bold uppercase ${
+                          PLAN_COLORS[billingData.subscription.plan] ?? PLAN_COLORS.free
+                        }`}>
+                          {billingData.subscription.plan}
+                        </span>
+                        <span className={`rounded-cos-pill px-3 py-1 text-xs font-medium ${
+                          STATUS_COLORS[billingData.subscription.status] ?? "bg-cos-cloud text-cos-slate"
+                        }`}>
+                          {billingData.subscription.status}
+                        </span>
+                        {billingData.subscription.cancelAtPeriodEnd && (
+                          <span className="text-xs font-medium text-cos-ember">
+                            ⚠ Cancels at period end
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-6 text-sm">
+                        <div>
+                          <p className="text-xs text-cos-slate">Current Period</p>
+                          <p className="font-medium text-cos-midnight">
+                            {formatDate(billingData.subscription.currentPeriodStart)} — {formatDate(billingData.subscription.currentPeriodEnd)}
+                          </p>
+                        </div>
+                        {billingData.subscription.trialEnd && (
+                          <div>
+                            <p className="text-xs text-cos-slate">Trial Ends</p>
+                            <p className="font-medium text-cos-midnight">{formatDate(billingData.subscription.trialEnd)}</p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-xs text-cos-slate">Stripe Customer ID</p>
+                          <p className="font-mono text-xs text-cos-slate">{billingData.subscription.stripeCustomerId}</p>
+                        </div>
+                        {billingData.subscription.stripeSubscriptionId && (
+                          <div>
+                            <p className="text-xs text-cos-slate">Stripe Subscription ID</p>
+                            <p className="font-mono text-xs text-cos-slate">{billingData.subscription.stripeSubscriptionId}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-cos-slate-light">No subscription found</p>
+                  )}
+                </Section>
+
+                {/* Usage */}
+                <Section title="Usage Metrics" icon={<BarChart3 className="h-4 w-4 text-purple-500" />}>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div className="rounded-cos bg-cos-cloud/50 p-3 text-center">
+                      <div className="text-lg font-bold text-purple-600">{formatCurrency(billingData.usage.aiCost)}</div>
+                      <div className="text-[10px] font-medium uppercase text-cos-slate">AI Cost</div>
+                    </div>
+                    <div className="rounded-cos bg-cos-cloud/50 p-3 text-center">
+                      <div className="text-lg font-bold text-cos-electric">{billingData.usage.aiCalls.toLocaleString()}</div>
+                      <div className="text-[10px] font-medium uppercase text-cos-slate">AI Calls</div>
+                    </div>
+                    <div className="rounded-cos bg-cos-cloud/50 p-3 text-center">
+                      <div className="text-lg font-bold text-cos-signal">
+                        {(billingData.usage.aiInputTokens + billingData.usage.aiOutputTokens).toLocaleString()}
+                      </div>
+                      <div className="text-[10px] font-medium uppercase text-cos-slate">Total Tokens</div>
+                    </div>
+                    <div className="rounded-cos bg-cos-cloud/50 p-3 text-center">
+                      <div className="text-lg font-bold text-cos-warm">{formatCurrency(billingData.usage.enrichmentCost)}</div>
+                      <div className="text-[10px] font-medium uppercase text-cos-slate">Enrichment</div>
+                    </div>
+                  </div>
+                </Section>
+
+                {/* Billing Events */}
+                {billingData.billingEvents.length > 0 && (
+                  <Section title="Billing History" icon={<Clock className="h-4 w-4 text-cos-slate" />}>
+                    <div className="space-y-2">
+                      {billingData.billingEvents.map((evt) => (
+                        <div
+                          key={evt.id}
+                          className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-4 py-2.5"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-cos-midnight">
+                              {evt.eventType.replace(/_/g, " ").replace(/\./g, " → ")}
+                            </p>
+                          </div>
+                          <span className="text-xs text-cos-slate">{formatDate(evt.createdAt)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Section>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
+                <CreditCard className="h-8 w-8 text-cos-slate-light" />
+                <p className="mt-2 text-sm text-cos-slate">Unable to load billing data</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── PARTNERSHIPS TAB ── */}
+        {activeTab === "partnerships" && (
+          <div className="space-y-5">
+            {partnershipsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+              </div>
+            ) : partnershipData ? (
+              <>
+                {/* Partnerships */}
+                <Section title={`Partnerships (${partnershipData.partnerships.length})`} icon={<Handshake className="h-4 w-4 text-emerald-500" />}>
+                  {partnershipData.partnerships.length === 0 ? (
+                    <p className="text-xs text-cos-slate-light">No partnerships yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {partnershipData.partnerships.map((p) => (
+                        <div key={p.id} className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-4 py-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-cos-midnight">{p.partnerFirmName}</p>
+                            {p.partnerFirmWebsite && (
+                              <p className="text-xs text-cos-slate">{p.partnerFirmWebsite}</p>
+                            )}
+                          </div>
+                          <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
+                            p.status === "accepted"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : p.status === "requested"
+                              ? "bg-blue-100 text-blue-700"
+                              : p.status === "suggested"
+                              ? "bg-cos-warm/10 text-cos-warm"
+                              : "bg-cos-cloud text-cos-slate"
+                          }`}>
+                            {p.status}
+                          </span>
+                          {p.matchScore !== null && (
+                            <span className="text-xs font-medium text-cos-electric">
+                              {Math.round(p.matchScore * 100)}%
+                            </span>
+                          )}
+                          <span className="text-xs text-cos-slate-light">{formatDate(p.createdAt)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+
+                {/* Opportunities */}
+                <Section title={`Opportunities (${partnershipData.opportunities.length})`} icon={<Lightbulb className="h-4 w-4 text-cos-warm" />}>
+                  {partnershipData.opportunities.length === 0 ? (
+                    <p className="text-xs text-cos-slate-light">No opportunities yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {partnershipData.opportunities.map((opp) => (
+                        <a
+                          key={opp.id}
+                          href={`/admin/opportunities/${opp.id}`}
+                          className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-4 py-3 hover:bg-cos-electric/5 transition-colors"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-cos-midnight">{opp.title}</p>
+                            {opp.clientName && (
+                              <p className="text-xs text-cos-slate">Client: {opp.clientName}</p>
+                            )}
+                          </div>
+                          <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
+                            opp.priority === "high"
+                              ? "bg-red-100 text-red-700"
+                              : opp.priority === "medium"
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-cos-cloud text-cos-slate"
+                          }`}>
+                            {opp.priority}
+                          </span>
+                          <span className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
+                            opp.status === "new"
+                              ? "bg-blue-100 text-blue-700"
+                              : opp.status === "actioned"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-cos-cloud text-cos-slate"
+                          }`}>
+                            {opp.status}
+                          </span>
+                          {opp.estimatedValue && (
+                            <span className="text-xs text-cos-slate">{opp.estimatedValue}</span>
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+
+                {/* Leads */}
+                <Section title={`Leads (${partnershipData.leads.length})`} icon={<FileText className="h-4 w-4 text-cos-signal" />}>
+                  {partnershipData.leads.length === 0 ? (
+                    <p className="text-xs text-cos-slate-light">No leads yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {partnershipData.leads.map((lead) => (
+                        <div key={lead.id} className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-4 py-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-cos-midnight">{lead.title}</p>
+                            {lead.clientName && (
+                              <p className="text-xs text-cos-slate">Client: {lead.clientName}</p>
+                            )}
+                          </div>
+                          <span className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
+                            lead.status === "open"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : lead.status === "claimed"
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-cos-cloud text-cos-slate"
+                          }`}>
+                            {lead.status}
+                          </span>
+                          <span className="text-xs text-cos-slate-light">{formatDate(lead.createdAt)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
+                <Handshake className="h-8 w-8 text-cos-slate-light" />
+                <p className="mt-2 text-sm text-cos-slate">Unable to load partnership data</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── ADMIN TAB ── */}
+        {activeTab === "admin" && (
+          <div className="space-y-5">
+            {/* Account Info */}
+            <Section title="Account Information" icon={<Shield className="h-4 w-4 text-cos-slate" />}>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-cos-slate">Organization ID</span>
+                  <span className="font-mono text-xs text-cos-midnight">{org.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-cos-slate">Slug</span>
+                  <span className="font-mono text-xs text-cos-midnight">/{org.slug}</span>
+                </div>
+                {firm && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-cos-slate">Firm ID</span>
+                      <span className="font-mono text-xs text-cos-midnight">{firm.id}</span>
+                    </div>
+                    {firm.graphNodeId && (
+                      <div className="flex justify-between">
+                        <span className="text-cos-slate">Neo4j Node ID</span>
+                        <span className="font-mono text-xs text-cos-midnight">{firm.graphNodeId}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </Section>
+
+            {/* Raw Data */}
+            {firm?.enrichmentData && (
+              <details className="rounded-cos-lg border border-cos-border bg-white">
+                <summary className="cursor-pointer px-5 py-3 text-xs font-semibold uppercase tracking-wider text-cos-slate hover:text-cos-midnight">
+                  Raw Enrichment Data (JSON)
+                </summary>
+                <div className="border-t border-cos-border px-5 py-4">
+                  <pre className="max-h-96 overflow-auto rounded-cos bg-cos-cloud/50 p-4 text-[11px] text-cos-midnight font-mono leading-relaxed">
+                    {JSON.stringify(firm.enrichmentData, null, 2)}
+                  </pre>
+                </div>
+              </details>
+            )}
+
+            {org.metadata && (
+              <details className="rounded-cos-lg border border-cos-border bg-white">
+                <summary className="cursor-pointer px-5 py-3 text-xs font-semibold uppercase tracking-wider text-cos-slate hover:text-cos-midnight">
+                  Organization Metadata (JSON)
+                </summary>
+                <div className="border-t border-cos-border px-5 py-4">
+                  <pre className="max-h-96 overflow-auto rounded-cos bg-cos-cloud/50 p-4 text-[11px] text-cos-midnight font-mono leading-relaxed">
+                    {typeof org.metadata === "string"
+                      ? JSON.stringify(JSON.parse(org.metadata), null, 2)
+                      : JSON.stringify(org.metadata, null, 2)}
+                  </pre>
+                </div>
+              </details>
+            )}
+
+            {/* Danger Zone */}
+            <div className="rounded-cos-lg border-2 border-cos-ember/30 bg-white p-5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-ember mb-4">
+                Danger Zone
+              </h3>
+              <p className="text-xs text-cos-slate mb-4">
+                These actions are irreversible. Use with extreme caution.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  className="rounded-cos border border-cos-ember/30 px-4 py-2 text-xs font-medium text-cos-ember hover:bg-cos-ember/5 transition-colors"
+                  onClick={() => alert("Reset enrichment — coming soon")}
+                >
+                  Reset Enrichment
+                </button>
+                <button
+                  className="rounded-cos border border-cos-ember/30 px-4 py-2 text-xs font-medium text-cos-ember hover:bg-cos-ember/5 transition-colors"
+                  onClick={() => alert("Force re-sync to Neo4j — coming soon")}
+                >
+                  Force Neo4j Re-sync
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

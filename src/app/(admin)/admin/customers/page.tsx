@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Users,
@@ -15,6 +16,7 @@ import {
   Globe,
   UserCheck,
   Eye,
+  ExternalLink,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -98,6 +100,7 @@ const PHASE_COLORS: Record<string, string> = {
 /* ── Component ────────────────────────────────────────────────────── */
 
 export default function CustomersPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("companies");
 
   // ── Companies tab state ──
@@ -447,15 +450,11 @@ export default function CustomersPage() {
                   >
                     {/* Main row */}
                     <button
-                      onClick={() => toggleExpand(org.id)}
+                      onClick={() => router.push(`/admin/customers/${org.id}`)}
                       className="flex w-full items-center gap-3 px-4 py-3 text-left"
                     >
-                      <span className="text-cos-slate-light">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
+                      <span className="text-cos-electric">
+                        <ExternalLink className="h-3.5 w-3.5" />
                       </span>
 
                       {/* Name */}
