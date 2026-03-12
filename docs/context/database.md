@@ -798,10 +798,36 @@ Case studies from legacy platform.
 
 ---
 
+## Firm Services (User-Managed)
+
+### `firm_services`
+Services auto-discovered from website enrichment or manually added by the firm. Seeded automatically on first load from `enrichmentData.extracted.services` (with fallback to `enrichmentCache` if the firm row is a stub).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | `svc_${timestamp36}_${i}_${randomHex}` |
+| firm_id | text FK -> service_firms (cascade) | |
+| organization_id | text NOT NULL | |
+| name | text NOT NULL | Service name |
+| description | text | AI-generated or user-edited |
+| source_url | text | Page where service was found |
+| source_page_title | text | |
+| sub_services | jsonb (string[]) | Specific sub-capabilities |
+| is_hidden | boolean (default false) | User-controlled visibility |
+| display_order | integer (default 0) | User sort order |
+| created_at | timestamp NOT NULL | |
+| updated_at | timestamp NOT NULL | |
+
+**Auto-seeding:** When `GET /api/firm/services` returns 0 rows, `seedServicesIfEmpty()` is called. It tries (in order): `serviceFirms.enrichmentData.extracted.services` → `enrichmentCache` by website domain → `enrichmentCache` by email domain → redirect-resolved domain. Only runs once (stops once services are in DB).
+
+**Manual services:** `sourceUrl = null`. Only manually-added services can be deleted via `DELETE /api/firm/services`. Auto-discovered services must be hidden instead.
+
+---
+
 ## Firm Case Studies (User-Managed)
 
 ### `firm_case_studies`
-Case studies submitted by firms (URL-based ingestion).
+Case studies submitted by firms (URL-based ingestion). Auto-seeded from `enrichmentData.extracted.caseStudyUrls` on first load, with the same cache fallback + redirect resolution as `firm_services`.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -866,6 +892,7 @@ users ──┬── sessions
                                               │
 organizations ── service_firms ──┬── partner_preferences
                                  ├── expert_profiles ── specialist_profiles ── specialist_profile_examples
+                                 ├── firm_services
                                  ├── firm_case_studies
                                  ├── partnerships ──┬── partnership_events
                                  │                  └── referrals

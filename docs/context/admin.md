@@ -102,7 +102,7 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 ### 11. Enrichment Audit
 - **Route:** `/admin/enrichment`
 - **File:** `src/app/(admin)/admin/enrichment/page.tsx`
-- **Purpose:** Inspect enrichment pipeline results for any firm by ID. Shows firm header with stats (entries, cost, first/last enriched), phase badges (jina, classifier, pdl, linkedin, case_study, onboarding, memory, deep_crawl), and expandable audit trail entries with raw input/output, extracted data, errors, and confidence scores.
+- **Purpose:** Inspect enrichment pipeline results for any firm by ID. Shows firm header with stats (entries, cost, first/last enriched), phase badges (jina, classifier, pdl, linkedin, case_study, onboarding, memory, deep_crawl), and expandable audit trail entries with raw input/output, extracted data, errors, and confidence scores. Also includes a **Backfill Services/Case Studies** tool — triggers `seedServicesIfEmpty()` and `seedCaseStudiesIfEmpty()` for a firm by ID, useful when a firm's offering/experience pages are empty despite enrichment data being present.
 - **API:** `GET /api/admin/enrichment/[firmId]`
 
 ### 12. Onboarding Funnel

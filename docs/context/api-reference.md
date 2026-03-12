@@ -75,8 +75,13 @@ All enrichment routes require authentication unless noted.
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | GET | `/api/profile` | Returns confirmed enrichment data + partner preferences for the user's firm. Merges `serviceFirms.enrichmentData.confirmed` with `partnerPreferences`. | Yes |
-| GET | `/api/firm/case-studies` | Lists firm's case studies by `organizationId`. Excludes soft-deleted entries. | Yes |
+| GET | `/api/firm/services` | Lists firm's services by `organizationId`. Auto-seeds from enrichment data on first call if empty (with `enrichmentCache` fallback + redirect resolution). Supports `?includeHidden=true`. | Yes |
+| POST | `/api/firm/services` | Manually add a service. Body: `{ organizationId, name, description? }`. | Yes |
+| PATCH | `/api/firm/services` | Update a service. Body: `{ id, organizationId, description?, isHidden?, displayOrder? }`. | Yes |
+| DELETE | `/api/firm/services` | Delete a manually-added service (`sourceUrl === null`). Query: `?id=&organizationId=`. Auto-discovered services cannot be deleted — use hide instead. | Yes |
+| GET | `/api/firm/case-studies` | Lists firm's case studies by `organizationId`. Auto-seeds from enrichment data on first call if empty (same cache fallback as services). Excludes deleted. | Yes |
 | POST | `/api/firm/case-studies` | Submits a new case study (URL, text paste, or PDF upload). Queues Inngest pipeline (`enrich/firm-case-study-ingest`). Max 10MB for PDFs. | Yes |
+| PATCH | `/api/firm/case-studies` | Update a case study. Body: `{ id, organizationId, isHidden? }`. | Yes |
 | DELETE | `/api/firm/case-studies/[id]` | Soft-deletes a case study. Verifies org membership. | Yes |
 
 ---
@@ -187,6 +192,16 @@ Shareable opportunities, quality-scored (score is internal only, not exposed to 
 |--------|------|-------------|------|
 | GET | `/api/dashboard/stats` | Returns dashboard metrics: conversation/message counts, AI usage, firm enrichment status, partnership count, memory count, recent conversations. | Yes |
 | POST | `/api/onboarding-events` | Ingestion endpoint for client-side onboarding funnel events. Works for guests (userId/orgId will be null). | No |
+| POST | `/api/onboarding/ensure-org` | Called by layout on every login. Ensures `serviceFirms` row exists for the user's org. If row is a stub (no enrichmentData), attempts to hydrate from `enrichmentCache` using email domain + HTTP redirect resolution. Always sets `website` on stub firms. | Yes |
+
+## Staff Management (Admin)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/api/admin/staff` | Lists all staff users (superadmin, growth_ops, customer_success roles). | superadmin |
+| POST | `/api/admin/staff` | Invite a new staff user. Body: `{ email, name, role }`. Creates account via `auth.api.createUser()` + sends password reset email. | superadmin |
+| PATCH | `/api/admin/staff` | Change a staff user's role. Body: `{ userId, role }`. | superadmin |
+| DELETE | `/api/admin/staff` | Revoke staff access (demotes role to "user"). Body: `{ userId }`. | superadmin |
 
 ---
 
@@ -373,7 +388,7 @@ No authentication required. Optional `x-api-key` header (configurable). CORS ena
 
 ## Partner Sync API
 
-Server-to-server API for bi-directional data sync with partner platforms (e.g., Chameleon Collective CORE). All routes require `x-api-key` and `x-partner-id` headers. Auth is validated by `src/app/api/partner-sync/lib/auth.ts` against the `PARTNER_SYNC_API_KEY` env var and an allow-list of partner IDs.
+Server-to-server API for bi-directional data sync with partner platforms (e.g., Chameleon Collective CORE). All routes require `x-api-key` and `x-partner-id` headers. Auth is validated by `src/app/api/partner-sync/lib/auth.ts` against the `COS_SYNC_API_KEY` env var (Vercel) and an allow-list of partner IDs. **Note:** The env var is `COS_SYNC_API_KEY` in Vercel — not `PARTNER_SYNC_API_KEY`.
 
 ### Taxonomy & Schema
 

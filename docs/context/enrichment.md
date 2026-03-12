@@ -1,6 +1,6 @@
 # 6. Enrichment Pipeline
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-12 (updated: services/case-study auto-seeding with cache fallback)
 
 ## Overview
 
@@ -360,6 +360,48 @@ Enrichment runs in tiers of increasing depth and cost:
 - Weekly recrawl of all firm websites (Sunday 2 AM UTC)
 - Detects new case studies, team changes, service updates
 - Re-runs full deep crawl pipeline
+
+---
+
+## First-Load Auto-Seeding (Services & Case Studies)
+
+When a firm's `firm_services` or `firm_case_studies` tables are empty on first page load, the GET handlers automatically seed them from enrichment data. This is a one-time operation that runs silently before returning the response.
+
+### `seedServicesIfEmpty()` — `src/app/api/firm/services/route.ts`
+
+Called by `GET /api/firm/services` when 0 services are found. Tries a multi-layer fallback chain to find service names:
+
+1. **Primary:** `serviceFirms.enrichmentData.extracted.services` — already-persisted enrichment on the firm row
+2. **Cache by website domain:** Looks up `enrichmentCache` by the firm's registered website hostname
+3. **Cache by email domain:** Looks up `enrichmentCache` by the requesting user's email domain (passed from GET handler)
+4. **Redirect resolution:** For each domain, follows HTTP HEAD redirect (3s timeout) to resolve canonicals (e.g., `chameleon.co` → `chameleoncollective.com`), then retries the cache lookup
+
+Once services are found, they're inserted into `firm_services` with `sourceUrl` pointing to the firm's website and `sourcePageTitle = "Auto-discovered from {domain}"`. Subsequent requests return the seeded data directly.
+
+### `seedCaseStudiesIfEmpty()` — `src/app/api/firm/case-studies/route.ts`
+
+Same pattern as above but for case study URLs. Uses `enrichmentData.extracted.caseStudyUrls` (and the same cache fallback chain) to seed stub `firm_case_studies` rows with `status: "pending"`. The Inngest `enrich/firm-case-study-ingest` job processes them asynchronously.
+
+### `ensure-org` Stub Hydration — `src/app/api/onboarding/ensure-org/route.ts`
+
+When a new user logs in and their org's `serviceFirms` row exists but has no `enrichmentData` (stub created from a previous session), `ensure-org` now hydrates it:
+
+1. Calls `lookupCacheByDomain(emailDomain)` — tries `enrichmentCache` by email domain, then by redirect-resolved domain
+2. If cache hit with `hasClassify: true`: full `UPDATE serviceFirms` with enrichment data (website, name, description, all classification fields)
+3. If partial hit or miss: at minimum sets `website = https://${emailDomain}` so seed functions can find the right domain next time
+
+For new firms, the same redirect-aware cache lookup is used when creating the initial `serviceFirms` row.
+
+### Offering & Experience Page Fallback
+
+`/firm/offering` and `/firm/experience` pages trigger enrichment on load. If the firm has no `website` in the DB, they now fall back to the user's email domain:
+
+```typescript
+const emailDomain = session?.user?.email?.split("@")[1];
+const fallback = emailDomain ? `https://${emailDomain}` : null;
+const target = website || fallback;
+if (target) triggerEnrichment(target);
+```
 
 ---
 

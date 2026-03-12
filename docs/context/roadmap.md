@@ -383,6 +383,18 @@ From git log (most recent first, as of 2026-03-09):
 
 **Focus:** Track A data migration, onboarding redesign, bidirectional matching, Ossy search tools, partner sync API with CORE.
 
+### Recent Activity (2026-03-12)
+
+| Commit | Description |
+|--------|-------------|
+| `335d757` | fix: ensure services/case studies populate for all firms regardless of domain redirect |
+| `c2432d7` | feat: coming-soon pages for Network/Partnerships, chat UX fixes, discover search loading |
+| `51ccc70` | feat: grouped expert roster by tier in admin — Experts, Potential, Not Expert sections |
+| `7abf50e` | feat: add backfill services/case studies tool to enrichment admin page |
+| `21cdc0a` | feat: auto-seed services and case studies on first load, retry stuck jobs after 48h |
+
+**Focus:** Offering/Experience page population fix — multi-layer enrichment cache fallback with HTTP redirect resolution. Admin Knowledge Graph expert grouping by tier.
+
 ---
 
 ## Phase Dependencies
