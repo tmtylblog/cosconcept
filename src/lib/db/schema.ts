@@ -1819,6 +1819,17 @@ export const growthOpsInviteCampaigns = pgTable("growth_ops_invite_campaigns", {
   dailyMin: integer("daily_min").notNull().default(15),
   dailyMax: integer("daily_max").notNull().default(19),
   inviteMessage: text("invite_message"),
+  // Safety & scheduling
+  activeDays: jsonb("active_days").$type<string[]>().notNull().default(["mon","tue","wed","thu","fri","sat"]),
+  activeHoursStart: integer("active_hours_start").notNull().default(8),  // UTC hour 0-23
+  activeHoursEnd: integer("active_hours_end").notNull().default(18),
+  // Counters
+  totalSent: integer("total_sent").notNull().default(0),
+  totalAccepted: integer("total_accepted").notNull().default(0),
+  // State
+  pauseReason: text("pause_reason"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -1830,7 +1841,9 @@ export const growthOpsInviteQueue = pgTable("growth_ops_invite_queue", {
   linkedinAccountId: text("linkedin_account_id").notNull().references(() => growthOpsLinkedInAccounts.id, { onDelete: "cascade" }),
   scheduledAt: timestamp("scheduled_at").notNull(),
   sentAt: timestamp("sent_at"),
-  status: text("status").notNull().default("queued"), // queued | sent | failed | skipped
+  acceptedAt: timestamp("accepted_at"),
+  unipileProviderId: text("unipile_provider_id"), // cached after first resolve
+  status: text("status").notNull().default("queued"), // queued | sent | accepted | failed | skipped
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

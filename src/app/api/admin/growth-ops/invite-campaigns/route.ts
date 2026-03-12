@@ -31,7 +31,16 @@ export async function POST(req: NextRequest) {
     dailyMin?: number;
     dailyMax?: number;
     inviteMessage?: string;
+    activeDays?: string[];
+    activeHoursStart?: number;
+    activeHoursEnd?: number;
   };
+
+  const dailyMin = body.dailyMin ?? 15;
+  const dailyMax = body.dailyMax ?? 19;
+  const activeDays = body.activeDays ?? ["mon", "tue", "wed", "thu", "fri", "sat"];
+  const activeHoursStart = body.activeHoursStart ?? 8;
+  const activeHoursEnd = body.activeHoursEnd ?? 18;
 
   const campaignId = randomUUID();
   const [campaign] = await db.insert(growthOpsInviteCampaigns).values({
@@ -39,9 +48,12 @@ export async function POST(req: NextRequest) {
     name: body.name,
     targetListId: body.targetListId,
     linkedinAccountId: body.linkedinAccountId,
-    dailyMin: body.dailyMin ?? 15,
-    dailyMax: body.dailyMax ?? 19,
+    dailyMin,
+    dailyMax,
     inviteMessage: body.inviteMessage ?? null,
+    activeDays,
+    activeHoursStart,
+    activeHoursEnd,
     status: "draft",
   }).returning();
 
@@ -55,12 +67,12 @@ export async function POST(req: NextRequest) {
     .map((t) => t.id);
 
   if (pendingTargetIds.length > 0) {
+    const dailyTarget = Math.round((dailyMin + dailyMax) / 2);
     const schedule = buildInviteSchedule(
       pendingTargetIds,
       body.linkedinAccountId,
       campaignId,
-      campaign.dailyMin,
-      campaign.dailyMax
+      { dailyTarget, activeDays, activeHoursStart, activeHoursEnd }
     );
     await db.insert(growthOpsInviteQueue).values(schedule);
   }

@@ -11,9 +11,15 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { growthOpsLinkedInAccounts, growthOpsConversations, growthOpsMessages } from "@/lib/db/schema";
+import {
+  growthOpsLinkedInAccounts,
+  growthOpsConversations,
+  growthOpsMessages,
+  growthOpsInviteQueue,
+  growthOpsInviteCampaigns,
+} from "@/lib/db/schema";
 import { validateUnipileWebhook, resolveMessageDirection } from "@/lib/growth-ops/UnipileClient";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +170,60 @@ export async function POST(req: NextRequest) {
           );
       }
 
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Acceptance tracking (new connection accepted invite) ──────────────────
+    if (rawEvent === "new_relation") {
+      const unipileAccountId = (body.account_id ?? body.id) as string | undefined;
+      // Unipile may provide the accepted person's provider ID in various fields
+      const acceptedProviderId = (
+        body.provider_id ?? body.profile_id ?? body.linkedin_id ??
+        (body.relation as Record<string, unknown> | undefined)?.provider_id ?? null
+      ) as string | null;
+
+      if (unipileAccountId && acceptedProviderId) {
+        // Find the account in our DB
+        const acctRows = await db
+          .select({ id: growthOpsLinkedInAccounts.id })
+          .from(growthOpsLinkedInAccounts)
+          .where(eq(growthOpsLinkedInAccounts.unipileAccountId, unipileAccountId))
+          .limit(1);
+
+        const acctDbId = acctRows[0]?.id;
+        if (acctDbId) {
+          // Find matching sent queue item for this account + provider
+          const queueRows = await db
+            .select({ id: growthOpsInviteQueue.id, campaignId: growthOpsInviteQueue.campaignId })
+            .from(growthOpsInviteQueue)
+            .where(
+              and(
+                eq(growthOpsInviteQueue.linkedinAccountId, acctDbId),
+                eq(growthOpsInviteQueue.unipileProviderId, acceptedProviderId),
+                eq(growthOpsInviteQueue.status, "sent")
+              )
+            )
+            .limit(1);
+
+          if (queueRows.length > 0) {
+            const { id: queueId, campaignId } = queueRows[0];
+            // Mark queue item as accepted
+            await db
+              .update(growthOpsInviteQueue)
+              .set({ status: "accepted", acceptedAt: new Date() })
+              .where(eq(growthOpsInviteQueue.id, queueId));
+
+            // Increment campaign totalAccepted
+            await db
+              .update(growthOpsInviteCampaigns)
+              .set({
+                totalAccepted: sql`${growthOpsInviteCampaigns.totalAccepted} + 1`,
+                updatedAt: new Date(),
+              })
+              .where(eq(growthOpsInviteCampaigns.id, campaignId));
+          }
+        }
+      }
       return NextResponse.json({ ok: true });
     }
 
