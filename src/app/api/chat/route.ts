@@ -141,9 +141,9 @@ export async function POST(req: Request) {
 
     const systemPrompt = getOssyPrompt({
       userName: userName ?? undefined,
-      // Always onboarding until all prefs are confirmed — regardless of message count
-      isOnboarding: !allPrefsComplete,
-      hasCompletedOnboarding,
+      // Discover page bypasses onboarding — Ossy should search, not ask prefs questions
+      isOnboarding: firmSection === "discover" ? false : !allPrefsComplete,
+      hasCompletedOnboarding: firmSection === "discover" ? true : hasCompletedOnboarding,
       hasToolAccess,
       websiteContext: websiteContext ?? undefined,
       memoryContext: memoryBlock,

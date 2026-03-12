@@ -325,9 +325,9 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     // Post-onboarding auth: show contextual default while personalized greeting loads
     return authWelcomeMessages;
   });
-  // For guests and onboarding users, messages are set synchronously — no need to fetch greeting
+  // For guests, onboarding users, and discover mode, messages are set synchronously — no need to fetch greeting
   // For post-onboarding auth users, historyLoaded=false triggers loadGreeting for personalized greeting
-  const [historyLoaded, setHistoryLoaded] = useState(isGuest || isOnboarding ? true : false);
+  const [historyLoaded, setHistoryLoaded] = useState(isGuest || isOnboarding || firmSection === "discover" ? true : false);
   const enrichedUrlRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string>(crypto.randomUUID());
   // Track whether we've seen enrichment go through "loading" this session
