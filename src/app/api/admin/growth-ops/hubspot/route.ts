@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { HubSpotClient } from "@/lib/growth-ops/HubSpotClient";
+import { handleHubSpotSync } from "@/lib/jobs/handlers/hubspot-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,10 @@ export async function POST(req: NextRequest) {
     if (body.action === "updateDealStage") {
       const data = await HubSpotClient.updateDealStage(body.dealId!, body.stageId!);
       return NextResponse.json(data);
+    }
+    if (body.action === "runSync") {
+      const result = await handleHubSpotSync({});
+      return NextResponse.json(result);
     }
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err) {
