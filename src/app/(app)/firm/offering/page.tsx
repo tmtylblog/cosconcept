@@ -18,25 +18,30 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect } from "react";
-import { useActiveOrganization } from "@/lib/auth-client";
+import { useActiveOrganization, useSession } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useFirmServices, type FirmService } from "@/hooks/use-firm-services";
 
 export default function FirmOfferingPage() {
   const { data: activeOrg } = useActiveOrganization();
+  const { data: session } = useSession();
   const { status: enrichmentStatus, result: enrichmentResult, triggerEnrichment } = useEnrichment();
 
   // If enrichment hasn't run yet and we have an org, kick it off from the firm's website
+  // Falls back to the user's email domain if no website is stored yet
   useEffect(() => {
     if (enrichmentStatus !== "idle" || !activeOrg?.id) return;
     fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         const website = data?.enrichmentData?.url || data?.website;
-        if (website) triggerEnrichment(website);
+        const emailDomain = session?.user?.email?.split("@")[1];
+        const fallback = emailDomain ? `https://${emailDomain}` : null;
+        const target = website || fallback;
+        if (target) triggerEnrichment(target);
       })
       .catch(() => {});
-  }, [enrichmentStatus, activeOrg?.id, triggerEnrichment]);
+  }, [enrichmentStatus, activeOrg?.id, session?.user?.email, triggerEnrichment]);
   const {
     services,
     total,

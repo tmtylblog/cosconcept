@@ -8,19 +8,85 @@ import { NextRequest } from "next/server";
 import { eq, and, asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { firmServices, serviceFirms, members } from "@/lib/db/schema";
+import { firmServices, serviceFirms, members, enrichmentCache } from "@/lib/db/schema";
 import { randomBytes } from "crypto";
 
+/** Resolve redirect domain (e.g. chameleon.co → chameleoncollective.com) — best-effort, 3s timeout */
+async function resolveRedirect(domain: string): Promise<string | null> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 3000);
+    const res = await fetch(`https://${domain}`, { method: "HEAD", redirect: "follow", signal: ctrl.signal });
+    clearTimeout(t);
+    const finalHost = new URL(res.url).hostname.replace(/^www\./, "").toLowerCase();
+    return finalHost !== domain.toLowerCase() ? finalHost : null;
+  } catch { return null; }
+}
+
 // ─── Seed from enrichment data (silent, first-load only) ─
-async function seedServicesIfEmpty(firmId: string, organizationId: string) {
+async function seedServicesIfEmpty(firmId: string, organizationId: string, userEmail?: string) {
   const [firmRow] = await db
     .select({ enrichmentData: serviceFirms.enrichmentData, website: serviceFirms.website })
     .from(serviceFirms)
     .where(eq(serviceFirms.id, firmId))
     .limit(1);
 
+  let discoveredServices: string[] = [];
+  let sourceUrl: string | null = firmRow?.website ?? null;
+  let sourcePageTitle = "Auto-discovered from website";
+
+  // Primary: read from serviceFirms.enrichmentData
   const extracted = (firmRow?.enrichmentData as Record<string, unknown> | null)?.extracted as Record<string, unknown> | null;
-  const discoveredServices = (extracted?.services as string[] | undefined) ?? [];
+  discoveredServices = (extracted?.services as string[] | undefined) ?? [];
+
+  // Fallback: check enrichmentCache. Try website domain, email domain, and redirect-resolved variants.
+  if (discoveredServices.length === 0) {
+    const domainsToTry: string[] = [];
+    if (firmRow?.website) {
+      try { domainsToTry.push(new URL(firmRow.website).hostname.replace(/^www\./, "").toLowerCase()); } catch { /* ignore */ }
+    }
+    if (userEmail) {
+      const emailDomain = userEmail.split("@")[1];
+      if (emailDomain && !domainsToTry.includes(emailDomain)) domainsToTry.push(emailDomain);
+    }
+
+    // Helper: look up cache for a domain, return services if found
+    async function tryDomain(domain: string): Promise<{ services: string[]; foundDomain: string } | null> {
+      const [cacheRow] = await db
+        .select({ enrichmentData: enrichmentCache.enrichmentData })
+        .from(enrichmentCache)
+        .where(eq(enrichmentCache.domain, domain))
+        .limit(1);
+      if (!cacheRow?.enrichmentData) return null;
+      const cacheExtracted = (cacheRow.enrichmentData as Record<string, unknown>)?.extracted as Record<string, unknown> | null;
+      const cacheServices = (cacheExtracted?.services as string[] | undefined) ?? [];
+      return cacheServices.length > 0 ? { services: cacheServices, foundDomain: domain } : null;
+    }
+
+    for (const domain of domainsToTry) {
+      const hit = await tryDomain(domain);
+      if (hit) {
+        discoveredServices = hit.services;
+        sourceUrl = firmRow?.website ?? `https://${hit.foundDomain}`;
+        sourcePageTitle = `Auto-discovered from ${hit.foundDomain}`;
+        console.log(`[SeedServices] Cache hit for ${hit.foundDomain}: ${hit.services.length} services`);
+        break;
+      }
+      // Try redirect-resolved domain (e.g. chameleon.co → chameleoncollective.com)
+      const redirectDomain = await resolveRedirect(domain);
+      if (redirectDomain && !domainsToTry.includes(redirectDomain)) {
+        const redirectHit = await tryDomain(redirectDomain);
+        if (redirectHit) {
+          discoveredServices = redirectHit.services;
+          sourceUrl = firmRow?.website ?? `https://${redirectHit.foundDomain}`;
+          sourcePageTitle = `Auto-discovered from ${redirectHit.foundDomain}`;
+          console.log(`[SeedServices] Cache hit via redirect ${domain}→${redirectHit.foundDomain}: ${redirectHit.services.length} services`);
+          break;
+        }
+      }
+    }
+  }
+
   if (discoveredServices.length === 0) return;
 
   const now = new Date();
@@ -31,8 +97,8 @@ async function seedServicesIfEmpty(firmId: string, organizationId: string) {
       organizationId,
       name: name.trim(),
       description: null,
-      sourceUrl: firmRow?.website ?? null,
-      sourcePageTitle: "Auto-discovered from website",
+      sourceUrl,
+      sourcePageTitle,
       subServices: [] as string[],
       isHidden: false,
       displayOrder: i,
@@ -113,7 +179,7 @@ export async function GET(req: NextRequest) {
 
   // If empty, try seeding from enrichment data then re-fetch
   if (rows.length === 0) {
-    await seedServicesIfEmpty(firm.id, organizationId);
+    await seedServicesIfEmpty(firm.id, organizationId, session.user.email ?? undefined);
     rows = await db
       .select({
         id: firmServices.id,

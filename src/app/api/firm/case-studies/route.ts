@@ -9,21 +9,68 @@ import { eq, ne, and, desc } from "drizzle-orm";
 import { after } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { firmCaseStudies, serviceFirms, members } from "@/lib/db/schema";
+import { firmCaseStudies, serviceFirms, members, enrichmentCache } from "@/lib/db/schema";
+
+/** Resolve redirect domain — best-effort, 3s timeout */
+async function resolveRedirect(domain: string): Promise<string | null> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 3000);
+    const res = await fetch(`https://${domain}`, { method: "HEAD", redirect: "follow", signal: ctrl.signal });
+    clearTimeout(t);
+    const finalHost = new URL(res.url).hostname.replace(/^www\./, "").toLowerCase();
+    return finalHost !== domain.toLowerCase() ? finalHost : null;
+  } catch { return null; }
+}
 import { enqueue } from "@/lib/jobs/queue";
 import { runNextJob } from "@/lib/jobs/runner";
 
 // ─── Seed from enrichment data (silent, first-load only) ─
 // Also re-queues any URLs stuck in pending/failed for over 48 hours.
-async function seedCaseStudiesIfEmpty(firmId: string, organizationId: string) {
+async function seedCaseStudiesIfEmpty(firmId: string, organizationId: string, userEmail?: string) {
   const [firmRow] = await db
-    .select({ enrichmentData: serviceFirms.enrichmentData })
+    .select({ enrichmentData: serviceFirms.enrichmentData, website: serviceFirms.website })
     .from(serviceFirms)
     .where(eq(serviceFirms.id, firmId))
     .limit(1);
 
   const extracted = (firmRow?.enrichmentData as Record<string, unknown> | null)?.extracted as Record<string, unknown> | null;
-  const urls = (extracted?.caseStudyUrls as string[] | undefined) ?? [];
+  let urls = (extracted?.caseStudyUrls as string[] | undefined) ?? [];
+
+  // Fallback: check enrichmentCache by website domain or email domain (with redirect resolution)
+  if (urls.length === 0) {
+    const domainsToTry: string[] = [];
+    if (firmRow?.website) {
+      try { domainsToTry.push(new URL(firmRow.website).hostname.replace(/^www\./, "").toLowerCase()); } catch { /* ignore */ }
+    }
+    if (userEmail) {
+      const emailDomain = userEmail.split("@")[1];
+      if (emailDomain && !domainsToTry.includes(emailDomain)) domainsToTry.push(emailDomain);
+    }
+
+    async function tryDomainForUrls(domain: string): Promise<string[] | null> {
+      const [cacheRow] = await db
+        .select({ enrichmentData: enrichmentCache.enrichmentData })
+        .from(enrichmentCache)
+        .where(eq(enrichmentCache.domain, domain))
+        .limit(1);
+      if (!cacheRow?.enrichmentData) return null;
+      const cacheExtracted = (cacheRow.enrichmentData as Record<string, unknown>)?.extracted as Record<string, unknown> | null;
+      const cacheUrls = (cacheExtracted?.caseStudyUrls as string[] | undefined) ?? [];
+      return cacheUrls.length > 0 ? cacheUrls : null;
+    }
+
+    for (const domain of domainsToTry) {
+      const hit = await tryDomainForUrls(domain);
+      if (hit) { urls = hit; console.log(`[SeedCaseStudies] Cache hit for ${domain}: ${hit.length} URLs`); break; }
+      const redirectDomain = await resolveRedirect(domain);
+      if (redirectDomain && !domainsToTry.includes(redirectDomain)) {
+        const redirectHit = await tryDomainForUrls(redirectDomain);
+        if (redirectHit) { urls = redirectHit; console.log(`[SeedCaseStudies] Cache hit via redirect ${domain}→${redirectDomain}: ${redirectHit.length} URLs`); break; }
+      }
+    }
+  }
+
   if (urls.length === 0) return;
 
   const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
@@ -158,7 +205,7 @@ export async function GET(req: NextRequest) {
 
   // If empty, seed from enrichment data then re-fetch
   if (rows.length === 0) {
-    await seedCaseStudiesIfEmpty(firm.id, organizationId);
+    await seedCaseStudiesIfEmpty(firm.id, organizationId, session.user.email ?? undefined);
     rows = await db
       .select({
         id: firmCaseStudies.id,
