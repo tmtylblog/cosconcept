@@ -82,6 +82,15 @@ interface CustomerData {
     role: string;
     createdAt: string;
   }[];
+  legacyUsers: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    title: string | null;
+    legacyRoles: string[];
+    createdAt: string;
+  }[];
   stats: {
     enrichmentCost: number;
     aiCost: number;
@@ -504,7 +513,31 @@ export default function CustomerDetailPage() {
     );
   }
 
-  const { org, firm, subscription, members, stats, enrichment } = data;
+  const { org, firm, subscription, members, legacyUsers, stats, enrichment } = data;
+  const allUsers = [
+    ...members.map((m) => ({
+      id: m.id,
+      name: m.userName ?? "Unnamed",
+      email: m.userEmail,
+      role: m.role,
+      title: null as string | null,
+      banned: m.banned,
+      userId: m.userId,
+      source: "registered" as const,
+      createdAt: m.createdAt,
+    })),
+    ...(legacyUsers ?? []).map((lu) => ({
+      id: lu.id,
+      name: [lu.firstName, lu.lastName].filter(Boolean).join(" ") || "Unnamed",
+      email: lu.email ?? "",
+      role: (lu.legacyRoles?.[0] ?? "member").toLowerCase(),
+      title: lu.title,
+      banned: false,
+      userId: null as string | null,
+      source: "imported" as const,
+      createdAt: lu.createdAt,
+    })),
+  ];
 
   return (
     <div className="space-y-6">
@@ -624,41 +657,42 @@ export default function CustomerDetailPage() {
           <div className="grid gap-5 lg:grid-cols-3">
             <div className="space-y-5 lg:col-span-2">
               {/* Members preview */}
-              <Section title="Team Members" icon={<Users className="h-4 w-4 text-cos-electric" />}>
-                {members.length === 0 ? (
+              <Section title={`Team Members (${allUsers.length})`} icon={<Users className="h-4 w-4 text-cos-electric" />}>
+                {allUsers.length === 0 ? (
                   <p className="text-xs text-cos-slate-light">No members</p>
                 ) : (
                   <div className="space-y-2">
-                    {members.slice(0, 5).map((m) => (
-                      <div key={m.id} className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-3 py-2">
+                    {allUsers.slice(0, 5).map((u) => (
+                      <div key={u.id} className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-3 py-2">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cos-electric/10 text-xs font-bold text-cos-electric">
-                          {(m.userName ?? m.userEmail ?? "?").charAt(0).toUpperCase()}
+                          {(u.name ?? u.email ?? "?").charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-cos-midnight">
-                            {m.userName ?? "Unnamed"}
+                            {u.name}
+                            {u.title && <span className="ml-1.5 text-xs font-normal text-cos-slate">· {u.title}</span>}
                           </p>
-                          <p className="truncate text-xs text-cos-slate">{m.userEmail}</p>
+                          <p className="truncate text-xs text-cos-slate">{u.email}</p>
                         </div>
                         <span
                           className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
-                            m.role === "owner"
+                            u.role === "owner"
                               ? "bg-cos-warm/10 text-cos-warm"
-                              : m.role === "admin"
+                              : u.role === "admin"
                               ? "bg-cos-electric/10 text-cos-electric"
                               : "bg-cos-cloud text-cos-slate"
                           }`}
                         >
-                          {m.role}
+                          {u.role}
                         </span>
                       </div>
                     ))}
-                    {members.length > 5 && (
+                    {allUsers.length > 5 && (
                       <button
                         onClick={() => setActiveTab("users")}
                         className="text-xs text-cos-electric hover:underline"
                       >
-                        View all {members.length} members →
+                        View all {allUsers.length} members →
                       </button>
                     )}
                   </div>
@@ -826,8 +860,8 @@ export default function CustomerDetailPage() {
 
         {/* ── USERS TAB ── */}
         {activeTab === "users" && (
-          <Section title={`Team Members (${members.length})`} icon={<Users className="h-4 w-4 text-cos-electric" />}>
-            {members.length === 0 ? (
+          <Section title={`Team Members (${allUsers.length})`} icon={<Users className="h-4 w-4 text-cos-electric" />}>
+            {allUsers.length === 0 ? (
               <p className="text-xs text-cos-slate-light">No members in this organization</p>
             ) : (
               <div className="overflow-hidden rounded-cos-lg border border-cos-border">
@@ -843,30 +877,33 @@ export default function CustomerDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-cos-border/60">
-                    {members.map((m) => (
-                      <tr key={m.id} className="transition-colors hover:bg-cos-electric/[0.02]">
+                    {allUsers.map((u) => (
+                      <tr key={u.id} className="transition-colors hover:bg-cos-electric/[0.02]">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
-                              {(m.userName ?? "?").charAt(0).toUpperCase()}
+                              {(u.name ?? "?").charAt(0).toUpperCase()}
                             </div>
-                            <span className="font-medium text-cos-midnight">{m.userName ?? "Unnamed"}</span>
+                            <div>
+                              <span className="font-medium text-cos-midnight">{u.name}</span>
+                              {u.title && <p className="text-[11px] text-cos-slate">{u.title}</p>}
+                            </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs text-cos-slate">{m.userEmail}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-cos-slate">{u.email}</td>
                         <td className="px-4 py-3">
                           <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
-                            m.role === "owner"
+                            u.role === "owner"
                               ? "bg-cos-warm/10 text-cos-warm"
-                              : m.role === "admin"
+                              : u.role === "admin"
                               ? "bg-cos-electric/10 text-cos-electric"
                               : "bg-cos-cloud text-cos-slate"
                           }`}>
-                            {m.role}
+                            {u.role}
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          {m.banned ? (
+                          {u.banned ? (
                             <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-ember/8 px-2.5 py-0.5 text-xs font-medium text-cos-ember">
                               <span className="h-1.5 w-1.5 rounded-full bg-cos-ember" />
                               Banned
@@ -878,25 +915,29 @@ export default function CustomerDetailPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-xs text-cos-slate">{formatDate(m.createdAt)}</td>
+                        <td className="px-4 py-3 text-xs text-cos-slate">{formatDate(u.createdAt)}</td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleImpersonate(m.userId)}
-                              disabled={impersonating === m.userId}
-                              title="Simulate as this user"
-                              className="h-8 gap-1.5 px-2.5 text-xs text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
-                            >
-                              {impersonating === m.userId ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Eye className="h-3.5 w-3.5" />
-                              )}
-                              Simulate
-                            </Button>
-                          </div>
+                          {u.source === "registered" && u.userId ? (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleImpersonate(u.userId!)}
+                                disabled={impersonating === u.userId}
+                                title="Simulate as this user"
+                                className="h-8 gap-1.5 px-2.5 text-xs text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
+                              >
+                                {impersonating === u.userId ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Eye className="h-3.5 w-3.5" />
+                                )}
+                                Simulate
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-cos-slate-light">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}

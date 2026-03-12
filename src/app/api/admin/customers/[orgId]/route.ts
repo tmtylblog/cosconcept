@@ -96,6 +96,23 @@ export async function GET(
     // 5. Aggregate stats
     const firmId = firm?.id as string | undefined;
 
+    // 5a. Legacy users linked through service_firms
+    const legacyUsersResult = firmId
+      ? await db.execute(sql`
+          SELECT
+            lu.id,
+            lu.first_name AS "firstName",
+            lu.last_name AS "lastName",
+            lu.email,
+            lu.title,
+            lu.legacy_roles AS "legacyRoles",
+            lu.created_at AS "createdAt"
+          FROM legacy_users lu
+          WHERE lu.firm_id = ${firmId}
+          ORDER BY lu.last_name ASC, lu.first_name ASC
+        `)
+      : { rows: [] };
+
     // Enrichment cost
     const enrichCostResult = firmId
       ? await db.execute(sql`
@@ -165,6 +182,7 @@ export async function GET(
       firm,
       subscription,
       members: membersResult.rows,
+      legacyUsers: legacyUsersResult.rows,
       stats: {
         enrichmentCost: Number(enrichRow?.totalCost ?? 0),
         aiCost: Number(aiCostResult.rows[0]?.totalCost ?? 0),

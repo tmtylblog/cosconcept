@@ -403,16 +403,6 @@ export default function CustomersPage() {
                           <span className="font-mono text-xs font-semibold text-cos-midnight">
                             {org.members}
                           </span>
-                          {org.legacyUsers > 0 && org.registeredMembers > 0 && (
-                            <span className="text-[10px] text-cos-slate" title={`${org.registeredMembers} registered + ${org.legacyUsers} imported`}>
-                              ({org.registeredMembers}+{org.legacyUsers})
-                            </span>
-                          )}
-                          {org.legacyUsers > 0 && org.registeredMembers === 0 && (
-                            <span className="text-[10px] text-cos-slate" title={`${org.legacyUsers} imported users`}>
-                              imported
-                            </span>
-                          )}
                         </div>
                       </td>
 
