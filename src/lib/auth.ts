@@ -52,6 +52,22 @@ export const auth = betterAuth({
     },
   },
 
+  // Auto-assign superadmin role to @joincollectiveos.com team members on signup
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          if (user.email?.endsWith("@joincollectiveos.com")) {
+            await db
+              .update(schema.users)
+              .set({ role: "superadmin" })
+              .where(eq(schema.users.id, user.id));
+          }
+        },
+      },
+    },
+  },
+
   plugins: [
     organization({
       async membershipLimit(data) {

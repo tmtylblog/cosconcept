@@ -94,6 +94,16 @@ function AppLayoutInner({
     ownerEmailMasked: string;
   } | null>(null);
 
+  // ─── Internal team redirect ─────────────────────────────────────────────────
+  // @joincollectiveos.com users are internal team — send straight to /admin,
+  // skip customer onboarding entirely.
+  useEffect(() => {
+    if (!session?.user || sessionPending) return;
+    if (session.user.email?.endsWith("@joincollectiveos.com")) {
+      router.replace("/admin");
+    }
+  }, [session?.user?.email, sessionPending, router]);
+
   // ─── Auto-provision org + firm for authenticated users with no org ────
   // The moment someone authenticates, an "unclaimed" org + firm is created
   // so ALL data is stored from the very first interaction. This org transitions
@@ -101,6 +111,8 @@ function AppLayoutInner({
   const orgProvisionedRef = useRef(false);
 
   useEffect(() => {
+    // Skip provisioning entirely for internal team members
+    if (session?.user?.email?.endsWith("@joincollectiveos.com")) return;
     if (!session?.user || activeOrg?.id || orgProvisionedRef.current) return;
     orgProvisionedRef.current = true;
 
