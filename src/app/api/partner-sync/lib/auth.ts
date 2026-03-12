@@ -23,10 +23,10 @@ export function authenticatePartner(
   const apiKey = req.headers.get("x-api-key");
   const partnerId = req.headers.get("x-partner-id");
 
-  const expectedKey = process.env.PARTNER_SYNC_API_KEY;
+  const expectedKey = process.env.COS_SYNC_API_KEY;
 
   if (!expectedKey) {
-    console.error("[Partner Sync] PARTNER_SYNC_API_KEY not configured");
+    console.error("[Partner Sync] COS_SYNC_API_KEY not configured");
     return NextResponse.json(
       { error: "Partner sync not configured" },
       { status: 503 }
