@@ -11,9 +11,9 @@ import {
 
 interface Account {
   id: string;
-  unipile_account_id: string;
-  display_name: string;
-  account_type: string;
+  unipileAccountId: string;
+  displayName: string;
+  accountType: string;
   status: string;
 }
 
@@ -331,7 +331,7 @@ function LinkedInUniboxInner() {
         const list: Account[] = d.accounts ?? [];
         setAccounts(list);
         const urlAccount = params.get("account");
-        const initial = urlAccount ?? list[0]?.unipile_account_id ?? "";
+        const initial = urlAccount ?? list[0]?.unipileAccountId ?? "";
         if (initial) setSelectedAccountId(initial);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -500,8 +500,8 @@ function LinkedInUniboxInner() {
               className="rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight focus:border-cos-electric focus:outline-none"
             >
               {accounts.map((a) => (
-                <option key={a.unipile_account_id} value={a.unipile_account_id}>
-                  {a.display_name}
+                <option key={a.unipileAccountId} value={a.unipileAccountId}>
+                  {a.displayName || a.unipileAccountId}
                 </option>
               ))}
             </select>

@@ -18,6 +18,38 @@ async function checkAdmin() {
 export async function GET(req: NextRequest) {
   if (!await checkAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  // ?diagnose=true — show raw Unipile accounts vs DB accounts side-by-side
+  if (req.nextUrl.searchParams.get("diagnose") === "true") {
+    const dbAccounts = await db.select().from(growthOpsLinkedInAccounts).orderBy(growthOpsLinkedInAccounts.createdAt);
+    let unipileAccounts: unknown[] = [];
+    let unipileError: string | null = null;
+    try {
+      const live = await UnipileClient.listAccounts();
+      const items = live.items ?? [];
+      unipileAccounts = await Promise.all(
+        items.map(async (acct) => {
+          try {
+            const detail = await UnipileClient.getAccount(acct.id);
+            return { list_data: acct, detail_data: detail };
+          } catch (e) {
+            return { list_data: acct, detail_error: String(e) };
+          }
+        })
+      );
+    } catch (e) {
+      unipileError = String(e);
+    }
+    return NextResponse.json({
+      db_accounts: dbAccounts,
+      unipile_accounts: unipileAccounts,
+      unipile_error: unipileError,
+      summary: {
+        db_count: dbAccounts.length,
+        unipile_count: unipileAccounts.length,
+      },
+    });
+  }
+
   // ?sync=true — import any Unipile accounts not yet in our DB, enrich display names
   if (req.nextUrl.searchParams.get("sync") === "true") {
     try {

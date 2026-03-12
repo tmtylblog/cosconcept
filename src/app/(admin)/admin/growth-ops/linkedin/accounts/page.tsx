@@ -5,11 +5,11 @@ import { Plus, Link2, Loader2, RefreshCw, Copy, Check, X, ExternalLink, AlertTri
 
 interface Account {
   id: string;
-  unipile_account_id: string;
-  display_name: string;
-  linkedin_username: string | null;
+  unipileAccountId: string;
+  displayName: string;
+  linkedinUsername: string | null;
   status: string;
-  created_at: string;
+  createdAt: string;
 }
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
@@ -89,18 +89,18 @@ export default function LinkedInAccountsPage() {
     setTimeout(() => setCopied(false), 2500);
   }
 
-  async function reconnect(unipileAccountId: string) {
+  async function reconnect(unipileAcctId: string) {
     const d = await fetch("/api/admin/growth-ops/unipile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "generateReconnectLink", accountId: unipileAccountId }),
+      body: JSON.stringify({ action: "generateReconnectLink", accountId: unipileAcctId }),
     }).then((r) => r.json());
     const url = d.url ?? d.link ?? d.hosted_url;
     if (url) window.open(url, "_blank");
   }
 
-  async function revokeAccount(id: string, displayName: string) {
-    if (!confirm(`Remove "${displayName || "this account"}" and disconnect it from Unipile? This cannot be undone.`)) return;
+  async function revokeAccount(id: string, name: string) {
+    if (!confirm(`Remove "${name || "this account"}" and disconnect it from Unipile? This cannot be undone.`)) return;
     setRevoking(id);
     try {
       await fetch(`/api/admin/growth-ops/linkedin-accounts?id=${id}`, { method: "DELETE" });
@@ -238,8 +238,8 @@ export default function LinkedInAccountsPage() {
                 const isRevoking = revoking === a.id;
                 return (
                   <tr key={a.id} className="border-b border-cos-border/50 last:border-0 hover:bg-cos-cloud/30 transition-colors">
-                    <td className="px-4 py-3 font-medium text-cos-midnight">{a.display_name || a.unipile_account_id}</td>
-                    <td className="px-4 py-3 text-cos-slate">{a.linkedin_username ? `@${a.linkedin_username}` : "—"}</td>
+                    <td className="px-4 py-3 font-medium text-cos-midnight">{a.displayName || a.unipileAccountId}</td>
+                    <td className="px-4 py-3 text-cos-slate">{a.linkedinUsername ? `@${a.linkedinUsername}` : "—"}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${style.bg} ${style.text}`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
@@ -247,15 +247,15 @@ export default function LinkedInAccountsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-cos-slate">
-                      {a.created_at && !isNaN(new Date(a.created_at).getTime())
-                        ? new Date(a.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                      {a.createdAt && !isNaN(new Date(a.createdAt).getTime())
+                        ? new Date(a.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
                         : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-3">
                         {(a.status === "CREDENTIALS" || a.status === "ERROR") && (
                           <button
-                            onClick={() => reconnect(a.unipile_account_id)}
+                            onClick={() => reconnect(a.unipileAccountId)}
                             className="inline-flex items-center gap-1 text-xs text-cos-ember hover:underline"
                           >
                             <AlertTriangle className="h-3.5 w-3.5" />
@@ -263,7 +263,7 @@ export default function LinkedInAccountsPage() {
                           </button>
                         )}
                         <button
-                          onClick={() => revokeAccount(a.id, a.display_name)}
+                          onClick={() => revokeAccount(a.id, a.displayName)}
                           disabled={isRevoking}
                           className="inline-flex items-center gap-1 text-xs text-cos-slate hover:text-red-600 disabled:opacity-40 transition-colors"
                           title="Remove and disconnect this account"
