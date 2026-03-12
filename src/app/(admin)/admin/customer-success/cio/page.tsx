@@ -96,12 +96,10 @@ export default function CioDashboardPage() {
 
   // Only show campaigns that are actively running
   const activeCampaigns = campaigns.filter((c) => c.state === "sending");
-  // Only show messages that were actually sent
-  const sentMessages = messages.filter((m) => (m.metrics.sent ?? 0) > 0 || (m.metrics.delivered ?? 0) > 0);
-
-  const totalSent = sentMessages.reduce((sum, m) => sum + (m.metrics.sent ?? 0), 0);
-  const totalOpened = sentMessages.reduce((sum, m) => sum + (m.metrics.opened ?? 0), 0);
-  const openRate = totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(1) : "0";
+  // metrics.sent/opened are Unix timestamps (truthy = event occurred), not counts
+  const sentMessages = messages.filter((m) => !!m.metrics.sent || !!m.metrics.delivered);
+  const openedCount = sentMessages.filter((m) => !!m.metrics.opened).length;
+  const openRate = sentMessages.length > 0 ? ((openedCount / sentMessages.length) * 100).toFixed(0) : "0";
 
   return (
     <div className="space-y-6">
@@ -127,9 +125,9 @@ export default function CioDashboardPage() {
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={Zap} label="Active Campaigns" value={activeCampaigns.length} color="text-cos-signal" bg="bg-cos-signal/10" sub="currently running" />
-        <StatCard icon={Mail} label="Emails Sent" value={totalSent.toLocaleString()} color="text-cos-electric" bg="bg-cos-electric/10" />
-        <StatCard icon={Eye} label="Open Rate" value={`${openRate}%`} color="text-cos-warm" bg="bg-cos-warm/10" sub={`${totalOpened} of ${totalSent} opens`} />
-        <StatCard icon={Send} label="Recent Deliveries" value={sentMessages.length} color="text-cos-electric" bg="bg-cos-electric/10" sub="in last 50" />
+        <StatCard icon={Mail} label="Emails Sent" value={sentMessages.length} color="text-cos-electric" bg="bg-cos-electric/10" sub="in last 50 fetched" />
+        <StatCard icon={Eye} label="Open Rate" value={`${openRate}%`} color="text-cos-warm" bg="bg-cos-warm/10" sub={`${openedCount} of ${sentMessages.length} opened`} />
+        <StatCard icon={Send} label="Not Opened" value={sentMessages.length - openedCount} color="text-cos-slate" bg="bg-cos-slate/10" />
       </div>
 
       {/* Active Campaigns */}
@@ -207,7 +205,7 @@ export default function CioDashboardPage() {
                   <td className="px-5 py-3 font-medium text-cos-midnight max-w-xs truncate">{m.subject || "—"}</td>
                   <td className="px-5 py-3 font-mono text-xs text-cos-slate truncate max-w-[180px]">{m.recipient}</td>
                   <td className="px-5 py-3">
-                    {(m.metrics.opened ?? 0) > 0 ? (
+                    {m.metrics.opened ? (
                       <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[10px] font-medium text-cos-electric">
                         <Eye className="h-2.5 w-2.5" /> Opened
                       </span>
