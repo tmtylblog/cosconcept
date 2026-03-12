@@ -14,6 +14,8 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
@@ -29,9 +31,26 @@ export default function FirmOfferingPage() {
     isLoading,
     toggleHidden,
     updateDescription,
+    addService,
+    deleteService,
   } = useFirmServices(activeOrg?.id);
 
   const [showHidden, setShowHidden] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addDescription, setAddDescription] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!addName.trim()) return;
+    setAdding(true);
+    await addService(addName.trim(), addDescription.trim() || undefined);
+    setAddName("");
+    setAddDescription("");
+    setAdding(false);
+    setShowAddForm(false);
+  }
 
   // Split visible / hidden
   const visibleServices = services.filter((s) => !s.isHidden);
@@ -45,16 +64,68 @@ export default function FirmOfferingPage() {
   return (
     <div className="cos-scrollbar mx-auto max-w-3xl space-y-4 overflow-y-auto p-6">
       {/* Page header */}
-      <div>
-        <h2 className="font-heading text-lg font-semibold text-cos-midnight">
-          Services & Solutions
-        </h2>
-        <p className="mt-1 text-xs text-cos-slate-dim">
-          {hasFirmServices
-            ? `Auto-discovered from ${enrichmentResult?.domain ?? "your website"}. Edit descriptions or hide services that aren't relevant.`
-            : "Your service offerings will be populated automatically from your website."}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="font-heading text-lg font-semibold text-cos-midnight">
+            Services & Solutions
+          </h2>
+          <p className="mt-1 text-xs text-cos-slate-dim">
+            {hasFirmServices
+              ? `Auto-discovered from ${enrichmentResult?.domain ?? "your website"}. Edit descriptions or hide services that aren't relevant.`
+              : "Your service offerings will be populated automatically from your website."}
+          </p>
+        </div>
+        <button
+          onClick={() => setShowAddForm((v) => !v)}
+          className="flex shrink-0 items-center gap-1.5 rounded-cos-lg border border-cos-electric/30 bg-cos-electric/5 px-3 py-1.5 text-xs font-semibold text-cos-electric transition-colors hover:bg-cos-electric/10"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Service
+        </button>
       </div>
+
+      {/* Add service form */}
+      {showAddForm && (
+        <form
+          onSubmit={handleAdd}
+          className="rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 p-4 space-y-3"
+        >
+          <p className="text-xs font-semibold text-cos-electric">New Service</p>
+          <input
+            type="text"
+            required
+            value={addName}
+            onChange={(e) => setAddName(e.target.value)}
+            placeholder="Service name (e.g. Brand Strategy)"
+            className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+            autoFocus
+          />
+          <textarea
+            value={addDescription}
+            onChange={(e) => setAddDescription(e.target.value)}
+            placeholder="Description (optional)"
+            rows={2}
+            className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={adding || !addName.trim()}
+              className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-cos-electric/90 disabled:opacity-50"
+            >
+              {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Add Service
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowAddForm(false); setAddName(""); setAddDescription(""); }}
+              className="flex items-center gap-1.5 rounded-cos-lg border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud-dim"
+            >
+              <X className="h-3.5 w-3.5" /> Cancel
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Loading states */}
       {(isLoading || enrichmentStatus === "loading") && (
@@ -117,6 +188,7 @@ export default function FirmOfferingPage() {
           service={service}
           onToggleHidden={toggleHidden}
           onUpdateDescription={updateDescription}
+          onDelete={deleteService}
         />
       ))}
 
@@ -139,6 +211,7 @@ export default function FirmOfferingPage() {
                   service={service}
                   onToggleHidden={toggleHidden}
                   onUpdateDescription={updateDescription}
+                  onDelete={deleteService}
                 />
               ))}
             </div>
@@ -169,10 +242,12 @@ function ServiceCard({
   service,
   onToggleHidden,
   onUpdateDescription,
+  onDelete,
 }: {
   service: FirmService;
   onToggleHidden: (id: string) => Promise<void>;
   onUpdateDescription: (id: string, description: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(service.description ?? "");
@@ -213,18 +288,30 @@ function ServiceCard({
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             )}
-            {/* Hide toggle */}
-            <button
-              onClick={() => onToggleHidden(service.id)}
-              className={`flex h-7 w-7 items-center justify-center rounded-cos-md transition-colors ${
-                service.isHidden
-                  ? "text-cos-warm hover:bg-cos-warm/10"
-                  : "text-cos-slate-light hover:bg-cos-cloud-dim hover:text-cos-midnight"
-              }`}
-              title={service.isHidden ? "Show service" : "Hide service"}
-            >
-              {service.isHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </button>
+            {/* Hide toggle (auto-discovered only) */}
+            {service.sourceUrl !== null && (
+              <button
+                onClick={() => onToggleHidden(service.id)}
+                className={`flex h-7 w-7 items-center justify-center rounded-cos-md transition-colors ${
+                  service.isHidden
+                    ? "text-cos-warm hover:bg-cos-warm/10"
+                    : "text-cos-slate-light hover:bg-cos-cloud-dim hover:text-cos-midnight"
+                }`}
+                title={service.isHidden ? "Show service" : "Hide service"}
+              >
+                {service.isHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+            )}
+            {/* Delete (manual services only) */}
+            {service.sourceUrl === null && (
+              <button
+                onClick={() => onDelete(service.id)}
+                className="flex h-7 w-7 items-center justify-center rounded-cos-md text-cos-slate-light transition-colors hover:bg-cos-ember/10 hover:text-cos-ember"
+                title="Delete service"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
         </div>
 

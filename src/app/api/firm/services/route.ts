@@ -9,6 +9,7 @@ import { eq, and, asc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { firmServices, serviceFirms, members } from "@/lib/db/schema";
+import { randomBytes } from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +98,86 @@ export async function GET(req: NextRequest) {
     total: rows.length,
     hiddenCount: hiddenRows.length,
   });
+}
+
+// ─── POST: Manually create a service ─────────────────────
+
+export async function POST(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const { organizationId, name, description } = body;
+
+  if (!organizationId || !name?.trim()) {
+    return Response.json({ error: "organizationId and name are required" }, { status: 400 });
+  }
+
+  const firm = await resolveFirm(session.user.id, organizationId);
+  if (!firm) {
+    return Response.json({ error: "Firm not found" }, { status: 404 });
+  }
+
+  const id = `svc_${Date.now().toString(36)}_${randomBytes(4).toString("hex")}`;
+  const now = new Date();
+
+  const [service] = await db.insert(firmServices).values({
+    id,
+    firmId: firm.id,
+    organizationId,
+    name: name.trim(),
+    description: description?.trim() ?? null,
+    sourceUrl: null,
+    sourcePageTitle: null,
+    subServices: [],
+    isHidden: false,
+    displayOrder: 9999,
+    createdAt: now,
+    updatedAt: now,
+  }).returning();
+
+  return Response.json({ service });
+}
+
+// ─── DELETE: Remove a manually-added service ─────────────
+
+export async function DELETE(req: NextRequest) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const organizationId = req.nextUrl.searchParams.get("organizationId");
+  const id = req.nextUrl.searchParams.get("id");
+
+  if (!id || !organizationId) {
+    return Response.json({ error: "id and organizationId required" }, { status: 400 });
+  }
+
+  const firm = await resolveFirm(session.user.id, organizationId);
+  if (!firm) {
+    return Response.json({ error: "Firm not found" }, { status: 404 });
+  }
+
+  // Only allow deleting manually-added services (sourceUrl is null)
+  const [svc] = await db
+    .select({ id: firmServices.id, sourceUrl: firmServices.sourceUrl })
+    .from(firmServices)
+    .where(and(eq(firmServices.id, id), eq(firmServices.firmId, firm.id)))
+    .limit(1);
+
+  if (!svc) {
+    return Response.json({ error: "Service not found" }, { status: 404 });
+  }
+
+  if (svc.sourceUrl !== null) {
+    return Response.json({ error: "Auto-discovered services cannot be deleted — use hide instead" }, { status: 400 });
+  }
+
+  await db.delete(firmServices).where(eq(firmServices.id, id));
+  return Response.json({ success: true });
 }
 
 // ─── PATCH: Update a service ─────────────────────────────

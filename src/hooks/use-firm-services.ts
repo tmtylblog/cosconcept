@@ -23,6 +23,8 @@ interface UseFirmServicesReturn {
   isLoading: boolean;
   toggleHidden: (id: string) => Promise<void>;
   updateDescription: (id: string, description: string) => Promise<void>;
+  addService: (name: string, description?: string) => Promise<void>;
+  deleteService: (id: string) => Promise<void>;
   refresh: () => void;
 }
 
@@ -151,6 +153,41 @@ export function useFirmServices(
     [organizationId, fetchServices]
   );
 
+  // ── Add service manually ──────────────────────────────
+  const addService = useCallback(
+    async (name: string, description?: string) => {
+      if (!organizationId) return;
+      const res = await fetch("/api/firm/services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId, name, description }),
+      });
+      if (res.ok) {
+        await fetchServices();
+      }
+    },
+    [organizationId, fetchServices]
+  );
+
+  // ── Delete a manually-added service ───────────────────
+  const deleteService = useCallback(
+    async (id: string) => {
+      if (!organizationId) return;
+      // Optimistic remove
+      setServices((prev) => prev.filter((s) => s.id !== id));
+      setTotal((t) => Math.max(0, t - 1));
+
+      const res = await fetch(
+        `/api/firm/services?id=${id}&organizationId=${organizationId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        await fetchServices();
+      }
+    },
+    [organizationId, fetchServices]
+  );
+
   return {
     services,
     total,
@@ -158,6 +195,8 @@ export function useFirmServices(
     isLoading,
     toggleHidden,
     updateDescription,
+    addService,
+    deleteService,
     refresh: fetchServices,
   };
 }
