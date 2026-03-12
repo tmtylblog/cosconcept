@@ -21,7 +21,8 @@
 import { neo4jWrite } from "../neo4j";
 import type { FirmClassification } from "./ai-classifier";
 import type { FirmGroundTruth } from "./jina-scraper";
-import type { PdlCompany } from "./pdl";
+import type { PdlCompany, PdlExperience } from "./pdl";
+import { matchSkillsToTaxonomy, matchSummary } from "./skill-matcher";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -354,6 +355,10 @@ export interface GraphExpertData {
   location?: string;
   skills?: string[];
   industries?: string[];
+  /** PDL seniority levels — stored as Person node property */
+  seniorityLevels?: string[];
+  /** PDL job title class — stored as Person node property */
+  jobTitleClass?: string | null;
 }
 
 /**
@@ -380,6 +385,8 @@ export async function writeExpertToGraph(
            p.linkedinUrl = $linkedinUrl,
            p.location = $location,
            p.firmId = $firmId,
+           p.seniorityLevels = $seniorityLevels,
+           p.jobTitleClass = $jobTitleClass,
            p.enrichmentStatus = "enriched",
            p.source = "pdl",
            p.emails = coalesce(p.emails, []),
@@ -399,6 +406,8 @@ export async function writeExpertToGraph(
         linkedinUrl: data.linkedinUrl ?? null,
         location: data.location ?? null,
         firmId: data.firmId,
+        seniorityLevels: data.seniorityLevels ?? [],
+        jobTitleClass: data.jobTitleClass ?? null,
       }
     );
 
@@ -611,6 +620,216 @@ export async function writeCaseStudyToGraph(
     errors.push(msg);
     return { skills: 0, industries: 0, errors };
   }
+}
+
+// ─── Work History Graph Writer ────────────────────────────
+
+export interface WorkHistoryWriteResult {
+  companiesCreated: number;
+  edgesCreated: number;
+  errors: string[];
+}
+
+/**
+ * Write an expert's work history to Neo4j as WORKED_AT edges.
+ *
+ * For each experience entry with a company name:
+ * - MERGE Company node by domain (preferred) or name (fallback)
+ * - Set company metadata from experience (industry, size)
+ * - Set stub properties so the company can be enriched later
+ * - Create WORKED_AT edge with title, dates, isCurrent
+ *
+ * This is the primary value of the team import feature —
+ * it builds the graph of "where has this firm's team worked?"
+ */
+export async function writeWorkHistoryToGraph(
+  expertId: string,
+  experience: PdlExperience[]
+): Promise<WorkHistoryWriteResult> {
+  const result: WorkHistoryWriteResult = {
+    companiesCreated: 0,
+    edgesCreated: 0,
+    errors: [],
+  };
+
+  if (!experience.length) return result;
+
+  // Filter to entries with a company name
+  const validExps = experience.filter((exp) => exp.company.name?.trim());
+
+  if (!validExps.length) return result;
+
+  // Batch write: MERGE companies + WORKED_AT edges
+  // Use UNWIND for efficiency — single query instead of N queries.
+  // Company MERGE: prefer domain if available, fall back to name.
+  const entries = validExps.map((exp) => {
+    const domain = exp.company.website
+      ? extractDomain(exp.company.website)
+      : null;
+    return {
+      companyName: exp.company.name.trim(),
+      companyDomain: domain,
+      companyIndustry: exp.company.industry ?? null,
+      companySize: exp.company.size ?? null,
+      title: exp.title ?? "Unknown Role",
+      startDate: exp.startDate ?? null,
+      endDate: exp.endDate ?? null,
+      isCurrent: exp.isCurrent ?? false,
+      locationName: exp.locationName ?? null,
+      summary: exp.summary ?? null,
+    };
+  });
+
+  try {
+    // For companies WITH a domain, MERGE by domain (canonical key)
+    const withDomain = entries.filter((e) => e.companyDomain);
+    if (withDomain.length > 0) {
+      await neo4jWrite(
+        `MATCH (p:Person {id: $expertId})
+         UNWIND $entries AS e
+         MERGE (c:Company {domain: e.companyDomain})
+         ON CREATE SET c.name = e.companyName,
+                       c.enrichmentStatus = "stub",
+                       c.isCosCustomer = false,
+                       c.source = "pdl_work_history",
+                       c.createdAt = datetime()
+         SET c.industry = coalesce(e.companyIndustry, c.industry),
+             c.size = coalesce(e.companySize, c.size),
+             c.name = coalesce(c.name, e.companyName)
+         MERGE (p)-[r:WORKED_AT]->(c)
+         SET r.title = e.title,
+             r.startDate = e.startDate,
+             r.endDate = e.endDate,
+             r.isCurrent = e.isCurrent,
+             r.locationName = e.locationName,
+             r.source = "pdl"`,
+        { expertId, entries: withDomain }
+      );
+      result.edgesCreated += withDomain.length;
+      result.companiesCreated += withDomain.length; // upper bound, some may already exist
+    }
+
+    // For companies WITHOUT a domain, MERGE by name (less precise)
+    const withoutDomain = entries.filter((e) => !e.companyDomain);
+    if (withoutDomain.length > 0) {
+      await neo4jWrite(
+        `MATCH (p:Person {id: $expertId})
+         UNWIND $entries AS e
+         MERGE (c:Company {name: e.companyName})
+         ON CREATE SET c.enrichmentStatus = "stub",
+                       c.isCosCustomer = false,
+                       c.source = "pdl_work_history",
+                       c.createdAt = datetime()
+         SET c.industry = coalesce(e.companyIndustry, c.industry),
+             c.size = coalesce(e.companySize, c.size)
+         MERGE (p)-[r:WORKED_AT]->(c)
+         SET r.title = e.title,
+             r.startDate = e.startDate,
+             r.endDate = e.endDate,
+             r.isCurrent = e.isCurrent,
+             r.locationName = e.locationName,
+             r.source = "pdl"`,
+        { expertId, entries: withoutDomain }
+      );
+      result.edgesCreated += withoutDomain.length;
+      result.companiesCreated += withoutDomain.length;
+    }
+
+    console.log(
+      `[GraphWriter] Work history for ${expertId}: ` +
+      `${result.edgesCreated} WORKED_AT edges (${withDomain.length} with domain, ${withoutDomain.length} name-only)`
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[GraphWriter] Work history failed for ${expertId}: ${msg}`);
+    result.errors.push(msg);
+  }
+
+  return result;
+}
+
+// ─── PDL Skills → Taxonomy Graph Writer ──────────────────
+
+export interface SkillMatchWriteResult {
+  matched: number;
+  unmatched: number;
+  matchRate: string;
+  edgesCreated: number;
+  errors: string[];
+}
+
+/**
+ * Match PDL self-reported skills against our L3 taxonomy
+ * and write HAS_SKILL edges with source="pdl_self_reported".
+ *
+ * Distinguishable from AI-inferred skills (source="enrichment")
+ * and specialist profile skills (source="specialist_profile").
+ */
+export async function writeSkillsFromPdlToGraph(
+  expertId: string,
+  pdlSkills: string[]
+): Promise<SkillMatchWriteResult> {
+  const result: SkillMatchWriteResult = {
+    matched: 0,
+    unmatched: 0,
+    matchRate: "0%",
+    edgesCreated: 0,
+    errors: [],
+  };
+
+  if (!pdlSkills.length) return result;
+
+  const matches = matchSkillsToTaxonomy(pdlSkills);
+  const summary = matchSummary(pdlSkills, matches);
+
+  result.matched = summary.matched;
+  result.unmatched = summary.unmatched;
+  result.matchRate = summary.matchRate;
+
+  if (matches.length === 0) {
+    console.log(`[GraphWriter] No skill matches for ${expertId} (${pdlSkills.length} PDL skills)`);
+    return result;
+  }
+
+  try {
+    // Write matched skills as HAS_SKILL edges
+    const skillEntries = matches.map((m) => ({
+      l3Name: m.l3Name,
+      l2Category: m.l2Category,
+      confidence: m.confidence,
+      pdlSkillName: m.pdlSkill,
+    }));
+
+    await neo4jWrite(
+      `MATCH (p:Person {id: $expertId})
+       UNWIND $skills AS s
+       MERGE (sk:Skill {name: s.l3Name})
+       ON CREATE SET sk.level = "L3",
+                     sk.l2Category = s.l2Category
+       MERGE (p)-[r:HAS_SKILL]->(sk)
+       SET r.source = "pdl_self_reported",
+           r.confidence = s.confidence,
+           r.pdlSkillName = s.pdlSkillName,
+           r.strength = coalesce(r.strength, s.confidence),
+           r.evidenceCount = coalesce(r.evidenceCount, 1)`,
+      { expertId, skills: skillEntries }
+    );
+
+    result.edgesCreated = matches.length;
+
+    console.log(
+      `[GraphWriter] Skills for ${expertId}: ${matches.length}/${pdlSkills.length} matched (${summary.matchRate})` +
+      (summary.unmatchedSkills.length > 0
+        ? ` | Unmatched: ${summary.unmatchedSkills.slice(0, 5).join(", ")}${summary.unmatchedSkills.length > 5 ? "..." : ""}`
+        : "")
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[GraphWriter] Skill write failed for ${expertId}: ${msg}`);
+    result.errors.push(msg);
+  }
+
+  return result;
 }
 
 // ─── Helpers ──────────────────────────────────────────────

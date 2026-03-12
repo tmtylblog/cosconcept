@@ -2,25 +2,32 @@
  * Handler: team-ingest
  *
  * Pulls current employees for a firm from PDL Person Search and upserts
- * them into expert_profiles. Classifies each person as a billable expert
- * (outward-facing) or an internal role based on PDL's job_title_role field.
+ * them into expert_profiles. Classifies each person into one of three tiers:
  *
- * Cost: 1 PDL credit per person returned.
- * Free tier limit: 5 people (teaser).
- * Paid tier limit: up to 500 people (full roster).
+ *   - expert: Client-facing roles (marketing, engineering, consulting, etc.)
+ *   - potential_expert: Ambiguous roles (management, communications, etc.)
+ *   - not_expert: Internal ops roles (HR, finance, legal, etc.)
+ *
+ * After classification, optionally queues enrichment jobs for high-confidence
+ * experts (via the expert-linkedin handler).
+ *
+ * Cost: 1 PDL credit per person returned (search).
+ *       1 PDL credit per person enriched (selective, only experts).
  */
 
 import { eq, and, gte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { expertProfiles } from "@/lib/db/schema";
 import { searchPeopleAtCompany } from "@/lib/enrichment/pdl";
+import { classifyTitle } from "@/lib/enrichment/expert-classifier";
 import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
+import { enqueue } from "@/lib/jobs/queue";
 
-// ── Role classification ──────────────────────────────────────────────────────
-// PDL's job_title_role field gives a structured role category.
-// We use it to split experts into billable (client-facing) vs internal.
+// ── Three-tier expert classification ─────────────────────────────────────────
 
-/** Roles that produce client-deliverable work — shown on public profile */
+export type ExpertTier = "expert" | "potential_expert" | "not_expert";
+
+/** Roles that produce client-deliverable work — high confidence experts */
 const BILLABLE_ROLES = new Set([
   "engineering",
   "design",
@@ -35,7 +42,7 @@ const BILLABLE_ROLES = new Set([
   "information_technology",
 ]);
 
-/** Roles that are internal ops — excluded from public expert roster */
+/** Roles that are internal ops — high confidence NOT experts */
 const INTERNAL_ROLES = new Set([
   "finance",
   "human_resources",
@@ -48,11 +55,26 @@ const INTERNAL_ROLES = new Set([
   "support",
 ]);
 
-function classifyRole(role: string | null): "billable" | "internal" | "unknown" {
-  if (!role) return "unknown";
-  if (BILLABLE_ROLES.has(role)) return "billable";
-  if (INTERNAL_ROLES.has(role)) return "internal";
-  return "unknown"; // management, communications, etc. — needs AI review
+/**
+ * Three-tier classification using PDL's structured role field as primary signal
+ * and keyword-based title classification as secondary signal for unknowns.
+ */
+function classifyTeamMember(
+  jobTitleRole: string | null,
+  jobTitle: string
+): ExpertTier {
+  // Primary signal: PDL's structured job_title_role
+  if (jobTitleRole && BILLABLE_ROLES.has(jobTitleRole)) return "expert";
+  if (jobTitleRole && INTERNAL_ROLES.has(jobTitleRole)) return "not_expert";
+
+  // Secondary signal: keyword-based title classification (for unknowns)
+  if (jobTitle) {
+    const titleClass = classifyTitle(jobTitle);
+    if (titleClass === "expert") return "expert";
+    if (titleClass === "internal") return "not_expert";
+  }
+
+  return "potential_expert";
 }
 
 function calcCompleteness(person: {
@@ -83,8 +105,17 @@ interface Payload {
   firmId: string;
   /** Bare domain, e.g. "agency.com" — no protocol */
   domain: string;
-  /** Max people to pull. Free=5, Paid=up to 500. */
+  /** Max people to pull. -1 or 500 = full roster. */
   limit: number;
+  /**
+   * How many "expert" tier people to auto-enrich after search.
+   * -1 = all experts (pro), 5 = first 5 (free), 0 = none (default).
+   */
+  autoEnrichLimit?: number;
+  /** Company name for PDL person enrich matching */
+  companyName?: string;
+  /** Force re-import even if recently ingested */
+  force?: boolean;
 }
 
 // ── Handler ──────────────────────────────────────────────────────────────────
@@ -92,28 +123,37 @@ interface Payload {
 export async function handleTeamIngest(
   payload: Record<string, unknown>
 ): Promise<unknown> {
-  const { firmId, domain, limit } = payload as unknown as Payload;
+  const {
+    firmId,
+    domain,
+    limit,
+    autoEnrichLimit = 0,
+    companyName,
+    force = false,
+  } = payload as unknown as Payload;
 
   if (!firmId || !domain) {
     throw new Error("[TeamIngest] Missing firmId or domain in payload");
   }
 
   // Skip if ingested within the last 30 days (avoid burning credits on re-runs)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const recentProfiles = await db
-    .select({ id: expertProfiles.id })
-    .from(expertProfiles)
-    .where(
-      and(
-        eq(expertProfiles.firmId, firmId),
-        gte(expertProfiles.pdlEnrichedAt, thirtyDaysAgo)
+  if (!force) {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentProfiles = await db
+      .select({ id: expertProfiles.id })
+      .from(expertProfiles)
+      .where(
+        and(
+          eq(expertProfiles.firmId, firmId),
+          gte(expertProfiles.pdlEnrichedAt, thirtyDaysAgo)
+        )
       )
-    )
-    .limit(1);
+      .limit(1);
 
-  if (recentProfiles.length > 0) {
-    console.log(`[TeamIngest] ${firmId} already ingested within 30 days — skipping.`);
-    return { skipped: true, reason: "recently_ingested" };
+    if (recentProfiles.length > 0) {
+      console.log(`[TeamIngest] ${firmId} already ingested within 30 days — skipping.`);
+      return { skipped: true, reason: "recently_ingested" };
+    }
   }
 
   console.log(`[TeamIngest] Fetching up to ${limit} employees at ${domain}...`);
@@ -141,9 +181,11 @@ export async function handleTeamIngest(
 
   console.log(`[TeamIngest] PDL returned ${allPeople.length} of ${total} total at ${domain}`);
 
-  // Upsert each person into expert_profiles
+  // Classify and upsert each person into expert_profiles
   let upserted = 0;
   let skippedCount = 0;
+  const tierCounts = { expert: 0, potential_expert: 0, not_expert: 0 };
+  const expertIdsForEnrich: { expertId: string; fullName: string; linkedinUrl: string }[] = [];
 
   for (const person of allPeople) {
     if (!person.id || !person.fullName) {
@@ -151,7 +193,9 @@ export async function handleTeamIngest(
       continue;
     }
 
-    const classified = classifyRole(person.jobTitleRole);
+    const tier = classifyTeamMember(person.jobTitleRole, person.jobTitle);
+    tierCounts[tier]++;
+
     const completeness = calcCompleteness(person);
     const expertId = `exp_pdl_${person.id}`;
 
@@ -162,7 +206,7 @@ export async function handleTeamIngest(
       titleRole: person.jobTitleRole,
       titleSubRole: person.jobTitleSubRole,
       titleLevels: person.jobTitleLevels,
-      classifiedAs: classified,
+      classifiedAs: tier,
     };
 
     try {
@@ -184,8 +228,8 @@ export async function handleTeamIngest(
           pdlData: pdlPayload as any,
           pdlEnrichedAt: new Date(),
           topSkills: person.skills.slice(0, 10),
-          // Only billable experts are public by default; unknown/internal hidden
-          isPublic: classified === "billable",
+          // Only expert tier is public by default
+          isPublic: tier === "expert",
           profileCompleteness: completeness,
         })
         .onConflictDoUpdate({
@@ -199,15 +243,55 @@ export async function handleTeamIngest(
             pdlData: pdlPayload as any,
             pdlEnrichedAt: new Date(),
             topSkills: person.skills.slice(0, 10),
-            isPublic: classified === "billable",
+            isPublic: tier === "expert",
             profileCompleteness: completeness,
             updatedAt: new Date(),
           },
         });
       upserted++;
+
+      // Track expert-tier people with LinkedIn for auto-enrichment
+      if (tier === "expert" && person.linkedinUrl) {
+        expertIdsForEnrich.push({
+          expertId,
+          fullName: person.fullName,
+          linkedinUrl: person.linkedinUrl,
+        });
+      }
     } catch (err) {
       console.error(`[TeamIngest] Failed to upsert ${person.fullName}: ${err}`);
       skippedCount++;
+    }
+  }
+
+  // ── Auto-enrich expert-tier people ──────────────────────────────────────
+  let autoEnrichQueued = 0;
+  if (autoEnrichLimit !== 0 && expertIdsForEnrich.length > 0) {
+    const toEnrich = autoEnrichLimit === -1
+      ? expertIdsForEnrich
+      : expertIdsForEnrich.slice(0, autoEnrichLimit);
+
+    console.log(`[TeamIngest] Queuing ${toEnrich.length} expert enrichment jobs (limit: ${autoEnrichLimit})...`);
+
+    for (let i = 0; i < toEnrich.length; i++) {
+      const { expertId, fullName, linkedinUrl } = toEnrich[i];
+      try {
+        await enqueue(
+          "expert-linkedin",
+          {
+            expertId,
+            firmId,
+            fullName,
+            linkedinUrl,
+            companyName: companyName || undefined,
+            companyWebsite: domain,
+          },
+          { delayMs: i * 3000 } // stagger 3s apart to avoid PDL rate limiting
+        );
+        autoEnrichQueued++;
+      } catch (err) {
+        console.error(`[TeamIngest] Failed to queue enrich for ${fullName}: ${err}`);
+      }
     }
   }
 
@@ -217,21 +301,26 @@ export async function handleTeamIngest(
     fetched: allPeople.length,
     upserted,
     skipped: skippedCount,
-    billable: allPeople.filter((p) => classifyRole(p.jobTitleRole) === "billable").length,
-    internal: allPeople.filter((p) => classifyRole(p.jobTitleRole) === "internal").length,
-    unknown: allPeople.filter((p) => classifyRole(p.jobTitleRole) === "unknown").length,
+    experts: tierCounts.expert,
+    potentialExperts: tierCounts.potential_expert,
+    notExperts: tierCounts.not_expert,
+    autoEnrichQueued,
   };
 
   await logEnrichmentStep({
     firmId,
     phase: "team-ingest",
     source: "api.peopledatalabs.com",
-    rawInput: `domain=${domain}, limit=${limit}`,
+    rawInput: `domain=${domain}, limit=${limit}, autoEnrichLimit=${autoEnrichLimit}`,
     extractedData: summary,
     status: "success",
   });
 
-  console.log(`[TeamIngest] Done: ${upserted} upserted, ${summary.billable} billable, ${summary.internal} internal, ${summary.unknown} unknown`);
+  console.log(
+    `[TeamIngest] Done: ${upserted} upserted — ${tierCounts.expert} experts, ` +
+    `${tierCounts.potential_expert} potential, ${tierCounts.not_expert} not expert — ` +
+    `${autoEnrichQueued} enrichment jobs queued`
+  );
 
   return summary;
 }

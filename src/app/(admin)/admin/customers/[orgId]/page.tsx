@@ -35,6 +35,9 @@ import {
   Copy,
   Check,
   Linkedin,
+  Download,
+  Zap,
+  AlertCircle,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -209,6 +212,41 @@ interface AdminExpert {
   partialProfiles: number;
   profileCompleteness: number | null;
   createdAt: string;
+  // Team import fields
+  expertTier: "expert" | "potential_expert" | "not_expert" | null;
+  isFullyEnriched: boolean;
+  pdlEnrichedAt: string | null;
+}
+
+interface TeamImportEstimate {
+  employeeCount: number;
+  estimates: {
+    searchCredits: number;
+    enrichCreditsFree: number;
+    enrichCreditsPro: number;
+    totalFree: number;
+    totalPro: number;
+  } | null;
+}
+
+interface TeamImportStatus {
+  phase: string;
+  jobId?: string;
+  jobStatus?: string;
+  jobError?: string;
+  searchResults: {
+    total: number;
+    experts: number;
+    potentialExperts: number;
+    notExperts: number;
+    unclassified: number;
+  } | null;
+  enrichProgress: {
+    total: number;
+    completed: number;
+    running: number;
+    failed: number;
+  } | null;
 }
 
 type TabId =
@@ -387,6 +425,15 @@ export default function CustomerDetailPage() {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [linkingUser, setLinkingUser] = useState<string | null>(null);
 
+  // Team import state
+  const [importEstimate, setImportEstimate] = useState<TeamImportEstimate | null>(null);
+  const [importEstimateLoading, setImportEstimateLoading] = useState(false);
+  const [showImportConfirm, setShowImportConfirm] = useState<"free" | "pro" | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importStatus, setImportStatus] = useState<TeamImportStatus | null>(null);
+  const [importPolling, setImportPolling] = useState(false);
+  const [enrichingExpert, setEnrichingExpert] = useState<string | null>(null);
+
   // Primary data load
   useEffect(() => {
     fetch(`/api/admin/customers/${orgId}`)
@@ -544,6 +591,85 @@ export default function CustomerDetailPage() {
       console.error("Failed to link user:", err);
     } finally {
       setLinkingUser(null);
+    }
+  }
+
+  // Team import handlers
+  async function handleImportEstimate(tier: "free" | "pro") {
+    setImportEstimateLoading(true);
+    try {
+      const res = await fetch(`/api/admin/customers/${orgId}/team-import/estimate`);
+      const est = await res.json();
+      setImportEstimate(est);
+      setShowImportConfirm(tier);
+    } catch (err) {
+      console.error("Failed to get import estimate:", err);
+    } finally {
+      setImportEstimateLoading(false);
+    }
+  }
+
+  async function handleTeamImport(tier: "free" | "pro") {
+    setImportLoading(true);
+    setShowImportConfirm(null);
+    try {
+      const res = await fetch(`/api/admin/customers/${orgId}/team-import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier, force: false }),
+      });
+      if (res.ok) {
+        // Start polling for status
+        setImportPolling(true);
+        pollImportStatus();
+      }
+    } catch (err) {
+      console.error("Failed to trigger import:", err);
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
+  async function pollImportStatus() {
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/admin/customers/${orgId}/team-import/status`);
+        const status = await res.json();
+        setImportStatus(status);
+
+        if (status.phase === "done" || status.phase === "error") {
+          setImportPolling(false);
+          // Reload experts
+          setExpertsLoaded(false);
+          loadExperts();
+          return;
+        }
+
+        // Continue polling
+        setTimeout(poll, 3000);
+      } catch (err) {
+        console.error("Failed to poll status:", err);
+        setImportPolling(false);
+      }
+    };
+    poll();
+  }
+
+  async function handleManualEnrich(expertId: string) {
+    setEnrichingExpert(expertId);
+    try {
+      await fetch(`/api/admin/customers/${orgId}/experts/${expertId}/enrich`, {
+        method: "POST",
+      });
+      // After a few seconds, refresh the expert list
+      setTimeout(() => {
+        setExpertsLoaded(false);
+        loadExperts();
+      }, 5000);
+    } catch (err) {
+      console.error("Failed to enrich expert:", err);
+    } finally {
+      setEnrichingExpert(null);
     }
   }
 
@@ -1117,15 +1243,49 @@ export default function CustomerDetailPage() {
               title={`Expert Roster (${experts.length})`}
               icon={<Users className="h-4 w-4 text-cos-signal" />}
               action={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAddExpert(true)}
-                  className="h-7 gap-1.5 text-xs"
-                >
-                  <UserPlus className="h-3.5 w-3.5" />
-                  Add Expert
-                </Button>
+                <div className="flex items-center gap-2">
+                  {data?.firm?.website && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleImportEstimate("free")}
+                        disabled={importLoading || importPolling || importEstimateLoading}
+                        className="h-7 gap-1.5 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      >
+                        {importEstimateLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" />
+                        )}
+                        Import Team (Free)
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleImportEstimate("pro")}
+                        disabled={importLoading || importPolling || importEstimateLoading}
+                        className="h-7 gap-1.5 text-xs border-cos-electric/30 text-cos-electric hover:bg-cos-electric/5"
+                      >
+                        {importEstimateLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Zap className="h-3.5 w-3.5" />
+                        )}
+                        Import Team (Pro)
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAddExpert(true)}
+                    className="h-7 gap-1.5 text-xs"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Add Expert
+                  </Button>
+                </div>
               }
             >
               {/* Add Expert Dialog */}
@@ -1182,6 +1342,136 @@ export default function CustomerDetailPage() {
                 </div>
               )}
 
+              {/* Import Confirmation Dialog */}
+              {showImportConfirm && (
+                <div className="mb-4 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/[0.02] p-4">
+                  <h4 className="mb-2 text-sm font-semibold text-cos-midnight">
+                    Import Team ({showImportConfirm === "pro" ? "Pro" : "Free"})
+                  </h4>
+                  {importEstimate?.estimates ? (
+                    <>
+                      <p className="text-xs text-cos-slate mb-3">
+                        PDL shows ~{importEstimate.employeeCount} employees at this company.
+                      </p>
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        <div className="rounded-cos bg-white border border-cos-border p-2 text-center">
+                          <div className="text-sm font-bold text-cos-midnight">
+                            {importEstimate.estimates.searchCredits}
+                          </div>
+                          <div className="text-[10px] text-cos-slate">Search credits</div>
+                        </div>
+                        <div className="rounded-cos bg-white border border-cos-border p-2 text-center">
+                          <div className="text-sm font-bold text-cos-electric">
+                            {showImportConfirm === "pro" ? importEstimate.estimates.enrichCreditsPro : importEstimate.estimates.enrichCreditsFree}
+                          </div>
+                          <div className="text-[10px] text-cos-slate">Enrich credits</div>
+                        </div>
+                        <div className="rounded-cos bg-white border border-cos-border p-2 text-center">
+                          <div className="text-sm font-bold text-cos-warm">
+                            {showImportConfirm === "pro" ? importEstimate.estimates.totalPro : importEstimate.estimates.totalFree}
+                          </div>
+                          <div className="text-[10px] text-cos-slate">Total credits</div>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-cos-slate-light mb-3">
+                        {showImportConfirm === "free"
+                          ? "Free tier: Searches all employees, classifies them, and auto-enriches the first 5 experts."
+                          : "Pro tier: Searches all employees, classifies them, and auto-enriches ALL experts with work history."}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-cos-slate mb-3">
+                      Employee count unknown. Costs depend on company size (1 credit per person found).
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setShowImportConfirm(null)} className="h-8 text-xs">
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleTeamImport(showImportConfirm)}
+                      disabled={importLoading}
+                      className="h-8 gap-1.5 text-xs bg-cos-electric text-white hover:bg-cos-electric/90"
+                    >
+                      {importLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                      Confirm Import
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Import Progress Panel */}
+              {(importPolling || importStatus) && importStatus?.phase !== "idle" && (
+                <div className="mb-4 rounded-cos-lg border border-cos-border bg-cos-cloud/30 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
+                      Import Progress
+                    </h4>
+                    <span className={`inline-flex items-center gap-1.5 rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
+                      importStatus?.phase === "done" ? "bg-emerald-50 text-emerald-600" :
+                      importStatus?.phase === "error" ? "bg-cos-ember/10 text-cos-ember" :
+                      "bg-cos-electric/10 text-cos-electric"
+                    }`}>
+                      {importPolling && <Loader2 className="h-3 w-3 animate-spin" />}
+                      {importStatus?.phase === "done" ? "Complete" :
+                       importStatus?.phase === "error" ? "Error" :
+                       importStatus?.phase === "enriching" ? "Enriching..." :
+                       importStatus?.phase === "searching" ? "Searching..." :
+                       importStatus?.phase === "queued" ? "Queued..." : importStatus?.phase}
+                    </span>
+                  </div>
+
+                  {importStatus?.searchResults && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      <span className="rounded-cos-pill bg-white border border-cos-border px-2.5 py-1 text-[10px]">
+                        <span className="font-semibold text-cos-midnight">{importStatus.searchResults.total}</span>{" "}
+                        <span className="text-cos-slate">Found</span>
+                      </span>
+                      <span className="rounded-cos-pill bg-emerald-50 px-2.5 py-1 text-[10px]">
+                        <span className="font-semibold text-emerald-600">{importStatus.searchResults.experts}</span>{" "}
+                        <span className="text-emerald-600/70">Expert</span>
+                      </span>
+                      <span className="rounded-cos-pill bg-amber-50 px-2.5 py-1 text-[10px]">
+                        <span className="font-semibold text-amber-600">{importStatus.searchResults.potentialExperts}</span>{" "}
+                        <span className="text-amber-600/70">Potential</span>
+                      </span>
+                      <span className="rounded-cos-pill bg-cos-cloud px-2.5 py-1 text-[10px]">
+                        <span className="font-semibold text-cos-slate">{importStatus.searchResults.notExperts}</span>{" "}
+                        <span className="text-cos-slate/70">Not Expert</span>
+                      </span>
+                    </div>
+                  )}
+
+                  {importStatus?.enrichProgress && importStatus.enrichProgress.total > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between text-[10px] text-cos-slate mb-1">
+                        <span>Enriching experts...</span>
+                        <span>{importStatus.enrichProgress.completed}/{importStatus.enrichProgress.total}</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-cos-cloud">
+                        <div
+                          className="h-full rounded-full bg-cos-electric transition-all"
+                          style={{ width: `${Math.round((importStatus.enrichProgress.completed / importStatus.enrichProgress.total) * 100)}%` }}
+                        />
+                      </div>
+                      {importStatus.enrichProgress.failed > 0 && (
+                        <p className="mt-1 text-[10px] text-cos-ember">
+                          {importStatus.enrichProgress.failed} enrichment(s) failed
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {importStatus?.phase === "error" && importStatus.jobError && (
+                    <div className="mt-2 flex items-start gap-2 rounded bg-cos-ember/5 p-2">
+                      <AlertCircle className="h-3.5 w-3.5 text-cos-ember mt-0.5 shrink-0" />
+                      <p className="text-[10px] text-cos-ember">{importStatus.jobError}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {expertsLoading && !expertsLoaded ? (
                 <div className="flex items-center gap-2 py-8 justify-center text-cos-slate">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1208,7 +1498,7 @@ export default function CustomerDetailPage() {
                       <tr className="border-b border-cos-border bg-cos-cloud/50">
                         <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Expert</th>
                         <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Title</th>
-                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Division</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Tier</th>
                         <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Profiles</th>
                         <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Claim Status</th>
                         <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Actions</th>
@@ -1237,14 +1527,25 @@ export default function CustomerDetailPage() {
                           <td className="px-4 py-3 text-xs text-cos-slate">{ep.title ?? "—"}</td>
                           <td className="px-4 py-3">
                             <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
-                              ep.division === "collective_member"
-                                ? "bg-cos-warm/10 text-cos-warm"
-                                : ep.division === "trusted_expert"
-                                ? "bg-cos-signal/10 text-cos-signal"
-                                : "bg-cos-cloud text-cos-slate"
+                              ep.expertTier === "expert"
+                                ? "bg-emerald-50 text-emerald-600"
+                                : ep.expertTier === "potential_expert"
+                                ? "bg-amber-50 text-amber-600"
+                                : ep.expertTier === "not_expert"
+                                ? "bg-cos-cloud text-cos-slate"
+                                : "bg-cos-cloud/50 text-cos-slate-light"
                             }`}>
-                              {ep.division === "collective_member" ? "CM" : ep.division === "trusted_expert" ? "Trusted" : "Expert"}
+                              {ep.expertTier === "expert" ? "Expert" :
+                               ep.expertTier === "potential_expert" ? "Potential" :
+                               ep.expertTier === "not_expert" ? "Not Expert" :
+                               ep.division === "collective_member" ? "CM" :
+                               ep.division === "trusted_expert" ? "Trusted" : "—"}
                             </span>
+                            {ep.isFullyEnriched && (
+                              <span title="Fully enriched">
+                                <Sparkles className="ml-1.5 inline-block h-3 w-3 text-cos-electric" />
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             {ep.profileCount === 0 ? (
@@ -1328,6 +1629,24 @@ export default function CustomerDetailPage() {
                               )}
                               {!ep.userId && !ep.email && (
                                 <span className="text-[10px] text-cos-slate-light">No email</span>
+                              )}
+                              {/* Enrich button — shown for non-fully-enriched experts with LinkedIn */}
+                              {!ep.isFullyEnriched && (ep.linkedinUrl || ep.fullName) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleManualEnrich(ep.id)}
+                                  disabled={enrichingExpert === ep.id}
+                                  title="Enrich with PDL (1 credit)"
+                                  className="h-7 gap-1 px-2 text-[10px] text-cos-warm hover:text-cos-warm hover:bg-cos-warm/5"
+                                >
+                                  {enrichingExpert === ep.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Sparkles className="h-3 w-3" />
+                                  )}
+                                  Enrich
+                                </Button>
                               )}
                             </div>
                           </td>

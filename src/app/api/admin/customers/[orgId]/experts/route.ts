@@ -107,6 +107,12 @@ export async function GET(
         }
       }
 
+      // Extract tier and enrichment status from pdlData
+      const pdlData = ep.pdlData as Record<string, unknown> | null;
+      const expertTier = (pdlData?.classifiedAs as string) ?? null;
+      const hasExperience = Array.isArray(pdlData?.experience) && (pdlData.experience as unknown[]).length > 0;
+      const isFullyEnriched = !!ep.pdlEnrichedAt && hasExperience;
+
       return {
         id: ep.id,
         firstName: ep.firstName,
@@ -125,6 +131,10 @@ export async function GET(
         partialProfiles: sp?.partial ?? 0,
         profileCompleteness: ep.profileCompleteness,
         createdAt: ep.createdAt,
+        // Team import tier + enrichment status
+        expertTier,
+        isFullyEnriched,
+        pdlEnrichedAt: ep.pdlEnrichedAt ?? null,
       };
     });
 

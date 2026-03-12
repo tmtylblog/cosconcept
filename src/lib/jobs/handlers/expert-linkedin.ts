@@ -10,6 +10,8 @@ import { generateSpecialistProfiles } from "@/lib/enrichment/specialist-generato
 import {
   writeExpertToGraph,
   writeSpecialistProfileToGraph,
+  writeWorkHistoryToGraph,
+  writeSkillsFromPdlToGraph,
 } from "@/lib/enrichment/graph-writer";
 import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
 import { db } from "@/lib/db";
@@ -134,6 +136,9 @@ export async function handleExpertLinkedIn(
       endDate: edu.endDate ?? undefined,
     })),
     summary: pdlPerson.summary ?? undefined,
+    // New fields from Step 2
+    jobTitleLevels: pdlPerson.jobTitleLevels ?? [],
+    jobTitleClass: pdlPerson.jobTitleClass ?? null,
   };
 
   if (!existing) {
@@ -264,7 +269,7 @@ export async function handleExpertLinkedIn(
     }
   }
 
-  // Step 4: Write to Neo4j
+  // Step 4: Write to Neo4j — Person node + CURRENTLY_AT edge
   const graphResult = await writeExpertToGraph({
     expertId,
     firmId,
@@ -284,7 +289,22 @@ export async function handleExpertLinkedIn(
             .filter((i): i is string => !!i)
             .filter((v, idx, arr) => arr.indexOf(v) === idx)
             .slice(0, 10),
+    // New fields: seniority levels + job title class
+    seniorityLevels: pdlPerson.jobTitleLevels,
+    jobTitleClass: pdlPerson.jobTitleClass,
   });
+
+  // Step 4b: Write work history → WORKED_AT edges to Company nodes
+  const workHistoryResult = await writeWorkHistoryToGraph(
+    expertId,
+    pdlPerson.experience
+  );
+
+  // Step 4c: Match PDL skills to taxonomy → HAS_SKILL edges (source: pdl_self_reported)
+  const skillMatchResult = await writeSkillsFromPdlToGraph(
+    expertId,
+    pdlPerson.skills
+  );
 
   // Write strong specialist profiles to Neo4j
   const strongSps = await db
@@ -314,5 +334,7 @@ export async function handleExpertLinkedIn(
     experience: pdlPerson.experience.length,
     pg: { epCreated: !existing, spCreated },
     graph: graphResult,
+    workHistory: workHistoryResult,
+    skillMatch: skillMatchResult,
   };
 }

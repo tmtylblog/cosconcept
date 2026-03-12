@@ -150,6 +150,10 @@ export interface PdlPerson {
   jobTitle: string;
   jobCompanyName: string;
   jobCompanyWebsite: string | null;
+  /** PDL seniority levels: "cxo", "owner", "vp", "director", "partner", "senior", "manager", "entry", "training" */
+  jobTitleLevels: string[];
+  /** PDL expense line category: "sales_and_marketing", "research_and_development", etc. */
+  jobTitleClass: string | null;
   location: {
     name: string;
     locality: string;
@@ -356,7 +360,9 @@ export async function enrichPerson(params: {
     );
   }
 
-  const data = await response.json();
+  const raw = await response.json();
+  // PDL wraps person data inside { status, likelihood, data: { ...fields } }
+  const data = raw.data ?? raw;
 
   return {
     id: data.id ?? "",
@@ -370,6 +376,8 @@ export async function enrichPerson(params: {
     jobTitle: data.job_title ?? "",
     jobCompanyName: data.job_company_name ?? "",
     jobCompanyWebsite: data.job_company_website ?? null,
+    jobTitleLevels: data.job_title_levels ?? [],
+    jobTitleClass: data.job_title_class ?? null,
     location: data.location_name
       ? {
           name: data.location_name ?? "",
@@ -407,6 +415,6 @@ export async function enrichPerson(params: {
         endDate: edu.end_date ?? null,
       })
     ),
-    likelihood: data.likelihood ?? 0,
+    likelihood: raw.likelihood ?? data.likelihood ?? 0,
   };
 }
