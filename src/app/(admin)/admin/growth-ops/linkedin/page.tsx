@@ -19,16 +19,16 @@ interface Account {
 
 interface Conversation {
   id: string;
-  chat_id: string;
-  participant_name: string;
-  participant_headline: string | null;
-  participant_profile_url: string | null;
-  participant_avatar_url: string | null;
-  participant_provider_id: string;
-  last_message_at: string | null;
-  last_message_preview: string | null;
-  unread_count: number;
-  is_inmail_thread: boolean;
+  chatId: string;
+  participantName: string;
+  participantHeadline: string | null;
+  participantProfileUrl: string | null;
+  participantAvatarUrl: string | null;
+  participantProviderId: string;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  unreadCount: number;
+  isInmailThread: boolean;
 }
 
 interface Message {
@@ -312,7 +312,7 @@ function LinkedInUniboxInner() {
   const [showNewMessage, setShowNewMessage] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const selectedConvo = conversations.find((c) => c.chat_id === selectedChatId) ?? null;
+  const selectedConvo = conversations.find((c) => c.chatId === selectedChatId) ?? null;
 
   function updateUrl(accountId: string, chatId?: string) {
     const url = new URL(window.location.href);
@@ -356,11 +356,10 @@ function LinkedInUniboxInner() {
 
       // Restore chat from URL
       const urlChat = params.get("chat");
-      if (urlChat && list.some((c) => c.chat_id === urlChat)) {
+      if (urlChat && list.some((c) => c.chatId === urlChat)) {
         setSelectedChatId(urlChat);
       } else if (list.length > 0 && !urlChat) {
-        // Auto-select most recent
-        setSelectedChatId(list[0].chat_id);
+        setSelectedChatId(list[0].chatId);
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -422,18 +421,18 @@ function LinkedInUniboxInner() {
     // Add synthetic conversation entry immediately
     const synthetic: Conversation = {
       id: `synth-${chatId}`,
-      chat_id: chatId,
-      participant_name: name || "New conversation",
-      participant_headline: recipient.headline ?? null,
-      participant_profile_url: null,
-      participant_avatar_url: recipient.profile_picture_url ?? null,
-      participant_provider_id: recipient.provider_id ?? "",
-      last_message_at: new Date().toISOString(),
-      last_message_preview: "Message sent",
-      unread_count: 0,
-      is_inmail_thread: false,
+      chatId,
+      participantName: name || "New conversation",
+      participantHeadline: recipient.headline ?? null,
+      participantProfileUrl: null,
+      participantAvatarUrl: recipient.profile_picture_url ?? null,
+      participantProviderId: recipient.provider_id ?? "",
+      lastMessageAt: new Date().toISOString(),
+      lastMessagePreview: "Message sent",
+      unreadCount: 0,
+      isInmailThread: false,
     };
-    setConversations((prev) => [synthetic, ...prev.filter((c) => c.chat_id !== chatId)]);
+    setConversations((prev) => [synthetic, ...prev.filter((c) => c.chatId !== chatId)]);
     setSelectedChatId(chatId);
     updateUrl(selectedAccountId, chatId);
 
@@ -541,40 +540,40 @@ function LinkedInUniboxInner() {
           )}
           {conversations.map((convo) => (
             <button
-              key={convo.chat_id}
-              onClick={() => selectChat(convo.chat_id)}
+              key={convo.chatId}
+              onClick={() => selectChat(convo.chatId)}
               className={`w-full text-left px-3 py-3 border-b border-cos-border/50 transition-colors flex items-start gap-2.5 ${
-                selectedChatId === convo.chat_id ? "bg-cos-electric/8" : "hover:bg-cos-cloud"
+                selectedChatId === convo.chatId ? "bg-cos-electric/8" : "hover:bg-cos-cloud"
               }`}
             >
               <Avatar
-                src={convo.participant_avatar_url}
-                name={convo.participant_name}
+                src={convo.participantAvatarUrl}
+                name={convo.participantName}
                 size={9}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
                   <p className="text-sm font-medium text-cos-midnight truncate leading-tight">
-                    {convo.participant_name || convo.chat_id}
+                    {convo.participantName || convo.chatId}
                   </p>
-                  {convo.is_inmail_thread && (
+                  {convo.isInmailThread && (
                     <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 leading-none">
                       InMail
                     </span>
                   )}
                 </div>
-                {convo.participant_headline && (
+                {convo.participantHeadline && (
                   <p className="text-[11px] text-cos-slate truncate leading-tight mt-0.5">
-                    {convo.participant_headline}
+                    {convo.participantHeadline}
                   </p>
                 )}
-                {convo.last_message_preview && (
-                  <p className="text-xs text-cos-slate-dim truncate mt-0.5">{convo.last_message_preview}</p>
+                {convo.lastMessagePreview && (
+                  <p className="text-xs text-cos-slate-dim truncate mt-0.5">{convo.lastMessagePreview}</p>
                 )}
               </div>
-              {convo.unread_count > 0 && (
+              {convo.unreadCount > 0 && (
                 <span className="shrink-0 rounded-full bg-cos-electric px-1.5 py-0.5 text-[10px] font-medium text-white leading-none">
-                  {convo.unread_count}
+                  {convo.unreadCount}
                 </span>
               )}
             </button>
@@ -601,21 +600,21 @@ function LinkedInUniboxInner() {
               {/* Thread header */}
               <div className="border-b border-cos-border px-5 py-3 flex items-center gap-3">
                 <Avatar
-                  src={selectedConvo.participant_avatar_url}
-                  name={selectedConvo.participant_name}
+                  src={selectedConvo.participantAvatarUrl}
+                  name={selectedConvo.participantName}
                   size={8}
                 />
                 <div>
                   <p className="font-medium text-sm text-cos-midnight leading-tight">
-                    {selectedConvo.participant_name || selectedConvo.chat_id}
+                    {selectedConvo.participantName || selectedConvo.chatId}
                   </p>
-                  {selectedConvo.participant_headline && (
-                    <p className="text-xs text-cos-slate leading-tight">{selectedConvo.participant_headline}</p>
+                  {selectedConvo.participantHeadline && (
+                    <p className="text-xs text-cos-slate leading-tight">{selectedConvo.participantHeadline}</p>
                   )}
                 </div>
-                {selectedConvo.participant_profile_url && (
+                {selectedConvo.participantProfileUrl && (
                   <a
-                    href={selectedConvo.participant_profile_url}
+                    href={selectedConvo.participantProfileUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="ml-auto text-xs text-cos-electric hover:underline"
@@ -636,8 +635,8 @@ function LinkedInUniboxInner() {
                   <div key={m.id} className={`flex items-end gap-2 ${m.is_sender ? "justify-end" : "justify-start"}`}>
                     {!m.is_sender && (
                       <Avatar
-                        src={selectedConvo.participant_avatar_url}
-                        name={selectedConvo.participant_name}
+                        src={selectedConvo.participantAvatarUrl}
+                        name={selectedConvo.participantName}
                         size={6}
                       />
                     )}
