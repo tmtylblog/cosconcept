@@ -6,9 +6,11 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { inngest } from "@/inngest/client";
+import { enqueue } from "@/lib/jobs/queue";
+import { runNextJob } from "@/lib/jobs/runner";
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -52,19 +54,17 @@ export async function POST(req: NextRequest) {
   const callId = generateId("call");
 
   // Queue the analysis pipeline
-  await inngest.send({
-    name: "calls/analyze",
-    data: {
-      callId,
-      firmId,
-      userId: session.user.id,
-      transcript,
-      platform,
-      duration: duration ?? null,
-      participants: participants ?? [],
-      callType,
-    },
+  await enqueue("calls-analyze", {
+    callId,
+    firmId,
+    userId: session.user.id,
+    transcript,
+    platform,
+    duration: duration ?? null,
+    participants: participants ?? [],
+    callType,
   });
+  after(runNextJob().catch(() => {}));
 
   return NextResponse.json(
     { callId, status: "queued_for_analysis" },

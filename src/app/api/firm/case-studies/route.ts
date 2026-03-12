@@ -6,10 +6,12 @@
 import { headers } from "next/headers";
 import { NextRequest } from "next/server";
 import { eq, ne, and, desc } from "drizzle-orm";
+import { after } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { firmCaseStudies, serviceFirms, members } from "@/lib/db/schema";
-import { inngest } from "@/inngest/client";
+import { enqueue } from "@/lib/jobs/queue";
+import { runNextJob } from "@/lib/jobs/runner";
 
 export const dynamic = "force-dynamic";
 
@@ -273,37 +275,17 @@ export async function POST(req: NextRequest) {
     status: "pending",
   });
 
-  // ── Trigger Inngest pipeline ────────────────────────────
-  try {
-    await inngest.send({
-      name: "enrich/firm-case-study-ingest",
-      data: {
-        caseStudyId: id,
-        firmId: firm.id,
-        organizationId,
-        sourceUrl,
-        sourceType: sourceType === "pdf" ? "pdf_url" : sourceType,
-        rawText,
-        filename,
-      },
-    });
-  } catch (err) {
-    // Inngest not configured — mark row as failed with a clear message
-    await db
-      .update(firmCaseStudies)
-      .set({
-        status: "failed",
-        statusMessage: "Background processing is not configured (Inngest). Contact your admin.",
-        updatedAt: new Date(),
-      })
-      .where(eq(firmCaseStudies.id, id));
-
-    console.error("[CaseStudies] Inngest send failed:", err);
-    return Response.json(
-      { error: "Case study saved but could not be queued for processing. Inngest is not configured." },
-      { status: 500 }
-    );
-  }
+  // ── Queue background job ─────────────────────────────────
+  await enqueue("firm-case-study-ingest", {
+    caseStudyId: id,
+    firmId: firm.id,
+    organizationId,
+    sourceUrl,
+    sourceType: sourceType === "pdf" ? "pdf_url" : sourceType,
+    rawText,
+    filename,
+  });
+  after(runNextJob().catch(() => {}));
 
   return Response.json(
     { caseStudy: { id, status: "pending" }, message: "Queued for ingestion" },

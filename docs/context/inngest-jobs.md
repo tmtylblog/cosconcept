@@ -1,16 +1,44 @@
-# 15. Background Jobs (Inngest)
+# 15. Background Jobs (Postgres Queue — Inngest Replaced)
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-11
 
 ## Overview
 
-Inngest powers all background/async processing in Collective OS. The Inngest client is registered under the app ID `collective-os`. All functions are served at a single endpoint.
+**Inngest has been replaced** with a self-hosted Postgres-backed job queue. All background/async processing now uses `background_jobs` table in Neon via Drizzle.
 
 **Key files:**
-- `src/inngest/client.ts` -- Inngest client + all event type definitions (union type `CosEvent`)
-- `src/inngest/functions/index.ts` -- function registry (re-exports all functions)
-- `src/app/api/inngest/route.ts` -- serve endpoint (`GET`, `POST`, `PUT`)
-- `src/inngest/functions/*.ts` -- individual function implementations
+- `src/lib/jobs/queue.ts` — `enqueue()`, `claimNextJob()`, `markDone()`, `markFailed()`, `resetStuckJobs()`, `jobQueueStats()`
+- `src/lib/jobs/runner.ts` — `runNextJob()`, `drainQueue()`
+- `src/lib/jobs/registry.ts` — lazy handler map for all 14 job types
+- `src/lib/jobs/handlers/*.ts` — individual job handlers
+- `src/app/api/jobs/worker/route.ts` — worker endpoint (POST, maxDuration=300)
+- `src/app/api/jobs/cron/route.ts` — cron endpoint (GET, every 2 min via Vercel Cron)
+- `vercel.json` — `{ "crons": [{ "path": "/api/jobs/cron", "schedule": "*/2 * * * *" }] }`
+
+**Old Inngest files** (`src/inngest/`) are still present but unused by API routes.
+
+## Environment Variables Required
+
+| Var | Purpose |
+|-----|---------|
+| `JOBS_SECRET` | Bearer token for `/api/jobs/worker` |
+| `CRON_SECRET` | Auto-sent by Vercel Cron to `/api/jobs/cron` |
+
+## How Jobs Are Triggered
+
+1. API route calls `enqueue(type, payload)` — fast DB write
+2. API route calls `after(runNextJob().catch(() => {}))` — runs job after response sent
+3. Vercel Cron hits `/api/jobs/cron` every 2 minutes as safety net (calls `drainQueue(5)`)
+4. Cron also enqueues recurring jobs by UTC time check (weekly-recrawl, weekly-digest, check-stale-partnerships)
+
+## Atomic Job Claiming (CAS)
+
+Neon HTTP driver doesn't support `FOR UPDATE SKIP LOCKED`. Uses compare-and-swap:
+1. SELECT one pending job with `runAt <= now()`
+2. UPDATE WHERE `status = 'pending' AND id = candidate.id`
+3. If 0 rows updated → race lost, recurse once
+
+## Job Types (14 total)
 
 ---
 

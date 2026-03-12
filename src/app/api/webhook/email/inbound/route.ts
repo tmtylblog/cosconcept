@@ -19,7 +19,9 @@ import crypto from "crypto";
 import { db } from "@/lib/db";
 import { emailThreads, emailMessages, scheduledCalls, serviceFirms } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { inngest } from "@/inngest/client";
+import { after } from "next/server";
+import { enqueue } from "@/lib/jobs/queue";
+import { runNextJob } from "@/lib/jobs/runner";
 
 // Resend signs inbound webhooks with HMAC-SHA256 using the signing secret
 const WEBHOOK_SECRET = process.env.RESEND_WEBHOOK_SECRET ?? "";
@@ -245,32 +247,31 @@ export async function POST(req: NextRequest) {
           })
           .returning({ id: scheduledCalls.id });
 
-        // Schedule Inngest job to join the meeting 2 minutes before
+        // Schedule job to join the meeting 2 minutes before
         const joinAt = new Date(parsed.startTime.getTime() - 2 * 60 * 1000);
         if (joinAt > new Date()) {
-          await inngest.send({
-            name: "calls/join-meeting",
-            data: { scheduledCallId: scheduledCallRow[0].id },
-            ts: joinAt.getTime(),
-          } as Parameters<typeof inngest.send>[0]);
+          const delayMs = joinAt.getTime() - Date.now();
+          await enqueue(
+            "calls-join-meeting",
+            { scheduledCallId: scheduledCallRow[0].id },
+            { delayMs }
+          );
         }
       }
     }
   }
 
-  // Fire Inngest to process the email (classify + extract + respond)
+  // Queue email processing (classify + extract + respond)
   if (threadId && dbMessageId) {
-    await inngest.send({
-      name: "email/process-inbound",
-      data: {
-        messageId: dbMessageId,
-        threadId,
-        firmId,
-        from,
-        subject,
-        bodyText: textBody,
-      },
+    await enqueue("email-process-inbound", {
+      messageId: dbMessageId,
+      threadId,
+      firmId,
+      from,
+      subject,
+      bodyText: textBody,
     });
+    after(runNextJob().catch(() => {}));
   }
 
   return NextResponse.json({ ok: true });

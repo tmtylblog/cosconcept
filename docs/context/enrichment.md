@@ -58,6 +58,8 @@ All modules live in `src/lib/enrichment/`.
 - **Page Priority:** case_studies (1) > clients (2) > services (3) > about (4) > industries (5) > team (6)
 - **API:** Jina Reader API (`https://r.jina.ai/{url}`) returns markdown-formatted page content
 - **Calls:** `extractClientsWithConfidence()` from `client-extractor.ts` for multi-signal client extraction
+- **Bot protection:** Exports `isBlockedContent(content)` — detects Cloudflare challenge pages, access denied, and suspiciously short responses. Used by both jina-scraper and deep-crawler to skip blocked pages rather than storing junk.
+- **Crawl pacing:** Case study URL scraping is sequential with 5–10 second jitter delay between requests (was parallel) to avoid triggering CF behavioral bot detection on case-study-heavy sites.
 
 ### pdl.ts — People Data Labs
 
@@ -75,8 +77,12 @@ All modules live in `src/lib/enrichment/`.
 - **Output:** `DeepCrawlResult` — all crawled pages with AI page classification, structured extracted data (case studies, team, services, clients), combined raw content (20k char cap), stats
 - **Discovery strategy:** homepage links -> sitemap.xml -> common URL path probes (/about, /services, /case-studies, etc.) -> subpage link following
 - **Cost:** Per-page Jina scrape + per-page AI classification + per-type AI extraction
-- **Limits:** MAX_PAGES = 30, SCRAPE_TIMEOUT_MS = 10000
+- **Limits:** MAX_PAGES = 50, SCRAPE_TIMEOUT_MS = 10000
 - **Uses:** `page-classifier.ts`, `extractors/case-study-extractor.ts`, `extractors/team-extractor.ts`, `extractors/service-extractor.ts`, `client-extractor.ts`
+- **Crawl pacing:** 5–10 second jitter delay (`sleep()`) between every page request in the main loop to avoid Cloudflare behavioral bot detection.
+- **Block detection:** Uses `isBlockedContent()` from jina-scraper — blocked pages return null and are skipped (logged as warnings) rather than stored as content.
+- **Pre-seeded clients:** After `extractCaseStudyDeep()` runs, extracted `clientName` values are passed as `preSeededClients` to `extractClientsWithConfidence()`, eliminating a duplicate Gemini Flash AI call on the same pages.
+- **NDA detection:** `detectNdaProtection()` checks homepage + client pages for NDA/confidentiality disclaimers. Result exposed as `DeepCrawlResult.extracted.clientsNdaProtected: boolean`.
 
 ### ai-classifier.ts — COS Taxonomy Classification
 
@@ -97,9 +103,10 @@ All modules live in `src/lib/enrichment/`.
   4. Testimonial attribution (0.65) — "-- Name, VP at CompanyName"
   5. Case study title parsing (0.6) — heuristic patterns like "ClientName: How We..."
 - **Cross-validation:** Same name from 2+ sources gets +0.1 per extra source
-- **Threshold:** Only returns clients with confidence >= 0.5
+- **Threshold:** Only returns clients with confidence >= 0.5 (aligns with schema plan minimum edge confidence rule)
 - **Max:** 30 clients returned
 - **Blocklist:** Extensive regex filtering out nav items, generic terms, image references
+- **`preSeededClients` param:** Optional `string[]` of client names already extracted by the case study extractor. When provided, these are injected directly as `case_study_ai` signals at 0.9 confidence and the duplicate Gemini Flash AI call on case study pages is skipped entirely. Pass from `deep-crawler.ts` after `extractCaseStudyDeep()` runs.
 
 ### page-classifier.ts — AI Page Type Classification
 

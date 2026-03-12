@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { emailApprovalQueue } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { after } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { inngest } from "@/inngest/client";
+import { enqueue } from "@/lib/jobs/queue";
+import { runNextJob } from "@/lib/jobs/runner";
 
 async function requireAdmin() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -32,8 +34,9 @@ export async function POST(
     .set({ status: "approved", reviewedBy: admin.id, reviewedAt: new Date() })
     .where(eq(emailApprovalQueue.id, id));
 
-  // Fire send-now event
-  await inngest.send({ name: "email/send-now", data: { queueId: id } });
+  // Queue send-now job
+  await enqueue("email-send-now", { queueId: id });
+  after(runNextJob().catch(() => {}));
 
   return NextResponse.json({ ok: true });
 }

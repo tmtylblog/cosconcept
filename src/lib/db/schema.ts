@@ -7,8 +7,22 @@ import {
   jsonb,
   real,
   pgEnum,
+  customType,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+
+// pgvector custom type — stores 1536-dim float arrays as PostgreSQL vector
+const vector = customType<{ data: number[]; driverData: string }>({
+  dataType() {
+    return "vector(1536)";
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(",")}]`;
+  },
+  fromDriver(value: string): number[] {
+    return value.slice(1, -1).split(",").map(Number);
+  },
+});
 
 // ─── Enums ───────────────────────────────────────────────
 
@@ -283,7 +297,7 @@ export const abstractionProfiles = pgTable("abstraction_profiles", {
   }>(),
   confidenceScores: jsonb("confidence_scores"),
   evidenceSources: jsonb("evidence_sources"),
-  // embedding: vector(1536) — added when pgvector extension is enabled
+  embedding: vector("embedding"),
   lastEnrichedAt: timestamp("last_enriched_at"),
   enrichmentVersion: integer("enrichment_version").default(1),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1604,4 +1618,25 @@ export const coachingReports = pgTable("coaching_reports", {
   sentToFirmAAt: timestamp("sent_to_firm_a_at"),
   sentToFirmBAt: timestamp("sent_to_firm_b_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Background Jobs Queue ─────────────────────────────
+// Replaces Inngest for background job processing.
+// Jobs are claimed atomically and processed by /api/jobs/worker.
+
+export const backgroundJobs = pgTable("background_jobs", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(), // e.g. "firm-case-study-ingest", "deep-crawl"
+  status: text("status").notNull().default("pending"), // pending|running|done|failed|cancelled
+  payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
+  priority: integer("priority").notNull().default(0), // higher = picked first
+  runAt: timestamp("run_at").notNull().defaultNow(), // when to process (supports delays)
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(3),
+  lastError: text("last_error"),
+  result: jsonb("result"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

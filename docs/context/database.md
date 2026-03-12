@@ -897,6 +897,31 @@ organizations ── service_firms ──┬── partner_preferences
 
 ---
 
+## `background_jobs` Table
+
+> Added: 2026-03-11 — Postgres-backed job queue replacing Inngest
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| type | text NOT NULL | Job type key (see Jobs system) |
+| status | text NOT NULL DEFAULT 'pending' | pending \| running \| done \| failed \| cancelled |
+| payload | jsonb NOT NULL | Job-specific data |
+| priority | integer NOT NULL DEFAULT 0 | Higher = processed first |
+| run_at | timestamp NOT NULL DEFAULT now() | Delayed jobs set future timestamp |
+| started_at | timestamp | When job was claimed |
+| completed_at | timestamp | When job finished |
+| attempts | integer NOT NULL DEFAULT 0 | Incremented on each attempt |
+| max_attempts | integer NOT NULL DEFAULT 3 | Max retries before marking failed |
+| last_error | text | Last failure message |
+| result | jsonb | Handler return value on success |
+| created_at | timestamp NOT NULL DEFAULT now() | |
+| updated_at | timestamp NOT NULL DEFAULT now() | |
+
+**Note:** Requires `npm run db:push` to apply to Neon. New env vars needed: `JOBS_SECRET` (worker auth), `CRON_SECRET` (auto-set by Vercel Cron).
+
+---
+
 ## Conventions
 
 - **All IDs:** Application-generated text (UUIDs via `nanoid` or `crypto.randomUUID`)

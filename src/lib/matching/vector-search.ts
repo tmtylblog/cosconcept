@@ -12,7 +12,7 @@
 
 import { db } from "@/lib/db";
 import { abstractionProfiles } from "@/lib/db/schema";
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import type { MatchCandidate } from "./types";
 
 /**
@@ -76,50 +76,83 @@ export async function vectorRerank(
 ): Promise<MatchCandidate[]> {
   if (candidates.length === 0) return [];
 
-  // Load abstraction profiles for candidates
   const firmIds = candidates.map((c) => c.firmId);
   const entityIds = firmIds.map((id) => `abs_${id}`);
 
+  // Try to generate a query embedding for real cosine similarity
+  const queryEmbedding = await generateQueryEmbedding(rawQuery);
+
+  if (queryEmbedding.length > 0) {
+    // ── Pgvector path: cosine similarity via SQL ─────────
+    const vectorStr = `[${queryEmbedding.join(",")}]`;
+
+    // Get cosine similarity scores for firms that have embeddings
+    const rows = await db.execute<{ entity_id: string; similarity: number }>(
+      sql`SELECT entity_id,
+               (1 - (embedding <=> ${vectorStr}::vector)) AS similarity
+          FROM abstraction_profiles
+          WHERE id = ANY(${entityIds}::text[])
+            AND embedding IS NOT NULL`
+    );
+
+    const similarityMap = new Map(
+      (rows as unknown as { rows: { entity_id: string; similarity: number }[] }).rows.map(
+        (r) => [r.entity_id, r.similarity]
+      )
+    );
+
+    // For firms without embeddings yet, fall back to text overlap
+    const profilesWithoutEmbedding =
+      similarityMap.size < candidates.length
+        ? await db
+            .select({ entityId: abstractionProfiles.entityId, hiddenNarrative: abstractionProfiles.hiddenNarrative })
+            .from(abstractionProfiles)
+            .where(inArray(abstractionProfiles.id, entityIds))
+        : [];
+    const narrativeMap = new Map(
+      profilesWithoutEmbedding.map((p) => [p.entityId, p.hiddenNarrative])
+    );
+    const queryTerms = rawQuery.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
+
+    const scored = candidates.map((candidate) => {
+      let vectorScore = similarityMap.get(candidate.firmId) ?? 0;
+
+      if (!similarityMap.has(candidate.firmId)) {
+        const narrative = narrativeMap.get(candidate.firmId)?.toLowerCase() ?? "";
+        if (narrative && queryTerms.length > 0) {
+          const matches = queryTerms.filter((t) => narrative.includes(t));
+          vectorScore = matches.length / queryTerms.length;
+        }
+      }
+
+      const totalScore = candidate.structuredScore * 0.6 + vectorScore * 0.4;
+      return { ...candidate, vectorScore, totalScore };
+    });
+
+    scored.sort((a, b) => b.totalScore - a.totalScore);
+    return scored.slice(0, topK);
+  }
+
+  // ── Text-overlap fallback (no OpenAI key or embedding failed) ──
   const profiles = await db
-    .select()
+    .select({ entityId: abstractionProfiles.entityId, hiddenNarrative: abstractionProfiles.hiddenNarrative })
     .from(abstractionProfiles)
     .where(inArray(abstractionProfiles.id, entityIds));
 
-  // Create lookup map
-  const profileMap = new Map(
-    profiles.map((p) => [p.entityId, p])
-  );
-
-  // Score each candidate using text-based similarity
-  // (pgvector cosine similarity would be used when embedding column is active)
-  const queryTerms = rawQuery
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((t) => t.length > 2);
+  const profileMap = new Map(profiles.map((p) => [p.entityId, p.hiddenNarrative]));
+  const queryTerms = rawQuery.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
 
   const scored = candidates.map((candidate) => {
-    const profile = profileMap.get(candidate.firmId);
+    const narrative = profileMap.get(candidate.firmId)?.toLowerCase() ?? "";
     let vectorScore = 0;
-
-    if (profile?.hiddenNarrative) {
-      const narrative = profile.hiddenNarrative.toLowerCase();
-      // Simple term overlap scoring (replaced by cosine similarity with pgvector)
-      const matches = queryTerms.filter((term) => narrative.includes(term));
-      vectorScore = queryTerms.length > 0 ? matches.length / queryTerms.length : 0;
+    if (narrative && queryTerms.length > 0) {
+      const matches = queryTerms.filter((t) => narrative.includes(t));
+      vectorScore = matches.length / queryTerms.length;
     }
-
-    // Combine scores: 60% structured + 40% vector
-    const totalScore =
-      candidate.structuredScore * 0.6 + vectorScore * 0.4;
-
-    return {
-      ...candidate,
-      vectorScore,
-      totalScore,
-    };
+    const totalScore = candidate.structuredScore * 0.6 + vectorScore * 0.4;
+    return { ...candidate, vectorScore, totalScore };
   });
 
-  // Sort by combined score and take top K
   scored.sort((a, b) => b.totalScore - a.totalScore);
   return scored.slice(0, topK);
 }

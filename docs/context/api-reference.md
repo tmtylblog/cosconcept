@@ -216,6 +216,9 @@ All admin routes require `superadmin` role unless noted. Prefix: `/api/admin/`.
 | GET | `/api/admin/abstractions` | Lists abstraction profiles joined to serviceFirms. Stats: totalFirms, profilesGenerated, missingProfiles, avgConfidence. Query params: `missing=true` (firms with no profile), `limit`, `offset`. | superadmin |
 | GET | `/api/admin/abstractions/[firmId]` | Full abstraction profile for one firm (hiddenNarrative, topSkills, typicalClientProfile, partnershipReadiness, evidenceSources, confidenceScores). | superadmin |
 | POST | `/api/admin/abstractions/[firmId]` | Triggers `generateFirmAbstraction()` to regenerate the abstraction profile. Returns the newly generated profile. | superadmin |
+| POST | `/api/admin/enrich/backfill-abstractions` | Queues `firm-abstraction` jobs for all enriched firms missing abstraction profiles. Body: `{ force?: boolean }`. | superadmin |
+| POST | `/api/admin/enrich/backfill-deep-crawl` | Queues `enrich-deep-crawl` jobs for firms missing a classifier audit log entry, staggered 30s apart. | superadmin |
+| POST | `/api/admin/enrich/fix-customer-profiles` | One-time cleanup: hydrates customer `service_firms` from `enrichment_cache`. Looks up domain from owner email, applies enrichment data, queues abstraction. Body: `{ dryRun?: boolean, force?: boolean }`. | superadmin |
 
 ### Organizations
 
@@ -416,6 +419,14 @@ Server-to-server API for bi-directional data sync with partner platforms (e.g., 
 | Admin APIs | 28 |
 | Webhooks | 4 |
 | Inngest | 1 |
+| Job Queue | 2 |
 | Public API | 5 |
 | Partner Sync | 5 |
-| **Total** | **96 route files** |
+| **Total** | **101 route files** |
+
+## Job Queue Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/jobs/worker` | `x-jobs-secret` or `Authorization: Bearer <JOBS_SECRET>` | Claim and run one (or N with `?drain=true`) pending jobs. maxDuration=300. |
+| GET | `/api/jobs/cron` | `Authorization: Bearer <CRON_SECRET>` or JOBS_SECRET | Enqueue recurring jobs + drain queue. Called by Vercel Cron every 2 min. |

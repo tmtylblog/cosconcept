@@ -11,7 +11,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { conversations, messages as messagesTable, serviceFirms, members, callRecordings, callTranscripts } from "@/lib/db/schema";
 import { readAllPreferences, isOnboardingComplete } from "@/lib/profile/update-profile-field";
-import { inngest } from "@/inngest/client";
+import { enqueue } from "@/lib/jobs/queue";
 import { logUsage } from "@/lib/ai/gateway";
 import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
 import { extractMemoriesFromConversation } from "@/lib/ai/memory-extractor";
@@ -181,16 +181,13 @@ export async function POST(req: Request) {
             fullText: transcriptText,
             processingStatus: "done",
           });
-          await inngest.send({
-            name: "calls/analyze",
-            data: {
-              callId: recId,
-              firmId,
-              userId,
-              transcript: transcriptText,
-              callType: "client",
-              transcriptId: txId,
-            },
+          await enqueue("calls-analyze", {
+            callId: recId,
+            firmId,
+            userId,
+            transcript: transcriptText,
+            callType: "client",
+            transcriptId: txId,
           });
           console.log(`[Ossy] Transcript stored (${txId}) + analysis queued`);
         } catch (err) {

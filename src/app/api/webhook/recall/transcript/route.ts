@@ -23,7 +23,9 @@ import {
   callTranscripts,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { inngest } from "@/inngest/client";
+import { after } from "next/server";
+import { enqueue } from "@/lib/jobs/queue";
+import { runNextJob } from "@/lib/jobs/runner";
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -153,20 +155,18 @@ export async function POST(req: NextRequest) {
     })
     .where(eq(scheduledCalls.id, scheduledCall.id));
 
-  // Fire post-call analysis
-  await inngest.send({
-    name: "calls/analyze",
-    data: {
-      callId: recordingId,
-      firmId: scheduledCall.firmId,
-      userId: scheduledCall.userId ?? undefined,
-      transcript: fullText,
-      callType: scheduledCall.callType ?? "unknown",
-      partnershipId: scheduledCall.partnershipId ?? undefined,
-      scheduledCallId: scheduledCall.id,
-      transcriptId,
-    },
+  // Queue post-call analysis
+  await enqueue("calls-analyze", {
+    callId: recordingId,
+    firmId: scheduledCall.firmId,
+    userId: scheduledCall.userId ?? undefined,
+    transcript: fullText,
+    callType: scheduledCall.callType ?? "unknown",
+    partnershipId: scheduledCall.partnershipId ?? undefined,
+    scheduledCallId: scheduledCall.id,
+    transcriptId,
   });
+  after(runNextJob().catch(() => {}));
 
   return NextResponse.json({ ok: true });
 }
