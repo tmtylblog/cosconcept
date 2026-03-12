@@ -1,8 +1,5 @@
-"use client";
-
 import { TrendingUp, Linkedin, Mail, BarChart3, Share2 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 const SECTIONS = [
   { label: "LinkedIn", href: "/admin/growth-ops/linkedin", icon: Linkedin, description: "Unified inbox + invite campaigns" },

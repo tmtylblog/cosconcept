@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── New message received ───────────────────────────────────────────────
-    if (event === "message_received" || body.object === "Message") {
+    if (rawEvent === "message_received" || body.object === "Message") {
       const msg = body.message as Record<string, unknown> | undefined ?? body;
       const chatId = (msg.chat_id ?? msg.chatId) as string | undefined;
       const messageId = (msg.id ?? msg.message_id) as string | undefined;
