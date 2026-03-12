@@ -27,7 +27,11 @@ export default function BillingPage() {
   } | null>(null);
   const searchParams = useSearchParams();
 
-  const orgId = activeOrg?.id ?? "";
+  // Local orgId state — useActiveOrganization() often doesn't re-render after
+  // setActive(), so we track the resolved orgId ourselves to guarantee the
+  // Upgrade button becomes enabled.
+  const [resolvedOrgId, setResolvedOrgId] = useState<string>("");
+  const orgId = activeOrg?.id || resolvedOrgId;
   const [syncing, setSyncing] = useState(false);
   const orgActivationAttempted = useRef(false);
 
@@ -43,6 +47,8 @@ export default function BillingPage() {
         if (orgList.length > 0) {
           console.log("[Billing] No active org — auto-activating", orgList[0].id);
           await authClient.organization.setActive({ organizationId: orgList[0].id });
+          // Force local state update — the hook may not re-render
+          setResolvedOrgId(orgList[0].id);
         }
       } catch (err) {
         console.error("[Billing] Failed to auto-activate org:", err);
@@ -94,7 +100,26 @@ export default function BillingPage() {
   }, [searchParams, orgId]);
 
   async function handleUpgrade(plan: "pro" | "enterprise") {
-    if (!orgId) return;
+    // Resolve orgId — use local state, hook, or fetch as last resort
+    let effectiveOrgId = orgId;
+    if (!effectiveOrgId) {
+      try {
+        const { data: orgs } = await authClient.organization.list();
+        const orgList = (orgs as { id: string }[]) ?? [];
+        if (orgList.length > 0) {
+          effectiveOrgId = orgList[0].id;
+          setResolvedOrgId(effectiveOrgId);
+          await authClient.organization.setActive({ organizationId: effectiveOrgId });
+        }
+      } catch {
+        // fall through
+      }
+    }
+    if (!effectiveOrgId) {
+      setNotice({ type: "error", message: "No organization found. Please refresh and try again." });
+      return;
+    }
+
     setLoading(plan);
     setNotice(null);
     try {
@@ -102,7 +127,7 @@ export default function BillingPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          organizationId: orgId,
+          organizationId: effectiveOrgId,
           plan,
           interval: "monthly",
         }),
@@ -355,7 +380,7 @@ export default function BillingPage() {
                     size="sm"
                     className="w-full"
                     onClick={() => handleUpgrade(plan)}
-                    disabled={loading === plan || !orgId}
+                    disabled={loading === plan}
                   >
                     {loading === plan
                       ? "..."
