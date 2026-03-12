@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let step = "parse_body";
   try {
     const { organizationId, plan, interval } = (await req.json()) as {
       organizationId: string;
@@ -40,30 +41,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    step = "resolve_price";
     const priceId = STRIPE_PRICES[plan]?.[interval];
     if (!priceId) {
       return NextResponse.json(
-        { error: "Invalid plan or interval" },
+        { error: `Invalid plan or interval (plan=${plan}, interval=${interval}, priceId=${priceId})` },
         { status: 400 }
       );
     }
 
+    step = "db_query";
     // Get or create Stripe customer for this org
     const sub = await db.query.subscriptions.findFirst({
       where: eq(subscriptions.organizationId, organizationId),
     });
 
+    step = "stripe_init";
     const stripe = getStripe();
     let customerId = sub?.stripeCustomerId;
 
     // Treat placeholder IDs (set before first upgrade) as if there's no customer yet
     if (!customerId || customerId.startsWith("pending_")) {
+      step = "stripe_create_customer";
       const customer = await stripe.customers.create({
         metadata: { organizationId },
       });
       customerId = customer.id;
       // Store real customer ID now so subsequent requests don't create duplicates
       if (sub) {
+        step = "db_update_customer";
         await db
           .update(subscriptions)
           .set({ stripeCustomerId: customerId, updatedAt: new Date() })
@@ -71,7 +77,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const session = await stripe.checkout.sessions.create({
+    step = "stripe_create_session";
+    const checkoutSession = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
@@ -80,13 +87,13 @@ export async function POST(req: NextRequest) {
       metadata: { organizationId, plan },
     });
 
-    return NextResponse.json({ url: session.url });
+    return NextResponse.json({ url: checkoutSession.url });
   } catch (error) {
-    console.error("[Stripe] Checkout error:", error);
+    console.error(`[Stripe] Checkout error at step="${step}":`, error);
     const message =
-      error instanceof Error ? error.message : "Failed to create checkout session";
+      error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: message },
+      { error: `Checkout failed at step "${step}": ${message}` },
       { status: 500 }
     );
   }
