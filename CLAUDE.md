@@ -9,6 +9,10 @@ COS CONCEPT (Collective OS) is a growth platform for professional services firms
 **Hosting:** Vercel
 **Domain:** joincollectiveos.com
 
+## Standard Nomenclature
+- **Customer service providers** — the unified term for ALL firms on the platform (legacy imports + app-registered). Do NOT split into "legacy firms" vs "real customers" — they are all real customers. The distinction is only technical (ID prefix `firm_leg_*` vs `firm_*`) and irrelevant to product/business discussions.
+- **Customers** or **customer firms** are acceptable shorthand.
+
 ## Critical Context
 - This is a SEPARATE project from Sanctum SOS. They are completely unrelated.
 - All project documentation is in the `docs/` folder

@@ -186,6 +186,129 @@ export interface PdlEducation {
   endDate: string | null;
 }
 
+// ─── Person Search (Team Roster) ──────────────────────────
+
+/**
+ * Structured result from PDL Person Search.
+ * Omits work history (experience) to keep costs down — use enrichPerson() for that.
+ */
+export interface PdlPersonSearchResult {
+  id: string;
+  fullName: string;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+  /** PDL's structured role category — key for expert classification */
+  jobTitleRole: string | null;
+  jobTitleSubRole: string | null;
+  jobTitleLevels: string[];
+  linkedinUrl: string | null;
+  linkedinId: string | null;
+  location: string | null;
+  headline: string | null;
+  skills: string[];
+  photoUrl: string | null;
+}
+
+/**
+ * Search for current employees at a company by domain.
+ * Uses PDL Person Search endpoint (POST /v5/person/search).
+ *
+ * Charges 1 credit per record returned — NOT per API call.
+ * Only fetches current jobs (job_is_primary=true).
+ * Does NOT request experience/education to keep payload slim (cost is the same).
+ *
+ * @param domain  Bare domain, e.g. "agency.com" (no protocol/www)
+ * @param limit   Max records to return. Default 5. PDL max per page is 100.
+ * @param from    Offset for pagination.
+ */
+export async function searchPeopleAtCompany(params: {
+  domain: string;
+  limit?: number;
+  from?: number;
+}): Promise<{ people: PdlPersonSearchResult[]; total: number }> {
+  const domain = params.domain
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0]
+    .toLowerCase();
+
+  const body = {
+    query: {
+      bool: {
+        must: [
+          { term: { job_company_website: domain } },
+          { term: { job_is_primary: true } },
+        ],
+      },
+    },
+    size: params.limit ?? 5,
+    from: params.from ?? 0,
+    dataset: "resume",
+    // Select only the fields we need — cost is per record regardless, but
+    // keeping the select list small reduces payload size and avoids storing
+    // sensitive contact info.
+    select: [
+      "id",
+      "full_name",
+      "first_name",
+      "last_name",
+      "job_title",
+      "job_title_role",
+      "job_title_sub_role",
+      "job_title_levels",
+      "linkedin_url",
+      "linkedin_id",
+      "location_name",
+      "headline",
+      "skills",
+      "photo_url",
+    ],
+  };
+
+  const response = await fetch(`${PDL_BASE}/person/search`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": getPdlKey(),
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (response.status === 404) {
+    return { people: [], total: 0 };
+  }
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`PDL person search failed: ${response.status} ${text.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+
+  return {
+    total: data.total ?? 0,
+    people: (data.data ?? []).map((p: Record<string, unknown>) => ({
+      id: (p.id as string) ?? "",
+      fullName: (p.full_name as string) ?? "",
+      firstName: (p.first_name as string) ?? "",
+      lastName: (p.last_name as string) ?? "",
+      jobTitle: (p.job_title as string) ?? "",
+      jobTitleRole: (p.job_title_role as string) ?? null,
+      jobTitleSubRole: (p.job_title_sub_role as string) ?? null,
+      jobTitleLevels: (p.job_title_levels as string[]) ?? [],
+      linkedinUrl: (p.linkedin_url as string) ?? null,
+      linkedinId: (p.linkedin_id as string) ?? null,
+      location: (p.location_name as string) ?? null,
+      headline: (p.headline as string) ?? null,
+      skills: (p.skills as string[]) ?? [],
+      photoUrl: (p.photo_url as string) ?? null,
+    })),
+  };
+}
+
+// ─── Person Enrichment ────────────────────────────────────
+
 /**
  * Enrich a person using PDL.
  * Used when adding experts to the platform — pulls job history, skills, education.

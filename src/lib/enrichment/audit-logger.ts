@@ -17,7 +17,8 @@ type AuditPhase =
   | "case_study"
   | "onboarding"
   | "memory"
-  | "deep_crawl";
+  | "deep_crawl"
+  | "team-ingest";
 
 interface AuditLogParams {
   firmId?: string;

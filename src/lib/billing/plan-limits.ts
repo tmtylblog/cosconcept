@@ -32,6 +32,14 @@ export interface PlanLimits {
   canAccessEmailAgent: boolean;
   /** Can export data */
   canExportData: boolean;
+
+  // ── Profile data limits ──────────────────────────────────────────
+  /** Max expert profiles imported via PDL (-1 = full roster) */
+  expertRosterLimit: number;
+  /** Max case studies shown on public profile (-1 = all) */
+  caseStudyDisplayLimit: number;
+  /** Max client logos/names shown on public profile (-1 = all) */
+  clientDisplayLimit: number;
 }
 
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
@@ -47,6 +55,9 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     canAccessCallIntelligence: false,
     canAccessEmailAgent: false,
     canExportData: false,
+    expertRosterLimit: 5,       // teaser: 5 people to show the feature
+    caseStudyDisplayLimit: 5,   // show 5 case studies on profile
+    clientDisplayLimit: 20,     // show up to 20 client names/logos
   },
   pro: {
     members: 3,
@@ -60,6 +71,9 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     canAccessCallIntelligence: true,
     canAccessEmailAgent: false,
     canExportData: true,
+    expertRosterLimit: -1,      // full roster (capped at 500 per firm in handler)
+    caseStudyDisplayLimit: -1,  // all case studies
+    clientDisplayLimit: -1,     // all clients
   },
   enterprise: {
     members: Infinity, // custom
@@ -73,6 +87,9 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     canAccessCallIntelligence: true,
     canAccessEmailAgent: true,
     canExportData: true,
+    expertRosterLimit: -1,
+    caseStudyDisplayLimit: -1,
+    clientDisplayLimit: -1,
   },
 };
 

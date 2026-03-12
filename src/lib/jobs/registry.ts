@@ -11,6 +11,8 @@ type HandlerLoader = () => Promise<JobHandler>;
 
 const registry: Record<string, HandlerLoader> = {
   // ── Enrichment pipeline ──────────────────────────────
+  "team-ingest": () =>
+    import("./handlers/team-ingest").then((m) => m.handleTeamIngest),
   "firm-abstraction": () =>
     import("./handlers/firm-abstraction").then(
       (m) => m.handleFirmAbstraction
