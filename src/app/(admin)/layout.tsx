@@ -85,7 +85,7 @@ export default async function AdminLayout({
           />
 
           <SectionHeader label="Platform" />
-          <AdminNavLink href="/admin/organizations" icon={<Building2 className="h-4 w-4" />} label="Organizations" />
+          <AdminNavLink href="/admin/customers" icon={<Building2 className="h-4 w-4" />} label="Customers" />
           <AdminNavLink href="/admin/users" icon={<Users className="h-4 w-4" />} label="Users" />
 
           <SectionHeader label="Operations" />

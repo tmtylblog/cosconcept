@@ -123,7 +123,10 @@ export async function GET(req: Request) {
 
     // Gate is purely preferences-based for service firms.
     // Brand/client entities bypass the gate (they go straight to waitlist screen).
-    const onboardingComplete = isBrandWaitlist || preferencesComplete;
+    // DEV_BYPASS_ONBOARDING: local-only env var that skips the onboarding gate
+    // for development/testing. MUST NOT be set in Vercel production env.
+    const devBypass = process.env.DEV_BYPASS_ONBOARDING === "true";
+    const onboardingComplete = devBypass || isBrandWaitlist || preferencesComplete;
 
     return NextResponse.json({
       enrichmentComplete,

@@ -89,6 +89,7 @@ function AppLayoutInner({
   const [chatKey, setChatKey] = useState(0);
   const [mobileChat, setMobileChat] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [devLoginLoading, setDevLoginLoading] = useState(false);
   const [domainClaimed, setDomainClaimed] = useState<{
     orgName: string;
     ownerEmailMasked: string;
@@ -103,6 +104,8 @@ function AppLayoutInner({
       router.replace("/admin");
     }
   }, [session?.user?.email, sessionPending, router]);
+
+  const isDevMode = process.env.NODE_ENV === "development";
 
   // ─── Auto-provision org + firm for authenticated users with no org ────
   // The moment someone authenticates, an "unclaimed" org + firm is created
@@ -405,6 +408,27 @@ function AppLayoutInner({
     }
   };
 
+  /** DEV: Auto-login as test user — seeds data + creates session + reloads */
+  const handleDevLogin = async () => {
+    if (!isDevMode) return;
+    setDevLoginLoading(true);
+    try {
+      const res = await fetch("/api/dev/auto-login", { method: "POST" });
+      if (res.ok) {
+        // Session cookie is set by the endpoint — just reload
+        window.location.href = "/dashboard";
+      } else {
+        const err = await res.json();
+        console.error("[Dev Login] Failed:", err);
+        alert("Dev login failed: " + (err.message ?? err.error));
+      }
+    } catch (err) {
+      console.error("[Dev Login] Error:", err);
+    } finally {
+      setDevLoginLoading(false);
+    }
+  };
+
   // ─── Session loading gate ──────────────────────────────────
   // While Better Auth is resolving the session cookie (isPending),
   // show a loading screen to prevent flashing the guest layout
@@ -477,13 +501,24 @@ function AppLayoutInner({
               </button>
             </div>
 
-            {/* DEV: Simulate New Onboarding — bottom left */}
-            <button
-              onClick={handleSimulateNewUser}
-              className="absolute bottom-6 left-6 rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
-            >
-              🔄 Simulate New Onboarding
-            </button>
+            {/* DEV: Simulate New Onboarding + Dev Login — bottom left */}
+            <div className="absolute bottom-6 left-6 flex gap-2">
+              <button
+                onClick={handleSimulateNewUser}
+                className="rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
+              >
+                🔄 Simulate New Onboarding
+              </button>
+              {isDevMode && (
+                <button
+                  onClick={handleDevLogin}
+                  disabled={devLoginLoading}
+                  className="rounded-cos-pill border border-cos-electric/40 bg-cos-electric/10 px-4 py-2 text-xs font-medium text-cos-electric transition-colors hover:border-cos-electric hover:bg-cos-electric/20 disabled:opacity-50"
+                >
+                  {devLoginLoading ? "⏳ Seeding..." : "🔑 Dev Login"}
+                </button>
+              )}
+            </div>
           </main>
 
           {/* Right: Chat panel — matches enriching/authenticated layout */}
@@ -582,13 +617,24 @@ function AppLayoutInner({
             Already have an account? Sign in
           </button>
 
-          {/* DEV: Simulate New Onboarding — bottom center */}
-          <button
-            onClick={handleSimulateNewUser}
-            className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember backdrop-blur-sm transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
-          >
-            🔄 Simulate New Onboarding
-          </button>
+          {/* DEV buttons — bottom center */}
+          <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 gap-2">
+            <button
+              onClick={handleSimulateNewUser}
+              className="rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember backdrop-blur-sm transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
+            >
+              🔄 Simulate New Onboarding
+            </button>
+            {isDevMode && (
+              <button
+                onClick={handleDevLogin}
+                disabled={devLoginLoading}
+                className="rounded-cos-pill border border-cos-electric/40 bg-cos-electric/10 px-4 py-2 text-xs font-medium text-cos-electric backdrop-blur-sm transition-colors hover:border-cos-electric hover:bg-cos-electric/20 disabled:opacity-50"
+              >
+                {devLoginLoading ? "⏳ Seeding..." : "🔑 Dev Login"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -692,13 +738,24 @@ function AppLayoutInner({
                 </div>
               )}
 
-              {/* DEV: Simulate New Onboarding — bottom left */}
-              <button
-                onClick={handleSimulateNewUser}
-                className="fixed bottom-6 left-6 z-40 rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember backdrop-blur-sm transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
-              >
-                Simulate New Onboarding
-              </button>
+              {/* DEV buttons — bottom left */}
+              <div className="fixed bottom-6 left-6 z-40 flex gap-2">
+                <button
+                  onClick={handleSimulateNewUser}
+                  className="rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember backdrop-blur-sm transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
+                >
+                  Simulate New Onboarding
+                </button>
+                {isDevMode && (
+                  <button
+                    onClick={handleDevLogin}
+                    disabled={devLoginLoading}
+                    className="rounded-cos-pill border border-cos-electric/40 bg-cos-electric/10 px-4 py-2 text-xs font-medium text-cos-electric backdrop-blur-sm transition-colors hover:border-cos-electric hover:bg-cos-electric/20 disabled:opacity-50"
+                  >
+                    {devLoginLoading ? "⏳ Seeding..." : "🔑 Dev Login"}
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </>

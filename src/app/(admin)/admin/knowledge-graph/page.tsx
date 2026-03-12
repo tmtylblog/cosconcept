@@ -1,207 +1,222 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  Building2,
-  Puzzle,
-  UserCheck,
-  Briefcase,
-  FileText,
-  Tag,
-  Loader2,
-} from "lucide-react";
-import ServiceProvidersTab from "@/components/admin/tabs/service-providers-tab";
-import ExpertsTab from "@/components/admin/tabs/experts-tab";
-import ClientsTab from "@/components/admin/tabs/clients-tab";
-import CaseStudiesTab from "@/components/admin/tabs/case-studies-tab";
-import SolutionPartnersTab from "@/components/admin/tabs/solution-partners-tab";
-import AttributesTab from "@/components/admin/tabs/attributes-tab";
-
-/* ── Tab definitions ─────────────────────────────────── */
-
-type TabKey =
-  | "service-providers"
-  | "solution-partners"
-  | "experts"
-  | "clients"
-  | "case-studies"
-  | "attributes";
-
-interface TabDef {
-  key: TabKey;
-  label: string;
-  icon: React.ReactNode;
-  countKey: string; // path into stats object
-}
-
-const TABS: TabDef[] = [
-  {
-    key: "service-providers",
-    label: "Service Providers",
-    icon: <Building2 className="h-4 w-4" />,
-    countKey: "serviceProviders",
-  },
-  {
-    key: "solution-partners",
-    label: "Solution Partners",
-    icon: <Puzzle className="h-4 w-4" />,
-    countKey: "solutionPartners",
-  },
-  {
-    key: "experts",
-    label: "Experts",
-    icon: <UserCheck className="h-4 w-4" />,
-    countKey: "experts",
-  },
-  {
-    key: "clients",
-    label: "Clients",
-    icon: <Briefcase className="h-4 w-4" />,
-    countKey: "clients",
-  },
-  {
-    key: "case-studies",
-    label: "Case Studies",
-    icon: <FileText className="h-4 w-4" />,
-    countKey: "caseStudies",
-  },
-  {
-    key: "attributes",
-    label: "Attributes",
-    icon: <Tag className="h-4 w-4" />,
-    countKey: "attributes",
-  },
-];
-
-/* ── Stats shape ─────────────────────────────────────── */
-
-interface KGStats {
-  serviceProviders: number;
-  solutionPartners: number;
-  experts: number;
-  clients: number;
-  caseStudies: number;
-  attributes: {
-    skills: number;
-    industries: number;
-    markets: number;
-    languages: number;
-  };
-}
-
-function getCount(stats: KGStats | null, countKey: string): number | null {
-  if (!stats) return null;
-  if (countKey === "attributes") {
-    const a = stats.attributes;
-    return a ? a.skills + a.industries + a.markets + a.languages : 0;
-  }
-  const val = (stats as unknown as Record<string, unknown>)[countKey];
-  return typeof val === "number" ? val : null;
-}
-
-/* ── Page ────────────────────────────────────────────── */
+import { useEffect, useRef, useState, useCallback } from "react";
+import { Loader2, Maximize2, Minimize2, RotateCcw } from "lucide-react";
+import GraphViewer from "@/components/graph-explorer/GraphViewer";
+import GraphFilters from "@/components/graph-explorer/GraphFilters";
+import GraphSearch from "@/components/graph-explorer/GraphSearch";
+import NodeDetail from "@/components/graph-explorer/NodeDetail";
+import { useGraphData } from "@/components/graph-explorer/useGraphData";
+import type { GraphNode, NodeType } from "@/lib/graph/types";
 
 export default function KnowledgeGraphPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>("service-providers");
-  const [stats, setStats] = useState<KGStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
+  const {
+    nodes,
+    edges,
+    center,
+    loading,
+    error,
+    loadInitial,
+    expandNode,
+    searchNodes,
+    focusNode,
+    expandedNodes,
+    visibleTypes,
+    setVisibleTypes,
+    stats,
+  } = useGraphData();
 
-  // Read ?tab= from URL on mount
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const graphContainerRef = useRef<HTMLDivElement>(null);
+  const outerRef = useRef<HTMLDivElement>(null);
+
+  // Load initial graph on mount
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tab = params.get("tab") as TabKey | null;
-    if (tab && TABS.some((t) => t.key === tab)) {
-      setActiveTab(tab);
-    }
+    loadInitial();
+  }, [loadInitial]);
+
+  // Handle node click (select)
+  const handleNodeClick = useCallback((node: GraphNode) => {
+    setSelectedNode(node);
   }, []);
 
-  // Update URL when tab changes (without page reload)
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", activeTab);
-    window.history.replaceState({}, "", url.toString());
-  }, [activeTab]);
+  // Handle node double-click (expand)
+  const handleNodeDoubleClick = useCallback(
+    (node: GraphNode) => {
+      setSelectedNode(node);
+      expandNode(node.id);
+    },
+    [expandNode]
+  );
 
-  // Fetch tab counts
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch("/api/admin/knowledge-graph/stats");
-        if (res.ok) {
-          const data = await res.json();
-          setStats(data);
-        }
-      } catch (err) {
-        console.error("Failed to load KG stats:", err);
-      } finally {
-        setStatsLoading(false);
+  // Toggle node type visibility
+  const handleToggleType = useCallback(
+    (type: NodeType) => {
+      const next = new Set(visibleTypes);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
       }
+      setVisibleTypes(next);
+    },
+    [visibleTypes, setVisibleTypes]
+  );
+
+  // Navigate to a node from detail panel
+  const handleNavigate = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((n) => n.id === nodeId);
+      if (node) {
+        setSelectedNode(node);
+        expandNode(nodeId);
+      }
+    },
+    [nodes, expandNode]
+  );
+
+  // Fullscreen toggle
+  const toggleFullscreen = useCallback(() => {
+    if (!outerRef.current) return;
+    if (!isFullscreen) {
+      outerRef.current.requestFullscreen?.();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen?.();
+      setIsFullscreen(false);
     }
-    load();
+  }, [isFullscreen]);
+
+  // Listen for fullscreen exit via Escape
+  useEffect(() => {
+    const handler = () => {
+      if (!document.fullscreenElement) {
+        setIsFullscreen(false);
+      }
+    };
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div
+      ref={outerRef}
+      className={`flex flex-col ${
+        isFullscreen ? "h-screen bg-white" : "h-[calc(100vh-8rem)]"
+      }`}
+    >
       {/* Header */}
-      <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
-          Knowledge Graph
-        </h1>
-        <p className="mt-1 text-sm text-cos-slate">
-          The core entities and relationships that power matching, search, and
-          recommendations.
-        </p>
+      <div className="flex items-center justify-between border-b border-cos-border px-4 py-3">
+        <div>
+          <h1 className="font-heading text-xl font-bold tracking-tight text-cos-midnight">
+            Knowledge Graph Explorer
+          </h1>
+          <p className="mt-0.5 text-xs text-cos-slate">
+            Interactive visualization of entities and relationships
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-64">
+            <GraphSearch onSearch={searchNodes} onSelect={focusNode} />
+          </div>
+          <button
+            onClick={() => {
+              setSelectedNode(null);
+              loadInitial();
+            }}
+            disabled={loading}
+            className="flex items-center gap-1.5 rounded-cos border border-cos-border px-3 py-2 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud hover:text-cos-midnight disabled:opacity-50"
+            title="Load random firm"
+          >
+            <RotateCcw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Shuffle
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            className="rounded-cos border border-cos-border p-2 text-cos-slate transition-colors hover:bg-cos-cloud hover:text-cos-midnight"
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-4 w-4" />
+            ) : (
+              <Maximize2 className="h-4 w-4" />
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex flex-wrap gap-1.5 border-b border-cos-border pb-0">
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.key;
-          const count = getCount(stats, tab.countKey);
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`group relative flex items-center gap-2 rounded-t-cos-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                isActive
-                  ? "bg-cos-surface text-cos-electric border border-cos-border border-b-cos-surface -mb-px z-10"
-                  : "text-cos-slate hover:text-cos-midnight hover:bg-cos-cloud/50"
-              }`}
-            >
-              <span
-                className={
-                  isActive ? "text-cos-electric" : "text-cos-slate-light group-hover:text-cos-slate"
-                }
+      {/* Error banner */}
+      {error && (
+        <div className="border-b border-cos-ember/20 bg-cos-ember/5 px-4 py-2 text-xs text-cos-ember">
+          {error}
+        </div>
+      )}
+
+      {/* Main content: 3-column layout */}
+      <div className="flex min-h-0 flex-1">
+        {/* Left: Filters */}
+        <div className="hidden w-52 shrink-0 overflow-y-auto border-r border-cos-border p-3 lg:block">
+          <GraphFilters
+            visibleTypes={visibleTypes}
+            onToggleType={handleToggleType}
+            stats={stats}
+          />
+        </div>
+
+        {/* Center: Graph canvas */}
+        <div ref={graphContainerRef} className="relative min-w-0 flex-1 bg-cos-cloud/30">
+          {loading && nodes.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-cos-electric" />
+              <p className="text-sm text-cos-slate">Loading graph data...</p>
+            </div>
+          ) : nodes.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3">
+              <div className="text-4xl">🕸️</div>
+              <p className="text-sm text-cos-slate">No graph data available</p>
+              <button
+                onClick={loadInitial}
+                className="rounded-cos bg-cos-electric px-4 py-2 text-sm font-medium text-white hover:bg-cos-electric-hover"
               >
-                {tab.icon}
-              </span>
-              <span className="hidden sm:inline">{tab.label}</span>
-              {count !== null ? (
-                <span
-                  className={`rounded-cos-pill px-1.5 py-0.5 text-[10px] font-semibold ${
-                    isActive
-                      ? "bg-cos-electric/10 text-cos-electric"
-                      : "bg-cos-cloud text-cos-slate-light"
-                  }`}
-                >
-                  {count.toLocaleString()}
-                </span>
-              ) : statsLoading ? (
-                <Loader2 className="h-3 w-3 animate-spin text-cos-slate-light" />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+                Load Graph
+              </button>
+            </div>
+          ) : (
+            <>
+              <GraphViewer
+                nodes={nodes}
+                edges={edges}
+                center={center}
+                visibleTypes={visibleTypes}
+                selectedNode={selectedNode}
+                expandedNodes={expandedNodes}
+                onNodeClick={handleNodeClick}
+                onNodeDoubleClick={handleNodeDoubleClick}
+                containerRef={graphContainerRef}
+              />
 
-      {/* Tab content */}
-      <div>
-        {activeTab === "service-providers" && <ServiceProvidersTab />}
-        {activeTab === "solution-partners" && <SolutionPartnersTab />}
-        {activeTab === "experts" && <ExpertsTab />}
-        {activeTab === "clients" && <ClientsTab />}
-        {activeTab === "case-studies" && <CaseStudiesTab />}
-        {activeTab === "attributes" && <AttributesTab />}
+              {/* Loading overlay */}
+              {loading && (
+                <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-cos-lg bg-white/90 px-3 py-2 shadow-sm">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-cos-electric" />
+                  <span className="text-xs text-cos-slate">Expanding...</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Right: Node detail */}
+        <div className="w-72 shrink-0 overflow-hidden border-l border-cos-border">
+          <NodeDetail
+            node={selectedNode}
+            edges={edges}
+            allNodes={nodes}
+            onClose={() => setSelectedNode(null)}
+            onNavigate={handleNavigate}
+          />
+        </div>
       </div>
     </div>
   );
