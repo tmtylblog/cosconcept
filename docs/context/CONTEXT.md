@@ -25,6 +25,7 @@
 | 17 | Multi-Dev Coordination | [multi-dev.md](multi-dev.md) | Git workflow, branch naming, conflict avoidance |
 | 18 | Roadmap & Status | [roadmap.md](roadmap.md) | Build phases, what's done, gaps, TODOs |
 | 19 | Growth Operations | [growth-ops.md](growth-ops.md) | Unipile/LinkedIn, Instantly, HubSpot, invite scheduler, attribution |
+| 20 | CRM & Acquisition | [crm-acquisition.md](crm-acquisition.md) | HubSpot sync, acquisition pipeline vs marketplace pipeline, attribution |
 
 ## Rules for Claude Agents
 

@@ -60,6 +60,14 @@ const registry: Record<string, HandlerLoader> = {
       (m) => m.handleExtractMemories
     ),
 
+  // ── Growth Ops / Acquisition ─────────────────────────
+  "hubspot-sync": () =>
+    import("./handlers/hubspot-sync").then((m) => m.handleHubSpotSync),
+  "attribution-check": () =>
+    import("./handlers/attribution-check").then(
+      (m) => m.handleAttributionCheck
+    ),
+
   // ── Cron jobs (triggered via vercel.json schedule) ───
   "weekly-recrawl": () =>
     import("./handlers/weekly-recrawl").then((m) => m.handleWeeklyRecrawl),

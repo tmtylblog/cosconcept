@@ -76,6 +76,12 @@ export async function GET(req: NextRequest) {
     enqueued.push("linkedin-invite-scheduler");
   }
 
+  // ── HubSpot Sync — every day at 00:00 UTC ────────────
+  if (isNearUtc(0, 0)) {
+    await enqueue("hubspot-sync", {});
+    enqueued.push("hubspot-sync");
+  }
+
   // Drain the queue (runs pending jobs, resets stuck ones)
   const result = await drainQueue(5);
 

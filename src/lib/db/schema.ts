@@ -1815,3 +1815,67 @@ export const domainAliases = pgTable("domain_aliases", {
   createdBy: text("created_by").references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// ─── Acquisition Pipeline (COS-native CRM) ──────────────
+// See docs/context/crm-acquisition.md for full context.
+// HubSpot is synced into these tables bidirectionally.
+// acq_ prefix = "acquisition" — prospective COS customers,
+// NOT the same as Opportunities/Leads which are platform-to-platform.
+
+export const acqCompanies = pgTable("acq_companies", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  domain: text("domain"),
+  industry: text("industry"),
+  sizeEstimate: text("size_estimate"),
+  hubspotCompanyId: text("hubspot_company_id").unique(),
+  hubspotSyncedAt: timestamp("hubspot_synced_at"),
+  cosOrgId: text("cos_org_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const acqContacts = pgTable("acq_contacts", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  firstName: text("first_name").notNull().default(""),
+  lastName: text("last_name").notNull().default(""),
+  linkedinUrl: text("linkedin_url"),
+  companyId: text("company_id").references(() => acqCompanies.id, { onDelete: "set null" }),
+  hubspotContactId: text("hubspot_contact_id").unique(),
+  hubspotOwnerId: text("hubspot_owner_id"),
+  hubspotSyncedAt: timestamp("hubspot_synced_at"),
+  cosUserId: text("cos_user_id").unique(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const acqDeals = pgTable("acq_deals", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  contactId: text("contact_id").references(() => acqContacts.id, { onDelete: "set null" }),
+  companyId: text("company_id").references(() => acqCompanies.id, { onDelete: "set null" }),
+  hubspotDealId: text("hubspot_deal_id").unique(),
+  hubspotPipelineId: text("hubspot_pipeline_id"),
+  hubspotStageId: text("hubspot_stage_id"),
+  stageLabel: text("stage_label").notNull().default(""),
+  dealValue: text("deal_value"),
+  status: text("status").notNull().default("open"), // open | won | lost
+  closedAt: timestamp("closed_at"),
+  hubspotSyncedAt: timestamp("hubspot_synced_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const attributionEvents = pgTable("attribution_events", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().unique(),
+  contactId: text("contact_id").references(() => acqContacts.id, { onDelete: "set null" }),
+  instantlyCampaignId: text("instantly_campaign_id"),
+  instantlyCampaignName: text("instantly_campaign_name"),
+  linkedinCampaignId: text("linkedin_campaign_id").references(() => growthOpsInviteCampaigns.id, { onDelete: "set null" }),
+  linkedinInviteTargetId: text("linkedin_invite_target_id").references(() => growthOpsInviteTargets.id, { onDelete: "set null" }),
+  matchMethod: text("match_method").notNull().default("none"), // email_exact | linkedin_url | name_domain | none
+  matchedAt: timestamp("matched_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
