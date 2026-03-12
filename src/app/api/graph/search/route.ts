@@ -10,6 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import neo4j from "neo4j-driver";
 import { neo4jRead } from "@/lib/neo4j";
 import type { SearchResult, NodeType } from "@/lib/graph/types";
 
@@ -70,7 +71,7 @@ export async function GET(req: NextRequest) {
     const rows = await neo4jRead<NeoSearchRow>(cypher, {
       query,
       targetLabels,
-      limit,
+      limit: neo4j.int(limit),
     });
 
     const results: SearchResult[] = rows.map((row) => ({

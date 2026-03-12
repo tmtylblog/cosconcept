@@ -15,6 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import neo4j from "neo4j-driver";
 import { neo4jRead } from "@/lib/neo4j";
 import type { GraphNode, GraphEdge, GraphData, NodeType } from "@/lib/graph/types";
 
@@ -105,7 +106,7 @@ export async function GET(req: NextRequest) {
           ELSE null END as direction
       `;
 
-      const rows = await neo4jRead<InitialRecord>(cypher, { allowedTypes, limit });
+      const rows = await neo4jRead<InitialRecord>(cypher, { allowedTypes, limit: neo4j.int(limit) });
 
       if (rows.length === 0) {
         return NextResponse.json({ nodes: [], edges: [], center: null } satisfies GraphData);
@@ -183,7 +184,7 @@ export async function GET(req: NextRequest) {
     const rows = await neo4jRead<NeoRecord>(cypher, {
       nodeId,
       allowedTypes,
-      limit,
+      limit: neo4j.int(limit),
     });
 
     if (rows.length === 0) {
@@ -231,8 +232,9 @@ export async function GET(req: NextRequest) {
     } satisfies GraphData);
   } catch (error) {
     console.error("Graph neighbors error:", error);
+    const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "Failed to fetch graph neighbors" },
+      { error: "Failed to fetch graph neighbors", detail: message },
       { status: 500 }
     );
   }
