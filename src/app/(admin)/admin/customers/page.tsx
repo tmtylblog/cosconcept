@@ -1,20 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Building2,
   Users,
-  ChevronDown,
-  ChevronRight,
-  Save,
-  X,
   Search,
   Loader2,
   Clock,
-  Sparkles,
-  Globe,
-  UserCheck,
   Eye,
   ExternalLink,
 } from "lucide-react";
@@ -33,38 +26,6 @@ interface OrgRow {
   createdAt: string;
 }
 
-interface OrgMember {
-  id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  role: string;
-}
-
-interface OrgFirm {
-  id: string;
-  name: string;
-  website: string | null;
-  firmType: string | null;
-  sizeBand: string | null;
-  profileCompleteness: number | null;
-  createdAt: string;
-}
-
-interface EnrichmentStat {
-  entries: number;
-  cost: number;
-  phases: string[];
-  lastEnriched: string | null;
-}
-
-interface OrgDetails {
-  members: OrgMember[];
-  firms: OrgFirm[];
-  enrichmentStats: Record<string, EnrichmentStat>;
-}
-
-// Flat user row for the Users tab
 interface CustomerUser {
   id: string;
   name: string;
@@ -78,23 +39,12 @@ interface CustomerUser {
 }
 
 type Tab = "companies" | "users";
-type FilterStatus = "all" | "active" | "free" | "pro" | "enterprise";
+type FilterStatus = "all" | "free" | "pro" | "enterprise";
 
-const PLAN_COLORS: Record<string, string> = {
-  free: "bg-cos-cloud text-cos-slate",
-  pro: "bg-cos-electric/10 text-cos-electric",
-  enterprise: "bg-cos-warm/10 text-cos-warm",
-};
-
-const PHASE_COLORS: Record<string, string> = {
-  jina: "bg-cos-electric/10 text-cos-electric",
-  classifier: "bg-cos-signal/10 text-cos-signal",
-  pdl: "bg-purple-100 text-purple-700",
-  linkedin: "bg-blue-100 text-blue-700",
-  case_study: "bg-cos-warm/10 text-cos-warm",
-  onboarding: "bg-emerald-100 text-emerald-700",
-  memory: "bg-pink-100 text-pink-700",
-  deep_crawl: "bg-orange-100 text-orange-700",
+const PLAN_COLORS: Record<string, { bg: string; text: string }> = {
+  free: { bg: "bg-cos-cloud", text: "text-cos-slate" },
+  pro: { bg: "bg-cos-electric/10", text: "text-cos-electric" },
+  enterprise: { bg: "bg-cos-warm/10", text: "text-cos-warm" },
 };
 
 const PAGE_SIZE = 100;
@@ -110,13 +60,6 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
-  const [expandedOrg, setExpandedOrg] = useState<string | null>(null);
-  const [orgDetails, setOrgDetails] = useState<Record<string, OrgDetails>>({});
-  const [detailsLoading, setDetailsLoading] = useState<string | null>(null);
-  const [editingPlan, setEditingPlan] = useState<string | null>(null);
-  const [pendingPlan, setPendingPlan] = useState<string>("");
-  const [saving, setSaving] = useState(false);
-
   const [companyPage, setCompanyPage] = useState(1);
 
   // ── Users tab state ──
@@ -146,7 +89,6 @@ export default function CustomersPage() {
     if (activeTab !== "users" || usersLoaded) return;
     setUsersLoading(true);
 
-    // Fetch all users and filter out admins (show only regular "user" role)
     authClient.admin
       .listUsers({ query: { limit: 500 } })
       .then(async (res) => {
@@ -168,41 +110,27 @@ export default function CustomersPage() {
               : "",
           }));
 
-        // Enrich with org membership data
-        // Build a lookup from the org details we already have or fetch them
-        const enriched: CustomerUser[] = [];
-
-        // Quick approach: use the orgs list we already loaded and
-        // fetch details for any org we haven't expanded yet
-        const orgLookup = new Map<string, OrgRow>();
-        for (const org of orgs) {
-          orgLookup.set(org.id, org);
-        }
-
-        // For each user, try to find their org via the details API
-        // But a faster approach: just add all org member info we already know
+        // Build member-to-org mapping
         const memberToOrg = new Map<string, { orgName: string; orgSlug: string; orgPlan: string }>();
-
-        // Fetch all org details to build the member-to-org map
         try {
           const detailsPromises = orgs.map(async (org) => {
-            if (orgDetails[org.id]) return { orgId: org.id, details: orgDetails[org.id] };
             try {
               const r = await fetch(`/api/admin/organizations/${org.id}/details`);
               if (r.ok) {
                 const data = await r.json();
-                return { orgId: org.id, details: data as OrgDetails };
+                return { orgId: org.id, members: data.members ?? [] };
               }
             } catch { /* skip */ }
             return null;
           });
 
           const results = await Promise.all(detailsPromises);
+          const orgLookup = new Map(orgs.map((o) => [o.id, o]));
           for (const result of results) {
             if (!result) continue;
             const org = orgLookup.get(result.orgId);
             if (!org) continue;
-            for (const member of result.details.members) {
+            for (const member of result.members) {
               memberToOrg.set(member.userId, {
                 orgName: org.name,
                 orgSlug: org.slug,
@@ -212,76 +140,22 @@ export default function CustomersPage() {
           }
         } catch { /* skip enrichment */ }
 
-        for (const user of regularUsers) {
+        const enriched: CustomerUser[] = regularUsers.map((user) => {
           const orgInfo = memberToOrg.get(user.id);
-          enriched.push({
+          return {
             ...user,
             orgName: orgInfo?.orgName,
             orgSlug: orgInfo?.orgSlug,
             orgPlan: orgInfo?.orgPlan,
-          });
-        }
+          };
+        });
 
         setCustomerUsers(enriched);
         setUsersLoaded(true);
       })
       .catch(console.error)
       .finally(() => setUsersLoading(false));
-  }, [activeTab, usersLoaded, orgs, orgDetails]);
-
-  // Load org details on expand
-  const toggleExpand = useCallback(
-    async (orgId: string) => {
-      if (expandedOrg === orgId) {
-        setExpandedOrg(null);
-        return;
-      }
-      setExpandedOrg(orgId);
-
-      if (orgDetails[orgId]) return;
-
-      setDetailsLoading(orgId);
-      try {
-        const res = await fetch(`/api/admin/organizations/${orgId}/details`);
-        if (res.ok) {
-          const data = await res.json();
-          setOrgDetails((prev) => ({ ...prev, [orgId]: data }));
-        }
-      } catch (err) {
-        console.error("Failed to load org details:", err);
-      } finally {
-        setDetailsLoading(null);
-      }
-    },
-    [expandedOrg, orgDetails]
-  );
-
-  // Update plan
-  const savePlan = useCallback(
-    async (orgId: string) => {
-      setSaving(true);
-      try {
-        const res = await fetch(`/api/admin/organizations/${orgId}/plan`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ plan: pendingPlan }),
-        });
-        if (res.ok) {
-          setOrgs((prev) =>
-            prev.map((o) =>
-              o.id === orgId ? { ...o, plan: pendingPlan } : o
-            )
-          );
-          setEditingPlan(null);
-        }
-      } catch (err) {
-        console.error("Failed to save plan:", err);
-      } finally {
-        setSaving(false);
-      }
-    },
-    [pendingPlan]
-  );
+  }, [activeTab, usersLoaded, orgs]);
 
   // Impersonate user
   async function handleImpersonate(userId: string) {
@@ -306,11 +180,8 @@ export default function CustomersPage() {
         return false;
       }
     }
-    if (filterStatus !== "all" && filterStatus !== "active") {
+    if (filterStatus !== "all") {
       return org.plan === filterStatus;
-    }
-    if (filterStatus === "active") {
-      return org.status === "active";
     }
     return true;
   });
@@ -335,6 +206,32 @@ export default function CustomersPage() {
     enterprise: orgs.filter((o) => o.plan === "enterprise").length,
     totalMembers: orgs.reduce((sum, o) => sum + o.members, 0),
   };
+
+  // Pagination helpers
+  const companyTotalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const companyPaginated = filtered.slice(
+    (companyPage - 1) * PAGE_SIZE,
+    companyPage * PAGE_SIZE
+  );
+  const userTotalPages = Math.ceil(filteredUsers.length / PAGE_SIZE);
+  const userPaginated = filteredUsers.slice(
+    (userPage - 1) * PAGE_SIZE,
+    userPage * PAGE_SIZE
+  );
+
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="h-8 w-56 rounded-cos-md bg-cos-border" />
+        <div className="h-12 rounded-cos-xl bg-cos-border/50" />
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-14 rounded-cos-lg bg-cos-border/30" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -398,31 +295,36 @@ export default function CustomersPage() {
           {/* Search + Filters */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[240px]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
               <input
                 type="text"
-                placeholder="Search companies..."
+                placeholder="Search companies by name or slug..."
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCompanyPage(1); }}
-                className="w-full rounded-cos-lg border border-cos-border bg-white py-2 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+                className="w-full rounded-cos-xl border border-cos-border bg-cos-surface py-3 pl-11 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light transition-colors focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
               />
+              {searchQuery && (
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 rounded-cos-pill bg-cos-electric/10 px-2.5 py-0.5 text-xs font-medium text-cos-electric">
+                  {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+                </span>
+              )}
             </div>
-            <div className="flex gap-1">
+            <div className="flex items-center gap-0.5 rounded-cos-lg bg-cos-cloud-dim p-1">
               {(
                 [
                   { key: "all", label: "All" },
                   { key: "free", label: `Free (${stats.free})` },
                   { key: "pro", label: `Pro (${stats.pro})` },
-                  { key: "enterprise", label: `Enterprise (${stats.enterprise})` },
+                  { key: "enterprise", label: `Ent (${stats.enterprise})` },
                 ] as { key: FilterStatus; label: string }[]
               ).map(({ key, label }) => (
                 <button
                   key={key}
                   onClick={() => { setFilterStatus(key); setCompanyPage(1); }}
-                  className={`rounded-cos-pill px-3 py-1.5 text-xs font-medium transition-colors ${
+                  className={`rounded-cos-md px-3.5 py-1.5 text-xs font-medium capitalize transition-all ${
                     filterStatus === key
-                      ? "bg-cos-electric text-white"
-                      : "bg-cos-cloud text-cos-slate hover:bg-cos-cloud-dim"
+                      ? "bg-cos-surface text-cos-midnight shadow-sm"
+                      : "text-cos-slate hover:text-cos-midnight"
                   }`}
                 >
                   {label}
@@ -431,284 +333,157 @@ export default function CustomersPage() {
             </div>
           </div>
 
-          {/* Company list */}
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
-              <Building2 className="h-8 w-8 text-cos-slate-light" />
-              <p className="mt-2 text-sm text-cos-slate">No companies found</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filtered
-                .slice((companyPage - 1) * PAGE_SIZE, companyPage * PAGE_SIZE)
-                .map((org) => {
-                const isExpanded = expandedOrg === org.id;
-                const details = orgDetails[org.id];
-                const isLoadingDetails = detailsLoading === org.id;
-
-                return (
-                  <div
-                    key={org.id}
-                    className="overflow-hidden rounded-cos-lg border border-cos-border bg-white transition-shadow hover:shadow-sm"
-                  >
-                    {/* Main row */}
-                    <button
+          {/* Companies Table */}
+          <div className="overflow-hidden rounded-cos-xl border border-cos-border bg-cos-surface">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-cos-border bg-cos-cloud/50">
+                  <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Company
+                  </th>
+                  <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Slug
+                  </th>
+                  <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Plan
+                  </th>
+                  <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Users
+                  </th>
+                  <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Status
+                  </th>
+                  <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Created
+                  </th>
+                  <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cos-border/60">
+                {companyPaginated.map((org) => {
+                  const planStyle = PLAN_COLORS[org.plan] ?? PLAN_COLORS.free;
+                  return (
+                    <tr
+                      key={org.id}
                       onClick={() => router.push(`/admin/customers/${org.id}`)}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                      className="cursor-pointer transition-colors hover:bg-cos-electric/[0.02]"
                     >
-                      <span className="text-cos-electric">
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </span>
-
-                      {/* Name */}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-semibold text-cos-midnight">
-                            {org.name}
-                          </span>
-                          <span className="text-xs text-cos-slate-light">/{org.slug}</span>
+                      {/* Company name */}
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-cos-lg bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
+                            {org.name.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="font-medium text-cos-midnight">{org.name}</span>
                         </div>
-                      </div>
+                      </td>
 
-                      {/* Plan badge */}
-                      <div className="flex items-center gap-2">
-                        {editingPlan === org.id ? (
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <select
-                              value={pendingPlan}
-                              onChange={(e) => setPendingPlan(e.target.value)}
-                              className="rounded-cos border border-cos-border px-2 py-1 text-xs"
-                            >
-                              <option value="free">Free</option>
-                              <option value="pro">Pro</option>
-                              <option value="enterprise">Enterprise</option>
-                            </select>
-                            <button
-                              onClick={() => savePlan(org.id)}
-                              disabled={saving}
-                              className="rounded-cos bg-cos-electric p-1 text-white hover:bg-cos-electric-hover disabled:opacity-50"
-                            >
-                              <Save className="h-3 w-3" />
-                            </button>
-                            <button
-                              onClick={() => setEditingPlan(null)}
-                              className="rounded-cos p-1 text-cos-slate hover:bg-cos-cloud"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
+                      {/* Slug */}
+                      <td className="px-5 py-3.5">
+                        <span className="font-mono text-xs text-cos-slate">/{org.slug}</span>
+                      </td>
+
+                      {/* Plan */}
+                      <td className="px-5 py-3.5">
+                        <span
+                          className={`inline-flex items-center rounded-cos-pill px-2.5 py-1 text-[10px] font-bold uppercase ${planStyle.bg} ${planStyle.text}`}
+                        >
+                          {org.plan}
+                        </span>
+                      </td>
+
+                      {/* Users */}
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-1.5">
+                          <Users className="h-3.5 w-3.5 text-cos-slate-light" />
+                          <span className="font-mono text-xs font-semibold text-cos-midnight">
+                            {org.members}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-5 py-3.5">
+                        {org.status === "active" ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-signal/8 px-2.5 py-1 text-xs font-medium text-cos-signal">
+                            <span className="h-1.5 w-1.5 rounded-full bg-cos-signal" />
+                            Active
+                          </span>
                         ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingPlan(org.id);
-                              setPendingPlan(org.plan);
-                            }}
-                            className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                              PLAN_COLORS[org.plan] ?? PLAN_COLORS.free
-                            }`}
-                            title="Click to edit plan"
-                          >
-                            {org.plan}
-                          </button>
+                          <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-slate/8 px-2.5 py-1 text-xs font-medium text-cos-slate">
+                            <span className="h-1.5 w-1.5 rounded-full bg-cos-slate" />
+                            {org.status}
+                          </span>
                         )}
-                      </div>
+                      </td>
 
-                      {/* Member count */}
-                      <div className="flex items-center gap-1 text-xs text-cos-slate">
-                        <Users className="h-3.5 w-3.5" />
-                        <span>{org.members}</span>
-                      </div>
+                      {/* Created */}
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-1.5 text-xs text-cos-slate">
+                          <Clock className="h-3.5 w-3.5" />
+                          {org.createdAt}
+                        </div>
+                      </td>
 
-                      {/* Created date */}
-                      <div className="hidden items-center gap-1 text-xs text-cos-slate-light sm:flex">
-                        <Clock className="h-3.5 w-3.5" />
-                        <span>{org.createdAt}</span>
-                      </div>
-                    </button>
-
-                    {/* Expanded details */}
-                    {isExpanded && (
-                      <div className="border-t border-cos-border bg-cos-cloud/30">
-                        {isLoadingDetails ? (
-                          <div className="flex items-center justify-center py-8">
-                            <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
-                          </div>
-                        ) : details ? (
-                          <div className="grid gap-4 p-4 lg:grid-cols-2">
-                            {/* Users section */}
-                            <div className="rounded-cos border border-cos-border bg-white p-3">
-                              <div className="mb-3 flex items-center gap-2">
-                                <UserCheck className="h-4 w-4 text-cos-electric" />
-                                <h3 className="text-sm font-semibold text-cos-midnight">
-                                  Users ({details.members.length})
-                                </h3>
-                              </div>
-                              {details.members.length === 0 ? (
-                                <p className="text-xs text-cos-slate-light">No members</p>
-                              ) : (
-                                <div className="space-y-2">
-                                  {details.members.map((m) => (
-                                    <div
-                                      key={m.id}
-                                      className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-3 py-2"
-                                    >
-                                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-cos-electric/10 text-xs font-bold text-cos-electric">
-                                        {(m.userName ?? m.userEmail ?? "?")
-                                          .charAt(0)
-                                          .toUpperCase()}
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <p className="truncate text-xs font-medium text-cos-midnight">
-                                          {m.userName ?? "Unnamed"}
-                                        </p>
-                                        <p className="truncate text-[10px] text-cos-slate">
-                                          {m.userEmail}
-                                        </p>
-                                      </div>
-                                      <span
-                                        className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
-                                          m.role === "owner"
-                                            ? "bg-cos-warm/10 text-cos-warm"
-                                            : m.role === "admin"
-                                            ? "bg-cos-electric/10 text-cos-electric"
-                                            : "bg-cos-cloud text-cos-slate"
-                                        }`}
-                                      >
-                                        {m.role}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Firms section */}
-                            <div className="rounded-cos border border-cos-border bg-white p-3">
-                              <div className="mb-3 flex items-center gap-2">
-                                <Building2 className="h-4 w-4 text-cos-signal" />
-                                <h3 className="text-sm font-semibold text-cos-midnight">
-                                  Linked Firms ({details.firms.length})
-                                </h3>
-                              </div>
-                              {details.firms.length === 0 ? (
-                                <p className="text-xs text-cos-slate-light">No linked firms</p>
-                              ) : (
-                                <div className="space-y-2">
-                                  {details.firms.map((firm) => {
-                                    const enrichment = details.enrichmentStats[firm.id];
-                                    return (
-                                      <div
-                                        key={firm.id}
-                                        className="rounded-cos bg-cos-cloud/50 p-3"
-                                      >
-                                        <div className="flex items-start justify-between">
-                                          <div className="min-w-0">
-                                            <p className="truncate text-xs font-semibold text-cos-midnight">
-                                              {firm.name}
-                                            </p>
-                                            {firm.website && (
-                                              <a
-                                                href={
-                                                  firm.website.startsWith("http")
-                                                    ? firm.website
-                                                    : `https://${firm.website}`
-                                                }
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="mt-0.5 flex items-center gap-1 text-[10px] text-cos-electric hover:underline"
-                                              >
-                                                <Globe className="h-3 w-3" />
-                                                {firm.website}
-                                              </a>
-                                            )}
-                                          </div>
-                                          {firm.profileCompleteness !== null && (
-                                            <div className="text-right">
-                                              <div className="text-[10px] font-medium text-cos-slate">
-                                                Profile
-                                              </div>
-                                              <div className="text-xs font-bold text-cos-electric">
-                                                {firm.profileCompleteness}%
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        <div className="mt-2 flex flex-wrap gap-1">
-                                          {firm.firmType && (
-                                            <span className="rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-medium text-cos-signal">
-                                              {firm.firmType}
-                                            </span>
-                                          )}
-                                          {firm.sizeBand && (
-                                            <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] text-cos-slate">
-                                              {firm.sizeBand}
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        {/* Enrichment stats */}
-                                        {enrichment && (
-                                          <div className="mt-2 border-t border-cos-border/50 pt-2">
-                                            <div className="flex items-center gap-1 text-[10px] text-cos-slate">
-                                              <Sparkles className="h-3 w-3" />
-                                              <span>
-                                                {enrichment.entries} enrichment
-                                                {enrichment.entries !== 1 ? "s" : ""} ·{" "}
-                                                ${enrichment.cost.toFixed(2)}
-                                              </span>
-                                            </div>
-                                            <div className="mt-1 flex flex-wrap gap-1">
-                                              {enrichment.phases.map((phase) => (
-                                                <span
-                                                  key={phase}
-                                                  className={`rounded-cos-pill px-1.5 py-0.5 text-[9px] font-medium ${
-                                                    PHASE_COLORS[phase] ??
-                                                    "bg-cos-cloud text-cos-slate"
-                                                  }`}
-                                                >
-                                                  {phase}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="p-4 text-center text-xs text-cos-slate-light">
-                            Failed to load details
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {Math.ceil(filtered.length / PAGE_SIZE) > 1 && (
-                <div className="flex items-center justify-between rounded-cos-lg border border-cos-border bg-white px-5 py-3">
+                      {/* Actions */}
+                      <td className="px-5 py-3.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/admin/customers/${org.id}`);
+                          }}
+                          className="h-7 gap-1.5 text-xs text-cos-slate hover:text-cos-electric"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          View
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-5 py-12 text-center text-sm text-cos-slate"
+                    >
+                      {searchQuery ? "No companies match your search." : "No companies found."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            {companyTotalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
+                <span className="text-xs text-cos-slate">
+                  Showing {(companyPage - 1) * PAGE_SIZE + 1}–{Math.min(companyPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCompanyPage((p) => Math.max(1, p - 1))}
+                    disabled={companyPage === 1}
+                    className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
                   <span className="text-xs text-cos-slate">
-                    Showing {(companyPage - 1) * PAGE_SIZE + 1}–{Math.min(companyPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+                    Page {companyPage} of {companyTotalPages}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setCompanyPage((p) => Math.max(1, p - 1))} disabled={companyPage === 1} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Previous</button>
-                    <span className="text-xs text-cos-slate">Page {companyPage} of {Math.ceil(filtered.length / PAGE_SIZE)}</span>
-                    <button onClick={() => setCompanyPage((p) => Math.min(Math.ceil(filtered.length / PAGE_SIZE), p + 1))} disabled={companyPage === Math.ceil(filtered.length / PAGE_SIZE)} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Next</button>
-                  </div>
+                  <button
+                    onClick={() => setCompanyPage((p) => Math.min(companyTotalPages, p + 1))}
+                    disabled={companyPage === companyTotalPages}
+                    className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
+                  >
+                    Next
+                  </button>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </>
       )}
 
@@ -717,16 +492,16 @@ export default function CustomersPage() {
         <>
           {/* Search */}
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
             <input
               type="text"
               placeholder="Search users by name, email, or company..."
               value={userSearch}
               onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
-              className="w-full rounded-cos-lg border border-cos-border bg-white py-2.5 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+              className="w-full rounded-cos-xl border border-cos-border bg-cos-surface py-3 pl-11 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light transition-colors focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
             />
             {userSearch && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-cos-pill bg-cos-electric/10 px-2.5 py-0.5 text-xs font-medium text-cos-electric">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 rounded-cos-pill bg-cos-electric/10 px-2.5 py-0.5 text-xs font-medium text-cos-electric">
                 {filteredUsers.length} result{filteredUsers.length !== 1 ? "s" : ""}
               </span>
             )}
@@ -737,153 +512,171 @@ export default function CustomersPage() {
               <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
               <span className="ml-2 text-sm text-cos-slate">Loading customer users...</span>
             </div>
-          ) : filteredUsers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
-              <Users className="h-8 w-8 text-cos-slate-light" />
-              <p className="mt-2 text-sm text-cos-slate">
-                {userSearch ? "No users match your search" : "No customer users found"}
-              </p>
-            </div>
           ) : (
             <div className="overflow-hidden rounded-cos-xl border border-cos-border bg-cos-surface">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-cos-border bg-cos-cloud/50">
-                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                       User
                     </th>
-                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                       Email
                     </th>
-                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                       Company
                     </th>
-                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                       Plan
                     </th>
-                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                       Status
                     </th>
-                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                       Joined
                     </th>
-                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                    <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cos-border/60">
-                  {filteredUsers
-                    .slice((userPage - 1) * PAGE_SIZE, userPage * PAGE_SIZE)
-                    .map((user) => (
-                    <tr
-                      key={user.id}
-                      className="transition-colors hover:bg-cos-electric/[0.02]"
-                    >
-                      {/* Name */}
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
-                            {user.name?.charAt(0)?.toUpperCase() || "?"}
+                  {userPaginated.map((user) => {
+                    const planStyle = user.orgPlan
+                      ? PLAN_COLORS[user.orgPlan] ?? PLAN_COLORS.free
+                      : null;
+                    return (
+                      <tr
+                        key={user.id}
+                        className="transition-colors hover:bg-cos-electric/[0.02]"
+                      >
+                        {/* Name */}
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
+                              {user.name?.charAt(0)?.toUpperCase() || "?"}
+                            </div>
+                            <span className="font-medium text-cos-midnight">
+                              {user.name}
+                            </span>
                           </div>
-                          <span className="font-medium text-cos-midnight">
-                            {user.name}
+                        </td>
+
+                        {/* Email */}
+                        <td className="px-5 py-3.5">
+                          <span className="font-mono text-xs text-cos-slate">
+                            {user.email}
                           </span>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Email */}
-                      <td className="px-5 py-3">
-                        <span className="font-mono text-xs text-cos-slate">
-                          {user.email}
-                        </span>
-                      </td>
-
-                      {/* Company */}
-                      <td className="px-5 py-3">
-                        {user.orgName ? (
-                          <button
-                            onClick={() => {
-                              setActiveTab("companies");
-                              setSearchQuery(user.orgName ?? "");
-                            }}
-                            className="flex items-center gap-1.5 text-xs font-medium text-cos-electric hover:underline"
-                          >
-                            <Building2 className="h-3 w-3" />
-                            {user.orgName}
-                          </button>
-                        ) : (
-                          <span className="text-xs italic text-cos-slate-light">
-                            No company
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Plan */}
-                      <td className="px-5 py-3">
-                        {user.orgPlan ? (
-                          <span
-                            className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                              PLAN_COLORS[user.orgPlan] ?? PLAN_COLORS.free
-                            }`}
-                          >
-                            {user.orgPlan}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-cos-slate-light">—</span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-5 py-3">
-                        {user.banned ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-ember/8 px-2.5 py-1 text-xs font-medium text-cos-ember">
-                            <span className="h-1.5 w-1.5 rounded-full bg-cos-ember" />
-                            Banned
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-signal/8 px-2.5 py-1 text-xs font-medium text-cos-signal">
-                            <span className="h-1.5 w-1.5 rounded-full bg-cos-signal" />
-                            Active
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Joined */}
-                      <td className="px-5 py-3 text-xs text-cos-slate">
-                        {user.createdAt}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-5 py-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleImpersonate(user.id)}
-                          disabled={impersonating === user.id}
-                          title="Impersonate this user"
-                          className="h-7 w-7 p-0 text-cos-slate hover:text-cos-electric"
-                        >
-                          {impersonating === user.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        {/* Company */}
+                        <td className="px-5 py-3.5">
+                          {user.orgName ? (
+                            <button
+                              onClick={() => {
+                                setActiveTab("companies");
+                                setSearchQuery(user.orgName ?? "");
+                              }}
+                              className="flex items-center gap-1.5 text-xs font-medium text-cos-electric hover:underline"
+                            >
+                              <Building2 className="h-3 w-3" />
+                              {user.orgName}
+                            </button>
                           ) : (
-                            <Eye className="h-3.5 w-3.5" />
+                            <span className="text-xs italic text-cos-slate-light">
+                              No company
+                            </span>
                           )}
-                        </Button>
+                        </td>
+
+                        {/* Plan */}
+                        <td className="px-5 py-3.5">
+                          {planStyle ? (
+                            <span
+                              className={`inline-flex items-center rounded-cos-pill px-2.5 py-1 text-[10px] font-bold uppercase ${planStyle.bg} ${planStyle.text}`}
+                            >
+                              {user.orgPlan}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-cos-slate-light">&mdash;</span>
+                          )}
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-5 py-3.5">
+                          {user.banned ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-ember/8 px-2.5 py-1 text-xs font-medium text-cos-ember">
+                              <span className="h-1.5 w-1.5 rounded-full bg-cos-ember" />
+                              Banned
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-signal/8 px-2.5 py-1 text-xs font-medium text-cos-signal">
+                              <span className="h-1.5 w-1.5 rounded-full bg-cos-signal" />
+                              Active
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Joined */}
+                        <td className="px-5 py-3.5 text-xs text-cos-slate">
+                          {user.createdAt}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-5 py-3.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleImpersonate(user.id)}
+                            disabled={impersonating === user.id}
+                            title="Simulate as this user"
+                            className="h-7 w-7 p-0 text-cos-slate hover:text-cos-electric"
+                          >
+                            {impersonating === user.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredUsers.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-5 py-12 text-center text-sm text-cos-slate"
+                      >
+                        {userSearch ? "No users match your search." : "No customer users found."}
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
-              {Math.ceil(filteredUsers.length / PAGE_SIZE) > 1 && (
+              {userTotalPages > 1 && (
                 <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
                   <span className="text-xs text-cos-slate">
                     Showing {(userPage - 1) * PAGE_SIZE + 1}–{Math.min(userPage * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length}
                   </span>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setUserPage((p) => Math.max(1, p - 1))} disabled={userPage === 1} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Previous</button>
-                    <span className="text-xs text-cos-slate">Page {userPage} of {Math.ceil(filteredUsers.length / PAGE_SIZE)}</span>
-                    <button onClick={() => setUserPage((p) => Math.min(Math.ceil(filteredUsers.length / PAGE_SIZE), p + 1))} disabled={userPage === Math.ceil(filteredUsers.length / PAGE_SIZE)} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40">Next</button>
+                    <button
+                      onClick={() => setUserPage((p) => Math.max(1, p - 1))}
+                      disabled={userPage === 1}
+                      className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs text-cos-slate">
+                      Page {userPage} of {userTotalPages}
+                    </span>
+                    <button
+                      onClick={() => setUserPage((p) => Math.min(userTotalPages, p + 1))}
+                      disabled={userPage === userTotalPages}
+                      className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
+                    >
+                      Next
+                    </button>
                   </div>
                 </div>
               )}
