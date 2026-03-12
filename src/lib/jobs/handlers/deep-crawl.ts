@@ -22,6 +22,89 @@ function uid(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
 }
 
+// ─── Auto-derive firmType and sizeBand from enrichment data ──────
+
+/**
+ * Map PDL employee count → sizeBand enum value.
+ * Uses the same thresholds as the schema enum names.
+ */
+function deriveSizeBand(employeeCount: number | null | undefined): string | null {
+  if (!employeeCount || employeeCount <= 0) return null;
+  if (employeeCount === 1) return "individual";
+  if (employeeCount <= 10) return "micro_1_10";
+  if (employeeCount <= 50) return "small_11_50";
+  if (employeeCount <= 200) return "emerging_51_200";
+  if (employeeCount <= 500) return "mid_201_500";
+  if (employeeCount <= 1000) return "upper_mid_501_1000";
+  if (employeeCount <= 5000) return "large_1001_5000";
+  if (employeeCount <= 10000) return "major_5001_10000";
+  return "global_10000_plus";
+}
+
+/**
+ * Map classification categories → best-fit firmType enum value.
+ * Uses keyword matching against COS category names to infer delivery model.
+ */
+function deriveFirmType(
+  categories: string[],
+  pdlSize: string | null | undefined,
+  employeeCount: number | null | undefined,
+): string | null {
+  const cats = new Set(categories.map((c) => c.toLowerCase()));
+
+  // Direct mappings: category name → firmType
+  if (cats.has("fractional & interim executives")) return "fractional_interim";
+  if (cats.has("freelancer networks & talent platforms")) return "freelancer_network";
+  if (cats.has("agency collectives & holding companies")) return "agency_collective";
+  if (cats.has("managed service providers")) return "managed_service_provider";
+  if (cats.has("staff augmentation & talent placement")) return "staff_augmentation";
+  if (cats.has("embedded teams & pods")) return "embedded_teams";
+
+  // Advisory if the firm is advisory/consulting focused
+  if (cats.has("management consulting") || cats.has("strategy consulting")) {
+    // Large consulting firms = global_consulting, small = advisory
+    if (employeeCount && employeeCount > 200) return "global_consulting";
+    return "advisory";
+  }
+
+  // Project-based consulting
+  if (cats.has("innovation & r&d consulting") || cats.has("transformation & change management")) {
+    return "project_consulting";
+  }
+
+  // Agency-like categories → boutique_agency (most common)
+  const agencySignals = [
+    "creative & branding agencies",
+    "digital marketing agencies",
+    "performance marketing agencies",
+    "pr & communications agencies",
+    "social media agencies",
+    "content & media agencies",
+    "seo & sem agencies",
+    "web & app development agencies",
+    "data & analytics consultancies",
+    "product & ux design studios",
+    "ecommerce & marketplace consultancies",
+    "crm & marketing automation",
+    "ai & machine learning consultancies",
+    "video & motion studios",
+    "experiential & events agencies",
+    "employer branding & recruitment marketing",
+  ];
+  for (const signal of agencySignals) {
+    if (cats.has(signal)) {
+      if (employeeCount && employeeCount > 1000) return "global_consulting";
+      return "boutique_agency";
+    }
+  }
+
+  // If PDL says it's large, assume global consulting
+  if (employeeCount && employeeCount > 500) return "global_consulting";
+
+  // Default for service providers with no strong signal
+  return "boutique_agency";
+}
+
 interface Payload {
   firmId: string;
   organizationId: string;
@@ -224,36 +307,51 @@ export async function handleDeepCrawl(
     }
   }
 
-  // Step 7b: Update service_firms enrichment status + data
+  // Step 7b: Derive firmType and sizeBand from enrichment data
+  const derivedSizeBand = deriveSizeBand(pdlData?.employeeCount);
+  const derivedFirmType = deriveFirmType(
+    classification.categories,
+    pdlData?.size,
+    pdlData?.employeeCount,
+  );
+  console.log(`[DeepCrawl] Derived: firmType=${derivedFirmType}, sizeBand=${derivedSizeBand} (employeeCount=${pdlData?.employeeCount})`);
+
+  // Step 7c: Update service_firms enrichment status + data + derived fields
+  const updateFields: Record<string, unknown> = {
+    enrichmentStatus: "enriched",
+    enrichmentData: {
+      classification: {
+        categories: classification.categories,
+        skills: classification.skills,
+        industries: classification.industries,
+        confidence: classification.confidence,
+      },
+      extracted: {
+        services: crawlResult.extracted.services.map((s) => s.name),
+        clients: crawlResult.extracted.clients,
+        aboutPitch: crawlResult.extracted.aboutPitch,
+        caseStudyUrls: crawlResult.extracted.caseStudyUrls,
+      },
+      pdl: pdlData
+        ? {
+            displayName: pdlData.displayName,
+            industry: pdlData.industry,
+            size: pdlData.size,
+            employeeCount: pdlData.employeeCount,
+            headline: pdlData.headline,
+          }
+        : null,
+      enrichedAt: new Date().toISOString(),
+    },
+    classificationConfidence: classification.confidence,
+  };
+  // Only set firmType/sizeBand if not already set (don't overwrite manual edits)
+  if (derivedFirmType) updateFields.firmType = derivedFirmType;
+  if (derivedSizeBand) updateFields.sizeBand = derivedSizeBand;
+
   await db
     .update(serviceFirms)
-    .set({
-      enrichmentStatus: "enriched",
-      enrichmentData: {
-        classification: {
-          categories: classification.categories,
-          skills: classification.skills,
-          industries: classification.industries,
-          confidence: classification.confidence,
-        },
-        extracted: {
-          services: crawlResult.extracted.services.map((s) => s.name),
-          clients: crawlResult.extracted.clients,
-          aboutPitch: crawlResult.extracted.aboutPitch,
-          caseStudyUrls: crawlResult.extracted.caseStudyUrls,
-        },
-        pdl: pdlData
-          ? {
-              displayName: pdlData.displayName,
-              industry: pdlData.industry,
-              size: pdlData.size,
-              employeeCount: pdlData.employeeCount,
-              headline: pdlData.headline,
-            }
-          : null,
-        enrichedAt: new Date().toISOString(),
-      },
-    })
+    .set(updateFields)
     .where(eq(serviceFirms.id, firmId));
   console.log(`[DeepCrawl] Updated service_firms enrichment_status → enriched for ${firmId}`);
 

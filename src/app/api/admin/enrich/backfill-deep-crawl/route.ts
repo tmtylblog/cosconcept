@@ -6,6 +6,7 @@
  *
  * Safe to re-run — only targets firms with no enrichment audit log entry.
  * Pass { force: true } in body to re-crawl even enriched firms.
+ * Pass { limit: N } to cap the number of jobs queued (default 50, max 500).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -13,7 +14,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { serviceFirms, enrichmentAuditLog } from "@/lib/db/schema";
-import { eq, isNotNull, inArray, notInArray } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import { enqueue } from "@/lib/jobs/queue";
 
 async function requireAdmin() {
@@ -29,9 +30,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const force = body.force === true;
-  const limit = Math.min(Number(body.limit ?? 50), 200); // max 200 at once
+  const limit = Math.min(Number(body.limit ?? 50), 500); // max 500 at once
 
-  // Get firms with websites
+  // Get ALL firms with websites (no limit on the query itself — we filter then cap)
   const allFirms = await db
     .select({
       id: serviceFirms.id,
@@ -40,10 +41,10 @@ export async function POST(req: NextRequest) {
       website: serviceFirms.website,
     })
     .from(serviceFirms)
-    .where(isNotNull(serviceFirms.website))
-    .limit(limit);
+    .where(isNotNull(serviceFirms.website));
 
-  let firmsToProcess = allFirms.filter((f) => f.website);
+  const firmsWithWebsite = allFirms.filter((f) => f.website);
+  let firmsToProcess = firmsWithWebsite;
 
   if (!force) {
     // Skip firms that already have a classifier audit log entry
@@ -57,6 +58,10 @@ export async function POST(req: NextRequest) {
     );
     firmsToProcess = firmsToProcess.filter((f) => !enrichedSet.has(f.id));
   }
+
+  // Cap to the requested limit
+  const totalNeedingEnrichment = firmsToProcess.length;
+  firmsToProcess = firmsToProcess.slice(0, limit);
 
   // Enqueue with stagger to avoid hammering Jina
   let queued = 0;
@@ -76,10 +81,12 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    totalFirmsWithWebsite: allFirms.filter((f) => f.website).length,
+    totalFirmsWithWebsite: firmsWithWebsite.length,
+    totalNeedingEnrichment,
     queued,
-    skipped: allFirms.filter((f) => f.website).length - queued,
+    skipped: firmsWithWebsite.length - totalNeedingEnrichment,
+    remaining: totalNeedingEnrichment - queued,
     estimatedDurationMinutes: Math.ceil((queued * 30) / 60),
-    message: `Queued ${queued} deep-crawl jobs. Staggered at 30s intervals (~${Math.ceil((queued * 30) / 60)} min total). Abstractions will auto-generate 5 min after each crawl completes.`,
+    message: `Queued ${queued} deep-crawl jobs (${totalNeedingEnrichment - queued} remaining). Staggered at 30s intervals (~${Math.ceil((queued * 30) / 60)} min total).`,
   });
 }
