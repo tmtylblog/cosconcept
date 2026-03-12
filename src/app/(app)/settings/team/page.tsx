@@ -347,7 +347,7 @@ export default function TeamSettingsPage() {
                   {!linked && suggested && (
                     <p className="mt-2 text-xs text-cos-slate">
                       <span className="text-cos-electric font-medium">Suggested:</span>{" "}
-                      matches expert profile "{suggested.fullName}" — link them in the roster below
+                      matches expert profile &ldquo;{suggested.fullName}&rdquo; — link them in the roster below
                     </p>
                   )}
                 </div>
