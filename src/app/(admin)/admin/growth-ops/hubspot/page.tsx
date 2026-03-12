@@ -27,7 +27,15 @@ export default function HubSpotPage() {
         if (d.error) { setError(`HubSpot error: ${d.error}`); setLoading(false); return; }
         const pips: Pipeline[] = d.results ?? d.pipelines ?? [];
         setPipelines(pips);
-        if (pips.length > 0) setSelectedPipeline(pips[0].id);
+        // Default to "self-sign up" pipeline if present, otherwise first
+        const selfSignUp = pips.find((p) =>
+          p.label?.toLowerCase().replace(/[^a-z]/g, "").includes("selfsignup") ||
+          p.label?.toLowerCase().includes("self") ||
+          p.label?.toLowerCase().includes("sign up") ||
+          p.label?.toLowerCase().includes("signup")
+        );
+        if (selfSignUp) setSelectedPipeline(selfSignUp.id);
+        else if (pips.length > 0) setSelectedPipeline(pips[0].id);
         setLoading(false);
       })
       .catch((e) => { setError(String(e)); setLoading(false); });
@@ -177,19 +185,19 @@ export default function HubSpotPage() {
               </p>
             </div>
           )}
-          <div className="flex gap-4 overflow-x-auto pb-4">
+          <div className="flex gap-4 overflow-x-auto pb-2" style={{ height: "calc(100vh - 230px)" }}>
             {columns.map((col) => (
               <div
                 key={col.stageId}
-                className="w-64 shrink-0"
+                className="w-64 shrink-0 flex flex-col"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => handleDrop(col.stageId)}
               >
-                <div className="mb-2 flex items-center justify-between px-1">
+                <div className="mb-2 flex items-center justify-between px-1 shrink-0">
                   <p className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim">{col.label}</p>
                   <span className="rounded-full bg-cos-cloud text-cos-slate text-[10px] font-medium px-2 py-0.5">{col.deals.length}</span>
                 </div>
-                <div className="space-y-2 min-h-[200px] rounded-cos-xl bg-cos-cloud/50 p-2">
+                <div className="flex-1 overflow-y-auto space-y-2 rounded-cos-xl bg-cos-cloud/50 p-2">
                   {loadingDeals ? (
                     <div className="flex justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-cos-electric opacity-50" /></div>
                   ) : col.deals.map((deal) => (

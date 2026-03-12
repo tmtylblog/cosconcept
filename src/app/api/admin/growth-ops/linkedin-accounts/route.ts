@@ -18,23 +18,43 @@ async function checkAdmin() {
 export async function GET(req: NextRequest) {
   if (!await checkAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  // ?sync=true — import any Unipile accounts not yet in our DB
+  // ?sync=true — import any Unipile accounts not yet in our DB, enrich display names
   if (req.nextUrl.searchParams.get("sync") === "true") {
     try {
       const live = await UnipileClient.listAccounts();
       const items = live.items ?? [];
       for (const acct of items) {
+        // Unipile /accounts often returns blank name — fetch individual account for richer data
+        let displayName = acct.name ?? "";
+        let linkedinUsername: string | null = null;
+        if (!displayName || displayName === acct.id) {
+          try {
+            const detail = await UnipileClient.getAccount(acct.id) as {
+              name?: string; username?: string; connection_params?: { username?: string; name?: string };
+            };
+            displayName = detail.name ?? detail.connection_params?.name ?? detail.connection_params?.username ?? "";
+            linkedinUsername = detail.username ?? detail.connection_params?.username ?? null;
+          } catch {
+            // Use whatever we have
+          }
+        }
         await db
           .insert(growthOpsLinkedInAccounts)
           .values({
             id: crypto.randomUUID(),
             unipileAccountId: acct.id,
-            displayName: acct.name ?? acct.id,
+            displayName: displayName || acct.id,
+            linkedinUsername,
             status: acct.status ?? "OK",
           })
           .onConflictDoUpdate({
             target: growthOpsLinkedInAccounts.unipileAccountId,
-            set: { status: acct.status ?? "OK", displayName: acct.name ?? acct.id, updatedAt: new Date() },
+            set: {
+              status: acct.status ?? "OK",
+              displayName: displayName || acct.id,
+              ...(linkedinUsername ? { linkedinUsername } : {}),
+              updatedAt: new Date(),
+            },
           });
       }
     } catch {

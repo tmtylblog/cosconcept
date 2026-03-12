@@ -232,7 +232,9 @@ export default function LinkedInAccountsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-cos-slate">
-                      {new Date(a.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                      {a.created_at && !isNaN(new Date(a.created_at).getTime())
+                        ? new Date(a.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                        : "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {(a.status === "CREDENTIALS" || a.status === "ERROR") && (
