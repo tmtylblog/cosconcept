@@ -122,8 +122,8 @@ export default async function AdminLayout({
 
         <div className="h-px bg-gradient-to-r from-transparent via-cos-border to-transparent" />
 
-        {/* Back link */}
-        <div className="px-5 py-4">
+        {/* Back link + version */}
+        <div className="px-5 py-4 flex items-center justify-between">
           <a
             href="/dashboard"
             className="group flex items-center gap-2 text-xs text-cos-slate transition-colors hover:text-cos-electric"
@@ -131,6 +131,7 @@ export default async function AdminLayout({
             <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
             Back to App
           </a>
+          <span className="text-[10px] text-cos-slate/40 select-none">v0.1</span>
         </div>
       </aside>
 
