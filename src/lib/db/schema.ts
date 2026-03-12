@@ -1672,3 +1672,71 @@ export const backgroundJobs = pgTable("background_jobs", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// ─── Growth Ops ───────────────────────────────────────
+
+export const growthOpsLinkedInAccounts = pgTable("growth_ops_linkedin_accounts", {
+  id: text("id").primaryKey(),
+  unipileAccountId: text("unipile_account_id").notNull().unique(),
+  displayName: text("display_name").notNull().default(""),
+  linkedinUsername: text("linkedin_username"),
+  status: text("status").notNull().default("CONNECTING"), // CONNECTING | OK | CREDENTIALS | ERROR
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const growthOpsTargetLists = pgTable("growth_ops_target_lists", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const growthOpsInviteTargets = pgTable("growth_ops_invite_targets", {
+  id: text("id").primaryKey(),
+  listId: text("list_id").notNull().references(() => growthOpsTargetLists.id, { onDelete: "cascade" }),
+  firstName: text("first_name").notNull().default(""),
+  linkedinUrl: text("linkedin_url").notNull(),
+  unipileProviderId: text("unipile_provider_id"),
+  status: text("status").notNull().default("pending"), // pending | invited | failed | skipped
+  invitedAt: timestamp("invited_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const growthOpsInviteCampaigns = pgTable("growth_ops_invite_campaigns", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  targetListId: text("target_list_id").notNull().references(() => growthOpsTargetLists.id, { onDelete: "restrict" }),
+  linkedinAccountId: text("linkedin_account_id").notNull().references(() => growthOpsLinkedInAccounts.id, { onDelete: "restrict" }),
+  status: text("status").notNull().default("draft"), // draft | active | paused | completed
+  dailyMin: integer("daily_min").notNull().default(15),
+  dailyMax: integer("daily_max").notNull().default(19),
+  inviteMessage: text("invite_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const growthOpsInviteQueue = pgTable("growth_ops_invite_queue", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").notNull().references(() => growthOpsInviteCampaigns.id, { onDelete: "cascade" }),
+  targetId: text("target_id").notNull().references(() => growthOpsInviteTargets.id, { onDelete: "cascade" }),
+  linkedinAccountId: text("linkedin_account_id").notNull().references(() => growthOpsLinkedInAccounts.id, { onDelete: "cascade" }),
+  scheduledAt: timestamp("scheduled_at").notNull(),
+  sentAt: timestamp("sent_at"),
+  status: text("status").notNull().default("queued"), // queued | sent | failed | skipped
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const growthOpsHubspotCache = pgTable("growth_ops_hubspot_cache", {
+  id: text("id").primaryKey(),
+  dealId: text("deal_id").notNull().unique(),
+  pipelineId: text("pipeline_id").notNull(),
+  pipelineLabel: text("pipeline_label").notNull().default(""),
+  stageId: text("stage_id").notNull(),
+  stageLabel: text("stage_label").notNull().default(""),
+  stageOrder: integer("stage_order").notNull().default(0),
+  dealData: jsonb("deal_data").notNull().$type<Record<string, unknown>>().default({}),
+  syncedAt: timestamp("synced_at").notNull().defaultNow(),
+});

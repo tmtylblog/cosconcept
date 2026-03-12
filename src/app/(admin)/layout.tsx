@@ -20,6 +20,9 @@ import {
   Lightbulb,
   Phone,
   Shield,
+  Linkedin,
+  Mail,
+  BarChart3,
 } from "lucide-react";
 
 /**
@@ -101,6 +104,13 @@ export default async function AdminLayout({
           <AdminNavLink href="/admin/onboarding" icon={<TrendingUp className="h-4 w-4" />} label="Onboarding" />
           <AdminNavLink href="/admin/opportunities" icon={<Lightbulb className="h-4 w-4" />} label="Opportunities" />
           <AdminNavLink href="/admin/calls" icon={<Phone className="h-4 w-4" />} label="Call Transcripts" />
+
+          <SectionHeader label="Growth Ops" />
+          <AdminNavLink href="/admin/growth-ops" icon={<TrendingUp className="h-4 w-4" />} label="Overview" />
+          <AdminNavLink href="/admin/growth-ops/linkedin" icon={<Linkedin className="h-4 w-4" />} label="LinkedIn" />
+          <AdminNavLink href="/admin/growth-ops/instantly" icon={<Mail className="h-4 w-4" />} label="Instantly" />
+          <AdminNavLink href="/admin/growth-ops/hubspot" icon={<Share2 className="h-4 w-4" />} label="HubSpot" />
+          <AdminNavLink href="/admin/growth-ops/attribution" icon={<BarChart3 className="h-4 w-4" />} label="Attribution" />
 
           <SectionHeader label="Tools" />
           <AdminNavLink href="/admin/neo4j" icon={<Database className="h-4 w-4" />} label="Neo4j" />

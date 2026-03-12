@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
   const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon
+  const nowMinute = now.getUTCMinutes();
   const enqueued: string[] = [];
 
   // ── Weekly Recrawl — every Sunday at 2:00 AM UTC ─────
@@ -67,6 +68,12 @@ export async function GET(req: NextRequest) {
   if (isNearUtc(9, 0)) {
     await enqueue("check-stale-partnerships", {});
     enqueued.push("check-stale-partnerships");
+  }
+
+  // ── LinkedIn Invite Scheduler — top of every hour Mon–Sat ─
+  if (dayOfWeek !== 0 && nowMinute <= 2) {
+    await enqueue("linkedin-invite-scheduler", {});
+    enqueued.push("linkedin-invite-scheduler");
   }
 
   // Drain the queue (runs pending jobs, resets stuck ones)

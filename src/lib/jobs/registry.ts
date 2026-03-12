@@ -65,6 +65,10 @@ const registry: Record<string, HandlerLoader> = {
     import("./handlers/check-stale-partnerships").then(
       (m) => m.handleCheckStalePartnerships
     ),
+  "linkedin-invite-scheduler": () =>
+    import("./handlers/linkedin-invite-scheduler").then(
+      (m) => m.handleLinkedInInviteScheduler
+    ),
 };
 
 /** Returns the handler function for a given job type, or null if not registered. */
