@@ -22,6 +22,7 @@ const PUBLIC_EXCEPTIONS = [
   "/api/admin/neo4j/seed",     // neo4j seed (protected by ADMIN_SECRET header)
   "/api/admin/neo4j/migrate",  // legacy migration (protected by ADMIN_SECRET header)
   "/api/admin/import",         // n8n import endpoints (protected by ADMIN_SECRET header)
+  "/api/admin/enrich",         // enrichment backfill endpoints (protected by session OR ADMIN_SECRET)
 ];
 
 function isProtectedPath(pathname: string): boolean {

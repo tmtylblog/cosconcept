@@ -16,7 +16,12 @@ import { db } from "@/lib/db";
 import { serviceFirms } from "@/lib/db/schema";
 import { isNotNull, isNull, or, eq } from "drizzle-orm";
 
-async function requireAdmin() {
+async function requireAdmin(req: NextRequest) {
+  // Allow ADMIN_SECRET header for CLI/script access
+  const adminSecret = req.headers.get("x-admin-secret");
+  if (adminSecret && adminSecret === process.env.ADMIN_SECRET) {
+    return { id: "admin-cli", role: "superadmin" };
+  }
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user || !["admin", "superadmin"].includes(session.user.role ?? ""))
     return null;
@@ -86,7 +91,7 @@ function deriveFirmType(
 }
 
 export async function POST(req: NextRequest) {
-  const admin = await requireAdmin();
+  const admin = await requireAdmin(req);
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
