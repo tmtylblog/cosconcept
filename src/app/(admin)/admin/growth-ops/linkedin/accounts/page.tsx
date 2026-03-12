@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Link2, Loader2, RefreshCw, Copy, Check, X, ExternalLink, AlertTriangle } from "lucide-react";
+import { Plus, Link2, Loader2, RefreshCw, Copy, Check, X, ExternalLink, AlertTriangle, Trash2 } from "lucide-react";
 
 interface Account {
   id: string;
@@ -23,6 +23,7 @@ export default function LinkedInAccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [revoking, setRevoking] = useState<string | null>(null); // account id being revoked
 
   // Connect my account
   const [connecting, setConnecting] = useState(false);
@@ -57,6 +58,7 @@ export default function LinkedInAccountsPage() {
       }).then((r) => r.json());
       const url = d.url ?? d.link ?? d.hosted_url;
       if (url) window.open(url, "_blank");
+      else alert(d.error ?? "Failed to generate auth link");
     } finally {
       setConnecting(false);
     }
@@ -74,6 +76,7 @@ export default function LinkedInAccountsPage() {
       }).then((r) => r.json());
       const url = d.url ?? d.link ?? d.hosted_url;
       if (url) setInviteLink(url);
+      else alert(d.error ?? "Failed to generate invite link");
     } finally {
       setGeneratingInvite(false);
     }
@@ -94,6 +97,17 @@ export default function LinkedInAccountsPage() {
     }).then((r) => r.json());
     const url = d.url ?? d.link ?? d.hosted_url;
     if (url) window.open(url, "_blank");
+  }
+
+  async function revokeAccount(id: string, displayName: string) {
+    if (!confirm(`Remove "${displayName || "this account"}" and disconnect it from Unipile? This cannot be undone.`)) return;
+    setRevoking(id);
+    try {
+      await fetch(`/api/admin/growth-ops/linkedin-accounts?id=${id}`, { method: "DELETE" });
+      setAccounts((prev) => prev.filter((a) => a.id !== id));
+    } finally {
+      setRevoking(null);
+    }
   }
 
   return (
@@ -221,6 +235,7 @@ export default function LinkedInAccountsPage() {
             <tbody>
               {accounts.map((a) => {
                 const style = STATUS_STYLE[a.status] ?? STATUS_STYLE.CONNECTING;
+                const isRevoking = revoking === a.id;
                 return (
                   <tr key={a.id} className="border-b border-cos-border/50 last:border-0 hover:bg-cos-cloud/30 transition-colors">
                     <td className="px-4 py-3 font-medium text-cos-midnight">{a.display_name || a.unipile_account_id}</td>
@@ -236,16 +251,27 @@ export default function LinkedInAccountsPage() {
                         ? new Date(a.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
                         : "—"}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      {(a.status === "CREDENTIALS" || a.status === "ERROR") && (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-3">
+                        {(a.status === "CREDENTIALS" || a.status === "ERROR") && (
+                          <button
+                            onClick={() => reconnect(a.unipile_account_id)}
+                            className="inline-flex items-center gap-1 text-xs text-cos-ember hover:underline"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Reconnect
+                          </button>
+                        )}
                         <button
-                          onClick={() => reconnect(a.unipile_account_id)}
-                          className="inline-flex items-center gap-1 text-xs text-cos-ember hover:underline"
+                          onClick={() => revokeAccount(a.id, a.display_name)}
+                          disabled={isRevoking}
+                          className="inline-flex items-center gap-1 text-xs text-cos-slate hover:text-red-600 disabled:opacity-40 transition-colors"
+                          title="Remove and disconnect this account"
                         >
-                          <AlertTriangle className="h-3.5 w-3.5" />
-                          Reconnect
+                          {isRevoking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          Revoke
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 );

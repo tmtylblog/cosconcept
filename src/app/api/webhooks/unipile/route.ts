@@ -38,20 +38,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Bad JSON" }, { status: 400 });
   }
 
-  const event = (body.event ?? body.status ?? "") as string;
+  // Unipile may send event as: the status value directly ("OK"), or an event name
+  // ("account_connected") alongside a separate status field. Normalise both.
+  const rawEvent = (body.event ?? "") as string;
+  const rawStatus = (body.status ?? "") as string;
+  const STATUS_VALUES = ["OK", "CREDENTIALS", "ERROR", "CONNECTING", "STOPPED"];
+  const resolvedStatus = STATUS_VALUES.find((s) => s === rawEvent || s === rawStatus) ?? null;
 
   try {
     // ── Account status changes (including new connections) ────────────────
-    if (["OK", "CREDENTIALS", "ERROR", "CONNECTING", "STOPPED"].includes(event)) {
+    if (resolvedStatus) {
       const unipileAccountId = (body.account_id ?? body.id) as string;
-      const displayName = (body.name ?? body.display_name ?? body.username ?? "") as string;
-      const linkedinUsername = (body.username ?? body.linkedin_username ?? null) as string | null;
+      // Unipile may nest profile data — check multiple locations
+      const acctData = (body.account ?? {}) as Record<string, unknown>;
+      const displayName = (
+        body.name ?? body.display_name ?? acctData.name ?? acctData.display_name ?? body.username ?? acctData.username ?? ""
+      ) as string;
+      const linkedinUsername = (body.username ?? acctData.username ?? body.linkedin_username ?? null) as string | null;
 
       if (unipileAccountId) {
         // Try update first; if no rows affected, this is a new account — insert it
         const updated = await db
           .update(growthOpsLinkedInAccounts)
-          .set({ status: event, updatedAt: new Date() })
+          .set({
+            status: resolvedStatus,
+            // Always update name/username if we have them — fixes blank-name ghost rows
+            ...(displayName ? { displayName } : {}),
+            ...(linkedinUsername ? { linkedinUsername } : {}),
+            updatedAt: new Date(),
+          })
           .where(eq(growthOpsLinkedInAccounts.unipileAccountId, unipileAccountId));
 
         // @ts-expect-error — rowCount is available on the underlying result
@@ -64,15 +79,9 @@ export async function POST(req: NextRequest) {
               unipileAccountId,
               displayName: displayName || unipileAccountId,
               linkedinUsername,
-              status: event,
+              status: resolvedStatus,
             })
             .onConflictDoNothing();
-        } else if (displayName) {
-          // Update name too if provided
-          await db
-            .update(growthOpsLinkedInAccounts)
-            .set({ displayName, linkedinUsername, updatedAt: new Date() })
-            .where(eq(growthOpsLinkedInAccounts.unipileAccountId, unipileAccountId));
         }
       }
       return NextResponse.json({ ok: true });

@@ -24,19 +24,35 @@ export async function GET(req: NextRequest) {
       const live = await UnipileClient.listAccounts();
       const items = live.items ?? [];
       for (const acct of items) {
-        // Unipile /accounts often returns blank name — fetch individual account for richer data
+        // Always fetch individual account for richest data (list endpoint often returns blank names)
         let displayName = acct.name ?? "";
         let linkedinUsername: string | null = null;
-        if (!displayName || displayName === acct.id) {
-          try {
-            const detail = await UnipileClient.getAccount(acct.id) as {
-              name?: string; username?: string; connection_params?: { username?: string; name?: string };
+        try {
+          const detail = await UnipileClient.getAccount(acct.id) as {
+            name?: string;
+            username?: string;
+            // Unipile sometimes nests profile info under connection_params
+            connection_params?: {
+              username?: string;
+              name?: string;
+              full_name?: string;
+              first_name?: string;
+              last_name?: string;
             };
-            displayName = detail.name ?? detail.connection_params?.name ?? detail.connection_params?.username ?? "";
-            linkedinUsername = detail.username ?? detail.connection_params?.username ?? null;
-          } catch {
-            // Use whatever we have
-          }
+          };
+          const cp = detail.connection_params;
+          displayName =
+            detail.name ||
+            cp?.full_name ||
+            cp?.name ||
+            ([cp?.first_name, cp?.last_name].filter(Boolean).join(" ")) ||
+            detail.username ||
+            cp?.username ||
+            displayName ||
+            "";
+          linkedinUsername = detail.username ?? cp?.username ?? null;
+        } catch {
+          // Use list-level data if individual fetch fails
         }
         await db
           .insert(growthOpsLinkedInAccounts)
@@ -78,6 +94,25 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   if (!await checkAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const id = req.nextUrl.searchParams.get("id") ?? "";
+
+  // Look up the Unipile account ID so we can disconnect it there too
+  const rows = await db
+    .select({ unipileAccountId: growthOpsLinkedInAccounts.unipileAccountId })
+    .from(growthOpsLinkedInAccounts)
+    .where(eq(growthOpsLinkedInAccounts.id, id))
+    .limit(1);
+
+  // Remove from our DB first
   await db.delete(growthOpsLinkedInAccounts).where(eq(growthOpsLinkedInAccounts.id, id));
+
+  // Disconnect from Unipile (non-fatal if it fails — account may already be gone)
+  if (rows[0]?.unipileAccountId) {
+    try {
+      await UnipileClient.deleteAccount(rows[0].unipileAccountId);
+    } catch {
+      // Non-fatal — Unipile disconnection failure should not block the UI
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }

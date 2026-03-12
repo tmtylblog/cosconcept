@@ -352,15 +352,17 @@ export async function POST(req: NextRequest) {
 
   try {
     if (body.action === "generateAuthLink") {
-      const successUrl = `${process.env.NEXT_PUBLIC_APP_URL}/linkedin-connected`;
-      const notifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/unipile`;
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.BETTER_AUTH_URL ?? "").replace(/\/$/, "");
+      const successUrl = `${appUrl}/linkedin-connected`;
+      const notifyUrl = `${appUrl}/api/webhooks/unipile`;
       const data = await UnipileClient.generateHostedAuthLink(successUrl, notifyUrl);
       return NextResponse.json(data);
     }
 
     if (body.action === "generateReconnectLink") {
-      const successUrl = `${process.env.NEXT_PUBLIC_APP_URL}/linkedin-connected`;
-      const notifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/unipile`;
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.BETTER_AUTH_URL ?? "").replace(/\/$/, "");
+      const successUrl = `${appUrl}/linkedin-connected`;
+      const notifyUrl = `${appUrl}/api/webhooks/unipile`;
       const data = await UnipileClient.generateReconnectLink(
         body.accountId as string,
         successUrl,
