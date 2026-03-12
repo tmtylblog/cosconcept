@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     const stripe = getStripe();
     const session = await stripe.billingPortal.sessions.create({
       customer: sub.stripeCustomerId,
-      return_url: `${process.env.BETTER_AUTH_URL}/settings/billing`,
+      return_url: `${process.env.BETTER_AUTH_URL}/settings/billing?portal=true`,
     });
 
     return NextResponse.json({ url: session.url });

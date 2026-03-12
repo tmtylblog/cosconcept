@@ -19,7 +19,7 @@ const plans: PlanId[] = ["free", "pro", "enterprise"];
 
 export default function BillingPage() {
   const { data: activeOrg } = useActiveOrganization();
-  const { plan: currentPlan, usage, isLoading: planLoading } = usePlan();
+  const { plan: currentPlan, usage, isLoading: planLoading, refresh: refreshPlan } = usePlan();
   const [loading, setLoading] = useState<string | null>(null);
   const [notice, setNotice] = useState<{
     type: "success" | "error" | "info";
@@ -28,18 +28,50 @@ export default function BillingPage() {
   const searchParams = useSearchParams();
 
   const orgId = activeOrg?.id ?? "";
+  const [syncing, setSyncing] = useState(false);
+
+  // Sync subscription state from Stripe after checkout or portal return
+  async function syncFromStripe() {
+    if (!orgId) return;
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/stripe/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId: orgId }),
+      });
+      if (res.ok) {
+        // Refresh plan data from our DB (now updated by sync)
+        await new Promise((r) => setTimeout(r, 300));
+        refreshPlan();
+      }
+    } catch {
+      // Sync failure is non-fatal — webhook will eventually catch up
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   // Handle Stripe redirect params
   useEffect(() => {
     if (searchParams.get("success") === "true") {
-      setNotice({ type: "success", message: "Your plan has been upgraded. Welcome aboard!" });
-      // Clean URL
-      window.history.replaceState({}, "", "/settings/billing");
+      setNotice({ type: "success", message: "Syncing your subscription..." });
+      syncFromStripe().then(() => {
+        setNotice({ type: "success", message: "Your plan has been upgraded. Welcome aboard!" });
+        window.history.replaceState({}, "", "/settings/billing");
+      });
     } else if (searchParams.get("canceled") === "true") {
       setNotice({ type: "info", message: "Checkout canceled — no changes were made." });
       window.history.replaceState({}, "", "/settings/billing");
+    } else if (searchParams.get("portal") === "true") {
+      setNotice({ type: "info", message: "Syncing subscription changes..." });
+      syncFromStripe().then(() => {
+        setNotice(null);
+        window.history.replaceState({}, "", "/settings/billing");
+      });
     }
-  }, [searchParams]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, orgId]);
 
   async function handleUpgrade(plan: "pro" | "enterprise") {
     if (!orgId) return;

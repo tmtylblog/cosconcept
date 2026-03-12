@@ -231,6 +231,18 @@ Creates a Stripe Customer Portal session for managing existing billing. Requires
 - Returns `{ url }` -- redirect URL to Stripe billing portal.
 - Returns 404 if no `stripeCustomerId` exists for the org.
 
+### `POST /api/stripe/sync`
+**File:** `src/app/api/stripe/sync/route.ts`
+
+Pulls the latest subscription state directly from Stripe and syncs it to the DB. Used as a fallback when webhooks aren't configured (dev mode) and as a verify-on-redirect mechanism. Requires auth session.
+
+- Body: `{ organizationId }`
+- Lists subscriptions for the org's Stripe customer, finds the active one
+- Resolves plan from price ID (env vars, falls back to `"pro"` for any paid sub)
+- Updates `subscriptions` row with plan, status, period dates, cancelAtPeriodEnd
+- Returns `{ synced, plan, status, cancelAtPeriodEnd }`
+- Called automatically by the billing page after checkout success (`?success=true`) and portal return (`?portal=true`)
+
 ### `GET /api/billing/usage?organizationId=xxx`
 **File:** `src/app/api/billing/usage/route.ts`
 
@@ -327,6 +339,7 @@ Tracks all AI feature usage. Used by billing usage-checker for metering.
 | `src/hooks/use-plan.ts` | Client-side `usePlan()` hook |
 | `src/app/api/stripe/checkout/route.ts` | Stripe Checkout session creation |
 | `src/app/api/stripe/portal/route.ts` | Stripe Customer Portal session creation |
+| `src/app/api/stripe/sync/route.ts` | Pull subscription state from Stripe (webhook-free sync) |
 | `src/app/api/billing/usage/route.ts` | Usage data API endpoint |
 | `src/app/api/webhooks/stripe/route.ts` | Stripe webhook handler |
 | `src/app/(app)/settings/billing/page.tsx` | Billing settings UI |
