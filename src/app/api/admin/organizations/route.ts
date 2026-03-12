@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
-    // Join organizations with subscriptions and count members
+    // Join organizations with subscriptions and count members + legacy users
     const rows = await db.execute(sql`
       SELECT
         o.id,
@@ -20,6 +20,9 @@ export async function GET() {
         COALESCE(s.plan, 'free') AS plan,
         COALESCE(s.status, 'active') AS status,
         (SELECT COUNT(*) FROM "members" m WHERE m."organization_id" = o.id)::int AS members,
+        (SELECT COUNT(*) FROM "legacy_users" lu
+         INNER JOIN "service_firms" sf ON lu."firm_id" = sf."id"
+         WHERE sf."organization_id" = o.id)::int AS "legacyUsers",
         o."created_at" AS "createdAt"
       FROM "organizations" o
       LEFT JOIN "subscriptions" s ON s."organization_id" = o.id
@@ -32,7 +35,9 @@ export async function GET() {
       slug: r.slug,
       plan: r.plan,
       status: r.status,
-      members: Number(r.members),
+      members: Number(r.members) + Number(r.legacyUsers ?? 0),
+      registeredMembers: Number(r.members),
+      legacyUsers: Number(r.legacyUsers ?? 0),
       createdAt: r.createdAt
         ? new Date(r.createdAt as string).toLocaleDateString()
         : "",
