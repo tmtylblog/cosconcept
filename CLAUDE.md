@@ -140,6 +140,25 @@ drizzle.config.ts                   # Drizzle Kit config
 5. **Bidirectional Matching:** Both parties must want what the other offers
 6. **Progressive Disclosure:** Get basic info first, enrich over time
 
+## ⚠️ VERCEL BUILD IS STRICTER THAN LOCAL BUILD
+
+**Vercel's production ESLint catches things that `next build` locally does NOT.** This means your code can compile locally but FAIL on Vercel. Common failures:
+
+1. **Unescaped entities in JSX text** — `react/no-unescaped-entities`:
+   - ❌ `you've` → use `you&apos;ve`
+   - ❌ `"quoted"` → use `&quot;quoted&quot;`
+   - ❌ `it's`, `don't`, `won't` → use `it&apos;s`, `don&apos;t`, `won&apos;t`
+
+2. **After pushing, ALWAYS deploy and verify:**
+   ```bash
+   vercel --yes --prod
+   vercel ls --prod 2>&1 | head -3   # Must show "● Ready", NOT "● Error"
+   ```
+
+3. **If your deploy shows `● Error`**, check logs with `vercel inspect <url> --logs` and fix immediately. A failed deploy means production is stuck on the PREVIOUS version and none of your changes are live.
+
+4. **Check `STATUS.md`** at project root before starting work — it tracks which agent owns which files and recent incidents.
+
 ## STRICT: Pre-Push Sync Rule (MANDATORY)
 
 **Before EVERY commit or push to remote, you MUST:**
