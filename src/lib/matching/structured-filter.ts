@@ -132,8 +132,10 @@ export async function structuredFilter(
     returnFields.push("[] AS matchedServices");
   }
 
+  // Use OR — a firm matching ANY criterion is a candidate; score reflects how many it matches.
+  // AND was too strict: most firms lack IN_CATEGORY edges, causing zero results.
   const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    conditions.length > 0 ? `WHERE ${conditions.join(" OR ")}` : "";
 
   const query = `
     ${matchClause}
