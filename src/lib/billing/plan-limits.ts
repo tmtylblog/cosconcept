@@ -10,8 +10,10 @@
 export type PlanId = "free" | "pro" | "enterprise";
 
 export interface PlanLimits {
-  /** Max team members (seats) */
+  /** Max team members (seats) included in the plan */
   members: number;
+  /** Price per additional seat beyond included (0 = not available — must upgrade) */
+  additionalSeatPriceUsd: number;
   /** Potential matches surfaced per week */
   potentialMatchesPerWeek: number;
   /** AI Perfect Matches per month */
@@ -45,6 +47,7 @@ export interface PlanLimits {
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   free: {
     members: 1,
+    additionalSeatPriceUsd: 0, // must upgrade to Pro
     potentialMatchesPerWeek: 5,
     aiPerfectMatchesPerMonth: 1, // trial
     opportunityResponsesPerMonth: 0,
@@ -61,6 +64,7 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   },
   pro: {
     members: 3,
+    additionalSeatPriceUsd: 50, // $50/mo per extra seat
     potentialMatchesPerWeek: 12,
     aiPerfectMatchesPerMonth: 2,
     opportunityResponsesPerMonth: 3,
@@ -76,7 +80,8 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     clientDisplayLimit: -1,     // all clients
   },
   enterprise: {
-    members: Infinity, // custom
+    members: Infinity,
+    additionalSeatPriceUsd: 0, // unlimited seats included
     potentialMatchesPerWeek: Infinity,
     aiPerfectMatchesPerMonth: Infinity,
     opportunityResponsesPerMonth: Infinity,
