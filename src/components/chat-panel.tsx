@@ -116,6 +116,20 @@ const authWelcomeMessages: UIMessage[] = [
   },
 ];
 
+/** Discover mode welcome — shown when user navigates to /discover */
+const discoverWelcomeMessages: UIMessage[] = [
+  {
+    id: "welcome-discover",
+    role: "assistant",
+    parts: [
+      {
+        type: "text",
+        text: "Hey! I'm your partner scout. Tell me what kind of firm you're looking for — a specific capability, industry, or type — and I'll find the best matches from the network.",
+      },
+    ],
+  },
+];
+
 // ─── Onboarding question map (field → bolded question text) ────────
 // v2 flow: 5 questions (new users)
 const ONBOARDING_QUESTIONS_V2: { field: string; question: string }[] = [
@@ -142,6 +156,17 @@ const ONBOARDING_QUESTIONS_V1: { field: string; question: string }[] = [
 // Active question set for new onboarding — use v2
 const ONBOARDING_QUESTIONS = ONBOARDING_QUESTIONS_V2;
 
+interface DiscoverResult {
+  firmId: string;
+  firmName: string;
+  matchScore: number;
+  explanation: string;
+  categories: string[];
+  skills: string[];
+  industries: string[];
+  website?: string;
+}
+
 interface ChatPanelProps {
   isGuest?: boolean;
   isOnboarding?: boolean;
@@ -149,9 +174,10 @@ interface ChatPanelProps {
   answeredCount?: number;
   firmSection?: string | null;
   onRequestLogin?: () => void;
+  onSearchResults?: (results: DiscoverResult[], query: string) => void;
 }
 
-export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount, firmSection, onRequestLogin }: ChatPanelProps) {
+export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount, firmSection, onRequestLogin, onSearchResults }: ChatPanelProps) {
   const router = useRouter();
   const { data: activeOrg } = useActiveOrganization();
   const pathname = usePathname();
@@ -291,6 +317,10 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     // (can't rely on async loadGreeting — useChat initializes from this value)
     if (!isGuest && isOnboarding) {
       return onboardingWelcomeMessages;
+    }
+    // Discover mode: show partner scout welcome
+    if (firmSection === "discover") {
+      return discoverWelcomeMessages;
     }
     // Post-onboarding auth: show contextual default while personalized greeting loads
     return authWelcomeMessages;
@@ -617,6 +647,17 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           }, 4000);
         }
 
+        // Handle search_partners tool results — push to discover panel if on /discover
+        if (toolName === "search_partners" && onSearchResults) {
+          const output = (part as { output?: unknown }).output as
+            | { candidates?: DiscoverResult[]; totalFound?: number }
+            | undefined;
+          const args = (part as { args?: { query?: string } }).args;
+          if (output?.candidates) {
+            onSearchResults(output.candidates, args?.query ?? "");
+          }
+        }
+
         // Handle navigate_section tool results (authenticated firm pages)
         if (toolName === "navigate_section") {
           const output = (part as { output?: unknown }).output as
@@ -628,7 +669,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         }
       }
     }
-  }, [messages, updateProfileField, isGuest, setGuestPreference, onRequestLogin, forceFlushToDb, router]);
+  }, [messages, updateProfileField, isGuest, setGuestPreference, onRequestLogin, forceFlushToDb, router, onSearchResults]);
 
   // ─── Auto-continuation safety net ──────────────────────────
   // If Ossy saved a preference (tool result present) but didn't ask the
@@ -746,6 +787,23 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   };
 
   const atGuestLimit = isGuest && (showLoginPrompt || guestMessageCount >= GUEST_MESSAGE_LIMIT);
+
+  // ─── Inject chat text from discover page starters ────────────
+  // The discover page dispatches "cos:inject-chat" events with starter text.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<{ text: string }>).detail?.text;
+      if (!text) return;
+      setInput(text);
+      // Auto-submit after a short delay so user sees the text first
+      setTimeout(() => {
+        sendMessage({ text });
+        setInput("");
+      }, 150);
+    };
+    window.addEventListener("cos:inject-chat", handler);
+    return () => window.removeEventListener("cos:inject-chat", handler);
+  }, [sendMessage]);
 
   // Re-focus input when assistant finishes responding (status → ready).
   // The textarea is disabled during loading, so focus is lost. Re-acquire it.
@@ -898,6 +956,35 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                     };
                     // Extract tool name from part type (strip "tool-" prefix)
                     const toolName = part.type.slice(5);
+
+                    // On the discover page, search_partners results go to the middle panel.
+                    // Show a compact "results in panel" indicator instead of full card list.
+                    if (firmSection === "discover" && toolName === "search_partners") {
+                      if (toolPart.state === "output-available") {
+                        const output = toolPart.output as { candidates?: unknown[]; totalFound?: number } | undefined;
+                        const count = output?.candidates?.length ?? 0;
+                        return (
+                          <div key={partIdx} className="my-2">
+                            <div className="flex items-center gap-1.5 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/5 px-3 py-1.5">
+                              <Sparkles className="h-3.5 w-3.5 text-cos-electric" />
+                              <span className="text-xs font-medium text-cos-electric">
+                                {count > 0 ? `${count} match${count === 1 ? "" : "es"} loaded in panel` : "No matches found"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div key={partIdx} className="my-2">
+                            <div className="flex items-center gap-2 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/5 px-3 py-2">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-cos-electric" />
+                              <span className="text-xs font-medium text-cos-electric">Searching the network...</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                    }
+
                     return (
                       <div key={partIdx} className="my-2">
                         <ToolResultRenderer

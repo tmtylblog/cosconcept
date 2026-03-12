@@ -11,6 +11,7 @@ import { AuthOnboardingPanel } from "@/components/auth-onboarding-panel";
 import { EnrichmentProvider, useEnrichment } from "@/hooks/use-enrichment";
 import { ProfileProvider, useProfile } from "@/hooks/use-profile";
 import { GuestDataProvider, useGuestData } from "@/hooks/use-guest-data";
+import { DiscoverResultsProvider, useDiscoverResults, type DiscoverCandidate } from "@/hooks/use-discover-results";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { authClient, useSession, useActiveOrganization } from "@/lib/auth-client";
 import { getEmailDomain, isPersonalEmail } from "@/lib/email-validation";
@@ -40,7 +41,9 @@ export default function AppLayout({
 }) {
   return (
     <GuestDataProvider>
-      <AppLayoutOuter>{children}</AppLayoutOuter>
+      <DiscoverResultsProvider>
+        <AppLayoutOuter>{children}</AppLayoutOuter>
+      </DiscoverResultsProvider>
     </GuestDataProvider>
   );
 }
@@ -278,7 +281,14 @@ function AppLayoutInner({
     : pathname === "/firm/experience" ? "experience"
     : pathname === "/firm/preferences" ? "preferences"
     : pathname.startsWith("/firm/case-studies") ? "experience"
+    : pathname === "/discover" || pathname.startsWith("/discover/") ? "discover"
     : null;
+
+  // ─── Discover results context ────────────────────────────────
+  const discover = useDiscoverResults();
+  const handleSearchResults = (results: DiscoverCandidate[], query: string) => {
+    discover?.setResults(results, query);
+  };
 
   // ─── Derive app phase (5 states) ──────────────────────────
   // When admin is impersonating, skip onboarding gate so they can see the real app
@@ -869,10 +879,11 @@ function AppLayoutInner({
             {/* Right: Chat panel — desktop */}
             <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-midnight/20 lg:flex">
               <ChatPanel
-                key={chatKey}
+                key={`${chatKey}-${firmSection === "discover" ? "discover" : "app"}`}
                 isGuest={false}
                 firmSection={firmSection}
                 onRequestLogin={handleRequestLogin}
+                onSearchResults={pathname === "/discover" ? handleSearchResults : undefined}
               />
             </aside>
 
@@ -898,10 +909,11 @@ function AppLayoutInner({
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <ChatPanel
-                    key={chatKey}
+                    key={`${chatKey}-${firmSection === "discover" ? "discover" : "app"}`}
                     isGuest={false}
                     firmSection={firmSection}
                     onRequestLogin={handleRequestLogin}
+                    onSearchResults={pathname === "/discover" ? handleSearchResults : undefined}
                   />
                 </div>
               </div>

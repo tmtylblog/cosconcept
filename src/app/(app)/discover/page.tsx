@@ -1,53 +1,204 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Search, Filter, Sparkles, Building2, ArrowRight, ChevronDown, X } from "lucide-react";
+import { useCallback, useState } from "react";
+import { ArrowRight, Building2, Sparkles, X, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { usePlan } from "@/hooks/use-plan";
+import { useDiscoverResults } from "@/hooks/use-discover-results";
 import { useActiveOrganization } from "@/lib/auth-client";
+import { cn } from "@/lib/utils";
 
-interface MatchCandidate {
-  firmId: string;
-  firmName: string;
-  totalScore: number;
-  structuredScore: number;
-  vectorScore: number;
-  llmScore?: number;
-  matchExplanation?: string;
-  bidirectionalFit?: { theyWantUs: number; weWantThem: number };
-  preview: {
-    categories: string[];
-    topServices: string[];
-    topSkills: string[];
-    industries: string[];
-    website?: string;
-  };
+// ─── Conversation starters ───────────────────────────────────
+// Clicking injects text into Ossy's chat via a custom event
+
+const STARTERS = [
+  "Find me a Shopify agency in APAC",
+  "Who complements our services in B2B SaaS?",
+  "Looking for a fractional CFO to refer clients to",
+  "Find UX design partners for healthcare projects",
+];
+
+function injectIntoChat(text: string) {
+  // Dispatch a custom event the ChatPanel listens for
+  window.dispatchEvent(new CustomEvent("cos:inject-chat", { detail: { text } }));
 }
 
-interface SearchStats {
-  layer1Candidates: number;
-  layer2Candidates: number;
-  layer3Ranked: number;
-  totalDurationMs: number;
-  estimatedCostUsd: number;
+// ─── Match Card ──────────────────────────────────────────────
+
+function MatchCard({
+  match,
+  onRequestPartnership,
+  requesting,
+  requested,
+  index,
+}: {
+  match: NonNullable<ReturnType<typeof useDiscoverResults>>["results"][number];
+  onRequestPartnership: (firmId: string) => void;
+  requesting: boolean;
+  requested: boolean;
+  index: number;
+}) {
+  const score = match.matchScore;
+
+  return (
+    <div
+      className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-5 hover:border-cos-electric/30 transition-colors animate-fade-slide-in"
+      style={{ animationDelay: `${index * 60}ms`, animationFillMode: "both" }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-cos-lg bg-cos-electric/10">
+            <Building2 className="h-5 w-5 text-cos-electric" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-heading text-sm font-semibold text-cos-midnight truncate">
+              {match.firmName}
+            </h3>
+            <p className="mt-0.5 text-xs text-cos-slate truncate">
+              {match.categories.slice(0, 2).join(" · ") || "Professional Services"}
+            </p>
+          </div>
+        </div>
+        <div
+          className={cn(
+            "shrink-0 inline-flex items-center rounded-cos-full px-2 py-0.5 text-xs font-medium",
+            score >= 80
+              ? "bg-green-100 text-green-700"
+              : score >= 60
+                ? "bg-cos-electric/10 text-cos-electric"
+                : "bg-cos-cloud text-cos-slate"
+          )}
+        >
+          {score}% match
+        </div>
+      </div>
+
+      {match.explanation && (
+        <p className="mt-3 text-sm text-cos-midnight/80 leading-relaxed">
+          {match.explanation}
+        </p>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {match.skills.slice(0, 4).map((skill) => (
+          <span
+            key={skill}
+            className="rounded-cos-full bg-cos-cloud px-2 py-0.5 text-xs text-cos-slate"
+          >
+            {skill}
+          </span>
+        ))}
+        {match.industries.slice(0, 2).map((industry) => (
+          <span
+            key={industry}
+            className="rounded-cos-full bg-cos-warm/10 px-2 py-0.5 text-xs text-cos-warm"
+          >
+            {industry}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-4 flex items-center gap-2">
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/discover/${match.firmId}`}>
+            View Profile
+            <ExternalLink className="ml-1 h-3 w-3" />
+          </Link>
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={requested ? "text-cos-signal" : "text-cos-slate"}
+          disabled={requesting || requested}
+          onClick={() => onRequestPartnership(match.firmId)}
+        >
+          {requested ? "Requested ✓" : requesting ? "Requesting..." : "Request Partnership"}
+        </Button>
+      </div>
+    </div>
+  );
 }
+
+// ─── Skeleton Card ───────────────────────────────────────────
+
+function SkeletonCard({ index }: { index: number }) {
+  return (
+    <div
+      className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-5 animate-pulse"
+      style={{ animationDelay: `${index * 100}ms` }}
+    >
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 rounded-cos-lg bg-cos-cloud" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 w-36 rounded bg-cos-cloud" />
+          <div className="h-3 w-24 rounded bg-cos-cloud" />
+        </div>
+        <div className="h-5 w-16 rounded-full bg-cos-cloud" />
+      </div>
+      <div className="mt-3 space-y-2">
+        <div className="h-3 w-full rounded bg-cos-cloud" />
+        <div className="h-3 w-4/5 rounded bg-cos-cloud" />
+      </div>
+      <div className="mt-3 flex gap-1.5">
+        <div className="h-5 w-16 rounded-full bg-cos-cloud" />
+        <div className="h-5 w-20 rounded-full bg-cos-cloud" />
+        <div className="h-5 w-14 rounded-full bg-cos-cloud" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Empty / Idle State ──────────────────────────────────────
+
+function IdleState() {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="flex h-14 w-14 items-center justify-center rounded-cos-2xl bg-gradient-to-br from-cos-electric/20 to-cos-signal/20">
+        <Sparkles className="h-7 w-7 text-cos-electric" />
+      </div>
+
+      <h2 className="mt-5 font-heading text-lg font-bold text-cos-midnight">
+        Tell Ossy what you&apos;re looking for
+      </h2>
+      <p className="mt-2 max-w-sm text-sm text-cos-slate leading-relaxed">
+        Ask Ossy in the panel on the right. She&apos;ll ask a couple of questions
+        and find the best-fit partners from the network.
+      </p>
+
+      {/* Arrow hint */}
+      <div className="mt-6 flex items-center gap-2 rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-5 py-3">
+        <span className="text-sm font-medium text-cos-electric">
+          Start a conversation with Ossy
+        </span>
+        <ArrowRight className="h-4 w-4 text-cos-electric" />
+      </div>
+
+      {/* Conversation starters */}
+      <div className="mt-6 w-full max-w-lg">
+        <p className="mb-3 text-xs font-medium text-cos-slate uppercase tracking-wide">
+          Try asking
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {STARTERS.map((starter) => (
+            <button
+              key={starter}
+              onClick={() => injectIntoChat(starter)}
+              className="rounded-cos-xl border border-cos-border bg-white px-4 py-3 text-left text-sm text-cos-midnight hover:border-cos-electric/40 hover:bg-cos-electric/5 transition-colors"
+            >
+              &ldquo;{starter}&rdquo;
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ────────────────────────────────────────────────────
 
 export default function DiscoverPage() {
-  const { limits, remaining, plan, refresh: refreshPlan } = usePlan();
+  const discover = useDiscoverResults();
   const { data: activeOrg } = useActiveOrganization();
-
-  const searchLimit = limits.monthlySearches;
-  const searchesRemaining = remaining.searchesThisMonth;
-  const isUnlimited = searchLimit === -1;
-  const isExhausted = !isUnlimited && searchesRemaining <= 0;
-
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<MatchCandidate[]>([]);
-  const [stats, setStats] = useState<SearchStats | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [searchGated, setSearchGated] = useState(false);
   const [requestingPartnership, setRequestingPartnership] = useState<string | null>(null);
   const [partnershipRequested, setPartnershipRequested] = useState<Set<string>>(new Set());
 
@@ -56,14 +207,12 @@ export default function DiscoverPage() {
       if (!activeOrg?.id) return;
       const firmId = `firm_${activeOrg.id}`;
       setRequestingPartnership(targetFirmId);
-
       try {
         const res = await fetch("/api/partnerships", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ firmId, targetFirmId }),
         });
-
         if (res.ok || res.status === 409) {
           setPartnershipRequested((prev) => new Set(prev).add(targetFirmId));
         }
@@ -76,316 +225,67 @@ export default function DiscoverPage() {
     [activeOrg?.id]
   );
 
-  const handleSearch = useCallback(async () => {
-    if (!query.trim()) return;
-    setSearching(true);
-    setHasSearched(true);
-    setSearchGated(false);
+  if (!discover) return null;
 
-    try {
-      const res = await fetch("/api/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim() }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setResults(data.candidates ?? []);
-        setStats(data.stats ?? null);
-        // Refresh plan data to update remaining count
-        refreshPlan();
-      } else if (res.status === 403) {
-        // Search limit reached
-        setSearchGated(true);
-        setResults([]);
-        setStats(null);
-        refreshPlan();
-      }
-    } catch {
-      /* ignore */
-    } finally {
-      setSearching(false);
-    }
-  }, [query, refreshPlan]);
+  const { results, searching, searchQuery } = discover;
+  const hasResults = results.length > 0;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
-      <div>
-        <h2 className="font-heading text-lg font-semibold text-cos-midnight">
-          Discover Partners
-        </h2>
-        <p className="mt-1 text-sm text-cos-slate">
-          Search the network for firms that complement your services.
-        </p>
+    <div className="mx-auto max-w-3xl px-6 py-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="font-heading text-lg font-semibold text-cos-midnight">
+            Discover Partners
+          </h2>
+          {hasResults ? (
+            <p className="mt-0.5 text-sm text-cos-slate">
+              {results.length} match{results.length === 1 ? "" : "es"}
+              {searchQuery ? ` for "${searchQuery}"` : ""}
+            </p>
+          ) : (
+            <p className="mt-0.5 text-sm text-cos-slate">
+              AI-powered partner matching — just ask Ossy →
+            </p>
+          )}
+        </div>
+        {hasResults && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-cos-slate hover:text-cos-midnight"
+            onClick={() => discover.clear()}
+          >
+            <X className="mr-1 h-3.5 w-3.5" />
+            Clear
+          </Button>
+        )}
       </div>
 
-      {/* Search counter banner */}
-      {!isUnlimited && (
-        <div className={`flex items-center justify-between rounded-cos-lg border px-4 py-2.5 text-sm ${
-          searchesRemaining <= 3
-            ? "border-cos-ember/30 bg-cos-ember/5 text-cos-ember"
-            : "border-cos-electric/20 bg-cos-electric/5 text-cos-electric"
-        }`}>
-          <span>
-            <span className="font-semibold">{Math.max(0, searchesRemaining)}</span> of{" "}
-            <span className="font-semibold">{searchLimit}</span> free searches remaining this month
-          </span>
-          {searchesRemaining <= 3 && (
-            <Button variant="ghost" size="sm" className="text-cos-electric hover:text-cos-electric/80" asChild>
-              <a href="/settings/billing">Upgrade to Pro</a>
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* Search bar */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSearch();
-        }}
-        className="flex items-center gap-2"
-      >
-        <div className="flex flex-1 items-center gap-2 rounded-cos-xl border border-cos-border bg-cos-cloud px-4 py-2.5 focus-within:border-cos-electric focus-within:ring-1 focus-within:ring-cos-electric">
-          <Search className="h-4 w-4 text-cos-slate" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Try: &quot;Shopify agency in APAC&quot; or &quot;B2B SaaS marketing partner&quot;"
-            className="flex-1 bg-transparent text-sm text-cos-midnight placeholder:text-cos-slate-light focus:outline-none"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => {
-                setQuery("");
-                setResults([]);
-                setHasSearched(false);
-              }}
-              className="text-cos-slate-light hover:text-cos-midnight"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setShowFilters(!showFilters)}
-        >
-          <Filter className="mr-1.5 h-3.5 w-3.5" />
-          Filters
-          <ChevronDown className={`ml-1 h-3 w-3 transition-transform ${showFilters ? "rotate-180" : ""}`} />
-        </Button>
-        <Button type="submit" disabled={searching || !query.trim()}>
-          {searching ? "Searching..." : "Search"}
-        </Button>
-      </form>
-
-      {/* Filters panel (collapsible) */}
-      {showFilters && (
-        <div className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-4">
-          <p className="text-xs text-cos-slate">
-            Filter controls coming soon. For now, use natural language in the
-            search bar — Ossy understands skills, industries, locations, and firm
-            types.
-          </p>
-        </div>
-      )}
-
-      {/* Stats bar */}
-      {stats && (
-        <div className="flex items-center gap-4 text-xs text-cos-slate">
-          <span>{stats.layer3Ranked} results</span>
-          <span>from {stats.layer1Candidates} candidates</span>
-          <span>{stats.totalDurationMs}ms</span>
-          <span>~${stats.estimatedCostUsd.toFixed(4)} cost</span>
-        </div>
-      )}
-
-      {/* Search gate — shown when free trial exhausted */}
-      {(searchGated || isExhausted) && (
-        <div className="rounded-cos-2xl border border-cos-ember/20 bg-cos-ember/5 p-6 text-center">
-          <Sparkles className="mx-auto h-8 w-8 text-cos-ember" />
-          <h3 className="mt-3 font-heading text-sm font-semibold text-cos-midnight">
-            You&apos;ve used all {searchLimit} free searches this month
-          </h3>
-          <p className="mt-1 max-w-sm mx-auto text-xs text-cos-slate">
-            Upgrade to Pro for unlimited network searches, enhanced profiles, and more.
-          </p>
-          <Button className="mt-4" asChild>
-            <a href="/settings/billing">Upgrade to Pro — $199/mo</a>
-          </Button>
-        </div>
-      )}
-
-      {/* Results */}
-      {results.length > 0 ? (
-        <div className="space-y-3">
-          {results.map((match) => (
-            <MatchCard
-              key={match.firmId}
-              match={match}
-              onRequestPartnership={handleRequestPartnership}
-              requesting={requestingPartnership === match.firmId}
-              requested={partnershipRequested.has(match.firmId)}
-            />
-          ))}
-        </div>
-      ) : hasSearched && !searching ? (
-        <div className="flex flex-col items-center justify-center rounded-cos-2xl border border-dashed border-cos-border py-12 text-center">
-          <Search className="h-8 w-8 text-cos-slate-light" />
-          <h3 className="mt-3 font-heading text-sm font-semibold text-cos-midnight">
-            No matches found
-          </h3>
-          <p className="mt-1 max-w-xs text-xs text-cos-slate">
-            Try broadening your search. Use different skills, industries, or
-            remove geographic constraints.
-          </p>
-        </div>
-      ) : !hasSearched ? (
-        <div className="flex flex-col items-center justify-center rounded-cos-2xl border border-dashed border-cos-border py-16 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-cos-full bg-cos-electric/10">
-            <Sparkles className="h-6 w-6 text-cos-electric" />
-          </div>
-          <h3 className="mt-4 font-heading text-sm font-semibold text-cos-midnight">
-            Search the Network
-          </h3>
-          <p className="mt-1 max-w-xs text-xs text-cos-slate">
-            Describe what you need in natural language. Ossy will find firms that
-            complement your capabilities using AI-powered matching.
-          </p>
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {[
-              "Shopify agency in APAC",
-              "B2B SaaS marketing partner",
-              "Fractional CFO for startups",
-              "UX design for healthcare",
-            ].map((suggestion) => (
-              <button
-                key={suggestion}
-                onClick={() => {
-                  setQuery(suggestion);
-                }}
-                className="rounded-cos-lg border border-cos-border bg-cos-cloud px-3 py-1.5 text-xs text-cos-slate hover:bg-cos-surface-raised hover:text-cos-midnight transition-colors"
-              >
-                {suggestion}
-              </button>
+      {/* Content area */}
+      <div className="mt-6">
+        {searching ? (
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <SkeletonCard key={i} index={i} />
             ))}
           </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-// ─── Match Card ──────────────────────────────────────────
-
-function MatchCard({
-  match,
-  onRequestPartnership,
-  requesting,
-  requested,
-}: {
-  match: MatchCandidate;
-  onRequestPartnership: (firmId: string) => void;
-  requesting: boolean;
-  requested: boolean;
-}) {
-  const scorePercent = Math.round(match.totalScore * 100);
-
-  return (
-    <div className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-5 hover:border-cos-electric/30 transition-colors">
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-cos-lg bg-cos-electric/10">
-            <Building2 className="h-5 w-5 text-cos-electric" />
+        ) : hasResults ? (
+          <div className="space-y-3">
+            {results.map((match, i) => (
+              <MatchCard
+                key={match.firmId}
+                match={match}
+                index={i}
+                onRequestPartnership={handleRequestPartnership}
+                requesting={requestingPartnership === match.firmId}
+                requested={partnershipRequested.has(match.firmId)}
+              />
+            ))}
           </div>
-          <div>
-            <h3 className="font-heading text-sm font-semibold text-cos-midnight">
-              {match.firmName}
-            </h3>
-            <p className="mt-0.5 text-xs text-cos-slate">
-              {match.preview.categories.slice(0, 2).join(" · ") || "Professional Services"}
-            </p>
-          </div>
-        </div>
-        <div className="text-right">
-          <div
-            className={`inline-flex items-center rounded-cos-full px-2 py-0.5 text-xs font-medium ${
-              scorePercent >= 80
-                ? "bg-green-100 text-green-700"
-                : scorePercent >= 60
-                  ? "bg-cos-electric/10 text-cos-electric"
-                  : "bg-cos-cloud text-cos-slate"
-            }`}
-          >
-            {scorePercent}% match
-          </div>
-        </div>
-      </div>
-
-      {/* Match explanation */}
-      {match.matchExplanation && (
-        <p className="mt-3 text-sm text-cos-midnight/80">
-          {match.matchExplanation}
-        </p>
-      )}
-
-      {/* Skills and industries */}
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {match.preview.topSkills.slice(0, 5).map((skill) => (
-          <span
-            key={skill}
-            className="rounded-cos-full bg-cos-cloud px-2 py-0.5 text-xs text-cos-slate"
-          >
-            {skill}
-          </span>
-        ))}
-        {match.preview.industries.slice(0, 3).map((industry) => (
-          <span
-            key={industry}
-            className="rounded-cos-full bg-cos-warm/10 px-2 py-0.5 text-xs text-cos-warm"
-          >
-            {industry}
-          </span>
-        ))}
-      </div>
-
-      {/* Bidirectional fit */}
-      {match.bidirectionalFit && (
-        <div className="mt-3 flex items-center gap-4 text-xs text-cos-slate">
-          <span>
-            They want you: {Math.round(match.bidirectionalFit.theyWantUs * 100)}%
-          </span>
-          <span>
-            You want them: {Math.round(match.bidirectionalFit.weWantThem * 100)}%
-          </span>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="mt-4 flex items-center gap-2">
-        <Button variant="outline" size="sm">
-          View Profile
-          <ArrowRight className="ml-1 h-3 w-3" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={requested ? "text-cos-signal" : "text-cos-slate"}
-          disabled={requesting || requested}
-          onClick={() => onRequestPartnership(match.firmId)}
-        >
-          {requested
-            ? "Requested ✓"
-            : requesting
-              ? "Requesting..."
-              : "Request Partnership"}
-        </Button>
+        ) : (
+          <IdleState />
+        )}
       </div>
     </div>
   );
