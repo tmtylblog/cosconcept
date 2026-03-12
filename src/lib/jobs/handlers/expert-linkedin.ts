@@ -1,31 +1,24 @@
 /**
  * Handler: expert-linkedin
  *
- * PDL person enrichment + specialist profile generation + graph write.
- * Extracted from the Inngest function of the same name.
+ * PDL person enrichment + graph write.
+ * Pulls work history, skills, education from PDL and writes to PG + Neo4j.
+ *
+ * NOTE: Specialist profile generation is intentionally NOT done here.
+ * That will be a separate, dedicated process with its own quality controls.
+ * This handler only captures the "base layer" — factual PDL data.
  */
 
 import { enrichPerson } from "@/lib/enrichment/pdl";
-import { generateSpecialistProfiles } from "@/lib/enrichment/specialist-generator";
 import {
   writeExpertToGraph,
-  writeSpecialistProfileToGraph,
   writeWorkHistoryToGraph,
   writeSkillsFromPdlToGraph,
 } from "@/lib/enrichment/graph-writer";
 import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
 import { db } from "@/lib/db";
-import {
-  expertProfiles,
-  specialistProfiles,
-  specialistProfileExamples,
-} from "@/lib/db/schema";
+import { expertProfiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { scoreSpecialistProfile } from "@/lib/expert/quality-score";
-
-function generateId(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 interface Payload {
   expertId: string;
@@ -35,6 +28,45 @@ interface Payload {
   companyName?: string;
   companyWebsite?: string;
   importedContactId?: string;
+}
+
+/**
+ * Derive a simple division from PDL job title levels + class.
+ * This is a lightweight heuristic — NOT the specialist profile system.
+ * Just buckets the person for basic filtering/display.
+ */
+function deriveDivision(
+  jobTitleLevels: string[],
+  jobTitleClass: string | null,
+): string {
+  const levels = new Set(jobTitleLevels.map((l) => l.toLowerCase()));
+
+  // C-suite / owner
+  if (levels.has("cxo") || levels.has("owner")) return "collective_leader";
+
+  // VP / Director / Partner
+  if (levels.has("vp") || levels.has("director") || levels.has("partner"))
+    return "collective_member";
+
+  // Senior / Manager
+  if (levels.has("senior") || levels.has("manager")) return "collective_member";
+
+  // Entry / Training
+  if (levels.has("entry") || levels.has("training")) return "collective_associate";
+
+  // Default
+  return "collective_member";
+}
+
+/**
+ * Extract unique industries from work history.
+ */
+function extractIndustries(experience: { company: { industry: string | null } }[]): string[] {
+  return experience
+    .map((e) => e.company.industry)
+    .filter((i): i is string => !!i)
+    .filter((v, idx, arr) => arr.indexOf(v) === idx)
+    .slice(0, 10);
 }
 
 export async function handleExpertLinkedIn(
@@ -79,31 +111,15 @@ export async function handleExpertLinkedIn(
     return { expertId, status: "not_found", fullName };
   }
 
-  // Step 2: Generate specialist profiles
-  const analysis = await generateSpecialistProfiles({
-    pdlPerson,
-    firmContext: companyName
-      ? { firmName: companyName, caseStudies: [], services: [] }
-      : undefined,
-    isCurrentMember: true,
-  });
+  // Step 2: Derive basic metadata from PDL data (no AI calls)
+  const division = deriveDivision(
+    pdlPerson.jobTitleLevels ?? [],
+    pdlPerson.jobTitleClass ?? null,
+  );
+  const topSkills = pdlPerson.skills.slice(0, 15);
+  const topIndustries = extractIndustries(pdlPerson.experience);
 
-  await logEnrichmentStep({
-    firmId,
-    userId: expertId,
-    phase: "linkedin",
-    source: "specialist-generator",
-    rawInput: `Expert: ${pdlPerson.fullName}, Skills: ${pdlPerson.skills.length}`,
-    extractedData: {
-      profiles: analysis.specialistProfiles.length,
-      division: analysis.division,
-      industries: analysis.industries.length,
-    },
-    model: "gemini-flash",
-    status: "success",
-  });
-
-  // Step 3: Write to PostgreSQL
+  // Step 3: Write to PostgreSQL — expert profile with PDL data
   const nameParts = (pdlPerson.fullName || fullName).split(" ");
   const firstName = nameParts[0] ?? null;
   const lastName = nameParts.slice(1).join(" ") || null;
@@ -136,7 +152,6 @@ export async function handleExpertLinkedIn(
       endDate: edu.endDate ?? undefined,
     })),
     summary: pdlPerson.summary ?? undefined,
-    // New fields from Step 2
     jobTitleLevels: pdlPerson.jobTitleLevels ?? [],
     jobTitleClass: pdlPerson.jobTitleClass ?? null,
   };
@@ -158,11 +173,11 @@ export async function handleExpertLinkedIn(
       pdlId: pdlPerson.id ?? null,
       pdlData: pdlDataPayload,
       pdlEnrichedAt: new Date(),
-      topSkills: analysis.topSkills.slice(0, 15),
-      topIndustries: analysis.industries.slice(0, 10),
-      division: analysis.division,
+      topSkills,
+      topIndustries,
+      division,
       isPublic: true,
-      profileCompleteness: pdlPerson.experience.length > 0 ? 0.6 : 0.3,
+      profileCompleteness: pdlPerson.experience.length > 0 ? 0.4 : 0.2,
     });
   } else {
     await db
@@ -173,100 +188,12 @@ export async function handleExpertLinkedIn(
         pdlId: pdlPerson.id ?? undefined,
         pdlData: pdlDataPayload,
         pdlEnrichedAt: new Date(),
-        topSkills: analysis.topSkills.slice(0, 15),
-        topIndustries: analysis.industries.slice(0, 10),
-        division: analysis.division,
+        topSkills,
+        topIndustries,
+        division,
         updatedAt: new Date(),
       })
       .where(eq(expertProfiles.id, expertId));
-  }
-
-  // Insert specialist profiles (only if none exist)
-  const [existingSp] = await db
-    .select({ id: specialistProfiles.id })
-    .from(specialistProfiles)
-    .where(eq(specialistProfiles.expertProfileId, expertId))
-    .limit(1);
-
-  let spCreated = 0;
-  if (!existingSp && analysis.specialistProfiles.length > 0) {
-    const scoredProfiles = analysis.specialistProfiles
-      .map((sp) => {
-        const relevantExp = pdlPerson.experience
-          .filter(
-            (exp) =>
-              sp.industries.some((ind) =>
-                exp.company.industry?.toLowerCase().includes(ind.toLowerCase())
-              ) ||
-              sp.skills.some((skill) =>
-                pdlPerson.skills.some((s) =>
-                  s.toLowerCase().includes(skill.toLowerCase())
-                )
-              )
-          )
-          .slice(0, 3);
-
-        const examples = relevantExp.map((exp) => ({
-          title: exp.title,
-          subject: exp.summary ?? null,
-          companyIndustry: exp.company.industry ?? null,
-        }));
-
-        const scored = scoreSpecialistProfile({
-          title: sp.title,
-          bodyDescription: sp.description,
-          industries: sp.industries,
-          examples,
-        });
-
-        return { sp, scored, relevantExp };
-      })
-      .sort((a, b) => b.scored.score - a.scored.score);
-
-    const primaryTitle = scoredProfiles[0]?.sp.title;
-
-    for (const { sp, scored, relevantExp } of scoredProfiles) {
-      const spId = generateId("sp");
-
-      await db.insert(specialistProfiles).values({
-        id: spId,
-        expertProfileId: expertId,
-        firmId,
-        title: sp.title,
-        bodyDescription: sp.description,
-        skills: sp.skills,
-        industries: sp.industries,
-        services: [],
-        qualityScore: scored.score,
-        qualityStatus: scored.status,
-        source: "ai_generated",
-        isSearchable: scored.score >= 80,
-        isPrimary: sp.title === primaryTitle,
-        status: scored.score >= 50 ? "published" : "draft",
-      });
-
-      for (let i = 0; i < Math.min(relevantExp.length, 3); i++) {
-        const exp = relevantExp[i];
-        const expIdx = pdlPerson.experience.indexOf(exp);
-        await db.insert(specialistProfileExamples).values({
-          id: generateId("ex"),
-          specialistProfileId: spId,
-          exampleType: "role",
-          title: exp.title,
-          subject: exp.summary ?? null,
-          companyName: exp.company.name,
-          companyIndustry: exp.company.industry ?? null,
-          startDate: exp.startDate ?? null,
-          endDate: exp.endDate ?? null,
-          isCurrent: exp.isCurrent ?? false,
-          isPdlSource: true,
-          pdlExperienceIndex: expIdx >= 0 ? expIdx : null,
-          position: i + 1,
-        });
-      }
-
-      spCreated++;
-    }
   }
 
   // Step 4: Write to Neo4j — Person node + CURRENTLY_AT edge
@@ -277,19 +204,8 @@ export async function handleExpertLinkedIn(
     headline: pdlPerson.headline,
     linkedinUrl: pdlPerson.linkedinUrl ?? undefined,
     location: pdlPerson.location?.name,
-    skills:
-      analysis.topSkills.length > 0
-        ? analysis.topSkills
-        : pdlPerson.skills.slice(0, 30),
-    industries:
-      analysis.industries.length > 0
-        ? analysis.industries
-        : pdlPerson.experience
-            .map((e) => e.company.industry)
-            .filter((i): i is string => !!i)
-            .filter((v, idx, arr) => arr.indexOf(v) === idx)
-            .slice(0, 10),
-    // New fields: seniority levels + job title class
+    skills: topSkills.length > 0 ? topSkills : pdlPerson.skills.slice(0, 30),
+    industries: topIndustries,
     seniorityLevels: pdlPerson.jobTitleLevels,
     jobTitleClass: pdlPerson.jobTitleClass,
   });
@@ -306,33 +222,15 @@ export async function handleExpertLinkedIn(
     pdlPerson.skills
   );
 
-  // Write strong specialist profiles to Neo4j
-  const strongSps = await db
-    .select()
-    .from(specialistProfiles)
-    .where(eq(specialistProfiles.expertProfileId, expertId));
-
-  for (const sp of strongSps.filter((s) => s.isSearchable)) {
-    await writeSpecialistProfileToGraph({
-      profileId: sp.id,
-      expertId,
-      firmId,
-      title: sp.title ?? undefined,
-      skills: (sp.skills as string[]) ?? [],
-      industries: (sp.industries as string[]) ?? [],
-    });
-  }
-
   return {
     expertId,
     fullName: pdlPerson.fullName,
     headline: pdlPerson.headline,
-    division: analysis.division,
-    specialistProfiles: analysis.specialistProfiles.map((p) => p.title),
-    skills: analysis.topSkills.length,
-    industries: analysis.industries.length,
+    division,
+    skills: topSkills.length,
+    industries: topIndustries.length,
     experience: pdlPerson.experience.length,
-    pg: { epCreated: !existing, spCreated },
+    pg: { epCreated: !existing },
     graph: graphResult,
     workHistory: workHistoryResult,
     skillMatch: skillMatchResult,
