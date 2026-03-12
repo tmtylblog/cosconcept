@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -80,7 +80,7 @@ export async function GET(
         })
         .from(verifications)
         .where(
-          sql`${verifications.identifier} = ANY(${identifiers})`
+          inArray(verifications.identifier, identifiers)
         );
 
       for (const row of rows) {
