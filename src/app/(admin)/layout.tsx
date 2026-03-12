@@ -107,7 +107,8 @@ export default async function AdminLayout({
 
           <SectionHeader label="Growth Ops" />
           <AdminNavLink href="/admin/growth-ops" icon={<TrendingUp className="h-4 w-4" />} label="Overview" />
-          <AdminNavLink href="/admin/growth-ops/linkedin" icon={<Linkedin className="h-4 w-4" />} label="LinkedIn" />
+          <AdminNavLink href="/admin/growth-ops/linkedin" icon={<Linkedin className="h-4 w-4" />} label="LinkedIn Inbox" />
+          <AdminNavLink href="/admin/growth-ops/linkedin/accounts" icon={<Users className="h-4 w-4" />} label="LinkedIn Accounts" />
           <AdminNavLink href="/admin/growth-ops/instantly" icon={<Mail className="h-4 w-4" />} label="Instantly" />
           <AdminNavLink href="/admin/growth-ops/hubspot" icon={<Share2 className="h-4 w-4" />} label="HubSpot" />
           <AdminNavLink href="/admin/growth-ops/attribution" icon={<BarChart3 className="h-4 w-4" />} label="Attribution" />
