@@ -18,11 +18,14 @@ async function req(method: string, path: string, body?: unknown) {
 }
 
 export const InstantlyClient = {
-  listCampaigns: () => req("GET", "/campaigns?limit=100&status=all"),
+  listCampaigns: (limit = 100) => req("GET", `/campaigns?limit=${limit}`),
   getCampaign: (id: string) => req("GET", `/campaigns/${id}`),
-  getCampaignAnalytics: (campaignIds: string[]) =>
-    req("POST", "/campaigns/analytics", { campaign_ids: campaignIds }),
-  listCampaignLeads: (campaignId: string) =>
-    req("GET", `/leads?campaign_id=${campaignId}&limit=100`),
+  // Analytics endpoint not available in v2 — use listLeads to aggregate
+  listLeads: (campaignId: string, limit = 100, cursor?: string) =>
+    req("POST", "/leads/list", {
+      campaign_id: campaignId,
+      limit,
+      ...(cursor ? { starting_after: cursor } : {}),
+    }),
   listEmailAccounts: () => req("GET", "/accounts?limit=100"),
 };

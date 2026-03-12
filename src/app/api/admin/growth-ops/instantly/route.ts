@@ -39,12 +39,12 @@ export async function POST(req: NextRequest) {
   if (!await checkAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await req.json() as { action: string; [key: string]: unknown };
   try {
-    if (body.action === "getAnalytics") {
-      const data = await InstantlyClient.getCampaignAnalytics(body.campaignIds as string[]);
-      return NextResponse.json(data);
-    }
     if (body.action === "listLeads") {
-      const data = await InstantlyClient.listCampaignLeads(body.campaignId as string);
+      const data = await InstantlyClient.listLeads(
+        body.campaignId as string,
+        (body.limit as number) ?? 100,
+        body.cursor as string | undefined,
+      );
       return NextResponse.json(data);
     }
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
