@@ -192,6 +192,8 @@ export const subscriptions = pgTable("subscriptions", {
   cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
   trialStart: timestamp("trial_start"),
   trialEnd: timestamp("trial_end"),
+  giftExpiresAt: timestamp("gift_expires_at"),
+  giftReturnPlan: subscriptionPlanEnum("gift_return_plan"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

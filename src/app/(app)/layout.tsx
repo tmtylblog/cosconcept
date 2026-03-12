@@ -117,10 +117,10 @@ function AppLayoutInner({
   const orgProvisionedRef = useRef(false);
 
   useEffect(() => {
-    // Skip provisioning entirely for internal team members
-    if (session?.user?.email?.endsWith("@joincollectiveos.com")) return;
     if (!session?.user || activeOrg?.id || orgProvisionedRef.current) return;
     orgProvisionedRef.current = true;
+
+    const isInternal = session.user.email?.endsWith("@joincollectiveos.com");
 
     async function provisionOrg() {
       try {
@@ -134,6 +134,11 @@ function AppLayoutInner({
           // Has org(s) but none set active — just activate the first one
           orgId = orgList[0].id;
           console.log(`[Layout] Auto-activating existing org: ${orgId}`);
+        } else if (isInternal) {
+          // Internal team without an org — skip auto-creation
+          console.log("[Layout] Internal team member has no org, skipping auto-create");
+          orgProvisionedRef.current = false;
+          return;
         } else {
           // No org at all — create one from email domain
           const email = session?.user?.email ?? "";

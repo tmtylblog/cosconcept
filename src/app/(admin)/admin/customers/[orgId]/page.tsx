@@ -82,6 +82,8 @@ interface CustomerData {
     cancelAtPeriodEnd: boolean;
     trialStart: string | null;
     trialEnd: string | null;
+    giftExpiresAt: string | null;
+    giftReturnPlan: string | null;
     createdAt: string;
   } | null;
   members: {
@@ -418,6 +420,10 @@ export default function CustomerDetailPage() {
   const [billingData, setBillingData] = useState<BillingData | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingLoaded, setBillingLoaded] = useState(false);
+  const [billingAction, setBillingAction] = useState(false);
+  const [giftMonths, setGiftMonths] = useState(1);
+  const [giftPlan, setGiftPlan] = useState<"pro" | "enterprise">("pro");
+  const [giftReturnPlan, setGiftReturnPlan] = useState<"free" | "pro">("free");
 
   // Communications (Customer.io) state
   const [commsData, setCommsData] = useState<{
@@ -528,9 +534,8 @@ export default function CustomerDetailPage() {
       .finally(() => setPartnershipsLoading(false));
   }, [activeTab, partnershipsLoaded, orgId]);
 
-  // Lazy load billing
-  useEffect(() => {
-    if (activeTab !== "billing" || billingLoaded) return;
+  // Billing fetch (reusable for lazy load + reload after changes)
+  const fetchBilling = useCallback(() => {
     setBillingLoading(true);
     fetch(`/api/admin/customers/${orgId}/billing`)
       .then((r) => r.json())
@@ -540,7 +545,36 @@ export default function CustomerDetailPage() {
       })
       .catch(console.error)
       .finally(() => setBillingLoading(false));
-  }, [activeTab, billingLoaded, orgId]);
+  }, [orgId]);
+
+  // Lazy load billing
+  useEffect(() => {
+    if (activeTab !== "billing" || billingLoaded) return;
+    fetchBilling();
+  }, [activeTab, billingLoaded, fetchBilling]);
+
+  // Admin billing actions
+  async function handleBillingAction(body: Record<string, unknown>) {
+    setBillingAction(true);
+    try {
+      const res = await fetch(`/api/admin/customers/${orgId}/billing`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error ?? "Failed to update billing");
+        return;
+      }
+      // Reload billing data
+      fetchBilling();
+    } catch {
+      alert("Network error");
+    } finally {
+      setBillingAction(false);
+    }
+  }
 
   // Lazy load communications (Customer.io) — loads alongside activity tab
   useEffect(() => {
@@ -2258,7 +2292,15 @@ export default function CustomerDetailPage() {
                         </span>
                         {billingData.subscription.cancelAtPeriodEnd && (
                           <span className="text-xs font-medium text-cos-ember">
-                            ⚠ Cancels at period end
+                            Cancels at period end
+                          </span>
+                        )}
+                        {billingData.subscription.giftExpiresAt && (
+                          <span className="rounded-cos-pill bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700">
+                            Gift expires {formatDate(billingData.subscription.giftExpiresAt)}
+                            {billingData.subscription.giftReturnPlan && (
+                              <> &rarr; {billingData.subscription.giftReturnPlan}</>
+                            )}
                           </span>
                         )}
                       </div>
@@ -2291,6 +2333,114 @@ export default function CustomerDetailPage() {
                     <p className="text-xs text-cos-slate-light">No subscription found</p>
                   )}
                 </Section>
+
+                {/* Admin: Change Plan */}
+                {billingData.subscription && (
+                  <Section title="Change Plan" icon={<Zap className="h-4 w-4 text-cos-warm" />}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {(["free", "pro", "enterprise"] as const).map((p) => (
+                        <Button
+                          key={p}
+                          size="sm"
+                          variant={billingData.subscription?.plan === p ? "secondary" : "outline"}
+                          disabled={billingData.subscription?.plan === p || billingAction}
+                          onClick={() => handleBillingAction({ action: "change_plan", plan: p })}
+                          className="min-w-[90px]"
+                        >
+                          {billingAction ? <Loader2 className="h-3 w-3 animate-spin" /> : p.charAt(0).toUpperCase() + p.slice(1)}
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[10px] text-cos-slate">
+                      Directly sets the plan in the database. Does not create a Stripe subscription.
+                    </p>
+                  </Section>
+                )}
+
+                {/* Admin: Gift Subscription */}
+                {billingData.subscription && (
+                  <Section title="Gift Subscription" icon={<Sparkles className="h-4 w-4 text-purple-500" />}>
+                    {billingData.subscription.giftExpiresAt ? (
+                      <div className="space-y-3">
+                        <div className="rounded-cos border border-purple-200 bg-purple-50 p-3 text-sm">
+                          <p className="font-medium text-purple-800">
+                            Active gift: {billingData.subscription.plan} until {formatDate(billingData.subscription.giftExpiresAt)}
+                          </p>
+                          <p className="text-xs text-purple-600">
+                            Returns to: {billingData.subscription.giftReturnPlan ?? "free"}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:bg-red-50"
+                          disabled={billingAction}
+                          onClick={() => handleBillingAction({ action: "revoke_gift" })}
+                        >
+                          {billingAction ? <Loader2 className="h-3 w-3 animate-spin" /> : "Revoke Gift"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-end gap-3">
+                          <div>
+                            <label className="mb-1 block text-[10px] font-medium uppercase text-cos-slate">Plan</label>
+                            <select
+                              value={giftPlan}
+                              onChange={(e) => setGiftPlan(e.target.value as "pro" | "enterprise")}
+                              className="rounded-cos border border-cos-border bg-white px-3 py-1.5 text-sm"
+                            >
+                              <option value="pro">Pro</option>
+                              <option value="enterprise">Enterprise</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[10px] font-medium uppercase text-cos-slate">Months</label>
+                            <select
+                              value={giftMonths}
+                              onChange={(e) => setGiftMonths(Number(e.target.value))}
+                              className="rounded-cos border border-cos-border bg-white px-3 py-1.5 text-sm"
+                            >
+                              {[1, 2, 3, 6, 12].map((m) => (
+                                <option key={m} value={m}>
+                                  {m} {m === 1 ? "month" : "months"}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[10px] font-medium uppercase text-cos-slate">After Gift</label>
+                            <select
+                              value={giftReturnPlan}
+                              onChange={(e) => setGiftReturnPlan(e.target.value as "free" | "pro")}
+                              className="rounded-cos border border-cos-border bg-white px-3 py-1.5 text-sm"
+                            >
+                              <option value="free">Return to Free</option>
+                              <option value="pro">Return to Paid (Pro)</option>
+                            </select>
+                          </div>
+                          <Button
+                            size="sm"
+                            disabled={billingAction}
+                            onClick={() =>
+                              handleBillingAction({
+                                action: "gift",
+                                plan: giftPlan,
+                                months: giftMonths,
+                                returnPlan: giftReturnPlan,
+                              })
+                            }
+                          >
+                            {billingAction ? <Loader2 className="h-3 w-3 animate-spin" /> : "Grant Gift"}
+                          </Button>
+                        </div>
+                        <p className="text-[10px] text-cos-slate">
+                          Grants complimentary access. After expiry, reverts to the selected plan.
+                        </p>
+                      </div>
+                    )}
+                  </Section>
+                )}
 
                 {/* Usage */}
                 <Section title="Usage Metrics" icon={<BarChart3 className="h-4 w-4 text-purple-500" />}>

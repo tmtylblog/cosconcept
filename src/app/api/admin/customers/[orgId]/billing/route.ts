@@ -1,33 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sql } from "drizzle-orm";
+import { subscriptions } from "@/lib/db/schema";
+import { sql, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import type { PlanId } from "@/lib/billing/plan-limits";
+
+type Params = { params: Promise<{ orgId: string }> };
+
+/** Verify superadmin access, return session or error response */
+async function requireSuperadmin() {
+  const headersList = await headers();
+  const session = await auth.api.getSession({ headers: headersList });
+  if (!session?.user || session.user.role !== "superadmin") {
+    return null;
+  }
+  return session;
+}
 
 /**
  * GET /api/admin/customers/[orgId]/billing
  *
- * Returns subscription details and billing history.
- * Queries Stripe API for invoices if stripeCustomerId exists.
+ * Returns subscription details, gift info, usage metrics, and billing history.
  */
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ orgId: string }> }
-) {
-  try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-    if (!session?.user || session.user.role !== "superadmin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(_req: NextRequest, { params }: Params) {
+  if (!(await requireSuperadmin())) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { orgId } = await params;
 
   try {
-    // Get subscription
+    // Get subscription (including gift fields)
     const subResult = await db.execute(sql`
       SELECT
         id, plan, status,
@@ -38,6 +42,8 @@ export async function GET(
         cancel_at_period_end AS "cancelAtPeriodEnd",
         trial_start AS "trialStart",
         trial_end AS "trialEnd",
+        gift_expires_at AS "giftExpiresAt",
+        gift_return_plan AS "giftReturnPlan",
         created_at AS "createdAt"
       FROM subscriptions
       WHERE organization_id = ${orgId}
@@ -99,6 +105,163 @@ export async function GET(
     const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
       { error: "Failed to fetch billing info", detail: message },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/admin/customers/[orgId]/billing
+ *
+ * Admin-only: change subscription plan or grant a gift period.
+ *
+ * Body options:
+ *   { action: "change_plan", plan: "free" | "pro" | "enterprise" }
+ *   { action: "gift", plan: "pro" | "enterprise", months: 1-12, returnPlan: "free" | "pro" }
+ *   { action: "revoke_gift" }
+ */
+export async function PATCH(req: NextRequest, { params }: Params) {
+  if (!(await requireSuperadmin())) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { orgId } = await params;
+
+  try {
+    const body = await req.json();
+    const { action } = body as { action: string };
+
+    // Verify subscription exists
+    const sub = await db.query.subscriptions.findFirst({
+      where: eq(subscriptions.organizationId, orgId),
+    });
+
+    if (!sub) {
+      return NextResponse.json(
+        { error: "No subscription found for this organization" },
+        { status: 404 }
+      );
+    }
+
+    if (action === "change_plan") {
+      const { plan } = body as { plan: PlanId };
+      if (!["free", "pro", "enterprise"].includes(plan)) {
+        return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+      }
+
+      await db
+        .update(subscriptions)
+        .set({
+          plan,
+          status: "active",
+          giftExpiresAt: null,
+          giftReturnPlan: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.organizationId, orgId));
+
+      // Log the event
+      await db.execute(sql`
+        INSERT INTO subscription_events (id, stripe_event_id, event_type, organization_id, data)
+        VALUES (
+          ${crypto.randomUUID()},
+          ${"admin_" + crypto.randomUUID().slice(0, 8)},
+          'admin.plan_change',
+          ${orgId},
+          ${JSON.stringify({ plan, changedBy: "admin" })}::jsonb
+        )
+      `);
+
+      return NextResponse.json({ success: true, plan, status: "active" });
+    }
+
+    if (action === "gift") {
+      const { plan, months, returnPlan } = body as {
+        plan: PlanId;
+        months: number;
+        returnPlan: PlanId;
+      };
+
+      if (!["pro", "enterprise"].includes(plan)) {
+        return NextResponse.json({ error: "Gift plan must be pro or enterprise" }, { status: 400 });
+      }
+      if (!months || months < 1 || months > 12) {
+        return NextResponse.json({ error: "Months must be 1-12" }, { status: 400 });
+      }
+      if (!["free", "pro"].includes(returnPlan)) {
+        return NextResponse.json({ error: "Return plan must be free or pro" }, { status: 400 });
+      }
+
+      const giftExpiresAt = new Date();
+      giftExpiresAt.setMonth(giftExpiresAt.getMonth() + months);
+
+      await db
+        .update(subscriptions)
+        .set({
+          plan,
+          status: "active",
+          giftExpiresAt,
+          giftReturnPlan: returnPlan,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: giftExpiresAt,
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.organizationId, orgId));
+
+      // Log the event
+      await db.execute(sql`
+        INSERT INTO subscription_events (id, stripe_event_id, event_type, organization_id, data)
+        VALUES (
+          ${crypto.randomUUID()},
+          ${"admin_" + crypto.randomUUID().slice(0, 8)},
+          'admin.gift_granted',
+          ${orgId},
+          ${JSON.stringify({ plan, months, returnPlan, giftExpiresAt: giftExpiresAt.toISOString(), changedBy: "admin" })}::jsonb
+        )
+      `);
+
+      return NextResponse.json({
+        success: true,
+        plan,
+        giftExpiresAt: giftExpiresAt.toISOString(),
+        returnPlan,
+      });
+    }
+
+    if (action === "revoke_gift") {
+      const returnPlan = sub.giftReturnPlan ?? "free";
+
+      await db
+        .update(subscriptions)
+        .set({
+          plan: returnPlan,
+          giftExpiresAt: null,
+          giftReturnPlan: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.organizationId, orgId));
+
+      // Log the event
+      await db.execute(sql`
+        INSERT INTO subscription_events (id, stripe_event_id, event_type, organization_id, data)
+        VALUES (
+          ${crypto.randomUUID()},
+          ${"admin_" + crypto.randomUUID().slice(0, 8)},
+          'admin.gift_revoked',
+          ${orgId},
+          ${JSON.stringify({ returnedToPlan: returnPlan, changedBy: "admin" })}::jsonb
+        )
+      `);
+
+      return NextResponse.json({ success: true, plan: returnPlan });
+    }
+
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (error) {
+    console.error("[Admin] Billing update error:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      { error: "Failed to update billing", detail: message },
       { status: 500 }
     );
   }
