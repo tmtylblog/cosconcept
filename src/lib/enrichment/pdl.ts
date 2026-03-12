@@ -242,8 +242,10 @@ export async function searchPeopleAtCompany(params: {
     query: {
       bool: {
         must: [
+          // job_company_website matches the person's current (primary) job.
+          // No need for a separate is_primary filter — the job_* fields
+          // are already flattened from the primary experience entry.
           { term: { job_company_website: domain } },
-          { term: { job_is_primary: true } },
         ],
       },
     },
