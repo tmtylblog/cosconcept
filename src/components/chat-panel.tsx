@@ -652,8 +652,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           }, 4000);
         }
 
-        // Handle discover_search tool results — push to discover panel if on /discover
-        if (toolName === "discover_search" && onSearchResults) {
+        // Handle discover_search (and legacy search_partners) — push to discover panel
+        if ((toolName === "discover_search" || toolName === "search_partners") && onSearchResults) {
           const output = (part as { output?: unknown }).output as
             | { candidates?: DiscoverResult[]; totalFound?: number }
             | undefined;
@@ -829,7 +829,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       if (msg.role !== "assistant") continue;
       for (const part of msg.parts) {
         if (
-          part.type === "tool-discover_search" &&
+          (part.type === "tool-discover_search" || part.type === "tool-search_partners") &&
           "state" in part &&
           (part.state === "call" || part.state === "partial-call")
         ) {
@@ -983,9 +983,9 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                     // Extract tool name from part type (strip "tool-" prefix)
                     const toolName = part.type.slice(5);
 
-                    // On the discover page, search_partners results go to the middle panel.
+                    // On the discover page, search results go to the middle panel.
                     // Show a compact "results in panel" indicator instead of full card list.
-                    if (firmSection === "discover" && toolName === "discover_search") {
+                    if (firmSection === "discover" && (toolName === "discover_search" || toolName === "search_partners")) {
                       if (toolPart.state === "output-available") {
                         const output = toolPart.output as { candidates?: unknown[]; totalFound?: number } | undefined;
                         const count = output?.candidates?.length ?? 0;

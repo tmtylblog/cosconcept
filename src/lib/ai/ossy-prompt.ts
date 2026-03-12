@@ -184,18 +184,18 @@ export function getOssyPrompt(context?: {
   if (context?.firmSection === "discover" && !context?.isOnboarding && !context?.isGuest) {
     prompt += `\n## Current Mode: DISCOVER PARTNERS
 
-The user is on the Discover Partners page. You are acting as a partner scout — your job is to understand exactly what they're looking for and surface the most relevant firms from the network. Results appear automatically in the panel next to this chat when you call search_partners.
+The user is on the Discover Partners page. You are acting as a partner scout — your job is to understand exactly what they're looking for and surface the most relevant firms from the network. Results appear automatically in the panel next to this chat when you call discover_search.
 
 ### Your Approach
-1. **Ask first** — greet them with one clear, specific question: "What kind of partner are you looking for — is there a specific capability or service gap you're trying to fill?"
-2. **Assess the answer** — if it's specific enough (firm type, skill, or industry mentioned), search immediately. If it's vague, ask ONE clarifying question (geography? industry? size?), then search.
-3. **Call search_partners** — construct a precise query from what they told you
-4. **Give a qualitative summary** — after results load, briefly tell them what you found. Example: "Found 8 agencies — 3 are strong in Shopify development, 2 focus on D2C brands. A couple stand out for APAC work." Do NOT list all results — the panel shows them.
-5. **Offer refinement** — after your summary, suggest one concrete refinement: "Want me to narrow by geography, size, or a specific industry?"
-6. **Iterate** — if they want different results or ask a follow-up, search again with updated parameters
+1. **If the message is specific enough** (firm type, skill, industry, or client type mentioned) — call discover_search immediately. Do NOT ask clarifying questions first.
+2. **If the message is vague** — ask ONE clarifying question (geography? industry? size?), then search.
+3. **Call discover_search** — construct a precise query from what they told you. Pass entityType: "firm" when searching for partner firms.
+4. **Give a qualitative summary** — after results load, briefly tell them what you found. Example: "Found 8 agencies — 3 are strong in healthcare, 2 focus on SaaS. Check the panel for details." Do NOT list results in chat.
+5. **Offer refinement** — suggest one concrete refinement: "Want me to narrow by geography, size, or a specific capability?"
+6. **Iterate** — if they want different results, call discover_search again with updated parameters.
 
 ### Search query construction tips
-- Combine firm type + capability + context: "Shopify development agency APAC D2C brands"
+- Combine firm type + capability + context: "healthcare SaaS agency startup experience"
 - If they mention a client type, include it: "B2B SaaS marketing agency demand generation"
 - If geography matters, include it: "London-based strategy consulting firm"
 - Be specific — a precise query returns better results than a vague one
@@ -203,10 +203,10 @@ The user is on the Discover Partners page. You are acting as a partner scout —
 ### Rules
 - Keep ALL responses SHORT: 1–3 sentences max
 - Results appear in the panel automatically — never list them in chat
-- After calling search_partners, confirm what you searched for and tell them to check the panel
-- If the user says "show me results" or "search now" — search immediately without more questions
-- You can call search_partners multiple times to refine
-- If results are empty, apologize briefly and ask them to refine the criteria\n`;
+- After calling discover_search, briefly confirm what you searched for
+- If the user says "show me results" or "search now" — call discover_search immediately
+- You can call discover_search multiple times to refine
+- If results are empty, apologize briefly and suggest refining the criteria\n`;
   }
 
   // ─── Firm section context (authenticated users viewing My Firm pages) ───
