@@ -1740,3 +1740,18 @@ export const growthOpsHubspotCache = pgTable("growth_ops_hubspot_cache", {
   dealData: jsonb("deal_data").notNull().$type<Record<string, unknown>>().default({}),
   syncedAt: timestamp("synced_at").notNull().defaultNow(),
 });
+
+// ─── Domain aliases ─────────────────────────────────────
+// Admin-managed mapping of alternate domains to service firms.
+// Handles cases where email domain ≠ website domain and
+// redirect resolution doesn't catch it (e.g. vanity domains,
+// country-specific domains, acquisitions).
+
+export const domainAliases = pgTable("domain_aliases", {
+  id: text("id").primaryKey(),
+  domain: text("domain").notNull().unique(),           // e.g. "chameleon.co"
+  firmId: text("firm_id").notNull().references(() => serviceFirms.id, { onDelete: "cascade" }),
+  note: text("note"),                                   // admin note: "email alias for chameleoncollective.com"
+  createdBy: text("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

@@ -78,6 +78,71 @@ const FREE_EMAIL_DOMAINS = new Set([
   "googlemail.com", "pm.me", "proton.me", "tutanota.com",
 ]);
 
+/**
+ * Resolve a domain by following HTTP redirects.
+ * e.g. chameleon.co → chameleoncollective.com
+ * Returns the final domain after redirects, or null on failure.
+ */
+async function resolveRedirect(domain: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`https://${domain}`, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: { "User-Agent": "CollectiveOS-ImportBot/1.0" },
+    });
+    clearTimeout(timeout);
+    const finalUrl = res.url;
+    if (!finalUrl) return null;
+    const finalDomain = extractDomain(finalUrl);
+    // Only return if it's actually a different domain
+    if (finalDomain && finalDomain !== domain) return finalDomain;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * For a set of unmatched email domains, try to resolve them via HTTP redirects
+ * and build a mapping: emailDomain → firmWebsiteDomain.
+ * Only resolves unique domains, so this is O(unique_domains) HTTP requests, not O(users).
+ */
+async function buildRedirectMap(
+  unmatchedDomains: Set<string>,
+  firmByDomain: Map<string, { id: string; name: string }>
+): Promise<Map<string, string>> {
+  const redirectMap = new Map<string, string>(); // emailDomain → firmId
+
+  // Process in batches of 10 concurrent requests
+  const domains = [...unmatchedDomains];
+  const BATCH = 10;
+  for (let i = 0; i < domains.length; i += BATCH) {
+    const batch = domains.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      batch.map(async (domain) => {
+        const resolved = await resolveRedirect(domain);
+        if (resolved) {
+          // Check if the resolved domain matches a known firm
+          const firm = firmByDomain.get(resolved);
+          if (firm) {
+            return { domain, firmId: firm.id };
+          }
+        }
+        return null;
+      })
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value) {
+        redirectMap.set(r.value.domain, r.value.firmId);
+      }
+    }
+  }
+  return redirectMap;
+}
+
 export async function POST(req: NextRequest) {
   // Auth check
   try {
@@ -121,34 +186,46 @@ export async function POST(req: NextRequest) {
     const parsed = JSON.parse(rawData);
     const legacyUsers: LegacyUserRecord[] = parsed.data.user_meta;
 
-    // 2. Load all service_firms for matching
-    const firmsResult = await db.execute(sql`
-      SELECT id, name, website, organization_id AS "organizationId"
-      FROM service_firms
-      ORDER BY name
-    `);
+    // 2. Load all service_firms + domain aliases for matching
+    const [firmsResult, aliasResult] = await Promise.all([
+      db.execute(sql`
+        SELECT id, name, website, organization_id AS "organizationId"
+        FROM service_firms ORDER BY name
+      `),
+      db.execute(sql`SELECT domain, firm_id AS "firmId" FROM domain_aliases`),
+    ]);
     const firms = firmsResult.rows as {
       id: string;
       name: string;
       website: string | null;
       organizationId: string;
     }[];
+    const aliases = aliasResult.rows as { domain: string; firmId: string }[];
 
     // Build domain → firm lookup (primary matching strategy)
     const firmByDomain = new Map<string, (typeof firms)[0]>();
     // Build name → firm lookup (fallback)
     const firmByNameLower = new Map<string, (typeof firms)[0]>();
+    // Build firmId lookup for aliases
+    const firmById = new Map<string, (typeof firms)[0]>();
 
     for (const firm of firms) {
-      // Domain lookup from website
+      firmById.set(firm.id, firm);
       if (firm.website) {
         const domain = extractDomain(firm.website);
         if (domain && !FREE_EMAIL_DOMAINS.has(domain)) {
           firmByDomain.set(domain, firm);
         }
       }
-      // Name lookup
       firmByNameLower.set(firm.name.toLowerCase().trim(), firm);
+    }
+
+    // Add admin-managed domain aliases to the domain lookup
+    for (const alias of aliases) {
+      const firm = firmById.get(alias.firmId);
+      if (firm) {
+        firmByDomain.set(alias.domain.toLowerCase(), firm);
+      }
     }
 
     // 3. Check how many are already imported (avoid duplicates)
@@ -159,15 +236,18 @@ export async function POST(req: NextRequest) {
       existingResult.rows.map((r) => r.legacy_user_id as string)
     );
 
-    // 4. Process each legacy user
+    // 4. First pass — direct domain + name matching, collect unmatched domains
     let matchedByDomain = 0;
+    let matchedByRedirect = 0;
     let matchedByName = 0;
     let unmatched = 0;
     let skippedDupe = 0;
     let inserted = 0;
     const unmatchedOrgs = new Map<string, number>();
     const matchedOrgs = new Map<string, { count: number; method: string }>();
-    const toInsert: {
+    const unmatchedEmailDomains = new Set<string>(); // for redirect resolution
+
+    interface InsertRecord {
       id: string;
       legacyUserId: string;
       legacyOrgId: string | null;
@@ -178,10 +258,11 @@ export async function POST(req: NextRequest) {
       title: string | null;
       legacyRoles: string[];
       firmId: string | null;
-    }[] = [];
+      matchMethod: string | null;
+    }
+    const toInsert: InsertRecord[] = [];
 
     for (const user of legacyUsers) {
-      // Skip if already imported
       if (existingIds.has(user.id)) {
         skippedDupe++;
         continue;
@@ -190,17 +271,14 @@ export async function POST(req: NextRequest) {
       const orgName =
         user.organisation?.organisation_detail?.business_name ?? null;
       const orgId = user.organisation?.id ?? null;
-
-      // Extract roles
       const roles = (user.user_meta_cos_user_roles ?? [])
         .map((r) => r.cos_user_role?.name)
         .filter(Boolean);
 
-      // ── Match to service_firm: domain first, then name ──
       let firmId: string | null = null;
       let matchMethod: string | null = null;
 
-      // Strategy 1: Match by email domain → firm website domain
+      // Strategy 1: Direct email domain → firm website domain
       if (user.email) {
         const domain = emailDomain(user.email);
         if (domain && !FREE_EMAIL_DOMAINS.has(domain)) {
@@ -209,32 +287,20 @@ export async function POST(req: NextRequest) {
             firmId = firmMatch.id;
             matchMethod = "domain";
             matchedByDomain++;
+          } else {
+            // Track this domain for redirect resolution
+            unmatchedEmailDomains.add(domain);
           }
         }
       }
 
-      // Strategy 2: Fall back to org name match
+      // Strategy 2: Org name fallback (only if domain didn't match)
       if (!firmId && orgName) {
         const firmMatch = firmByNameLower.get(orgName.toLowerCase().trim());
         if (firmMatch) {
           firmId = firmMatch.id;
           matchMethod = "name";
           matchedByName++;
-        }
-      }
-
-      if (firmId && matchMethod) {
-        const label = orgName ?? user.email ?? "unknown";
-        const existing = matchedOrgs.get(label);
-        if (existing) {
-          existing.count++;
-        } else {
-          matchedOrgs.set(label, { count: 1, method: matchMethod });
-        }
-      } else {
-        unmatched++;
-        if (orgName) {
-          unmatchedOrgs.set(orgName, (unmatchedOrgs.get(orgName) ?? 0) + 1);
         }
       }
 
@@ -249,7 +315,45 @@ export async function POST(req: NextRequest) {
         title: user.title ?? null,
         legacyRoles: roles,
         firmId,
+        matchMethod,
       });
+    }
+
+    // 4b. Redirect resolution — resolve unmatched email domains via HTTP
+    // e.g. chameleon.co → chameleoncollective.com
+    const redirectMap = await buildRedirectMap(unmatchedEmailDomains, firmByDomain);
+
+    // Second pass: apply redirect matches to previously unmatched users
+    for (const record of toInsert) {
+      if (record.firmId) continue; // already matched
+      if (!record.email) continue;
+      const domain = emailDomain(record.email);
+      if (!domain) continue;
+      const redirectFirmId = redirectMap.get(domain);
+      if (redirectFirmId) {
+        record.firmId = redirectFirmId;
+        record.matchMethod = "redirect";
+        matchedByRedirect++;
+        // Undo the unmatched name count if it was counted
+      }
+    }
+
+    // Tally final matched/unmatched stats
+    for (const record of toInsert) {
+      if (record.firmId && record.matchMethod) {
+        const label = record.legacyOrgName ?? record.email ?? "unknown";
+        const existing = matchedOrgs.get(label);
+        if (existing) {
+          existing.count++;
+        } else {
+          matchedOrgs.set(label, { count: 1, method: record.matchMethod });
+        }
+      } else {
+        unmatched++;
+        if (record.legacyOrgName) {
+          unmatchedOrgs.set(record.legacyOrgName, (unmatchedOrgs.get(record.legacyOrgName) ?? 0) + 1);
+        }
+      }
     }
 
     // 5. If dry run, return preview stats
@@ -269,12 +373,14 @@ export async function POST(req: NextRequest) {
         totalLegacyUsers: legacyUsers.length,
         alreadyImported: skippedDupe,
         toImport: toInsert.length,
-        matchedByDomain: matchedByDomain,
-        matchedByName: matchedByName,
-        totalMatched: matchedByDomain + matchedByName,
+        matchedByDomain,
+        matchedByRedirect,
+        matchedByName,
+        totalMatched: matchedByDomain + matchedByRedirect + matchedByName,
         unmatchedToFirm: unmatched,
         serviceFirmsInDb: firms.length,
         firmsWithDomain: firmByDomain.size,
+        redirectsResolved: redirectMap.size,
         topMatchedOrgs: topMatched,
         topUnmatchedOrgs: topUnmatched,
       });
@@ -306,10 +412,12 @@ export async function POST(req: NextRequest) {
       alreadyImported: skippedDupe,
       inserted,
       matchedByDomain,
+      matchedByRedirect,
       matchedByName,
-      totalMatched: matchedByDomain + matchedByName,
+      totalMatched: matchedByDomain + matchedByRedirect + matchedByName,
       unmatchedToFirm: unmatched,
       serviceFirmsInDb: firms.length,
+      redirectsResolved: redirectMap.size,
     });
   } catch (error) {
     console.error("[Admin] Legacy user import error:", error);
@@ -338,23 +446,25 @@ async function handleRematch(dryRun: boolean) {
     firm_id: string | null;
   }[];
 
-  // Load all service_firms
-  const firmsResult = await db.execute(sql`
-    SELECT id, name, website
-    FROM service_firms
-    ORDER BY name
-  `);
+  // Load all service_firms + domain aliases
+  const [firmsResult, aliasResult] = await Promise.all([
+    db.execute(sql`SELECT id, name, website FROM service_firms ORDER BY name`),
+    db.execute(sql`SELECT domain, firm_id AS "firmId" FROM domain_aliases`),
+  ]);
   const firms = firmsResult.rows as {
     id: string;
     name: string;
     website: string | null;
   }[];
+  const aliases = aliasResult.rows as { domain: string; firmId: string }[];
 
   // Build lookups
   const firmByDomain = new Map<string, (typeof firms)[0]>();
   const firmByNameLower = new Map<string, (typeof firms)[0]>();
+  const firmById = new Map<string, (typeof firms)[0]>();
 
   for (const firm of firms) {
+    firmById.set(firm.id, firm);
     if (firm.website) {
       const domain = extractDomain(firm.website);
       if (domain && !FREE_EMAIL_DOMAINS.has(domain)) {
@@ -364,61 +474,94 @@ async function handleRematch(dryRun: boolean) {
     firmByNameLower.set(firm.name.toLowerCase().trim(), firm);
   }
 
-  // Process each legacy user
+  // Add admin-managed domain aliases
+  for (const alias of aliases) {
+    const firm = firmById.get(alias.firmId);
+    if (firm) {
+      firmByDomain.set(alias.domain.toLowerCase(), firm);
+    }
+  }
+
+  // First pass — direct domain + name matching, collect unmatched domains
   let newDomainMatches = 0;
+  let newRedirectMatches = 0;
   let newNameMatches = 0;
   let alreadyMatched = 0;
   let stillUnmatched = 0;
+  const unmatchedEmailDomains = new Set<string>();
   const updates: { id: string; firmId: string }[] = [];
 
-  for (const user of legacyUsers) {
-    // Try domain match
-    let newFirmId: string | null = null;
+  interface RematchRecord {
+    id: string;
+    email: string | null;
+    legacy_org_name: string | null;
+    firm_id: string | null;
+    newFirmId: string | null;
+    method: string | null;
+  }
+  const records: RematchRecord[] = [];
 
+  for (const user of legacyUsers) {
+    let newFirmId: string | null = null;
+    let method: string | null = null;
+
+    // Strategy 1: Direct domain match
     if (user.email) {
       const domain = emailDomain(user.email);
       if (domain && !FREE_EMAIL_DOMAINS.has(domain)) {
         const firmMatch = firmByDomain.get(domain);
         if (firmMatch) {
           newFirmId = firmMatch.id;
+          method = "domain";
+        } else {
+          unmatchedEmailDomains.add(domain);
         }
       }
     }
 
-    // Fallback: name match
+    // Strategy 2: Name fallback
     if (!newFirmId && user.legacy_org_name) {
       const firmMatch = firmByNameLower.get(user.legacy_org_name.toLowerCase().trim());
       if (firmMatch) {
         newFirmId = firmMatch.id;
+        method = "name";
       }
     }
 
-    if (newFirmId) {
-      if (user.firm_id === newFirmId) {
+    records.push({ ...user, newFirmId, method });
+  }
+
+  // Redirect resolution for unmatched domains
+  const redirectMap = await buildRedirectMap(unmatchedEmailDomains, firmByDomain);
+
+  // Second pass: apply redirect matches
+  for (const rec of records) {
+    if (!rec.newFirmId && rec.email) {
+      const domain = emailDomain(rec.email);
+      if (domain) {
+        const redirectFirmId = redirectMap.get(domain);
+        if (redirectFirmId) {
+          rec.newFirmId = redirectFirmId;
+          rec.method = "redirect";
+        }
+      }
+    }
+  }
+
+  // Tally results
+  for (const rec of records) {
+    if (rec.newFirmId) {
+      if (rec.firm_id === rec.newFirmId) {
         alreadyMatched++;
       } else {
-        // New match (or better match)
-        if (user.firm_id) {
-          // Had a different match before — still update to domain-based
-          newDomainMatches++;
-        } else {
-          // Was unmatched, now matched
-          if (user.email) {
-            const domain = emailDomain(user.email);
-            if (domain && !FREE_EMAIL_DOMAINS.has(domain) && firmByDomain.has(domain)) {
-              newDomainMatches++;
-            } else {
-              newNameMatches++;
-            }
-          } else {
-            newNameMatches++;
-          }
-        }
-        updates.push({ id: user.id, firmId: newFirmId });
+        if (rec.method === "domain") newDomainMatches++;
+        else if (rec.method === "redirect") newRedirectMatches++;
+        else newNameMatches++;
+        updates.push({ id: rec.id, firmId: rec.newFirmId });
       }
     } else {
-      if (user.firm_id) {
-        alreadyMatched++; // Keep existing match
+      if (rec.firm_id) {
+        alreadyMatched++;
       } else {
         stillUnmatched++;
       }
@@ -433,9 +576,11 @@ async function handleRematch(dryRun: boolean) {
       alreadyCorrectlyMatched: alreadyMatched,
       newMatchesFound: updates.length,
       newDomainMatches,
+      newRedirectMatches,
       newNameMatches,
       stillUnmatched,
       firmsWithDomain: firmByDomain.size,
+      redirectsResolved: redirectMap.size,
     });
   }
 
@@ -459,7 +604,9 @@ async function handleRematch(dryRun: boolean) {
     alreadyCorrectlyMatched: alreadyMatched,
     updated,
     newDomainMatches,
+    newRedirectMatches,
     newNameMatches,
     stillUnmatched,
+    redirectsResolved: redirectMap.size,
   });
 }
