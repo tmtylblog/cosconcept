@@ -812,7 +812,7 @@ export default function UserDetailPage() {
               <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-16">
                 <Mail className="h-8 w-8 text-cos-slate-light" />
                 <p className="mt-3 text-sm font-medium text-cos-midnight">No Customer.io record</p>
-                <p className="mt-1 text-xs text-cos-slate">{user.email} hasn't received any emails via CIO yet.</p>
+                <p className="mt-1 text-xs text-cos-slate">{user.email} has not received any emails via CIO yet.</p>
               </div>
             ) : commsData.messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-16">
