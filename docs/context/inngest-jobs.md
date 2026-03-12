@@ -38,11 +38,11 @@ Neon HTTP driver doesn't support `FOR UPDATE SKIP LOCKED`. Uses compare-and-swap
 2. UPDATE WHERE `status = 'pending' AND id = candidate.id`
 3. If 0 rows updated → race lost, recurse once
 
-## Job Types (14 total)
+## Job Types (15 total)
 
 ---
 
-## Registered Functions (14 total)
+## Registered Functions (15 total)
 
 All 14 functions are registered in the serve handler at `/api/inngest`.
 
@@ -421,6 +421,23 @@ All 14 functions are registered in the serve handler at `/api/inngest`.
 
 ---
 
+### 15. `linkedin-invite-scheduler` — Send Due LinkedIn Invites
+
+| Property | Value |
+|---|---|
+| **File** | `src/lib/jobs/handlers/linkedin-invite-scheduler.ts` |
+| **Job type** | `linkedin-invite-scheduler` |
+| **Status** | Working |
+
+**Purpose:** Processes all `growth_ops_invite_queue` items due now (`scheduledAt <= now`, `status = "queued"`). Skips Sundays. Resolves + caches Unipile `provider_id` for each target, then sends connection invites via Unipile API. Updates queue + target status.
+
+**Cron trigger:** Top of every hour Mon–Sat (when `dayOfWeek !== 0 && nowMinute <= 2`) from `/api/jobs/cron`.
+
+**Input:** `{}` (no payload needed — queries DB directly)
+**Output:** `{ sent, failed, total }`
+
+---
+
 ## Cron Schedule Summary
 
 | Function | Schedule | Description |
@@ -428,6 +445,7 @@ All 14 functions are registered in the serve handler at `/api/inngest`.
 | `cron-weekly-recrawl` | `0 2 * * 0` (Sun 2 AM UTC) | Re-crawl all firm websites |
 | `check-stale-partnerships` | `0 9 * * *` (Daily 9 AM UTC) | Nudge stale partnership requests |
 | `weekly-digest` | `0 8 * * 1` (Mon 8 AM UTC) | Partnership activity digest emails |
+| `linkedin-invite-scheduler` | Top of every hour Mon–Sat | Send due LinkedIn connection invites |
 
 ---
 

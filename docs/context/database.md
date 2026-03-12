@@ -922,6 +922,96 @@ organizations ── service_firms ──┬── partner_preferences
 
 ---
 
+## Growth Operations
+
+Added in migration `0004_growth_ops.sql` (2026-03-12). All tables use `IF NOT EXISTS`.
+
+### `growth_ops_linkedin_accounts`
+Connected LinkedIn accounts via Unipile. Upserted by the Unipile webhook.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| unipile_account_id | text NOT NULL UNIQUE | Unipile's internal account ID |
+| display_name | text (default '') | |
+| linkedin_username | text | |
+| status | text (default 'CONNECTING') | CONNECTING \| OK \| CREDENTIALS \| ERROR |
+| created_at | timestamp NOT NULL | |
+| updated_at | timestamp NOT NULL | |
+
+### `growth_ops_target_lists`
+Named lists of LinkedIn targets for campaigns.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| name | text NOT NULL | |
+| description | text | |
+| created_at | timestamp NOT NULL | |
+| updated_at | timestamp NOT NULL | |
+
+### `growth_ops_invite_targets`
+Individual connection targets within a list.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| list_id | text FK → growth_ops_target_lists (cascade) | |
+| first_name | text (default '') | |
+| linkedin_url | text NOT NULL | |
+| unipile_provider_id | text | Cached after first resolution via Unipile |
+| status | text (default 'pending') | pending \| invited \| failed \| skipped |
+| invited_at | timestamp | |
+| created_at | timestamp NOT NULL | |
+
+### `growth_ops_invite_campaigns`
+Links a LinkedIn account to a target list with daily invite limits.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| name | text NOT NULL | |
+| target_list_id | text FK → growth_ops_target_lists (restrict) | |
+| linkedin_account_id | text FK → growth_ops_linkedin_accounts (restrict) | |
+| status | text (default 'draft') | draft \| active \| paused \| completed |
+| daily_min | integer (default 15) | |
+| daily_max | integer (default 19) | |
+| invite_message | text | Optional LinkedIn connection note |
+| created_at | timestamp NOT NULL | |
+| updated_at | timestamp NOT NULL | |
+
+### `growth_ops_invite_queue`
+Pre-scheduled invite entries built when a campaign is activated.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| campaign_id | text FK → growth_ops_invite_campaigns (cascade) | |
+| target_id | text FK → growth_ops_invite_targets (cascade) | |
+| linkedin_account_id | text FK → growth_ops_linkedin_accounts (cascade) | |
+| scheduled_at | timestamp NOT NULL | Poisson-distributed 8AM–6PM UTC, Mon–Sat only |
+| sent_at | timestamp | |
+| status | text (default 'queued') | queued \| sent \| failed \| skipped |
+| error_message | text | |
+| created_at | timestamp NOT NULL | |
+
+### `growth_ops_hubspot_cache`
+Snapshot of HubSpot deals for fast Kanban rendering.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| deal_id | text NOT NULL UNIQUE | HubSpot deal ID |
+| pipeline_id | text NOT NULL | |
+| pipeline_label | text (default '') | |
+| stage_id | text NOT NULL | |
+| stage_label | text (default '') | |
+| stage_order | integer (default 0) | Kanban column ordering |
+| deal_data | jsonb (default {}) | Full deal snapshot |
+| synced_at | timestamp NOT NULL | |
+
+---
+
 ## Conventions
 
 - **All IDs:** Application-generated text (UUIDs via `nanoid` or `crypto.randomUUID`)

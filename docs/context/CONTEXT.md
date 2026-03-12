@@ -17,13 +17,14 @@
 | 9 | Email System | [email.md](email.md) | Resend, approval queue, inbound/outbound, Inngest jobs |
 | 10 | Billing & Subscriptions | [billing.md](billing.md) | Stripe, plans, feature gates, webhooks |
 | 11 | Partnerships & Opportunities | [partnerships.md](partnerships.md) | Partnership lifecycle, intros, referrals, opportunities |
-| 12 | Admin Dashboard | [admin.md](admin.md) | All 13 admin pages, APIs, features |
+| 12 | Admin Dashboard | [admin.md](admin.md) | All 27+ admin pages, APIs, features |
 | 13 | Design System & Brand | [design-system.md](design-system.md) | Tokens, colors, typography, component patterns |
 | 14 | API Reference | [api-reference.md](api-reference.md) | All 70+ endpoints organized by domain |
 | 15 | Background Jobs | [inngest-jobs.md](inngest-jobs.md) | All Inngest functions, triggers, cron schedules |
 | 16 | Data & Taxonomy | [data-taxonomy.md](data-taxonomy.md) | CSV reference files, 3-level skill hierarchy, firm relationships |
 | 17 | Multi-Dev Coordination | [multi-dev.md](multi-dev.md) | Git workflow, branch naming, conflict avoidance |
 | 18 | Roadmap & Status | [roadmap.md](roadmap.md) | Build phases, what's done, gaps, TODOs |
+| 19 | Growth Operations | [growth-ops.md](growth-ops.md) | Unipile/LinkedIn, Instantly, HubSpot, invite scheduler, attribution |
 
 ## Rules for Claude Agents
 

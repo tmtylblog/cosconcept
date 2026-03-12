@@ -430,3 +430,72 @@ Server-to-server API for bi-directional data sync with partner platforms (e.g., 
 |--------|------|------|-------------|
 | POST | `/api/jobs/worker` | `x-jobs-secret` or `Authorization: Bearer <JOBS_SECRET>` | Claim and run one (or N with `?drain=true`) pending jobs. maxDuration=300. |
 | GET | `/api/jobs/cron` | `Authorization: Bearer <CRON_SECRET>` or JOBS_SECRET | Enqueue recurring jobs + drain queue. Called by Vercel Cron every 2 min. |
+
+---
+
+## Growth Operations (Admin Only)
+
+All routes require `role === "superadmin"`. Added 2026-03-12.
+
+### Unipile / LinkedIn Proxy
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/growth-ops/unipile?action=listAccounts` | All connected Unipile/LinkedIn accounts |
+| GET | `/api/admin/growth-ops/unipile?action=listChats&accountId=` | Chats/inbox for account |
+| GET | `/api/admin/growth-ops/unipile?action=getChatMessages&chatId=` | Messages in a thread |
+| POST | `/api/admin/growth-ops/unipile` `{ action: "generateAuthLink" }` | Hosted auth URL for new account |
+| POST | `/api/admin/growth-ops/unipile` `{ action: "generateReconnectLink", accountId }` | Reconnect URL |
+| POST | `/api/admin/growth-ops/unipile` `{ action: "sendMessage", chatId, text }` | Send message in thread |
+| POST | `/api/admin/growth-ops/unipile` `{ action: "resolveUser", linkedinUrl, accountId }` | Resolve LinkedIn URL → provider_id |
+| POST | `/api/admin/growth-ops/unipile` `{ action: "sendInvite", providerId, accountId, message? }` | Send connection invite |
+
+### Instantly Proxy
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/growth-ops/instantly?action=listCampaigns` | All email campaigns |
+| GET | `/api/admin/growth-ops/instantly?action=getCampaign&id=` | Single campaign |
+| GET | `/api/admin/growth-ops/instantly?action=listAccounts` | Email sender accounts |
+| POST | `/api/admin/growth-ops/instantly` `{ action: "getAnalytics", id }` | Campaign analytics |
+| POST | `/api/admin/growth-ops/instantly` `{ action: "listLeads", id, cursor? }` | Campaign leads |
+
+### HubSpot Proxy
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/growth-ops/hubspot?action=listPipelines` | All deal pipelines + stages |
+| GET | `/api/admin/growth-ops/hubspot?action=getAllDeals&pipelineId=` | All deals in pipeline |
+| POST | `/api/admin/growth-ops/hubspot` `{ action: "updateDealStage", dealId, stageId }` | Move deal to stage |
+
+### LinkedIn Accounts (DB CRUD)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/growth-ops/linkedin-accounts` | List all accounts |
+| PATCH | `/api/admin/growth-ops/linkedin-accounts` | Update account |
+| DELETE | `/api/admin/growth-ops/linkedin-accounts` | Remove account |
+
+### Target Lists
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/growth-ops/target-lists` | List all target lists |
+| POST | `/api/admin/growth-ops/target-lists` | Create list |
+| DELETE | `/api/admin/growth-ops/target-lists` | Delete list |
+| GET | `/api/admin/growth-ops/target-lists/[listId]/targets` | Targets in list |
+| POST | `/api/admin/growth-ops/target-lists/[listId]/targets` | Add targets (bulk) |
+
+### Invite Campaigns
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/growth-ops/invite-campaigns` | List all campaigns |
+| POST | `/api/admin/growth-ops/invite-campaigns` | Create campaign + build invite queue |
+| PATCH | `/api/admin/growth-ops/invite-campaigns/[campaignId]` | Update campaign status |
+
+### Unipile Webhook (Public)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/growth-ops/unipile-webhook` | Unipile event webhook — auto-registers/updates LinkedIn accounts. Always returns 200. |
