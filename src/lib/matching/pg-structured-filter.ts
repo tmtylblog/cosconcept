@@ -84,13 +84,15 @@ export async function pgStructuredFilter(
     const firmServices = extracted?.services ?? [];
     const employeeCount = companyData?.employeeCount ?? null;
 
-    // Calculate structured score based on filter matches
-    let score = 0;
-    let maxScore = 0;
+    // Start with a baseline score — all enriched firms pass Layer 1.
+    // Filters boost the score for ranking; they do NOT exclude firms.
+    // This prevents empty results when taxonomy terms don't exact-match.
+    let score = 0.1; // baseline so every enriched firm is a candidate
+    let maxScore = 0.1;
 
     if (filters.categories?.length) {
       const matched = filters.categories.filter((c) =>
-        firmCategories.some((fc) => fc.toLowerCase() === c.toLowerCase())
+        firmCategories.some((fc) => fc.toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes(fc.toLowerCase()))
       );
       score += matched.length / filters.categories.length;
       maxScore += 1;
@@ -98,7 +100,7 @@ export async function pgStructuredFilter(
 
     if (filters.skills?.length) {
       const matched = filters.skills.filter((s) =>
-        firmSkills.some((fs) => fs.toLowerCase() === s.toLowerCase())
+        firmSkills.some((fs) => fs.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(fs.toLowerCase()))
       );
       score += matched.length / filters.skills.length;
       maxScore += 1;
@@ -114,7 +116,11 @@ export async function pgStructuredFilter(
 
     if (filters.markets?.length) {
       const matched = filters.markets.filter((m) =>
-        firmMarkets.some((fm) => fm.toLowerCase() === m.toLowerCase())
+        firmMarkets.some(
+          (fm) =>
+            fm.toLowerCase().includes(m.toLowerCase()) ||
+            m.toLowerCase().includes(fm.toLowerCase())
+        )
       );
       score += matched.length / filters.markets.length;
       maxScore += 1;
@@ -130,15 +136,16 @@ export async function pgStructuredFilter(
       };
       const matchSizes = sizeMap[filters.sizeBand] ?? [];
       if (matchSizes.includes(row.sizeBand)) {
-        score += 0.5; // Half-weight bonus for size match
+        score += 0.5;
         maxScore += 0.5;
       }
     }
 
-    const structuredScore = maxScore > 0 ? score / maxScore : 0;
+    const structuredScore = score / maxScore;
 
-    // Only include firms that have ANY match (score > 0), or if no filters return all
-    if (structuredScore > 0 || maxScore === 0) {
+    // All enriched firms pass Layer 1 — filters rank, not exclude.
+    // Vector search (Layer 2) will surface the most semantically relevant ones.
+    {
       candidates.push({
         firmId: row.firmId,
         firmName: row.firmName,
@@ -149,7 +156,7 @@ export async function pgStructuredFilter(
         markets: firmMarkets,
         topServices: firmServices,
         employeeCount,
-        structuredScore: maxScore === 0 ? 0.5 : structuredScore, // Default 0.5 if no filters
+        structuredScore,
       });
     }
   }
