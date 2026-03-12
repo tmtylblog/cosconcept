@@ -22,7 +22,8 @@ export async function GET() {
         (SELECT COUNT(*) FROM "members" m WHERE m."organization_id" = o.id)::int AS members,
         (SELECT COUNT(*) FROM "legacy_users" lu
          INNER JOIN "service_firms" sf ON lu."firm_id" = sf."id"
-         WHERE sf."organization_id" = o.id)::int AS "legacyUsers",
+         WHERE sf."organization_id" = o.id
+           AND lu."migrated_at" IS NULL)::int AS "legacyUsers",
         o."created_at" AS "createdAt"
       FROM "organizations" o
       LEFT JOIN "subscriptions" s ON s."organization_id" = o.id

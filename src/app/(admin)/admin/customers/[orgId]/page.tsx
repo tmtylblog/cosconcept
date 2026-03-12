@@ -29,6 +29,12 @@ import {
   Bot,
   User,
   Share2,
+  UserPlus,
+  Link2,
+  Mail,
+  Copy,
+  Check,
+  Linkedin,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -185,6 +191,26 @@ interface BillingData {
   }[];
 }
 
+interface AdminExpert {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string | null;
+  email: string | null;
+  title: string | null;
+  linkedinUrl: string | null;
+  photoUrl: string | null;
+  division: string | null;
+  userId: string | null;
+  claimStatus: "claimed" | "invited" | "expired" | "unclaimed";
+  inviteSentAt: string | null;
+  profileCount: number;
+  strongProfiles: number;
+  partialProfiles: number;
+  profileCompleteness: number | null;
+  createdAt: string;
+}
+
 type TabId =
   | "overview"
   | "users"
@@ -197,7 +223,7 @@ type TabId =
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <BarChart3 className="h-4 w-4" /> },
-  { id: "users", label: "Users", icon: <Users className="h-4 w-4" /> },
+  { id: "users", label: "Users & Team", icon: <Users className="h-4 w-4" /> },
   { id: "firm-profile", label: "Firm Profile", icon: <Building2 className="h-4 w-4" /> },
   { id: "activity", label: "Activity", icon: <Activity className="h-4 w-4" /> },
   { id: "conversations", label: "Conversations", icon: <MessageSquare className="h-4 w-4" /> },
@@ -267,20 +293,25 @@ function Section({
   title,
   icon,
   children,
+  action,
   className = "",
 }: {
   title: string;
   icon?: React.ReactNode;
   children: React.ReactNode;
+  action?: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={`rounded-cos-lg border border-cos-border bg-white p-5 ${className}`}>
-      <div className="mb-4 flex items-center gap-2">
-        {icon}
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
-          {title}
-        </h3>
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {icon}
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
+            {title}
+          </h3>
+        </div>
+        {action}
       </div>
       {children}
     </div>
@@ -345,6 +376,17 @@ export default function CustomerDetailPage() {
   const [billingLoaded, setBillingLoaded] = useState(false);
 
   const [impersonating, setImpersonating] = useState<string | null>(null);
+
+  // Expert roster state
+  const [experts, setExperts] = useState<AdminExpert[]>([]);
+  const [expertsLoading, setExpertsLoading] = useState(false);
+  const [expertsLoaded, setExpertsLoaded] = useState(false);
+  const [showAddExpert, setShowAddExpert] = useState(false);
+  const [addExpertForm, setAddExpertForm] = useState({ firstName: "", lastName: "", email: "", title: "", linkedinUrl: "" });
+  const [addingExpert, setAddingExpert] = useState(false);
+  const [invitingExpert, setInvitingExpert] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+  const [linkingUser, setLinkingUser] = useState<string | null>(null);
 
   // Primary data load
   useEffect(() => {
@@ -419,6 +461,93 @@ export default function CustomerDetailPage() {
       .finally(() => setBillingLoading(false));
   }, [activeTab, billingLoaded, orgId]);
 
+  // Lazy load experts when Users & Team tab is active
+  const loadExperts = useCallback(() => {
+    setExpertsLoading(true);
+    fetch(`/api/admin/customers/${orgId}/experts`)
+      .then((r) => r.json())
+      .then((d) => {
+        setExperts(d.experts ?? []);
+        setExpertsLoaded(true);
+      })
+      .catch(console.error)
+      .finally(() => setExpertsLoading(false));
+  }, [orgId]);
+
+  useEffect(() => {
+    if (activeTab !== "users" || expertsLoaded) return;
+    loadExperts();
+  }, [activeTab, expertsLoaded, loadExperts]);
+
+  // Add expert handler
+  async function handleAddExpert() {
+    if (!addExpertForm.firstName && !addExpertForm.lastName) return;
+    setAddingExpert(true);
+    try {
+      const res = await fetch(`/api/admin/customers/${orgId}/experts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(addExpertForm),
+      });
+      if (res.ok) {
+        setShowAddExpert(false);
+        setAddExpertForm({ firstName: "", lastName: "", email: "", title: "", linkedinUrl: "" });
+        setExpertsLoaded(false); // trigger reload
+      }
+    } catch (err) {
+      console.error("Failed to add expert:", err);
+    } finally {
+      setAddingExpert(false);
+    }
+  }
+
+  // Send invite email
+  async function handleSendInvite(expertId: string) {
+    setInvitingExpert(expertId);
+    try {
+      const res = await fetch(`/api/experts/${expertId}/invite`, { method: "POST" });
+      if (res.ok) {
+        setExpertsLoaded(false); // trigger reload
+      }
+    } catch (err) {
+      console.error("Failed to send invite:", err);
+    } finally {
+      setInvitingExpert(null);
+    }
+  }
+
+  // Copy claim link
+  async function handleCopyLink(expertId: string) {
+    try {
+      const res = await fetch(`/api/experts/${expertId}/invite-link`, { method: "POST" });
+      if (res.ok) {
+        const { claimUrl } = await res.json();
+        await navigator.clipboard.writeText(claimUrl);
+        setCopiedLink(expertId);
+        setTimeout(() => setCopiedLink(null), 2000);
+      }
+    } catch (err) {
+      console.error("Failed to copy link:", err);
+    }
+  }
+
+  // Link existing user to expert
+  async function handleLinkUser(expertId: string, userId: string) {
+    setLinkingUser(expertId);
+    try {
+      await fetch(`/api/experts/${expertId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      setExpertsLoaded(false); // trigger reload
+    } catch (err) {
+      console.error("Failed to link user:", err);
+    } finally {
+      setLinkingUser(null);
+    }
+  }
+
   // Load conversation thread
   const loadThread = useCallback(
     async (convId: string) => {
@@ -470,15 +599,26 @@ export default function CustomerDetailPage() {
     }
   }, [convSearch, orgId]);
 
-  // Impersonate user
+  // Impersonate user — opens simulation in a new tab.
+  // Better Auth's impersonateUser replaces the current session cookie, so we:
+  // 1. Call impersonateUser to set the cookie
+  // 2. Open new tab pointing to /dashboard (it picks up the impersonated session)
+  // 3. Immediately call stopImpersonating to restore admin session in this tab
+  // The new tab keeps its impersonated cookie until the user clicks "Stop Simulating" there.
   async function handleImpersonate(userId: string) {
     setImpersonating(userId);
     try {
       await authClient.admin.impersonateUser({ userId });
-      // Open in new tab so admin doesn't lose their session
+      // Open simulation in new tab — it will pick up the impersonated session cookie
       window.open("/dashboard", "_blank");
+      // Brief delay to let the new tab start loading with the impersonated cookie
+      await new Promise(r => setTimeout(r, 500));
+      // Restore admin session in this tab
+      await authClient.admin.stopImpersonating();
     } catch (err) {
       console.error("Impersonation failed:", err);
+      // Try to restore admin session if something went wrong
+      try { await authClient.admin.stopImpersonating(); } catch {}
     } finally {
       setImpersonating(null);
     }
@@ -858,94 +998,348 @@ export default function CustomerDetailPage() {
           </div>
         )}
 
-        {/* ── USERS TAB ── */}
+        {/* ── USERS & TEAM TAB ── */}
         {activeTab === "users" && (
-          <Section title={`Team Members (${allUsers.length})`} icon={<Users className="h-4 w-4 text-cos-electric" />}>
-            {allUsers.length === 0 ? (
-              <p className="text-xs text-cos-slate-light">No members in this organization</p>
-            ) : (
-              <div className="overflow-hidden rounded-cos-lg border border-cos-border">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-cos-border bg-cos-cloud/50">
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">User</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Email</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Role</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Status</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Joined</th>
-                      <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-cos-border/60">
-                    {allUsers.map((u) => (
-                      <tr key={u.id} className="transition-colors hover:bg-cos-electric/[0.02]">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
-                              {(u.name ?? "?").charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <span className="font-medium text-cos-midnight">{u.name}</span>
-                              {u.title && <p className="text-[11px] text-cos-slate">{u.title}</p>}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-cos-slate">{u.email}</td>
-                        <td className="px-4 py-3">
-                          <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
-                            u.role === "owner"
-                              ? "bg-cos-warm/10 text-cos-warm"
-                              : u.role === "admin"
-                              ? "bg-cos-electric/10 text-cos-electric"
-                              : "bg-cos-cloud text-cos-slate"
-                          }`}>
-                            {u.role}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {u.banned ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-ember/8 px-2.5 py-0.5 text-xs font-medium text-cos-ember">
-                              <span className="h-1.5 w-1.5 rounded-full bg-cos-ember" />
-                              Banned
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-600">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              Active
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-cos-slate">{formatDate(u.createdAt)}</td>
-                        <td className="px-4 py-3">
-                          {u.source === "registered" && u.userId ? (
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleImpersonate(u.userId!)}
-                                disabled={impersonating === u.userId}
-                                title="Simulate as this user"
-                                className="h-8 gap-1.5 px-2.5 text-xs text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
-                              >
-                                {impersonating === u.userId ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Eye className="h-3.5 w-3.5" />
-                                )}
-                                Simulate
-                              </Button>
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-cos-slate-light">—</span>
-                          )}
-                        </td>
+          <div className="space-y-6">
+            {/* ── SECTION 1: Platform Users ── */}
+            <Section title={`Platform Users (${members.length})`} icon={<User className="h-4 w-4 text-cos-electric" />}>
+              {members.length === 0 ? (
+                <p className="text-xs text-cos-slate-light">No platform users in this organization</p>
+              ) : (
+                <div className="overflow-hidden rounded-cos-lg border border-cos-border">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-cos-border bg-cos-cloud/50">
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">User</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Email</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Role</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Expert Link</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Status</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Section>
+                    </thead>
+                    <tbody className="divide-y divide-cos-border/60">
+                      {members.map((m) => {
+                        // Check if this user is linked to any expert
+                        const linkedExpert = experts.find((e) => e.userId === m.userId);
+                        // Unlinked experts this user could be linked to (match by email)
+                        const suggestedExpert = !linkedExpert
+                          ? experts.find((e) => !e.userId && e.email && m.userEmail && e.email.toLowerCase() === m.userEmail.toLowerCase())
+                          : null;
+
+                        return (
+                          <tr key={m.id} className="transition-colors hover:bg-cos-electric/[0.02]">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
+                                  {(m.userName ?? "?").charAt(0).toUpperCase()}
+                                </div>
+                                <span className="font-medium text-cos-midnight">{m.userName ?? "Unnamed"}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs text-cos-slate">{m.userEmail}</td>
+                            <td className="px-4 py-3">
+                              <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
+                                m.role === "owner"
+                                  ? "bg-cos-warm/10 text-cos-warm"
+                                  : m.role === "admin"
+                                  ? "bg-cos-electric/10 text-cos-electric"
+                                  : "bg-cos-cloud text-cos-slate"
+                              }`}>
+                                {m.role}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {linkedExpert ? (
+                                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600">
+                                  <Link2 className="h-3 w-3" />
+                                  Linked
+                                </span>
+                              ) : suggestedExpert ? (
+                                <button
+                                  onClick={() => handleLinkUser(suggestedExpert.id, m.userId)}
+                                  disabled={linkingUser === suggestedExpert.id}
+                                  className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-electric/5 px-2.5 py-0.5 text-[10px] font-medium text-cos-electric hover:bg-cos-electric/10 transition-colors"
+                                >
+                                  {linkingUser === suggestedExpert.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Link2 className="h-3 w-3" />
+                                  )}
+                                  Link to {suggestedExpert.fullName ?? suggestedExpert.firstName}
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-cos-slate-light">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {m.banned ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-ember/8 px-2.5 py-0.5 text-xs font-medium text-cos-ember">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-cos-ember" />
+                                  Banned
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-600">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                  Active
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleImpersonate(m.userId)}
+                                  disabled={impersonating === m.userId}
+                                  title="Simulate as this user"
+                                  className="h-8 gap-1.5 px-2.5 text-xs text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
+                                >
+                                  {impersonating === m.userId ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Eye className="h-3.5 w-3.5" />
+                                  )}
+                                  Simulate
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Section>
+
+            {/* ── SECTION 2: Expert Roster ── */}
+            <Section
+              title={`Expert Roster (${experts.length})`}
+              icon={<Users className="h-4 w-4 text-cos-signal" />}
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddExpert(true)}
+                  className="h-7 gap-1.5 text-xs"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Add Expert
+                </Button>
+              }
+            >
+              {/* Add Expert Dialog */}
+              {showAddExpert && (
+                <div className="mb-4 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/[0.02] p-4">
+                  <h4 className="mb-3 text-sm font-semibold text-cos-midnight">Add Expert</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      placeholder="First name"
+                      value={addExpertForm.firstName}
+                      onChange={(e) => setAddExpertForm((f) => ({ ...f, firstName: e.target.value }))}
+                      className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
+                    />
+                    <input
+                      placeholder="Last name"
+                      value={addExpertForm.lastName}
+                      onChange={(e) => setAddExpertForm((f) => ({ ...f, lastName: e.target.value }))}
+                      className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
+                    />
+                    <input
+                      placeholder="Email"
+                      type="email"
+                      value={addExpertForm.email}
+                      onChange={(e) => setAddExpertForm((f) => ({ ...f, email: e.target.value }))}
+                      className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
+                    />
+                    <input
+                      placeholder="Title / Role"
+                      value={addExpertForm.title}
+                      onChange={(e) => setAddExpertForm((f) => ({ ...f, title: e.target.value }))}
+                      className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
+                    />
+                    <input
+                      placeholder="LinkedIn URL"
+                      value={addExpertForm.linkedinUrl}
+                      onChange={(e) => setAddExpertForm((f) => ({ ...f, linkedinUrl: e.target.value }))}
+                      className="col-span-2 rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
+                    />
+                  </div>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setShowAddExpert(false)} className="h-8 text-xs">
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleAddExpert}
+                      disabled={addingExpert || (!addExpertForm.firstName && !addExpertForm.lastName)}
+                      className="h-8 gap-1.5 text-xs bg-cos-electric text-white hover:bg-cos-electric/90"
+                    >
+                      {addingExpert ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                      Add Expert
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {expertsLoading && !expertsLoaded ? (
+                <div className="flex items-center gap-2 py-8 justify-center text-cos-slate">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-xs">Loading experts...</span>
+                </div>
+              ) : experts.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-8">
+                  <Users className="h-8 w-8 text-cos-slate-light" />
+                  <p className="text-xs text-cos-slate-light">No experts in the roster yet</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAddExpert(true)}
+                    className="mt-1 h-7 gap-1.5 text-xs"
+                  >
+                    <UserPlus className="h-3 w-3" />
+                    Add First Expert
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-cos-lg border border-cos-border">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-cos-border bg-cos-cloud/50">
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Expert</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Title</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Division</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Profiles</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Claim Status</th>
+                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-cos-border/60">
+                      {experts.map((ep) => (
+                        <tr key={ep.id} className="transition-colors hover:bg-cos-electric/[0.02]">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              {ep.photoUrl ? (
+                                <img src={ep.photoUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                              ) : (
+                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-xs font-semibold text-cos-signal">
+                                  {(ep.fullName ?? ep.firstName ?? "?").charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div>
+                                <span className="font-medium text-cos-midnight">
+                                  {ep.fullName ?? [ep.firstName, ep.lastName].filter(Boolean).join(" ") ?? "Unnamed"}
+                                </span>
+                                {ep.email && <p className="font-mono text-[10px] text-cos-slate">{ep.email}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-cos-slate">{ep.title ?? "—"}</td>
+                          <td className="px-4 py-3">
+                            <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
+                              ep.division === "collective_member"
+                                ? "bg-cos-warm/10 text-cos-warm"
+                                : ep.division === "trusted_expert"
+                                ? "bg-cos-signal/10 text-cos-signal"
+                                : "bg-cos-cloud text-cos-slate"
+                            }`}>
+                              {ep.division === "collective_member" ? "CM" : ep.division === "trusted_expert" ? "Trusted" : "Expert"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {ep.profileCount === 0 ? (
+                              <span className="text-[10px] text-cos-slate-light">0</span>
+                            ) : (
+                              <span className="text-xs text-cos-midnight">
+                                {ep.strongProfiles > 0 && <span className="text-emerald-600">{ep.strongProfiles} Strong</span>}
+                                {ep.strongProfiles > 0 && ep.partialProfiles > 0 && " · "}
+                                {ep.partialProfiles > 0 && <span className="text-cos-warm">{ep.partialProfiles} Partial</span>}
+                                {ep.strongProfiles === 0 && ep.partialProfiles === 0 && `${ep.profileCount}`}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {ep.claimStatus === "claimed" ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-600">
+                                <Check className="h-3 w-3" />
+                                Claimed
+                              </span>
+                            ) : ep.claimStatus === "invited" ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-electric/8 px-2.5 py-0.5 text-[10px] font-medium text-cos-electric">
+                                <Mail className="h-3 w-3" />
+                                Invited
+                              </span>
+                            ) : ep.claimStatus === "expired" ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-warm/10 px-2.5 py-0.5 text-[10px] font-medium text-cos-warm">
+                                <Clock className="h-3 w-3" />
+                                Expired
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 text-[10px] text-cos-slate-light">
+                                Unclaimed
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              {ep.linkedinUrl && (
+                                <a
+                                  href={ep.linkedinUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex h-7 w-7 items-center justify-center rounded text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
+                                  title="View LinkedIn"
+                                >
+                                  <Linkedin className="h-3.5 w-3.5" />
+                                </a>
+                              )}
+                              {!ep.userId && ep.email && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleSendInvite(ep.id)}
+                                    disabled={invitingExpert === ep.id}
+                                    title="Send invite email"
+                                    className="h-7 gap-1 px-2 text-[10px] text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
+                                  >
+                                    {invitingExpert === ep.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Mail className="h-3 w-3" />
+                                    )}
+                                    Invite
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleCopyLink(ep.id)}
+                                    title="Copy claim link"
+                                    className="h-7 gap-1 px-2 text-[10px] text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
+                                  >
+                                    {copiedLink === ep.id ? (
+                                      <Check className="h-3 w-3 text-emerald-500" />
+                                    ) : (
+                                      <Copy className="h-3 w-3" />
+                                    )}
+                                    {copiedLink === ep.id ? "Copied!" : "Link"}
+                                  </Button>
+                                </>
+                              )}
+                              {!ep.userId && !ep.email && (
+                                <span className="text-[10px] text-cos-slate-light">No email</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Section>
+          </div>
         )}
 
         {/* ── FIRM PROFILE TAB ── */}

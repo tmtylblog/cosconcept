@@ -109,6 +109,7 @@ export async function GET(
             lu.created_at AS "createdAt"
           FROM legacy_users lu
           WHERE lu.firm_id = ${firmId}
+            AND lu.migrated_at IS NULL
           ORDER BY lu.last_name ASC, lu.first_name ASC
         `)
       : { rows: [] };

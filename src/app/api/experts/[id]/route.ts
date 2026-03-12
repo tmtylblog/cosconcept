@@ -125,3 +125,37 @@ export async function PUT(
 
   return Response.json({ ok: true });
 }
+
+/**
+ * PATCH /api/experts/[id] — Admin-only: link/unlink userId
+ */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user || session.user.role !== "superadmin") {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const body = await req.json();
+
+  const [expert] = await db
+    .select({ id: expertProfiles.id })
+    .from(expertProfiles)
+    .where(eq(expertProfiles.id, id))
+    .limit(1);
+
+  if (!expert) return Response.json({ error: "Not found" }, { status: 404 });
+
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if ("userId" in body) updates.userId = body.userId || null;
+
+  await db
+    .update(expertProfiles)
+    .set(updates as Partial<typeof expertProfiles.$inferInsert>)
+    .where(eq(expertProfiles.id, id));
+
+  return Response.json({ ok: true });
+}

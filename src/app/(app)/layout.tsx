@@ -281,11 +281,13 @@ function AppLayoutInner({
     : null;
 
   // ─── Derive app phase (5 states) ──────────────────────────
+  // When admin is impersonating, skip onboarding gate so they can see the real app
+  const isImpersonating = !!(session?.session as Record<string, unknown>)?.impersonatedBy;
   const appPhase: AppPhase = !session?.user
     ? (enrichmentStatus === "idle" ? "landing" : "enriching")
     : isBrandWaitlist
       ? "brand_waitlist"
-      : onboardingComplete
+      : (onboardingComplete || isImpersonating)
         ? "authenticated"
         : "onboarding";
 
@@ -452,6 +454,37 @@ function AppLayoutInner({
 
   return (
     <>
+      {/* ─── IMPERSONATION BANNER — shown on ALL phases when admin is simulating ─── */}
+      {isImpersonating && (
+        <div className="fixed inset-x-0 top-0 z-[9999] flex shrink-0 items-center justify-between bg-cos-ember px-4 py-2 shadow-lg">
+          <div className="flex items-center gap-2 text-white">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[10px]">
+              👁
+            </span>
+            <span className="text-sm font-medium">
+              Simulating as{" "}
+              <span className="font-bold">
+                {session?.user?.name || session?.user?.email || "Unknown user"}
+              </span>
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              authClient.admin.stopImpersonating().then(() => {
+                // Try to refresh opener (admin tab) and close this tab
+                try { window.opener?.location.reload(); } catch {}
+                window.close();
+                // Fallback if window.close() doesn't work (not opened via window.open)
+                window.location.href = "/admin";
+              });
+            }}
+            className="rounded-cos-pill border border-white/30 bg-white/10 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-white/20"
+          >
+            Stop Simulating
+          </button>
+        </div>
+      )}
+
       {/* ─── PHASE 1: LANDING (guest, no domain yet) ─── */}
       {appPhase === "landing" && (
         <div className="flex h-screen overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
@@ -817,34 +850,7 @@ function AppLayoutInner({
 
       {/* ─── PHASE 4: AUTHENTICATED (onboarding complete, full app access) ─── */}
       {appPhase === "authenticated" && (
-        <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]">
-          {/* Impersonation banner — shown when admin is simulating this user */}
-          {session?.session?.impersonatedBy && (
-            <div className="flex shrink-0 items-center justify-between bg-cos-ember px-4 py-2 shadow-sm">
-              <div className="flex items-center gap-2 text-white">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[10px]">
-                  👁
-                </span>
-                <span className="text-sm font-medium">
-                  Simulating as{" "}
-                  <span className="font-bold">
-                    {session.user?.name || session.user?.email || "Unknown user"}
-                  </span>
-                </span>
-              </div>
-              <button
-                onClick={() => {
-                  authClient.signOut().then(() => {
-                    window.close();
-                  });
-                }}
-                className="rounded-cos-pill border border-white/30 bg-white/10 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-white/20"
-              >
-                Stop Simulating
-              </button>
-            </div>
-          )}
-
+        <div className={`flex h-screen flex-col overflow-hidden bg-gradient-to-br from-cos-cloud to-[#e8e4dd]${isImpersonating ? " pt-10" : ""}`}>
           <div className="flex flex-1 overflow-hidden">
             {/* Left: Collapsible navigation */}
             <NavBar
