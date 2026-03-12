@@ -10,7 +10,7 @@
 
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { firmCaseStudies, firmServices } from "@/lib/db/schema";
+import { firmCaseStudies, firmServices, serviceFirms } from "@/lib/db/schema";
 import { deepCrawlWebsite } from "@/lib/enrichment/deep-crawler";
 import { enrichCompany } from "@/lib/enrichment/pdl";
 import { classifyFirm } from "@/lib/enrichment/ai-classifier";
@@ -119,15 +119,15 @@ export async function handleDeepCrawl(
 
   // Step 5: Bulk-insert services
   let servicesInserted = 0;
-  if (crawlResult.extracted.services.length > 0) {
-    const existing = await db
-      .select({ name: firmServices.name })
-      .from(firmServices)
-      .where(eq(firmServices.firmId, firmId));
-    const existingNames = new Set(existing.map((s) => s.name.toLowerCase()));
+  const existingServicesForFirm = await db
+    .select({ name: firmServices.name })
+    .from(firmServices)
+    .where(eq(firmServices.firmId, firmId));
+  const existingServiceNames = new Set(existingServicesForFirm.map((s) => s.name.toLowerCase()));
 
+  if (crawlResult.extracted.services.length > 0) {
     const newServices = crawlResult.extracted.services.filter(
-      (s) => !existingNames.has(s.name.toLowerCase())
+      (s) => !existingServiceNames.has(s.name.toLowerCase())
     );
 
     if (newServices.length > 0) {
@@ -146,6 +146,27 @@ export async function handleDeepCrawl(
         await db.insert(firmServices).values(values.slice(i, i + 50));
       }
       servicesInserted = values.length;
+    }
+  } else if (classification.skills.length > 0 && existingServiceNames.size === 0) {
+    // Fallback: seed from classification skills when website doesn't have crawlable service pages
+    const skillsToSeed = classification.skills.slice(0, 15);
+    const values = skillsToSeed
+      .filter((skill) => !existingServiceNames.has(skill.toLowerCase()))
+      .map((skill, i) => ({
+        id: uid("svc"),
+        firmId,
+        organizationId,
+        name: skill,
+        description: null,
+        subServices: null,
+        isHidden: false,
+        displayOrder: i,
+      }));
+
+    if (values.length > 0) {
+      await db.insert(firmServices).values(values);
+      servicesInserted = values.length;
+      console.log(`[DeepCrawl] Seeded ${values.length} services from classification skills (no crawlable service pages found)`);
     }
   }
 
@@ -202,6 +223,39 @@ export async function handleDeepCrawl(
       caseStudiesQueued++;
     }
   }
+
+  // Step 7b: Update service_firms enrichment status + data
+  await db
+    .update(serviceFirms)
+    .set({
+      enrichmentStatus: "enriched",
+      enrichmentData: {
+        classification: {
+          categories: classification.categories,
+          skills: classification.skills,
+          industries: classification.industries,
+          confidence: classification.confidence,
+        },
+        extracted: {
+          services: crawlResult.extracted.services.map((s) => s.name),
+          clients: crawlResult.extracted.clients,
+          aboutPitch: crawlResult.extracted.aboutPitch,
+          caseStudyUrls: crawlResult.extracted.caseStudyUrls,
+        },
+        pdl: pdlData
+          ? {
+              displayName: pdlData.displayName,
+              industry: pdlData.industry,
+              size: pdlData.size,
+              employeeCount: pdlData.employeeCount,
+              headline: pdlData.headline,
+            }
+          : null,
+        enrichedAt: new Date().toISOString(),
+      },
+    })
+    .where(eq(serviceFirms.id, firmId));
+  console.log(`[DeepCrawl] Updated service_firms enrichment_status → enriched for ${firmId}`);
 
   // Step 8: Queue expert LinkedIn enrichment (top 20)
   const teamToEnrich = crawlResult.extracted.teamMembers.slice(0, 20);

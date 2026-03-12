@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { subscriptions } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -15,6 +17,11 @@ export const dynamic = "force-dynamic";
  * firmCaseStudies) instead of truncated imported_* tables.
  */
 export async function GET() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user || session.user.role !== "superadmin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     // Total orgs
     const orgCount = await db.execute(
@@ -70,6 +77,12 @@ export async function GET() {
     );
     const totalExperts = Number(expertCount.rows[0]?.count ?? 0);
 
+    // Clients (from imported_clients)
+    const clientCount = await db.execute(
+      sql`SELECT COUNT(*)::int AS count FROM "imported_clients"`
+    );
+    const totalClients = Number(clientCount.rows[0]?.count ?? 0);
+
     // Case studies (from firm_case_studies — auto-discovered from websites)
     const csCount = await db.execute(
       sql`SELECT COUNT(*)::int AS count FROM "firm_case_studies" WHERE status != 'deleted'`
@@ -94,6 +107,7 @@ export async function GET() {
       planDistribution,
       totalFirms,
       totalExperts,
+      totalClients,
       totalCaseStudies,
       onboarding: {
         started: onboardingStarted,
