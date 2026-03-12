@@ -1138,6 +1138,38 @@ export const migrationBatches = pgTable("migration_batches", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ─── Legacy Users (imported from old COS platform) ────
+// Stores user records from the legacy Collective OS platform with their
+// original roles. Linked to service_firms by matching org names.
+// These are NOT Better Auth users — they're reference records for role management.
+
+export const legacyUsers = pgTable("legacy_users", {
+  id: text("id").primaryKey(),
+  legacyUserId: text("legacy_user_id").notNull(), // Original UUID from user-basic.json
+  legacyOrgId: text("legacy_org_id"), // Original org UUID
+  legacyOrgName: text("legacy_org_name"), // Original org business_name
+
+  // User info
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  email: text("email"),
+  title: text("title"), // Job title
+
+  // Legacy roles (stored as JSON array)
+  legacyRoles: jsonb("legacy_roles").$type<string[]>().default([]),
+
+  // Linked to current platform
+  firmId: text("firm_id").references(() => serviceFirms.id, {
+    onDelete: "set null",
+  }),
+  // If this person later signs up, link to their Better Auth user
+  userId: text("user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ─── Settings (key-value store) ───────────────────────
 
 export const settings = pgTable("settings", {

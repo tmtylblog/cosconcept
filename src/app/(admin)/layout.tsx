@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Lightbulb,
   Phone,
+  Shield,
 } from "lucide-react";
 
 /**
@@ -87,6 +88,7 @@ export default async function AdminLayout({
           <SectionHeader label="Platform" />
           <AdminNavLink href="/admin/customers" icon={<Building2 className="h-4 w-4" />} label="Customers" />
           <AdminNavLink href="/admin/users" icon={<Users className="h-4 w-4" />} label="Staff" />
+          <AdminNavLink href="/admin/roles" icon={<Shield className="h-4 w-4" />} label="Role Management" />
 
           <SectionHeader label="Operations" />
           <AdminNavLink href="/admin/subscriptions" icon={<CreditCard className="h-4 w-4" />} label="Subscriptions" />
