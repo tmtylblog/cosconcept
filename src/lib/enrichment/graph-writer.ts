@@ -297,7 +297,8 @@ export async function writeFirmToGraph(
         `MATCH (f:ServiceFirm {id: $firmId})
          UNWIND $members AS m
          MERGE (p:Person {id: m.id})
-         SET p.fullName = m.fullName,
+         SET p:Expert,
+             p.fullName = m.fullName,
              p.firstName = m.firstName,
              p.lastName = m.lastName,
              p.firmId = $firmId,
@@ -378,7 +379,8 @@ export async function writeExpertToGraph(
     const parts = data.fullName.trim().split(/\s+/);
     await neo4jWrite(
       `MERGE (p:Person {id: $id})
-       SET p.fullName = $fullName,
+       SET p:Expert,
+           p.fullName = $fullName,
            p.firstName = $firstName,
            p.lastName = $lastName,
            p.headline = $headline,

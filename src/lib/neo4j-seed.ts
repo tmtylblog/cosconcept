@@ -131,9 +131,10 @@ async function seedCategories(): Promise<number> {
 }
 
 async function seedSkillsL1(): Promise<number> {
+  // Single Skill label for all levels — L1 skills are Skill nodes with level="L1"
   const l1Names = getSkillL1Names();
   const items = l1Names.map((name) => ({ name, props: { level: "L1" } }));
-  return batchMerge("SkillL1", items);
+  return batchMerge("Skill", items);
 }
 
 async function seedSkillsL2(): Promise<number> {
@@ -152,24 +153,25 @@ async function seedSkillsL2(): Promise<number> {
     }
   }
 
-  // Create Skill nodes
+  // Create Skill nodes — never downgrade level (L1 > L2 > L3)
   let created = 0;
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     const batch = items.slice(i, i + BATCH_SIZE);
     await neo4jWrite(
       `UNWIND $items AS item
        MERGE (s:Skill {name: item.name})
-       SET s.level = item.props.level, s.l1 = item.props.l1`,
+       SET s.l1 = item.props.l1,
+           s.level = CASE WHEN s.level = 'L1' THEN 'L1' ELSE item.props.level END`,
       { items: batch }
     );
     created += batch.length;
   }
 
-  // Create BELONGS_TO edges (L2 → L1)
+  // Create BELONGS_TO edges (L2 → L1) — both are Skill nodes now
   await neo4jWrite(
     `UNWIND $items AS item
-     MATCH (s:Skill {name: item.name})
-     MATCH (l1:SkillL1 {name: item.props.l1})
+     MATCH (s:Skill {name: item.name, level: "L2"})
+     MATCH (l1:Skill {name: item.props.l1, level: "L1"})
      MERGE (s)-[:BELONGS_TO]->(l1)`,
     { items }
   );
@@ -187,16 +189,17 @@ async function seedSkillsL3(): Promise<number> {
     await neo4jWrite(
       `UNWIND $items AS item
        MERGE (s:Skill {name: item.l3})
-       SET s.level = "L3", s.l2 = item.l2`,
+       SET s.l2 = item.l2,
+           s.level = CASE WHEN s.level = 'L1' THEN 'L1' WHEN s.level = 'L2' THEN 'L2' ELSE 'L3' END`,
       {
         items: batch.map((s) => ({ l2: s.l2, l3: s.l3 })),
       }
     );
 
-    // Create BELONGS_TO edges (L3 → L2 parent)
+    // Create BELONGS_TO edges (L3 → L2 parent) — only for actual L3 nodes
     await neo4jWrite(
       `UNWIND $items AS item
-       MATCH (child:Skill {name: item.l3})
+       MATCH (child:Skill {name: item.l3, level: 'L3'})
        MATCH (parent:Skill {name: item.l2})
        MERGE (child)-[:BELONGS_TO]->(parent)`,
       {
@@ -290,7 +293,8 @@ async function seedIndustries(): Promise<number> {
 async function seedFirmCategories(): Promise<number> {
   const categories = getFirmCategories();
 
-  // Merge as FirmCategory nodes (same data as Category, new label)
+  // Merge on Category first (finds existing or creates), then add FirmCategory label.
+  // Avoids duplicate nodes that would violate the firm_category_name uniqueness constraint.
   const items = categories.map((c) => ({
     name: c.name,
     props: {
@@ -299,10 +303,21 @@ async function seedFirmCategories(): Promise<number> {
       sampleOrgs: c.sampleOrgs.join(", "),
     },
   }));
-  const count = await batchMerge("FirmCategory", items);
 
-  // Also add FirmCategory label to existing Category nodes for dual-label support
-  await neo4jWrite(`MATCH (n:Category) SET n:FirmCategory`);
+  let count = 0;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = items.slice(i, i + BATCH_SIZE);
+    await neo4jWrite(
+      `UNWIND $items AS item
+       MERGE (n:Category {name: item.name})
+       SET n:FirmCategory,
+           n.definition = item.props.definition,
+           n.theme = item.props.theme,
+           n.sampleOrgs = item.props.sampleOrgs`,
+      { items: batch }
+    );
+    count += batch.length;
+  }
 
   // Mirror PARTNERS_WITH edges from firm-relationships.csv onto FirmCategory nodes
   const relationships = loadFirmRelationships();
@@ -350,10 +365,19 @@ async function seedDeliveryModels(): Promise<number> {
     name: dm.name,
     props: { description: dm.description },
   }));
-  const count = await batchMerge("DeliveryModel", items);
 
-  // Also add DeliveryModel label to existing FirmType nodes for dual-label support
-  await neo4jWrite(`MATCH (n:FirmType) SET n:DeliveryModel`);
+  let count = 0;
+  for (let i = 0; i < items.length; i += BATCH_SIZE) {
+    const batch = items.slice(i, i + BATCH_SIZE);
+    await neo4jWrite(
+      `UNWIND $items AS item
+       MERGE (n:FirmType {name: item.name})
+       SET n:DeliveryModel,
+           n.description = item.props.description`,
+      { items: batch }
+    );
+    count += batch.length;
+  }
 
   return count;
 }

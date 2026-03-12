@@ -240,12 +240,13 @@ async function syncContacts(limit: number) {
     }));
 
     try {
-      // MERGE Person nodes
+      // MERGE Person:Contact nodes — Contact = imported external contact from n8n
       const result = await neo4jWrite<{ sourceId: string; nodeId: string }>(
         `
         UNWIND $items AS item
         MERGE (p:Person {sourceId: item.sourceId, source: item.source})
-        SET p.name = item.name,
+        SET p:Contact,
+            p.name = item.name,
             p.firstName = item.firstName,
             p.lastName = item.lastName,
             p.email = item.email,

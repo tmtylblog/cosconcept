@@ -6,14 +6,16 @@
  *
  * Node Labels:
  *   Company (multi-label base), ServiceFirm, SolutionPartner,
- *   Person, Expert, WorkHistory,
- *   Skill, SkillL1, Industry, IndustryL1, Market,
+ *   Person (base), Person:Expert, Person:Contact, Person:PlatformUser,
+ *   WorkHistory,
+ *   Skill (level: L1/L2/L3 — single label, hierarchy via BELONGS_TO edges),
+ *   Industry, IndustryL1, Market,
  *   CaseStudy, Client, Service, ServiceCategory,
  *   Category, FirmCategory, TechCategory, DeliveryModel,
  *   Language, FirmType
  *
  * Relationship Types:
- *   BELONGS_TO (Skill→SkillL1, Skill→Skill parent, Industry→IndustryL1, Service→ServiceCategory)
+ *   BELONGS_TO (Skill L2→L1, Skill L3→L2, Industry→IndustryL1, Service→ServiceCategory)
  *   IN_CATEGORY (ServiceFirm→Category | FirmCategory)
  *   HAS_SKILL (ServiceFirm→Skill)
  *   OPERATES_IN (ServiceFirm→Market)
@@ -40,8 +42,8 @@ const CONSTRAINTS = [
   // Unique ID constraints for all node types
   `CREATE CONSTRAINT firm_id IF NOT EXISTS FOR (n:ServiceFirm) REQUIRE n.id IS UNIQUE`,
   `CREATE CONSTRAINT expert_id IF NOT EXISTS FOR (n:Expert) REQUIRE n.id IS UNIQUE`,
+  // Single Skill label for all levels (L1/L2/L3) — name is globally unique across all levels
   `CREATE CONSTRAINT skill_name IF NOT EXISTS FOR (n:Skill) REQUIRE n.name IS UNIQUE`,
-  `CREATE CONSTRAINT skill_l1_name IF NOT EXISTS FOR (n:SkillL1) REQUIRE n.name IS UNIQUE`,
   `CREATE CONSTRAINT industry_name IF NOT EXISTS FOR (n:Industry) REQUIRE n.name IS UNIQUE`,
   `CREATE CONSTRAINT market_name IF NOT EXISTS FOR (n:Market) REQUIRE n.name IS UNIQUE`,
   `CREATE CONSTRAINT case_study_id IF NOT EXISTS FOR (n:CaseStudy) REQUIRE n.id IS UNIQUE`,
@@ -95,6 +97,18 @@ const INDEXES = [
   // ── Track A: Person + WorkHistory indexes ─────────────
   `CREATE INDEX person_email IF NOT EXISTS FOR (n:Person) ON (n.emails)`,
   `CREATE INDEX work_history_dates IF NOT EXISTS FOR (n:WorkHistory) ON (n.startAt, n.endAt)`,
+
+  // ── Person sub-label indexes (Expert / Contact / PlatformUser) ──
+  // All three are sub-labels of Person (multi-label pattern: Person:Expert, Person:Contact, Person:PlatformUser)
+  // Expert    = professional employed at a COS member firm (CURRENTLY_AT ServiceFirm)
+  // Contact   = imported external contact from n8n / outreach (WORKS_AT Company)
+  // PlatformUser = COS account holder (has a pgUserId / was a legacy User node)
+  `CREATE INDEX expert_firm_id IF NOT EXISTS FOR (n:Expert) ON (n.firmId)`,
+  `CREATE INDEX expert_enrichment_status IF NOT EXISTS FOR (n:Expert) ON (n.enrichmentStatus)`,
+  `CREATE FULLTEXT INDEX expert_search IF NOT EXISTS FOR (n:Expert) ON EACH [n.fullName, n.headline]`,
+  `CREATE INDEX contact_source IF NOT EXISTS FOR (n:Contact) ON (n.source)`,
+  `CREATE INDEX contact_email IF NOT EXISTS FOR (n:Contact) ON (n.email)`,
+  `CREATE INDEX platform_user_pg_id IF NOT EXISTS FOR (n:PlatformUser) ON (n.pgUserId)`,
 ];
 
 // ─── Schema Setup ─────────────────────────────────────────
