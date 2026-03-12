@@ -808,16 +808,18 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         )}
       </div>
 
-      {/* Messages area — spacer pushes messages to bottom when few; scrolls normally when many */}
+      {/* Messages area — min-h-full inner wrapper anchors messages to bottom
+          when few, but lets content grow beyond the container height so
+          overflow-y-auto actually scrolls. */}
       <div
         ref={scrollRef}
-        className="cos-scrollbar relative flex flex-1 flex-col overflow-y-auto bg-cos-midnight-light/30 px-4 py-4"
+        className="cos-scrollbar flex-1 overflow-y-auto bg-cos-midnight-light/30"
         onScroll={(e) => {
           const el = e.currentTarget;
           isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
         }}
       >
-        <div className="flex-1" />
+        <div className="flex min-h-full flex-col justify-end px-4 py-4">
         <div className="space-y-2">
         {messages.map((message, idx) => {
           const text = getMessageText(message);
@@ -1168,7 +1170,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
             </div>
           </div>
         )}
-        </div>{/* close inner space-y-2 wrapper */}
+        </div>{/* close space-y-2 */}
+        </div>{/* close min-h-full inner wrapper */}
       </div>
 
       {/* Transcript detection banner */}
