@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { neo4jDriver } from "@/lib/neo4j";
+import { getNeo4jDriver } from "@/lib/neo4j";
 import { getStripe } from "@/lib/stripe";
 import { sql } from "drizzle-orm";
 
@@ -368,7 +368,7 @@ async function checkNeo4j(): Promise<ApiHealthCheck> {
   const start = Date.now();
   const name = "Neo4j";
   try {
-    const session = neo4jDriver.session();
+    const session = getNeo4jDriver().session();
     try {
       await session.run("RETURN 1 AS ping");
       const latencyMs = Date.now() - start;
