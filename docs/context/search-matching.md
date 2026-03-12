@@ -382,8 +382,10 @@ Key types:
 - **No search API auth** -- route has no authentication check
 - ~~**Ossy chat not integrated**~~ -- all 5 search tools are now wired in `ossy-tools.ts` (`search_partners`, `search_experts`, `search_case_studies`, `lookup_firm`, `get_my_profile`)
 - **No Redis caching** -- popular search patterns should be cached per design
-- ~~**Expert/case study search**~~ -- expert search (`searchExperts()`) and case study search (`searchCaseStudies()`) are now implemented and wired to Ossy tools
+- ~~**Expert/case study search**~~ -- DONE: `searchExperts()` and `searchCaseStudies()` implemented and wired to Ossy tools
 - **Size band filtering** -- parsed by query parser but not used in Neo4j structured filter
+- **Graph needs firm data** -- search tools return thin results until `POST /api/admin/import/populate-graph` is run to batch-sync enriched service_firms → Neo4j ServiceFirm nodes
+- **Graph population admin route** -- `src/app/api/admin/import/populate-graph/route.ts` built with `sync`, `promote`, and `classify` modes. Not yet executed.
 
 ---
 

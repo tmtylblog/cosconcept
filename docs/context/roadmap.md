@@ -9,9 +9,9 @@
 | 0 | Project Scaffold | Done | Next.js 15, Drizzle, Neo4j, Better Auth, Vercel deploy, design tokens |
 | 1 | Ossy Chat Core | Done | Claude Sonnet chat, streaming, conversation persistence, voice I/O shell |
 | 2 | Org & Expert Profiles | Done | Orgs, members, expert profiles, enrichment pipeline, billing, admin |
-| 3 | Knowledge Graph | In Progress | Neo4j schema + seed done, graph-sync Inngest partial, pgvector not live |
-| 4 | Search & Matching | In Progress | Three-layer search code written, needs graph data to be useful |
-| 5 | Partnerships & Opportunities | In Progress | Partnership CRUD, referrals, intros, opportunity extraction — UI built |
+| 3 | Knowledge Graph | In Progress | Neo4j schema + seed done, graph-sync Inngest partial, pgvector not live, partner sync API live |
+| 4 | Search & Matching | In Progress | Three-layer search + 5 Ossy tools wired, graph population admin route built, needs firm data in graph |
+| 5 | Partnerships & Opportunities | In Progress | Partnership CRUD, referrals, intros, opportunity extraction — UI built, partner sync API live |
 | 6 | Call Intelligence | In Progress | Recall.ai integration, post-call analysis pipeline, coaching reports — early MVP |
 | 7 | Email Agent | In Progress | Resend email client, inbound processing, approval queue — early MVP |
 | 8 | Advanced Features | Planned | Social graph analysis, meeting bot improvements, advanced coaching |
@@ -142,6 +142,15 @@
 **What's in progress:**
 - Graph-sync Inngest function is basic — only syncs firm-level data, does not handle full relationship graph (experts, case studies, clients as nodes)
 - Enrichment-to-graph pipeline works for individual firms but not at scale
+
+**What's new (2026-03-11):**
+- **Partner Sync API** — 6 REST endpoints under `/api/partner-sync/` for bidirectional knowledge graph sync with Chameleon Collective CORE. Live in production.
+- **Taxonomy shared module** (`src/lib/taxonomy-full.ts`) — extracted static data from `neo4j-seed.ts` for reuse by seed script + taxonomy API
+- **Graph population admin route** (`POST /api/admin/import/populate-graph`) — batch sync enriched `service_firms` to Neo4j, with promote and classify modes
+- **Ossy search tools** — 5 tools wired in `ossy-tools.ts`: `search_partners`, `search_experts`, `search_case_studies`, `lookup_firm`, `get_my_profile`
+- **Firm lookup** (`src/lib/matching/firm-lookup.ts`) — PG + Neo4j firm detail query
+- **Expert search** (`src/lib/matching/expert-search.ts`) — ILIKE + JSONB search on expert_profiles
+- **Case study search** (`src/lib/matching/case-study-search.ts`) — tag-filtered search on firm_case_studies
 
 **What's not done (gaps):**
 - **Global firm database import pipeline** — no bulk import of 1.5M+ firms
@@ -294,7 +303,7 @@
 
 ### Critical (blocks core value proposition)
 
-1. **Knowledge graph needs real data** — taxonomy is seeded, but no firm/expert/client data at scale; search returns nothing meaningful without it
+1. **Knowledge graph needs real firm data** — taxonomy is seeded, but few ServiceFirm nodes in Neo4j. `POST /api/admin/import/populate-graph` is built but not yet run. Search tools are wired but return thin results without graph data.
 2. **pgvector embeddings not generated** — abstraction profiles table exists but is empty; Layer 2 search falls back to text overlap
 3. **Abstraction profile auto-computation** — no Inngest trigger when content changes; profiles must be manually triggered
 4. **Graph-sync incomplete** — only syncs firm-level data, not full entity graph (experts, case studies, clients as separate nodes with edges)
@@ -359,6 +368,11 @@ From git log (most recent first, as of 2026-03-09):
 
 | Commit | Description |
 |--------|-------------|
+| `e70064d` | docs: update context files for partner sync API endpoints |
+| `80bbfd5` | feat: add partner sync API for Chameleon Collective CORE integration |
+| `221f311` | docs: update context files for search tools and graph population route |
+| `b652fcc` | feat: wire Ossy search tools + graph population admin route |
+| `ba0586d` | docs: update context files for PREFERS edges, bidirectional matching, and Neo4j migration |
 | `4da588b` | fix: use Category label instead of FirmCategory in preference-writer |
 | `b6cb362` | feat: wire onboarding answers to Neo4j PREFERS edges + bidirectional matching |
 | `579dad7` | refactor: redesign onboarding from 9 questions to 5 high-signal questions |
@@ -367,7 +381,7 @@ From git log (most recent first, as of 2026-03-09):
 | `83ea21f` | refactor: migrate admin routes to canonical tables for Track A alignment |
 | `3162d45` | chore: add Track A columns to existing tables |
 
-**Focus:** Track A data migration, onboarding redesign (9→5 questions), Neo4j PREFERS edges, bidirectional matching engine.
+**Focus:** Track A data migration, onboarding redesign, bidirectional matching, Ossy search tools, partner sync API with CORE.
 
 ---
 
@@ -399,10 +413,14 @@ Phase 0 (Scaffold) ──→ Phase 1 (Chat) ──→ Phase 2 (Profiles)
 
 ## Critical Blockers
 
-1. **No real firm data in graph** — The entire matching/search value proposition requires the knowledge graph to be populated with firm data beyond taxonomy. Currently, only firms enriched via the onboarding flow appear in Neo4j, and there are very few of these.
+1. **Graph needs firm data** — Taxonomy nodes are seeded but few ServiceFirm nodes exist in Neo4j. The `POST /api/admin/import/populate-graph` route is built to batch-sync enriched `service_firms` → Neo4j. Running it will unblock search. Ossy's 5 search tools are wired but return thin results without this data.
 
 2. **pgvector not operational** — The abstraction layer (Phase 4's core innovation) is architecturally complete but has no data. No embeddings have been generated. The `abstractionProfiles` table in Postgres exists but is empty.
 
 3. **Graph-sync is shallow** — The Inngest function `graph-sync-firm` only calls `writeFirmToGraph()` for top-level firm data. It does not create Expert, CaseStudy, or Client nodes with their full relationship edges. This means even enriched firms are only partially represented in Neo4j.
 
-4. ~~**No conversational onboarding**~~ — **RESOLVED (2026-03-11).** The v2 5-question interview is now live. Onboarding answers write to PG `rawOnboardingData` JSONB and fire-and-forget sync to Neo4j `PREFERS` edges. Bidirectional matching in Layer 1 structured filter uses these edges. See `preference-writer.ts`.
+4. ~~**No conversational onboarding**~~ — **RESOLVED (2026-03-11).** v2 5-question interview live. Answers → PG + Neo4j PREFERS edges. Bidirectional matching uses these edges.
+
+5. ~~**No search tools in Ossy**~~ — **RESOLVED (2026-03-11).** All 5 tools wired: `search_partners`, `search_experts`, `search_case_studies`, `lookup_firm`, `get_my_profile`. Backend functions built in `src/lib/matching/`.
+
+6. ~~**No partner sync**~~ — **RESOLVED (2026-03-11).** Partner Sync API live in production (6 endpoints). `PARTNER_SYNC_API_KEY` configured on Vercel. Chameleon Collective CORE can connect.
