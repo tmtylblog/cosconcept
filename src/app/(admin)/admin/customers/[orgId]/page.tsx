@@ -216,7 +216,6 @@ type TabId =
   | "users"
   | "firm-profile"
   | "activity"
-  | "conversations"
   | "billing"
   | "partnerships"
   | "admin";
@@ -226,7 +225,6 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "users", label: "Users & Team", icon: <Users className="h-4 w-4" /> },
   { id: "firm-profile", label: "Firm Profile", icon: <Building2 className="h-4 w-4" /> },
   { id: "activity", label: "Activity", icon: <Activity className="h-4 w-4" /> },
-  { id: "conversations", label: "Conversations", icon: <MessageSquare className="h-4 w-4" /> },
   { id: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" /> },
   { id: "partnerships", label: "Partnerships", icon: <Handshake className="h-4 w-4" /> },
   { id: "admin", label: "Admin", icon: <Shield className="h-4 w-4" /> },
@@ -362,6 +360,7 @@ export default function CustomerDetailPage() {
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityLoaded, setActivityLoaded] = useState(false);
   const [activityFilter, setActivityFilter] = useState("all");
+  const [activityView, setActivityView] = useState<"timeline" | "conversations">("timeline");
 
   const [partnershipData, setPartnershipData] = useState<{
     partnerships: PartnershipRow[];
@@ -405,9 +404,9 @@ export default function CustomerDetailPage() {
       });
   }, [orgId]);
 
-  // Lazy load conversations
+  // Lazy load conversations (loaded alongside activity tab)
   useEffect(() => {
-    if (activeTab !== "conversations" || convsLoaded) return;
+    if (activeTab !== "activity" || convsLoaded) return;
     setConvsLoading(true);
     fetch(`/api/admin/customers/${orgId}/conversations`)
       .then((r) => r.json())
@@ -979,7 +978,7 @@ export default function CustomerDetailPage() {
                     Manage Subscription
                   </button>
                   <button
-                    onClick={() => setActiveTab("conversations")}
+                    onClick={() => { setActiveTab("activity"); setActivityView("conversations"); }}
                     className="flex w-full items-center gap-2 rounded-cos px-3 py-2 text-xs font-medium text-cos-slate hover:bg-cos-electric/5 hover:text-cos-electric transition-colors"
                   >
                     <MessageSquare className="h-3.5 w-3.5" />
@@ -1497,204 +1496,242 @@ export default function CustomerDetailPage() {
           </div>
         )}
 
-        {/* ── ACTIVITY TAB ── */}
+        {/* ── ACTIVITY TAB (includes conversations) ── */}
         {activeTab === "activity" && (
           <div className="space-y-4">
-            {/* Filters */}
-            <div className="flex gap-2">
-              {["all", "conversation", "ai_usage", "enrichment", "onboarding"].map((type) => (
+            {/* View toggle: Timeline vs Conversations */}
+            <div className="flex items-center gap-3">
+              <div className="flex rounded-cos-lg border border-cos-border bg-cos-cloud/30 p-0.5">
                 <button
-                  key={type}
-                  onClick={() => {
-                    setActivityFilter(type);
-                    setActivityLoaded(false);
-                  }}
-                  className={`rounded-cos-pill px-3 py-1.5 text-xs font-medium transition-colors ${
-                    activityFilter === type
-                      ? "bg-cos-electric text-white"
-                      : "bg-cos-cloud text-cos-slate hover:bg-cos-cloud-dim"
+                  onClick={() => setActivityView("timeline")}
+                  className={`flex items-center gap-1.5 rounded-cos px-3 py-1.5 text-xs font-medium transition-colors ${
+                    activityView === "timeline"
+                      ? "bg-white text-cos-midnight shadow-sm"
+                      : "text-cos-slate hover:text-cos-midnight"
                   }`}
                 >
-                  {type === "all" ? "All" : type.replace(/_/g, " ")}
+                  <Activity className="h-3.5 w-3.5" />
+                  Timeline
                 </button>
-              ))}
+                <button
+                  onClick={() => setActivityView("conversations")}
+                  className={`flex items-center gap-1.5 rounded-cos px-3 py-1.5 text-xs font-medium transition-colors ${
+                    activityView === "conversations"
+                      ? "bg-white text-cos-midnight shadow-sm"
+                      : "text-cos-slate hover:text-cos-midnight"
+                  }`}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Conversations
+                  {conversations.length > 0 && (
+                    <span className="rounded-cos-full bg-cos-electric/10 px-1.5 py-0.5 text-[9px] font-semibold text-cos-electric">
+                      {conversations.length}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
 
-            {activityLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
-              </div>
-            ) : activityEvents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
-                <Activity className="h-8 w-8 text-cos-slate-light" />
-                <p className="mt-2 text-sm text-cos-slate">No activity found</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {activityEvents.map((evt, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-3 rounded-cos-lg border border-cos-border bg-white px-4 py-3"
-                  >
-                    <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-cos-cloud">
-                      {EVENT_ICONS[evt.type] ?? <Activity className="h-3.5 w-3.5 text-cos-slate" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-cos-midnight">{evt.title}</span>
-                        <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[9px] font-medium text-cos-slate uppercase">
-                          {evt.type.replace(/_/g, " ")}
+            {/* ── Timeline view ── */}
+            {activityView === "timeline" && (
+              <>
+                {/* Filters */}
+                <div className="flex gap-2">
+                  {["all", "conversation", "ai_usage", "enrichment", "onboarding"].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setActivityFilter(type);
+                        setActivityLoaded(false);
+                      }}
+                      className={`rounded-cos-pill px-3 py-1.5 text-xs font-medium transition-colors ${
+                        activityFilter === type
+                          ? "bg-cos-electric text-white"
+                          : "bg-cos-cloud text-cos-slate hover:bg-cos-cloud-dim"
+                      }`}
+                    >
+                      {type === "all" ? "All" : type.replace(/_/g, " ")}
+                    </button>
+                  ))}
+                </div>
+
+                {activityLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+                  </div>
+                ) : activityEvents.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
+                    <Activity className="h-8 w-8 text-cos-slate-light" />
+                    <p className="mt-2 text-sm text-cos-slate">No activity found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {activityEvents.map((evt, i) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-3 rounded-cos-lg border border-cos-border bg-white px-4 py-3"
+                      >
+                        <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-cos-cloud">
+                          {EVENT_ICONS[evt.type] ?? <Activity className="h-3.5 w-3.5 text-cos-slate" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-cos-midnight">{evt.title}</span>
+                            <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[9px] font-medium text-cos-slate uppercase">
+                              {evt.type.replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-cos-slate">{evt.detail}</p>
+                          {evt.userName && (
+                            <p className="mt-0.5 text-[10px] text-cos-slate-light">by {evt.userName}</p>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-[10px] text-cos-slate-light">
+                          {formatDateTime(evt.timestamp)}
                         </span>
                       </div>
-                      <p className="mt-0.5 text-xs text-cos-slate">{evt.detail}</p>
-                      {evt.userName && (
-                        <p className="mt-0.5 text-[10px] text-cos-slate-light">by {evt.userName}</p>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── Conversations view ── */}
+            {activityView === "conversations" && (
+              <>
+                {/* Search */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
+                    <input
+                      type="text"
+                      placeholder="Search within conversations..."
+                      value={convSearch}
+                      onChange={(e) => setConvSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && searchConversations()}
+                      className="w-full rounded-cos-lg border border-cos-border bg-white py-2 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+                    />
+                  </div>
+                  <Button
+                    onClick={searchConversations}
+                    variant="outline"
+                    size="sm"
+                    className="h-[38px] px-4 text-xs"
+                  >
+                    Search
+                  </Button>
+                </div>
+
+                {convsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+                  </div>
+                ) : (
+                  <div className="grid gap-4 lg:grid-cols-5">
+                    {/* Conversation list */}
+                    <div className="space-y-1 lg:col-span-2 max-h-[600px] overflow-y-auto">
+                      {conversations.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
+                          <MessageSquare className="h-8 w-8 text-cos-slate-light" />
+                          <p className="mt-2 text-sm text-cos-slate">No conversations found</p>
+                        </div>
+                      ) : (
+                        conversations.map((conv) => (
+                          <button
+                            key={conv.id}
+                            onClick={() => loadThread(conv.id)}
+                            className={`w-full text-left rounded-cos-lg border px-4 py-3 transition-colors ${
+                              selectedConv === conv.id
+                                ? "border-cos-electric bg-cos-electric/5"
+                                : "border-cos-border bg-white hover:border-cos-electric/30"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="truncate text-sm font-medium text-cos-midnight">
+                                {conv.title ?? "Untitled"}
+                              </p>
+                              <span className={`rounded-cos-pill px-2 py-0.5 text-[9px] font-medium ${
+                                conv.mode === "onboarding"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-cos-cloud text-cos-slate"
+                              }`}>
+                                {conv.mode}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex items-center gap-3 text-[10px] text-cos-slate">
+                              <span className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                {conv.userName}
+                              </span>
+                              <span>{conv.messageCount} msgs</span>
+                              <span>{formatDate(conv.lastMessageAt ?? conv.createdAt)}</span>
+                            </div>
+                          </button>
+                        ))
                       )}
                     </div>
-                    <span className="shrink-0 text-[10px] text-cos-slate-light">
-                      {formatDateTime(evt.timestamp)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
-        {/* ── CONVERSATIONS TAB ── */}
-        {activeTab === "conversations" && (
-          <div className="space-y-4">
-            {/* Search */}
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
-                <input
-                  type="text"
-                  placeholder="Search within conversations..."
-                  value={convSearch}
-                  onChange={(e) => setConvSearch(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && searchConversations()}
-                  className="w-full rounded-cos-lg border border-cos-border bg-white py-2 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
-                />
-              </div>
-              <Button
-                onClick={searchConversations}
-                variant="outline"
-                size="sm"
-                className="h-[38px] px-4 text-xs"
-              >
-                Search
-              </Button>
-            </div>
-
-            {convsLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
-              </div>
-            ) : (
-              <div className="grid gap-4 lg:grid-cols-5">
-                {/* Conversation list */}
-                <div className="space-y-1 lg:col-span-2 max-h-[600px] overflow-y-auto">
-                  {conversations.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
-                      <MessageSquare className="h-8 w-8 text-cos-slate-light" />
-                      <p className="mt-2 text-sm text-cos-slate">No conversations found</p>
-                    </div>
-                  ) : (
-                    conversations.map((conv) => (
-                      <button
-                        key={conv.id}
-                        onClick={() => loadThread(conv.id)}
-                        className={`w-full text-left rounded-cos-lg border px-4 py-3 transition-colors ${
-                          selectedConv === conv.id
-                            ? "border-cos-electric bg-cos-electric/5"
-                            : "border-cos-border bg-white hover:border-cos-electric/30"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className="truncate text-sm font-medium text-cos-midnight">
-                            {conv.title ?? "Untitled"}
-                          </p>
-                          <span className={`rounded-cos-pill px-2 py-0.5 text-[9px] font-medium ${
-                            conv.mode === "onboarding"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-cos-cloud text-cos-slate"
-                          }`}>
-                            {conv.mode}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex items-center gap-3 text-[10px] text-cos-slate">
-                          <span className="flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {conv.userName}
-                          </span>
-                          <span>{conv.messageCount} msgs</span>
-                          <span>{formatDate(conv.lastMessageAt ?? conv.createdAt)}</span>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-
-                {/* Message thread */}
-                <div className="lg:col-span-3">
-                  {selectedConv ? (
-                    <div className="rounded-cos-lg border border-cos-border bg-white overflow-hidden">
-                      <div className="border-b border-cos-border bg-cos-cloud/30 px-4 py-3">
-                        <p className="text-sm font-semibold text-cos-midnight">
-                          {conversations.find((c) => c.id === selectedConv)?.title ?? "Conversation"}
-                        </p>
-                        <p className="text-xs text-cos-slate">
-                          {convMessages.length} messages
-                        </p>
-                      </div>
-                      <div className="max-h-[500px] overflow-y-auto p-4 space-y-3">
-                        {convMsgsLoading ? (
-                          <div className="flex items-center justify-center py-8">
-                            <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
+                    {/* Message thread */}
+                    <div className="lg:col-span-3">
+                      {selectedConv ? (
+                        <div className="rounded-cos-lg border border-cos-border bg-white overflow-hidden">
+                          <div className="border-b border-cos-border bg-cos-cloud/30 px-4 py-3">
+                            <p className="text-sm font-semibold text-cos-midnight">
+                              {conversations.find((c) => c.id === selectedConv)?.title ?? "Conversation"}
+                            </p>
+                            <p className="text-xs text-cos-slate">
+                              {convMessages.length} messages
+                            </p>
                           </div>
-                        ) : (
-                          convMessages.map((msg) => (
-                            <div
-                              key={msg.id}
-                              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                            >
-                              <div
-                                className={`max-w-[80%] rounded-cos-lg px-4 py-2.5 ${
-                                  msg.role === "user"
-                                    ? "bg-cos-electric text-white"
-                                    : "bg-cos-cloud text-cos-midnight"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 mb-1">
-                                  {msg.role === "assistant" ? (
-                                    <Bot className="h-3 w-3 text-cos-electric" />
-                                  ) : (
-                                    <User className="h-3 w-3" />
-                                  )}
-                                  <span className="text-[10px] font-medium opacity-70">
-                                    {msg.role === "assistant" ? "Ossy" : "User"} · {formatDateTime(msg.createdAt)}
-                                  </span>
-                                </div>
-                                <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                                  {msg.content}
-                                </p>
+                          <div className="max-h-[500px] overflow-y-auto p-4 space-y-3">
+                            {convMsgsLoading ? (
+                              <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
                               </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
+                            ) : (
+                              convMessages.map((msg) => (
+                                <div
+                                  key={msg.id}
+                                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                                >
+                                  <div
+                                    className={`max-w-[80%] rounded-cos-lg px-4 py-2.5 ${
+                                      msg.role === "user"
+                                        ? "bg-cos-electric text-white"
+                                        : "bg-cos-cloud text-cos-midnight"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 mb-1">
+                                      {msg.role === "assistant" ? (
+                                        <Bot className="h-3 w-3 text-cos-electric" />
+                                      ) : (
+                                        <User className="h-3 w-3" />
+                                      )}
+                                      <span className="text-[10px] font-medium opacity-70">
+                                        {msg.role === "assistant" ? "Ossy" : "User"} · {formatDateTime(msg.createdAt)}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                                      {msg.content}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-24">
+                          <MessageSquare className="h-10 w-10 text-cos-slate-light" />
+                          <p className="mt-3 text-sm text-cos-slate">
+                            Select a conversation to view messages
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-24">
-                      <MessageSquare className="h-10 w-10 text-cos-slate-light" />
-                      <p className="mt-3 text-sm text-cos-slate">
-                        Select a conversation to view messages
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
