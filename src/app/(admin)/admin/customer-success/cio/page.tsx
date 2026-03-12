@@ -7,10 +7,6 @@ import {
   Send,
   Eye,
   RefreshCw,
-  CheckCircle2,
-  Clock,
-  PauseCircle,
-  XCircle,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,15 +41,6 @@ interface CioData {
   campaigns: Campaign[];
   messages: WorkspaceMessage[];
 }
-
-const CAMPAIGN_STATE_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  sending:  { label: "Sending",  color: "text-cos-signal bg-cos-signal/10",   icon: Send },
-  sent:     { label: "Sent",     color: "text-cos-electric bg-cos-electric/10", icon: CheckCircle2 },
-  draft:    { label: "Draft",    color: "text-cos-slate bg-cos-slate/10",     icon: Clock },
-  paused:   { label: "Paused",   color: "text-cos-warm bg-cos-warm/10",       icon: PauseCircle },
-  stopped:  { label: "Stopped",  color: "text-cos-ember bg-cos-ember/10",     icon: XCircle },
-  archived: { label: "Archived", color: "text-cos-slate-light bg-cos-cloud",  icon: XCircle },
-};
 
 const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
   regular:       "Broadcast",
@@ -107,9 +94,13 @@ export default function CioDashboardPage() {
 
   const { campaigns, messages } = data;
 
-  const activeCampaigns = campaigns.filter((c) => c.state === "sending" || c.state === "sent");
-  const totalSent = messages.reduce((sum, m) => sum + (m.metrics.sent ?? 0), 0);
-  const totalOpened = messages.reduce((sum, m) => sum + (m.metrics.opened ?? 0), 0);
+  // Only show campaigns that are actively running
+  const activeCampaigns = campaigns.filter((c) => c.state === "sending");
+  // Only show messages that were actually sent
+  const sentMessages = messages.filter((m) => (m.metrics.sent ?? 0) > 0 || (m.metrics.delivered ?? 0) > 0);
+
+  const totalSent = sentMessages.reduce((sum, m) => sum + (m.metrics.sent ?? 0), 0);
+  const totalOpened = sentMessages.reduce((sum, m) => sum + (m.metrics.opened ?? 0), 0);
   const openRate = totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(1) : "0";
 
   return (
@@ -135,45 +126,41 @@ export default function CioDashboardPage() {
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon={Zap} label="Total Campaigns" value={campaigns.length} color="text-cos-electric" bg="bg-cos-electric/10" />
-        <StatCard icon={Send} label="Active" value={activeCampaigns.length} color="text-cos-signal" bg="bg-cos-signal/10" />
-        <StatCard icon={Mail} label="Recent Emails" value={messages.length} color="text-cos-warm" bg="bg-cos-warm/10" />
-        <StatCard icon={Eye} label="Open Rate" value={`${openRate}%`} color="text-cos-electric" bg="bg-cos-electric/10" sub={`${totalOpened} of ${totalSent} sent`} />
+        <StatCard icon={Zap} label="Active Campaigns" value={activeCampaigns.length} color="text-cos-signal" bg="bg-cos-signal/10" sub="currently running" />
+        <StatCard icon={Mail} label="Emails Sent" value={totalSent.toLocaleString()} color="text-cos-electric" bg="bg-cos-electric/10" />
+        <StatCard icon={Eye} label="Open Rate" value={`${openRate}%`} color="text-cos-warm" bg="bg-cos-warm/10" sub={`${totalOpened} of ${totalSent} opens`} />
+        <StatCard icon={Send} label="Recent Deliveries" value={sentMessages.length} color="text-cos-electric" bg="bg-cos-electric/10" sub="in last 50" />
       </div>
 
-      {/* Campaigns */}
+      {/* Active Campaigns */}
       <div className="rounded-cos-xl border border-cos-border bg-cos-surface overflow-hidden">
         <div className="px-5 py-4 border-b border-cos-border">
           <h2 className="text-sm font-semibold text-cos-midnight">
-            Campaigns
-            <span className="ml-2 text-xs font-normal text-cos-slate">{campaigns.length} total</span>
+            Active Campaigns
+            <span className="ml-2 text-xs font-normal text-cos-slate">{activeCampaigns.length} running</span>
           </h2>
         </div>
-        {campaigns.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-cos-slate">No campaigns found.</p>
+        {activeCampaigns.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-cos-slate">No active campaigns right now.</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-cos-border bg-cos-cloud/50">
                 <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Name</th>
-                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">State</th>
                 <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Type</th>
                 <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Emails Sent</th>
                 <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Last Updated</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-cos-border/60">
-              {campaigns.map((c) => {
-                const stateConfig = CAMPAIGN_STATE_CONFIG[c.state] ?? CAMPAIGN_STATE_CONFIG.draft;
-                const StateIcon = stateConfig.icon;
+              {activeCampaigns.map((c) => {
                 return (
                   <tr key={c.id} className="transition-colors hover:bg-cos-electric/[0.02]">
-                    <td className="px-5 py-3 font-medium text-cos-midnight">{c.name}</td>
                     <td className="px-5 py-3">
-                      <span className={cn("inline-flex items-center gap-1.5 rounded-cos-pill px-2.5 py-1 text-xs font-medium", stateConfig.color)}>
-                        <StateIcon className="h-3 w-3" />
-                        {stateConfig.label}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-cos-signal animate-pulse" />
+                        <span className="font-medium text-cos-midnight">{c.name}</span>
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-xs text-cos-slate">
                       {CAMPAIGN_TYPE_LABELS[c.type] ?? c.type}
@@ -192,26 +179,22 @@ export default function CioDashboardPage() {
         )}
       </div>
 
-      {/* Recent messages */}
+      {/* Recent sent emails */}
       <div className="rounded-cos-xl border border-cos-border bg-cos-surface overflow-hidden">
         <div className="px-5 py-4 border-b border-cos-border">
           <h2 className="text-sm font-semibold text-cos-midnight">
-            Recent Emails
-            <span className="ml-2 text-xs font-normal text-cos-slate">Last {messages.length}</span>
+            Recent Transactional Emails
+            <span className="ml-2 text-xs font-normal text-cos-slate">{sentMessages.length} sent</span>
           </h2>
         </div>
-        {messages.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-cos-slate">No recent messages found.</p>
+        {sentMessages.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-cos-slate">No sent emails found.</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-cos-border bg-cos-cloud/50">
                 <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Subject</th>
                 <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Recipient</th>
-                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Type</th>
-                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  <span className="flex items-center gap-1"><Send className="h-3 w-3" /> Sent</span>
-                </th>
                 <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                   <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> Opened</span>
                 </th>
@@ -219,27 +202,17 @@ export default function CioDashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-cos-border/60">
-              {messages.map((m) => (
+              {sentMessages.map((m) => (
                 <tr key={m.id} className="transition-colors hover:bg-cos-electric/[0.02]">
                   <td className="px-5 py-3 font-medium text-cos-midnight max-w-xs truncate">{m.subject || "—"}</td>
                   <td className="px-5 py-3 font-mono text-xs text-cos-slate truncate max-w-[180px]">{m.recipient}</td>
-                  <td className="px-5 py-3 text-xs text-cos-slate capitalize">{m.type}</td>
-                  <td className="px-5 py-3">
-                    {(m.metrics.sent ?? 0) > 0 ? (
-                      <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-medium text-cos-signal">
-                        <CheckCircle2 className="h-2.5 w-2.5" /> Sent
-                      </span>
-                    ) : (
-                      <span className="text-xs text-cos-slate-light">—</span>
-                    )}
-                  </td>
                   <td className="px-5 py-3">
                     {(m.metrics.opened ?? 0) > 0 ? (
                       <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[10px] font-medium text-cos-electric">
                         <Eye className="h-2.5 w-2.5" /> Opened
                       </span>
                     ) : (
-                      <span className="text-xs text-cos-slate-light">—</span>
+                      <span className="text-xs text-cos-slate-light">Not opened</span>
                     )}
                   </td>
                   <td className="px-5 py-3 text-xs text-cos-slate">
