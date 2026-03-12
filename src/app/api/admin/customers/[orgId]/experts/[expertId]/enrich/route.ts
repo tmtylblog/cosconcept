@@ -8,12 +8,14 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { headers } from "next/headers";
 import { eq, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { expertProfiles, serviceFirms } from "@/lib/db/schema";
 import { enqueue } from "@/lib/jobs/queue";
+import { runNextJob } from "@/lib/jobs/runner";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +100,9 @@ export async function POST(
       },
       { priority: 10 } // High priority for manual enrichment
     );
+
+    // Trigger job worker immediately (runs after response is sent)
+    after(runNextJob().catch(() => {}));
 
     return NextResponse.json({
       jobId,
