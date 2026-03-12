@@ -11,17 +11,16 @@ import {
   Check,
   Lock,
   ArrowUpRight,
-  Clock,
+  Sparkles,
+  Star,
 } from "lucide-react";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useDbExperts } from "@/hooks/use-db-experts";
 import { usePlan } from "@/hooks/use-plan";
-import { ExpertCard } from "@/components/firm/expert-card";
 import { Button } from "@/components/ui/button";
 import { PLAN_LIMITS, type PlanId } from "@/lib/billing/plan-limits";
-
-const TIER_ORDER: Record<string, number> = { expert: 0, potential_expert: 1 };
+import type { Expert } from "@/types/cos-data";
 
 export default function FirmExpertsPage() {
   const { data: activeOrg } = useActiveOrganization();
@@ -35,28 +34,19 @@ export default function FirmExpertsPage() {
     isLoading: dbLoading,
   } = useDbExperts(activeOrg?.id);
 
-  // Sort experts: expert tier first, then potential, then unclassified
-  const sortedExperts = useMemo(
-    () =>
-      [...dbExperts].sort(
-        (a, b) =>
-          (TIER_ORDER[a.expertTier ?? ""] ?? 2) - (TIER_ORDER[b.expertTier ?? ""] ?? 2)
-      ),
-    [dbExperts]
-  );
-
-  // Tier counts for summary bar
-  const tierCounts = useMemo(() => {
-    let expertCount = 0;
-    let potentialCount = 0;
+  // Group experts by tier
+  const { tierExperts, tierPotential, tierOther } = useMemo(() => {
+    const te: Expert[] = [];
+    const tp: Expert[] = [];
+    const to: Expert[] = [];
     for (const e of dbExperts) {
-      if (e.expertTier === "expert") expertCount++;
-      else if (e.expertTier === "potential_expert") potentialCount++;
+      if (e.expertTier === "expert") te.push(e);
+      else if (e.expertTier === "potential_expert") tp.push(e);
+      else to.push(e);
     }
-    return { expertCount, potentialCount };
+    return { tierExperts: te, tierPotential: tp, tierOther: to };
   }, [dbExperts]);
 
-  const experts = sortedExperts;
   const totalExperts = dbTotalExperts;
   const expertsLoading = dbLoading;
 
@@ -75,7 +65,7 @@ export default function FirmExpertsPage() {
   const [addingExpert, setAddingExpert] = useState(false);
   const [invitingExpert, setInvitingExpert] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
-  const [showAllExperts, setShowAllExperts] = useState(false);
+  const [expandedExpert, setExpandedExpert] = useState<string | null>(null);
 
   // Expert is beyond the free limit? (only matters on free plan)
   const isExpertLocked = useCallback(
@@ -97,7 +87,6 @@ export default function FirmExpertsPage() {
       if (res.ok) {
         setShowAddExpert(false);
         setAddForm({ firstName: "", lastName: "", email: "", title: "", linkedinUrl: "" });
-        // Reload page to get fresh data
         window.location.reload();
       }
     } catch (err) {
@@ -134,15 +123,223 @@ export default function FirmExpertsPage() {
     }
   }
 
+  // Render a single expert row inside a tier section
+  function renderExpertRow(expert: Expert, globalIndex: number) {
+    const locked = isExpertLocked(globalIndex);
+    if (locked) {
+      return (
+        <div
+          key={expert.id}
+          className="flex items-center justify-between px-4 py-3 opacity-50"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cos-cloud text-cos-slate-light">
+              <Lock className="h-3.5 w-3.5" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-cos-slate">{expert.name}</p>
+              <p className="text-xs text-cos-slate-dim">{expert.role}</p>
+            </div>
+          </div>
+          <a
+            href="/settings/billing"
+            className="flex items-center gap-1.5 rounded-cos-pill bg-cos-electric/10 px-3 py-1.5 text-xs font-medium text-cos-electric transition-colors hover:bg-cos-electric/20"
+          >
+            <Lock className="h-3 w-3" />
+            Upgrade
+          </a>
+        </div>
+      );
+    }
+
+    const sps = expert.specialistProfiles ?? [];
+    const strongCount = sps.filter((s) => s.qualityStatus === "strong").length;
+    const partialCount = sps.filter((s) => s.qualityStatus === "partial").length;
+    const primarySp = sps.find((sp) => sp.isPrimary) ?? sps.find((sp) => sp.qualityStatus === "strong");
+    const isExpanded = expandedExpert === expert.id;
+
+    return (
+      <div key={expert.id}>
+        <button
+          onClick={() => setExpandedExpert(isExpanded ? null : expert.id)}
+          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-cos-electric/[0.02]"
+        >
+          {/* Avatar */}
+          {expert.photoUrl ? (
+            <img src={expert.photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+          ) : (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-xs font-semibold text-cos-signal">
+              {expert.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+            </div>
+          )}
+
+          {/* Name + Title + Specialist summary */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-medium text-cos-midnight">
+                {expert.name}
+              </span>
+              {expert.isFullyEnriched && (
+                <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Fully enriched with work history" />
+              )}
+            </div>
+            <p className="truncate text-xs text-cos-slate">
+              {primarySp?.qualityStatus === "strong" ? primarySp.title : expert.role}
+            </p>
+            {sps.length > 0 && (strongCount > 0 || partialCount > 0) && (
+              <p className="mt-0.5 flex items-center gap-1 text-[10px] text-cos-signal">
+                <Star className="h-2.5 w-2.5" />
+                {[
+                  strongCount > 0 ? `${strongCount} Strong` : null,
+                  partialCount > 0 ? `${partialCount} Partial` : null,
+                ].filter(Boolean).join(" · ")}
+                {" profile"}{sps.length === 1 ? "" : "s"}
+              </p>
+            )}
+            {sps.length === 0 && (
+              <p className="mt-0.5 text-[10px] italic text-cos-slate-light">
+                No specialist profiles yet
+              </p>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {expert.linkedinUrl && (
+              <a
+                href={expert.linkedinUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-7 w-7 items-center justify-center rounded text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
+                title="View LinkedIn"
+              >
+                <Linkedin className="h-3.5 w-3.5" />
+              </a>
+            )}
+            {expert.email && (
+              <button
+                onClick={() => handleSendInvite(expert.id)}
+                disabled={invitingExpert === expert.id}
+                className="flex h-7 items-center gap-1 rounded px-2 text-[10px] font-medium text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
+                title="Send invite email"
+              >
+                {invitingExpert === expert.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Mail className="h-3 w-3" />
+                )}
+                Invite
+              </button>
+            )}
+            {expert.email && (
+              <button
+                onClick={() => handleCopyLink(expert.id)}
+                className="flex h-7 items-center gap-1 rounded px-2 text-[10px] font-medium text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
+                title="Copy claim link"
+              >
+                {copiedLink === expert.id ? (
+                  <Check className="h-3 w-3 text-emerald-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+                {copiedLink === expert.id ? "Copied!" : "Link"}
+              </button>
+            )}
+          </div>
+        </button>
+
+        {/* Expanded detail */}
+        {isExpanded && (
+          <div className="border-t border-cos-border/20 bg-cos-cloud/20 px-4 py-3 space-y-2">
+            {expert.bio && (
+              <p className="text-xs leading-relaxed text-cos-slate-dim">{expert.bio}</p>
+            )}
+            {expert.location && (
+              <p className="text-[11px] text-cos-slate-dim">📍 {expert.location}</p>
+            )}
+            {expert.skills.length > 0 && (
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate-dim">Skills</p>
+                <div className="flex flex-wrap gap-1">
+                  {expert.skills.slice(0, 8).map((s) => (
+                    <span key={s} className="rounded-cos-pill bg-cos-midnight/5 px-2 py-0.5 text-[10px] text-cos-slate">{s}</span>
+                  ))}
+                  {expert.skills.length > 8 && (
+                    <span className="rounded-cos-pill bg-cos-midnight/5 px-2 py-0.5 text-[10px] text-cos-slate-dim">
+                      +{expert.skills.length - 8} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {expert.industries.length > 0 && (
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-slate-dim">Industries</p>
+                <div className="flex flex-wrap gap-1">
+                  {expert.industries.slice(0, 6).map((ind) => (
+                    <span key={ind} className="rounded-cos-pill bg-cos-signal/8 px-2 py-0.5 text-[10px] text-cos-signal">{ind}</span>
+                  ))}
+                  {expert.industries.length > 6 && (
+                    <span className="rounded-cos-pill bg-cos-signal/8 px-2 py-0.5 text-[10px] text-cos-slate-dim">
+                      +{expert.industries.length - 6} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+            {sps.length > 0 && (
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-cos-electric">
+                  Specialist Profiles ({sps.length})
+                </p>
+                <div className="space-y-1">
+                  {sps.slice(0, 4).map((sp) => (
+                    <div key={sp.id} className="flex items-center gap-1.5 rounded-cos-md border border-cos-electric/20 bg-white px-2.5 py-1.5">
+                      {sp.qualityStatus === "strong" && (
+                        <Star className="h-2.5 w-2.5 shrink-0 text-cos-signal" />
+                      )}
+                      <p className="flex-1 truncate text-[11px] font-medium text-cos-electric">
+                        {sp.title || "Untitled"}
+                      </p>
+                      <span className="shrink-0 text-[9px] text-cos-slate-dim">
+                        {Math.round(sp.qualityScore ?? 0)}/100
+                      </span>
+                    </div>
+                  ))}
+                  {sps.length > 4 && (
+                    <p className="text-[10px] text-cos-slate-dim pl-1">
+                      +{sps.length - 4} more profiles
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            {expert.profileUrl && (
+              <a
+                href={expert.profileUrl}
+                className="inline-flex items-center gap-1 rounded-cos-md border border-cos-border px-3 py-1.5 text-[11px] font-medium text-cos-slate-dim hover:border-cos-electric/40 hover:text-cos-electric transition-colors"
+              >
+                Edit Profile →
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Track global index for plan-limit locking across all tier groups
+  let globalIndex = 0;
+
   return (
     <div className="cos-scrollbar mx-auto max-w-3xl space-y-5 overflow-y-auto p-6">
       {/* Page header */}
       <div>
         <h2 className="font-heading text-lg font-semibold text-cos-midnight">
-          Team & Experts
+          Team &amp; Experts
         </h2>
         <p className="mt-1 text-xs text-cos-slate-dim">
-          Manage your team roster. Import from LinkedIn, invite members to claim their profiles.
+          Manage your team roster. Invite members to claim and edit their profiles.
         </p>
       </div>
 
@@ -212,7 +409,6 @@ export default function FirmExpertsPage() {
           <UserPlus className="h-3.5 w-3.5" />
           Add Expert
         </Button>
-        {/* LinkedIn import button is a future feature */}
         <Button
           variant="outline"
           size="sm"
@@ -279,99 +475,84 @@ export default function FirmExpertsPage() {
         </div>
       )}
 
-      {/* Expert List */}
+      {/* Expert Roster — Grouped by Tier */}
       {expertsLoading || status === "loading" ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
         </div>
-      ) : experts.length > 0 ? (
-        <div className="space-y-2">
-          {/* Tier summary bar */}
-          {(tierCounts.expertCount > 0 || tierCounts.potentialCount > 0) && totalExperts > 5 && (
-            <div className="flex items-center gap-3 rounded-cos-lg border border-cos-border/40 bg-cos-cloud/30 px-4 py-2.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-cos-slate">Team Breakdown</span>
-              <span className="flex items-center gap-1 rounded-cos-pill bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-600">
-                {tierCounts.expertCount} Expert-tier
-              </span>
-              {tierCounts.potentialCount > 0 && (
-                <span className="flex items-center gap-1 rounded-cos-pill bg-amber-50 px-2.5 py-0.5 text-[10px] font-medium text-amber-600">
-                  {tierCounts.potentialCount} Potential
-                </span>
-              )}
+      ) : dbExperts.length > 0 ? (
+        <div className="space-y-4">
+          {/* Experts section */}
+          {tierExperts.length > 0 && (
+            <div className="overflow-hidden rounded-cos-lg border border-emerald-200">
+              <div className="flex items-center justify-between bg-emerald-50 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-emerald-700">Experts</span>
+                  <span className="rounded-cos-pill bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                    {tierExperts.length}
+                  </span>
+                </div>
+                <span className="text-[10px] text-emerald-600/70">Client-facing specialists</span>
+              </div>
+              <div className="divide-y divide-emerald-100">
+                {tierExperts.map((expert) => {
+                  const row = renderExpertRow(expert, globalIndex);
+                  globalIndex++;
+                  return row;
+                })}
+              </div>
             </div>
           )}
-          {(showAllExperts ? experts : experts.slice(0, 20)).map((expert, index) => {
-            const locked = isExpertLocked(index);
 
-            if (locked) {
-              return (
-                <div
-                  key={expert.id}
-                  className="relative rounded-cos-xl border border-cos-border bg-cos-surface/50 p-4 opacity-50"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cos-cloud text-cos-slate-light">
-                        <Lock className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-cos-slate">{expert.name}</p>
-                        <p className="text-[11px] text-cos-slate-dim">{expert.role}</p>
-                      </div>
-                    </div>
-                    <a
-                      href="/settings/billing"
-                      className="flex items-center gap-1.5 rounded-cos-pill bg-cos-electric/10 px-3 py-1.5 text-xs font-medium text-cos-electric transition-colors hover:bg-cos-electric/20"
-                    >
-                      <Lock className="h-3 w-3" />
-                      Upgrade to unlock
-                    </a>
-                  </div>
+          {/* Potential Experts section */}
+          {tierPotential.length > 0 && (
+            <div className="overflow-hidden rounded-cos-lg border border-amber-200">
+              <div className="flex items-center justify-between bg-amber-50 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-amber-700">Potential Experts</span>
+                  <span className="rounded-cos-pill bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                    {tierPotential.length}
+                  </span>
                 </div>
-              );
-            }
-
-            return (
-              <div key={expert.id} className="relative">
-                <ExpertCard expert={expert} />
-                {/* Claim status and invite actions overlay */}
-                {expert.email && !expert.profileUrl?.includes("/edit") && (
-                  <div className="absolute right-3 top-3 flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleSendInvite(expert.id)}
-                      disabled={invitingExpert === expert.id}
-                      className="flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2.5 py-1 text-[10px] font-medium text-cos-electric hover:bg-cos-electric/20 transition-colors"
-                    >
-                      {invitingExpert === expert.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Mail className="h-3 w-3" />
-                      )}
-                      Invite
-                    </button>
-                    <button
-                      onClick={() => handleCopyLink(expert.id)}
-                      className="flex items-center gap-1 rounded-cos-pill bg-cos-cloud px-2.5 py-1 text-[10px] font-medium text-cos-slate hover:bg-cos-cloud-dim transition-colors"
-                    >
-                      {copiedLink === expert.id ? (
-                        <Check className="h-3 w-3 text-emerald-500" />
-                      ) : (
-                        <Copy className="h-3 w-3" />
-                      )}
-                      {copiedLink === expert.id ? "Copied!" : "Link"}
-                    </button>
-                  </div>
-                )}
+                <span className="text-[10px] text-amber-600/70">May be client-facing</span>
               </div>
-            );
-          })}
-          {experts.length > 20 && !showAllExperts && (
-            <button
-              onClick={() => setShowAllExperts(true)}
-              className="w-full rounded-cos-md border border-cos-border/50 py-2 text-xs font-medium text-cos-electric transition-colors hover:bg-cos-electric/5"
-            >
-              Show all {totalExperts} experts
-            </button>
+              <div className="divide-y divide-amber-100">
+                {tierPotential.map((expert) => {
+                  const row = renderExpertRow(expert, globalIndex);
+                  globalIndex++;
+                  return row;
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Unclassified / manually added section */}
+          {tierOther.length > 0 && (
+            <div className="overflow-hidden rounded-cos-lg border border-cos-border/60">
+              <div className="flex items-center justify-between bg-cos-cloud/50 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-cos-slate">Team Members</span>
+                  <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-bold text-cos-slate">
+                    {tierOther.length}
+                  </span>
+                </div>
+                <span className="text-[10px] text-cos-slate/70">Manually added or unclassified</span>
+              </div>
+              <div className="divide-y divide-cos-border/30">
+                {tierOther.map((expert) => {
+                  const row = renderExpertRow(expert, globalIndex);
+                  globalIndex++;
+                  return row;
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Show nothing-classified note when all are unclassified */}
+          {tierExperts.length === 0 && tierPotential.length === 0 && tierOther.length > 0 && (
+            <p className="text-center text-[11px] text-cos-slate-dim">
+              Your team hasn&apos;t been classified yet. Ask Ossy to discover and classify your team.
+            </p>
           )}
         </div>
       ) : extracted?.teamMembers?.length ? (
@@ -394,7 +575,7 @@ export default function FirmExpertsPage() {
             No team members yet
           </p>
           <p className="mt-1 text-xs text-cos-slate-dim">
-            Add experts manually or ask Ossy to help enrich your team roster from LinkedIn.
+            Add experts manually or ask Ossy to help discover your team.
           </p>
           <Button
             variant="outline"
@@ -409,9 +590,9 @@ export default function FirmExpertsPage() {
       )}
 
       {/* Locked slots placeholder for free plan */}
-      {!isUnlimited && experts.length > 0 && experts.length < expertLimit && (
+      {!isUnlimited && dbExperts.length > 0 && dbExperts.length < expertLimit && (
         <div className="space-y-2">
-          {Array.from({ length: Math.min(2, expertLimit - experts.length) }).map((_, i) => (
+          {Array.from({ length: Math.min(2, expertLimit - dbExperts.length) }).map((_, i) => (
             <div
               key={`locked-${i}`}
               className="flex items-center justify-between rounded-cos-xl border border-dashed border-cos-border/50 bg-cos-surface/30 p-4"
