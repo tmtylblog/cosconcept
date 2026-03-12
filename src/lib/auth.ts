@@ -6,6 +6,7 @@ import { db } from "./db";
 import * as schema from "./db/schema";
 import { PLAN_LIMITS } from "./billing/plan-limits";
 import { createFreeSubscription } from "./billing/create-free-subscription";
+import { enqueue } from "./jobs/queue";
 
 // Define access control with admin-level statements
 const ac = createAccessControl({
@@ -63,6 +64,18 @@ export const auth = betterAuth({
               .set({ role: "superadmin" })
               .where(eq(schema.users.id, user.id));
           }
+
+          // Enqueue attribution check — runs async, non-blocking
+          const nameParts = (user.name ?? "").split(" ");
+          await enqueue("attribution-check", {
+            userId: user.id,
+            email: user.email ?? "",
+            firstName: nameParts[0] ?? null,
+            lastName: nameParts.slice(1).join(" ") || null,
+            linkedinUrl: null,
+          }).catch(() => {
+            // Non-fatal — attribution failure must never block signup
+          });
         },
       },
     },
