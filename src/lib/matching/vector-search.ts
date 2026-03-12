@@ -18,7 +18,7 @@ import type { MatchCandidate } from "./types";
 /**
  * Generate an embedding for a search query using Jina AI.
  *
- * Uses jina-embeddings-v3 (1536-dim) with task "retrieval.query".
+ * Uses jina-embeddings-v3 (1024-dim) with task "retrieval.query".
  * Used for the query side of asymmetric retrieval.
  */
 export async function generateQueryEmbedding(
@@ -39,7 +39,7 @@ export async function generateQueryEmbedding(
     body: JSON.stringify({
       model: "jina-embeddings-v3",
       input: [queryText],
-      dimensions: 1536,
+      dimensions: 1024,
       task: "retrieval.query",
     }),
   });
@@ -56,7 +56,7 @@ export async function generateQueryEmbedding(
 /**
  * Generate an embedding for a firm's abstraction profile using Jina AI.
  *
- * Uses jina-embeddings-v3 (1536-dim) with task "retrieval.passage".
+ * Uses jina-embeddings-v3 (1024-dim) with task "retrieval.passage".
  * Used for the document/passage side of asymmetric retrieval.
  */
 export async function generateFirmEmbedding(
@@ -77,7 +77,7 @@ export async function generateFirmEmbedding(
     body: JSON.stringify({
       model: "jina-embeddings-v3",
       input: [narrativeText],
-      dimensions: 1536,
+      dimensions: 1024,
       task: "retrieval.passage",
     }),
   });

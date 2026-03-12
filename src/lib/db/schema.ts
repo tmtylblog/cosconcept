@@ -12,10 +12,10 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
-// pgvector custom type — stores 1536-dim float arrays as PostgreSQL vector
+// pgvector custom type — stores 1024-dim float arrays as PostgreSQL vector (Jina v3 max)
 const vector = customType<{ data: number[]; driverData: string }>({
   dataType() {
-    return "vector(1536)";
+    return "vector(1024)";
   },
   toDriver(value: number[]): string {
     return `[${value.join(",")}]`;
