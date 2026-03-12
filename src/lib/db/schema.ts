@@ -81,6 +81,10 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  // Profile fields
+  jobTitle: text("job_title"),
+  phone: text("phone"),       // E.164 format e.g. +14155552671 (for future WhatsApp)
+  linkedinUrl: text("linkedin_url"),
   // Admin plugin fields
   role: text("role").default("user"), // user | admin | superadmin
   banned: boolean("banned").default(false),
