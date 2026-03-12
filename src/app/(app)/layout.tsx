@@ -101,12 +101,16 @@ function AppLayoutInner({
   // ─── Internal team redirect ─────────────────────────────────────────────────
   // @joincollectiveos.com users are internal team — send straight to /admin,
   // skip customer onboarding entirely.
+  // Only redirect from root/dashboard — allow access to specific feature pages
+  // (e.g. /settings/network) so internal team can test app features.
   useEffect(() => {
     if (!session?.user || sessionPending) return;
     if (session.user.email?.endsWith("@joincollectiveos.com")) {
-      router.replace("/admin");
+      if (pathname === "/" || pathname === "/dashboard") {
+        router.replace("/admin");
+      }
     }
-  }, [session?.user?.email, sessionPending, router]);
+  }, [session?.user?.email, sessionPending, router, pathname]);
 
   const isDevMode = process.env.NODE_ENV === "development";
 
