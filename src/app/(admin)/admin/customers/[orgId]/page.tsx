@@ -474,6 +474,8 @@ export default function CustomerDetailPage() {
   const [importStatus, setImportStatus] = useState<TeamImportStatus | null>(null);
   const [importPolling, setImportPolling] = useState(false);
   const [enrichingExpert, setEnrichingExpert] = useState<string | null>(null);
+  const [enrichingAll, setEnrichingAll] = useState(false);
+  const [enrichAllResult, setEnrichAllResult] = useState<{ queued: number; skipped: number } | null>(null);
 
   // Primary data load
   useEffect(() => {
@@ -793,6 +795,32 @@ export default function CustomerDetailPage() {
       console.error("Failed to enrich expert:", err);
     } finally {
       setEnrichingExpert(null);
+    }
+  }
+
+  // Enrich all experts handler
+  async function handleEnrichAll() {
+    setEnrichingAll(true);
+    setEnrichAllResult(null);
+    try {
+      const res = await fetch(`/api/admin/customers/${orgId}/experts/enrich-all`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const result = await res.json();
+        setEnrichAllResult({ queued: result.queued, skipped: result.skipped });
+        // Reload experts after a delay to pick up queued state
+        if (result.queued > 0) {
+          setTimeout(() => {
+            setExpertsLoaded(false);
+            loadExperts();
+          }, 5000);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to enrich all experts:", err);
+    } finally {
+      setEnrichingAll(false);
     }
   }
 
@@ -1572,11 +1600,13 @@ export default function CustomerDetailPage() {
                       <span className={`inline-flex items-center gap-1.5 rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
                         importStatus?.phase === "done" ? "bg-emerald-50 text-emerald-600" :
                         importStatus?.phase === "error" ? "bg-cos-ember/10 text-cos-ember" :
+                        importStatus?.phase === "discovered" ? "bg-purple-50 text-purple-600" :
                         "bg-cos-electric/10 text-cos-electric"
                       }`}>
                         {importPolling && <Loader2 className="h-3 w-3 animate-spin" />}
                         {importStatus?.phase === "done" ? "Complete" :
                          importStatus?.phase === "error" ? "Error" :
+                         importStatus?.phase === "discovered" ? "Team Discovered via PDL" :
                          importStatus?.phase === "enriching" ? "Enriching..." :
                          importStatus?.phase === "searching" ? "Searching..." :
                          importStatus?.phase === "queued" ? "Queued..." : importStatus?.phase}
@@ -1592,6 +1622,29 @@ export default function CustomerDetailPage() {
                           <Zap className="h-3 w-3 mr-1" />
                           Retry
                         </Button>
+                      )}
+                      {/* Enrich All Experts button for discovered phase */}
+                      {importStatus?.phase === "discovered" && !enrichingAll && !enrichAllResult && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] px-2 border-purple-200 text-purple-600 hover:bg-purple-50"
+                          onClick={handleEnrichAll}
+                        >
+                          <Sparkles className="h-3 w-3 mr-1" />
+                          Enrich All Experts
+                        </Button>
+                      )}
+                      {enrichingAll && (
+                        <span className="inline-flex items-center gap-1.5 text-[10px] text-purple-500">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Queuing enrichment jobs...
+                        </span>
+                      )}
+                      {enrichAllResult && (
+                        <span className="text-[10px] text-emerald-600">
+                          ✓ Queued {enrichAllResult.queued} enrichments ({enrichAllResult.skipped} skipped)
+                        </span>
                       )}
                     </div>
                   </div>

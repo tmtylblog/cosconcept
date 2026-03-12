@@ -1300,6 +1300,7 @@ export const specialistProfileSourceEnum = pgEnum("specialist_profile_source", [
   "ai_generated",
   "user_created",
   "ai_suggested_user_confirmed",
+  "legacy_import",
 ]);
 
 export const specialistProfileStatusEnum = pgEnum("specialist_profile_status", [
@@ -1416,6 +1417,10 @@ export const specialistProfiles = pgTable("specialist_profiles", {
   isSearchable: boolean("is_searchable").notNull().default(false),
   isPrimary: boolean("is_primary").notNull().default(false),
   status: specialistProfileStatusEnum("status").notNull().default("draft"),
+
+  // Legacy import tracking
+  slideUrl: text("slide_url"), // Google Slides link from legacy data
+  legacyUserId: text("legacy_user_id"), // Original legacy user ID for traceability
 
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

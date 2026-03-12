@@ -69,6 +69,8 @@ export function useDbExperts(
             linkedinUrl?: string | null;
             photoUrl?: string | null;
             division?: string | null;
+            expertTier?: string | null;
+            isFullyEnriched?: boolean;
             topSkills?: string[] | null;
             topIndustries?: string[] | null;
             specialistProfiles?: Array<{
@@ -132,6 +134,8 @@ export function useDbExperts(
               bio: ep.bio ?? undefined,
               location: ep.location ?? undefined,
               profileUrl: `/experts/${ep.id}/edit`,
+              expertTier: (ep.expertTier as Expert["expertTier"]) ?? null,
+              isFullyEnriched: ep.isFullyEnriched ?? false,
               specialistProfiles:
                 specialistProfiles.length > 0 ? specialistProfiles : undefined,
             } satisfies Expert;

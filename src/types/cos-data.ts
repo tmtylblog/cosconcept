@@ -117,6 +117,10 @@ export interface Expert {
   location?: string;
   /** The firm this expert belongs to */
   firmId?: string;
+  /** PDL expert tier classification */
+  expertTier?: "expert" | "potential_expert" | "not_expert" | null;
+  /** Whether this expert has been fully enriched (has work history from PDL) */
+  isFullyEnriched?: boolean;
   /** Specialist sub-profiles — focused expertise combos */
   specialistProfiles?: ExpertSpecialistProfile[];
 }

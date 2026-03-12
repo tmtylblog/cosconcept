@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   Users,
   Loader2,
@@ -21,6 +21,8 @@ import { ExpertCard } from "@/components/firm/expert-card";
 import { Button } from "@/components/ui/button";
 import { PLAN_LIMITS, type PlanId } from "@/lib/billing/plan-limits";
 
+const TIER_ORDER: Record<string, number> = { expert: 0, potential_expert: 1 };
+
 export default function FirmExpertsPage() {
   const { data: activeOrg } = useActiveOrganization();
   const { status, result } = useEnrichment();
@@ -33,7 +35,28 @@ export default function FirmExpertsPage() {
     isLoading: dbLoading,
   } = useDbExperts(activeOrg?.id);
 
-  const experts = dbExperts;
+  // Sort experts: expert tier first, then potential, then unclassified
+  const sortedExperts = useMemo(
+    () =>
+      [...dbExperts].sort(
+        (a, b) =>
+          (TIER_ORDER[a.expertTier ?? ""] ?? 2) - (TIER_ORDER[b.expertTier ?? ""] ?? 2)
+      ),
+    [dbExperts]
+  );
+
+  // Tier counts for summary bar
+  const tierCounts = useMemo(() => {
+    let expertCount = 0;
+    let potentialCount = 0;
+    for (const e of dbExperts) {
+      if (e.expertTier === "expert") expertCount++;
+      else if (e.expertTier === "potential_expert") potentialCount++;
+    }
+    return { expertCount, potentialCount };
+  }, [dbExperts]);
+
+  const experts = sortedExperts;
   const totalExperts = dbTotalExperts;
   const expertsLoading = dbLoading;
 
@@ -263,6 +286,20 @@ export default function FirmExpertsPage() {
         </div>
       ) : experts.length > 0 ? (
         <div className="space-y-2">
+          {/* Tier summary bar */}
+          {(tierCounts.expertCount > 0 || tierCounts.potentialCount > 0) && totalExperts > 5 && (
+            <div className="flex items-center gap-3 rounded-cos-lg border border-cos-border/40 bg-cos-cloud/30 px-4 py-2.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-cos-slate">Team Breakdown</span>
+              <span className="flex items-center gap-1 rounded-cos-pill bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-600">
+                {tierCounts.expertCount} Expert-tier
+              </span>
+              {tierCounts.potentialCount > 0 && (
+                <span className="flex items-center gap-1 rounded-cos-pill bg-amber-50 px-2.5 py-0.5 text-[10px] font-medium text-amber-600">
+                  {tierCounts.potentialCount} Potential
+                </span>
+              )}
+            </div>
+          )}
           {(showAllExperts ? experts : experts.slice(0, 20)).map((expert, index) => {
             const locked = isExpertLocked(index);
 

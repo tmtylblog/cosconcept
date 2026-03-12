@@ -84,29 +84,40 @@ export async function GET(req: Request) {
     spByExpert[sp.expertProfileId].push(sp);
   }
 
-  const result = experts.map((ep) => {
-    const sps = (spByExpert[ep.id] ?? []).sort(
-      (a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0)
-    );
-    const bestSp = sps[0];
-    const strongCount = sps.filter((s) => s.qualityStatus === "strong").length;
-    const partialCount = sps.filter((s) => s.qualityStatus === "partial").length;
+  const result = experts
+    .map((ep) => {
+      // Compute tier and enrichment status from pdlData
+      const pdl = ep.pdlData as Record<string, unknown> | null;
+      const expertTier = (pdl?.classifiedAs as string) ?? null;
+      const hasExperience = Array.isArray(pdl?.experience) && (pdl.experience as unknown[]).length > 0;
+      const isFullyEnriched = !!(ep.pdlEnrichedAt && hasExperience);
 
-    return {
-      ...ep,
-      specialistProfiles: sps,
-      bestSpecialistTitle: bestSp?.qualityStatus === "strong" ? bestSp.title : null,
-      qualitySummary:
-        sps.length === 0
-          ? "No specialist profiles yet"
-          : [
-              strongCount > 0 ? `${strongCount} Strong` : null,
-              partialCount > 0 ? `${partialCount} Partial` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || `${sps.length} profiles`,
-    };
-  });
+      const sps = (spByExpert[ep.id] ?? []).sort(
+        (a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0)
+      );
+      const bestSp = sps[0];
+      const strongCount = sps.filter((s) => s.qualityStatus === "strong").length;
+      const partialCount = sps.filter((s) => s.qualityStatus === "partial").length;
+
+      return {
+        ...ep,
+        expertTier,
+        isFullyEnriched,
+        specialistProfiles: sps,
+        bestSpecialistTitle: bestSp?.qualityStatus === "strong" ? bestSp.title : null,
+        qualitySummary:
+          sps.length === 0
+            ? "No specialist profiles yet"
+            : [
+                strongCount > 0 ? `${strongCount} Strong` : null,
+                partialCount > 0 ? `${partialCount} Partial` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || `${sps.length} profiles`,
+      };
+    })
+    // Filter out not_expert tier — users shouldn't see internal ops staff
+    .filter((ep) => ep.expertTier !== "not_expert");
 
   return Response.json({ experts: result });
 }

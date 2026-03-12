@@ -58,6 +58,53 @@ export async function GET(
       .limit(1);
 
     if (!teamJob) {
+      // Check if we have batch-discovered experts (from pdl-team-discovery script)
+      const discoveredExperts = await db
+        .select({
+          id: expertProfiles.id,
+          pdlData: expertProfiles.pdlData,
+          pdlEnrichedAt: expertProfiles.pdlEnrichedAt,
+        })
+        .from(expertProfiles)
+        .where(eq(expertProfiles.firmId, firm.id));
+
+      // Count experts with PDL classification data
+      let dExperts = 0, dPotential = 0, dNotExperts = 0, dUnclassified = 0;
+      let dEnriched = 0;
+      for (const ep of discoveredExperts) {
+        const pdl = ep.pdlData as Record<string, unknown> | null;
+        const tier = pdl?.classifiedAs as string | undefined;
+        if (tier === "expert") dExperts++;
+        else if (tier === "potential_expert") dPotential++;
+        else if (tier === "not_expert") dNotExperts++;
+        else dUnclassified++;
+        // Fully enriched = has experience array
+        const hasExp = Array.isArray(pdl?.experience) && (pdl.experience as unknown[]).length > 0;
+        if (hasExp) dEnriched++;
+      }
+
+      const hasClassifiedExperts = dExperts + dPotential + dNotExperts > 0;
+
+      if (hasClassifiedExperts) {
+        const enrichable = dExperts + dPotential;
+        return NextResponse.json({
+          phase: "discovered",
+          searchResults: {
+            total: discoveredExperts.length,
+            experts: dExperts,
+            potentialExperts: dPotential,
+            notExperts: dNotExperts,
+            unclassified: dUnclassified,
+          },
+          enrichProgress: {
+            total: enrichable,
+            completed: dEnriched,
+            running: 0,
+            failed: 0,
+          },
+        });
+      }
+
       return NextResponse.json({
         phase: "idle",
         searchResults: null,

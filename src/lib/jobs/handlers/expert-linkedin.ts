@@ -82,6 +82,31 @@ export async function handleExpertLinkedIn(
     importedContactId,
   } = payload as unknown as Payload;
 
+  // Step 0: Skip if recently enriched (within 6 months) to save PDL credits.
+  // This catches legacy work history imports and recent PDL enrichments.
+  const SIX_MONTHS_MS = 6 * 30 * 24 * 60 * 60 * 1000;
+  const [existingProfile] = await db
+    .select({ pdlEnrichedAt: expertProfiles.pdlEnrichedAt })
+    .from(expertProfiles)
+    .where(eq(expertProfiles.id, expertId))
+    .limit(1);
+
+  if (existingProfile?.pdlEnrichedAt) {
+    const enrichedAge = Date.now() - existingProfile.pdlEnrichedAt.getTime();
+    if (enrichedAge < SIX_MONTHS_MS) {
+      const monthsAgo = Math.round(enrichedAge / (30 * 24 * 60 * 60 * 1000));
+      console.log(
+        `[expert-linkedin] Skipping ${expertId} — enriched ${monthsAgo} month(s) ago (within 6-month window)`
+      );
+      return {
+        expertId,
+        status: "skipped_recent",
+        fullName,
+        enrichedMonthsAgo: monthsAgo,
+      };
+    }
+  }
+
   // Step 1: PDL person enrichment
   const pdlPerson = await enrichPerson({
     name: fullName,

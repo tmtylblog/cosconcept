@@ -8,6 +8,7 @@ import {
   Pencil,
   Mail,
   Star,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Expert } from "@/types/cos-data";
@@ -75,6 +76,19 @@ export function ExpertCard({ expert }: { expert: Expert }) {
             >
               {expert.division}
             </span>
+            {expert.expertTier === "expert" && (
+              <span className="shrink-0 rounded-cos-pill bg-emerald-50 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600">
+                Expert
+              </span>
+            )}
+            {expert.expertTier === "potential_expert" && (
+              <span className="shrink-0 rounded-cos-pill bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-600">
+                Potential
+              </span>
+            )}
+            {expert.isFullyEnriched && (
+              <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Fully enriched" />
+            )}
           </div>
           {/* Show best specialist title as primary label, fallback to role */}
           <p className="text-[10px] text-cos-slate-dim truncate">
