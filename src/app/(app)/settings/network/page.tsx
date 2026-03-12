@@ -32,15 +32,7 @@ interface Relationship {
   provider: string;
 }
 
-type TierFilter = "all" | "strong" | "fair" | "weak";
-
-// ─── Tier config ─────────────────────────────────────────────────────────────
-
-const TIER_CONFIG = {
-  strong: { label: "Strong", bg: "bg-cos-electric/10", text: "text-cos-electric", dot: "bg-cos-electric" },
-  fair: { label: "Fair", bg: "bg-cos-signal/10", text: "text-cos-signal", dot: "bg-cos-signal" },
-  weak: { label: "Weak", bg: "bg-cos-slate/10", text: "text-cos-slate", dot: "bg-cos-slate" },
-};
+type ActionFilter = "all" | "on-cos" | "invite";
 
 function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return "never";
@@ -180,7 +172,6 @@ function ProviderCard({
 // ─── Relationship Card ────────────────────────────────────────────────────────
 
 function RelationshipCard({ rel }: { rel: Relationship }) {
-  const tier = TIER_CONFIG[rel.tier];
   const isOnCos = !!rel.firmId;
 
   const handleInvite = () => {
@@ -197,9 +188,6 @@ function RelationshipCard({ rel }: { rel: Relationship }) {
 
   return (
     <div className="flex items-start gap-4 rounded-cos-xl border border-cos-border bg-cos-surface px-4 py-3 transition-shadow hover:shadow-sm">
-      {/* Tier dot */}
-      <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", tier.dot)} />
-
       {/* Firm info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
@@ -232,11 +220,6 @@ function RelationshipCard({ rel }: { rel: Relationship }) {
         </div>
       </div>
 
-      {/* Tier badge */}
-      <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold", tier.bg, tier.text)}>
-        {tier.label}
-      </span>
-
       {/* CTA */}
       {isOnCos ? (
         <a
@@ -265,7 +248,7 @@ export default function NetworkScanPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tierFilter, setTierFilter] = useState<TierFilter>("all");
+  const [actionFilter, setActionFilter] = useState<ActionFilter>("all");
   const [scanning, setScanning] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -328,13 +311,11 @@ export default function NetworkScanPage() {
   const microsoftConn = connections.find(c => c.provider === "microsoft");
   const isScanning = connections.some(c => c.scanStatus === "scanning");
 
-  const filtered = tierFilter === "all"
-    ? relationships
-    : relationships.filter(r => r.tier === tierFilter);
+  const filtered =
+    actionFilter === "on-cos" ? relationships.filter(r => r.firmId) :
+    actionFilter === "invite" ? relationships.filter(r => !r.firmId) :
+    relationships;
 
-  const strongCount = relationships.filter(r => r.tier === "strong").length;
-  const fairCount = relationships.filter(r => r.tier === "fair").length;
-  const weakCount = relationships.filter(r => r.tier === "weak").length;
   const cosMatches = relationships.filter(r => r.firmId).length;
   const toInvite = relationships.filter(r => !r.firmId).length;
 
@@ -387,23 +368,24 @@ export default function NetworkScanPage() {
               </p>
             </div>
 
-            {/* Tier filter */}
+            {/* Action filter */}
             <div className="flex items-center gap-1 rounded-cos-lg border border-cos-border p-1">
-              {(["all", "strong", "fair", "weak"] as TierFilter[]).map((t) => (
+              {([
+                { key: "all",    label: `All (${relationships.length})` },
+                { key: "on-cos", label: `On COS (${cosMatches})` },
+                { key: "invite", label: `To Invite (${toInvite})` },
+              ] as { key: ActionFilter; label: string }[]).map(({ key, label }) => (
                 <button
-                  key={t}
-                  onClick={() => setTierFilter(t)}
+                  key={key}
+                  onClick={() => setActionFilter(key)}
                   className={cn(
-                    "rounded-cos-md px-2.5 py-1 text-xs font-medium capitalize transition-colors",
-                    tierFilter === t
+                    "rounded-cos-md px-2.5 py-1 text-xs font-medium transition-colors",
+                    actionFilter === key
                       ? "bg-cos-electric text-white"
                       : "text-cos-slate hover:text-cos-midnight"
                   )}
                 >
-                  {t === "all" ? `All (${relationships.length})` :
-                   t === "strong" ? `Strong (${strongCount})` :
-                   t === "fair" ? `Fair (${fairCount})` :
-                   `Weak (${weakCount})`}
+                  {label}
                 </button>
               ))}
             </div>
@@ -416,7 +398,7 @@ export default function NetworkScanPage() {
             ))}
             {filtered.length === 0 && (
               <p className="text-center py-6 text-sm text-cos-slate">
-                No {tierFilter} relationships found.
+                No results for this filter.
               </p>
             )}
           </div>
