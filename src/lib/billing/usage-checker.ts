@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { aiUsageLog, subscriptions } from "@/lib/db/schema";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { PLAN_LIMITS, type PlanId } from "./plan-limits";
+import { createFreeSubscription } from "./create-free-subscription";
 
 /**
  * Get the current month's start date (UTC).
@@ -32,7 +33,14 @@ export async function getOrgPlan(organizationId: string): Promise<PlanId> {
     where: eq(subscriptions.organizationId, organizationId),
     columns: { plan: true },
   });
-  return (sub?.plan as PlanId) ?? "free";
+
+  if (!sub) {
+    // Auto-create free subscription if none exists (e.g. legacy orgs, orgs created before billing)
+    await createFreeSubscription(organizationId);
+    return "free";
+  }
+
+  return (sub.plan as PlanId) ?? "free";
 }
 
 /**

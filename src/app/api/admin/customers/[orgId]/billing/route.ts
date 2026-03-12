@@ -131,16 +131,38 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const body = await req.json();
     const { action } = body as { action: string };
 
-    // Verify subscription exists
-    const sub = await db.query.subscriptions.findFirst({
+    // Find or auto-create subscription
+    let sub = await db.query.subscriptions.findFirst({
       where: eq(subscriptions.organizationId, orgId),
     });
 
     if (!sub) {
-      return NextResponse.json(
-        { error: "No subscription found for this organization" },
-        { status: 404 }
-      );
+      // Auto-create a free subscription for this org
+      const now = new Date();
+      const periodEnd = new Date(now);
+      periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+      const newId = crypto.randomUUID();
+
+      await db.insert(subscriptions).values({
+        id: newId,
+        organizationId: orgId,
+        plan: "free",
+        status: "active",
+        stripeCustomerId: `pending_${orgId.slice(0, 8)}`,
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+      });
+
+      sub = await db.query.subscriptions.findFirst({
+        where: eq(subscriptions.organizationId, orgId),
+      });
+
+      if (!sub) {
+        return NextResponse.json(
+          { error: "Failed to create subscription record" },
+          { status: 500 }
+        );
+      }
     }
 
     if (action === "change_plan") {

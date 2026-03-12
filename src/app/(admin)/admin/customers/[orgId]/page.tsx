@@ -538,12 +538,34 @@ export default function CustomerDetailPage() {
   const fetchBilling = useCallback(() => {
     setBillingLoading(true);
     fetch(`/api/admin/customers/${orgId}/billing`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Billing API ${r.status}`);
+        return r.json();
+      })
       .then((d) => {
-        setBillingData(d);
+        // Ensure shape is valid (not an error response)
+        if (d && !d.error) {
+          setBillingData(d);
+        } else {
+          // API returned OK but with error field, or empty — treat as empty billing
+          setBillingData({
+            subscription: null,
+            usage: { aiCost: 0, aiCalls: 0, aiInputTokens: 0, aiOutputTokens: 0, enrichmentCost: 0 },
+            billingEvents: [],
+          });
+        }
         setBillingLoaded(true);
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error("[Billing fetch]", err);
+        // Still set billing data so UI doesn't show "Unable to load" forever
+        setBillingData({
+          subscription: null,
+          usage: { aiCost: 0, aiCalls: 0, aiInputTokens: 0, aiOutputTokens: 0, enrichmentCost: 0 },
+          billingEvents: [],
+        });
+        setBillingLoaded(true);
+      })
       .finally(() => setBillingLoading(false));
   }, [orgId]);
 
@@ -2334,32 +2356,31 @@ export default function CustomerDetailPage() {
                   )}
                 </Section>
 
-                {/* Admin: Change Plan */}
-                {billingData.subscription && (
-                  <Section title="Change Plan" icon={<Zap className="h-4 w-4 text-cos-warm" />}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {(["free", "pro", "enterprise"] as const).map((p) => (
-                        <Button
-                          key={p}
-                          size="sm"
-                          variant={billingData.subscription?.plan === p ? "secondary" : "outline"}
-                          disabled={billingData.subscription?.plan === p || billingAction}
-                          onClick={() => handleBillingAction({ action: "change_plan", plan: p })}
-                          className="min-w-[90px]"
-                        >
-                          {billingAction ? <Loader2 className="h-3 w-3 animate-spin" /> : p.charAt(0).toUpperCase() + p.slice(1)}
-                        </Button>
-                      ))}
-                    </div>
-                    <p className="mt-2 text-[10px] text-cos-slate">
-                      Directly sets the plan in the database. Does not create a Stripe subscription.
-                    </p>
-                  </Section>
-                )}
+                {/* Admin: Change Plan (always visible — creates subscription if needed) */}
+                <Section title="Change Plan" icon={<Zap className="h-4 w-4 text-cos-warm" />}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(["free", "pro", "enterprise"] as const).map((p) => (
+                      <Button
+                        key={p}
+                        size="sm"
+                        variant={billingData.subscription?.plan === p ? "secondary" : "outline"}
+                        disabled={billingData.subscription?.plan === p || billingAction}
+                        onClick={() => handleBillingAction({ action: "change_plan", plan: p })}
+                        className="min-w-[90px]"
+                      >
+                        {billingAction ? <Loader2 className="h-3 w-3 animate-spin" /> : p.charAt(0).toUpperCase() + p.slice(1)}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[10px] text-cos-slate">
+                    {billingData.subscription
+                      ? "Directly sets the plan in the database. Does not create a Stripe subscription."
+                      : "No subscription record exists — selecting a plan will create one."}
+                  </p>
+                </Section>
 
-                {/* Admin: Gift Subscription */}
-                {billingData.subscription && (
-                  <Section title="Gift Subscription" icon={<Sparkles className="h-4 w-4 text-purple-500" />}>
+                {/* Admin: Gift Subscription (always visible) */}
+                <Section title="Gift Subscription" icon={<Sparkles className="h-4 w-4 text-purple-500" />}>
                     {billingData.subscription.giftExpiresAt ? (
                       <div className="space-y-3">
                         <div className="rounded-cos border border-purple-200 bg-purple-50 p-3 text-sm">
@@ -2439,35 +2460,36 @@ export default function CustomerDetailPage() {
                         </p>
                       </div>
                     )}
-                  </Section>
-                )}
+                </Section>
 
                 {/* Usage */}
+                {billingData.usage && (
                 <Section title="Usage Metrics" icon={<BarChart3 className="h-4 w-4 text-purple-500" />}>
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <div className="rounded-cos bg-cos-cloud/50 p-3 text-center">
-                      <div className="text-lg font-bold text-purple-600">{formatCurrency(billingData.usage.aiCost)}</div>
+                      <div className="text-lg font-bold text-purple-600">{formatCurrency(billingData.usage.aiCost ?? 0)}</div>
                       <div className="text-[10px] font-medium uppercase text-cos-slate">AI Cost</div>
                     </div>
                     <div className="rounded-cos bg-cos-cloud/50 p-3 text-center">
-                      <div className="text-lg font-bold text-cos-electric">{billingData.usage.aiCalls.toLocaleString()}</div>
+                      <div className="text-lg font-bold text-cos-electric">{(billingData.usage.aiCalls ?? 0).toLocaleString()}</div>
                       <div className="text-[10px] font-medium uppercase text-cos-slate">AI Calls</div>
                     </div>
                     <div className="rounded-cos bg-cos-cloud/50 p-3 text-center">
                       <div className="text-lg font-bold text-cos-signal">
-                        {(billingData.usage.aiInputTokens + billingData.usage.aiOutputTokens).toLocaleString()}
+                        {((billingData.usage.aiInputTokens ?? 0) + (billingData.usage.aiOutputTokens ?? 0)).toLocaleString()}
                       </div>
                       <div className="text-[10px] font-medium uppercase text-cos-slate">Total Tokens</div>
                     </div>
                     <div className="rounded-cos bg-cos-cloud/50 p-3 text-center">
-                      <div className="text-lg font-bold text-cos-warm">{formatCurrency(billingData.usage.enrichmentCost)}</div>
+                      <div className="text-lg font-bold text-cos-warm">{formatCurrency(billingData.usage.enrichmentCost ?? 0)}</div>
                       <div className="text-[10px] font-medium uppercase text-cos-slate">Enrichment</div>
                     </div>
                   </div>
                 </Section>
+                )}
 
                 {/* Billing Events */}
-                {billingData.billingEvents.length > 0 && (
+                {(billingData.billingEvents?.length ?? 0) > 0 && (
                   <Section title="Billing History" icon={<Clock className="h-4 w-4 text-cos-slate" />}>
                     <div className="space-y-2">
                       {billingData.billingEvents.map((evt) => (
