@@ -21,12 +21,16 @@ function createDriver(): Driver {
   return neo4j.driver(uri, neo4j.auth.basic(username, password));
 }
 
-export const neo4jDriver =
-  globalForNeo4j.neo4jDriver ?? createDriver();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForNeo4j.neo4jDriver = neo4jDriver;
+/** Lazy-initialized Neo4j driver — only connects when first accessed at runtime. */
+export function getNeo4jDriver(): Driver {
+  if (globalForNeo4j.neo4jDriver) return globalForNeo4j.neo4jDriver;
+  const driver = createDriver();
+  globalForNeo4j.neo4jDriver = driver;
+  return driver;
 }
+
+/** @deprecated Use getNeo4jDriver() — this eager export breaks builds without Neo4j env vars */
+export const neo4jDriver = null as unknown as Driver;
 
 /**
  * Run a read query against Neo4j.
@@ -35,7 +39,7 @@ export async function neo4jRead<T>(
   cypher: string,
   params?: Record<string, unknown>
 ): Promise<T[]> {
-  const session = neo4jDriver.session({ defaultAccessMode: neo4j.session.READ });
+  const session = getNeo4jDriver().session({ defaultAccessMode: neo4j.session.READ });
   try {
     const result = await session.run(cypher, params);
     return result.records.map((r) => r.toObject() as T);
@@ -51,7 +55,7 @@ export async function neo4jWrite<T>(
   cypher: string,
   params?: Record<string, unknown>
 ): Promise<T[]> {
-  const session = neo4jDriver.session({ defaultAccessMode: neo4j.session.WRITE });
+  const session = getNeo4jDriver().session({ defaultAccessMode: neo4j.session.WRITE });
   try {
     const result = await session.run(cypher, params);
     return result.records.map((r) => r.toObject() as T);
