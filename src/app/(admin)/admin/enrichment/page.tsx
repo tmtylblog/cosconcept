@@ -11,6 +11,10 @@ import {
   SkipForward,
   ChevronDown,
   ChevronRight,
+  RefreshCw,
+  Briefcase,
+  FileText,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -58,6 +62,168 @@ const PHASE_COLORS: Record<string, string> = {
   memory: "bg-pink-100 text-pink-700",
   deep_crawl: "bg-orange-100 text-orange-700",
 };
+
+interface BackfillResult {
+  dryRun: boolean;
+  firmsProcessed: number;
+  totalServicesSeeded: number;
+  totalCsQueued: number;
+  results: { firmId: string; name: string; servicesSeeded: number; caseStudiesQueued: number; skipped?: string }[];
+}
+
+function BackfillSection() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<BackfillResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(dryRun: boolean) {
+    setRunning(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/enrich/backfill-services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const actionableResults = result?.results.filter(r => r.servicesSeeded > 0 || r.caseStudiesQueued > 0) ?? [];
+  const skippedResults = result?.results.filter(r => r.servicesSeeded === 0 && r.caseStudiesQueued === 0) ?? [];
+
+  return (
+    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-5 space-y-4">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="font-heading text-base font-semibold text-cos-midnight flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-cos-electric" />
+            Backfill Services &amp; Case Studies
+          </h2>
+          <p className="mt-1 text-xs text-cos-slate">
+            For all firms with enrichment data but no services/case study rows yet — seeds
+            services from their website scrape and queues discovered case study URLs for AI ingestion.
+          </p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => run(true)} disabled={running} className="text-xs">
+            {running ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />}
+            Preview
+          </Button>
+          <Button size="sm" onClick={() => run(false)} disabled={running} className="bg-cos-electric hover:bg-cos-electric/90 text-xs">
+            {running ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+            Run Backfill (All Firms)
+          </Button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-cos-lg border border-cos-ember/20 bg-cos-ember/5 px-3 py-2 text-sm text-cos-ember">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {result && (
+        <div className="space-y-3">
+          {/* Summary */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-cos-lg border border-cos-border bg-white px-4 py-3 text-center">
+              <div className="text-2xl font-bold text-cos-midnight">{result.firmsProcessed}</div>
+              <div className="text-[10px] text-cos-slate uppercase tracking-wide">Firms checked</div>
+            </div>
+            <div className="rounded-cos-lg border border-cos-border bg-white px-4 py-3 text-center">
+              <div className="text-2xl font-bold text-cos-electric">{result.totalServicesSeeded}</div>
+              <div className="text-[10px] text-cos-slate uppercase tracking-wide flex items-center justify-center gap-1">
+                <Briefcase className="h-3 w-3" /> Services {result.dryRun ? "to seed" : "seeded"}
+              </div>
+            </div>
+            <div className="rounded-cos-lg border border-cos-border bg-white px-4 py-3 text-center">
+              <div className="text-2xl font-bold text-cos-signal">{result.totalCsQueued}</div>
+              <div className="text-[10px] text-cos-slate uppercase tracking-wide flex items-center justify-center gap-1">
+                <FileText className="h-3 w-3" /> Case studies {result.dryRun ? "to queue" : "queued"}
+              </div>
+            </div>
+          </div>
+
+          {result.dryRun && (
+            <div className="flex items-center gap-2 rounded-cos-lg border border-cos-warm/20 bg-cos-warm/5 px-3 py-2 text-xs text-cos-warm font-medium">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              Preview only — no changes made. Click &quot;Run Backfill&quot; to apply.
+            </div>
+          )}
+
+          {/* Firms with data to action */}
+          {actionableResults.length > 0 && (
+            <div className="overflow-hidden rounded-cos-lg border border-cos-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-cos-border bg-cos-cloud/50">
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Firm</th>
+                    <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Services</th>
+                    <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Case Studies</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-cos-border/60">
+                  {actionableResults.map(r => (
+                    <tr key={r.firmId} className="hover:bg-cos-electric/[0.02]">
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-cos-midnight text-sm">{r.name}</div>
+                        <div className="font-mono text-[10px] text-cos-slate-light">{r.firmId}</div>
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {r.servicesSeeded > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[11px] font-medium text-cos-electric">
+                            <Briefcase className="h-3 w-3" /> {r.servicesSeeded}
+                          </span>
+                        ) : <span className="text-cos-slate-light text-xs">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {r.caseStudiesQueued > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[11px] font-medium text-cos-signal">
+                            <FileText className="h-3 w-3" /> {r.caseStudiesQueued}
+                          </span>
+                        ) : <span className="text-cos-slate-light text-xs">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {actionableResults.length === 0 && (
+            <div className="flex items-center gap-2 rounded-cos-lg border border-cos-signal/20 bg-cos-signal/5 px-3 py-2 text-xs text-cos-signal font-medium">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              All firms already have services/case studies — nothing to backfill.
+            </div>
+          )}
+
+          {skippedResults.length > 0 && (
+            <details className="text-xs text-cos-slate">
+              <summary className="cursor-pointer hover:text-cos-midnight">{skippedResults.length} firms skipped (already populated or no data)</summary>
+              <div className="mt-2 space-y-1 pl-3">
+                {skippedResults.map(r => (
+                  <div key={r.firmId} className="flex items-center gap-2">
+                    <span className="text-cos-midnight font-medium">{r.name}</span>
+                    {r.skipped && <span className="text-cos-slate-light">— {r.skipped}</span>}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminEnrichmentPage() {
   const [firmQuery, setFirmQuery] = useState("");
@@ -107,6 +273,9 @@ export default function AdminEnrichmentPage() {
           Inspect enrichment pipeline results for any firm.
         </p>
       </div>
+
+      {/* Backfill tool */}
+      <BackfillSection />
 
       {/* Search */}
       <form
