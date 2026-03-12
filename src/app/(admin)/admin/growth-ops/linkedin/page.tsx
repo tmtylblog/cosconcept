@@ -1,17 +1,29 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { MessageSquare, Send, Loader2, RefreshCw } from "lucide-react";
+import { useEffect, useState, useRef, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { MessageSquare, Send, Loader2 } from "lucide-react";
 
 interface Account { id: string; unipile_account_id: string; display_name: string; status: string; }
 interface Chat { id: string; name?: string; last_message?: string; updated_at?: string; }
-interface Message { id: string; text?: string; body?: string; sender_id?: string; created_at?: string; }
+interface Message {
+  id: string;
+  text?: string;
+  body?: string;
+  sender_id?: string;
+  created_at?: string;
+  /** Unipile sets this true when the message was sent by the account owner */
+  is_sender?: boolean;
+}
 
-export default function LinkedInUniboxPage() {
+function LinkedInUniboxInner() {
+  const router = useRouter();
+  const params = useSearchParams();
+
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [chats, setChats] = useState<Chat[]>([]);
-  const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+  const [selectedChatId, setSelectedChatId] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
@@ -19,50 +31,90 @@ export default function LinkedInUniboxPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Derive selected chat object from id
+  const selectedChat = chats.find((c) => c.id === selectedChatId) ?? null;
+
+  // Update URL when selection changes
+  function updateUrl(accountId: string, chatId?: string) {
+    const url = new URL(window.location.href);
+    if (accountId) url.searchParams.set("account", accountId);
+    else url.searchParams.delete("account");
+    if (chatId) url.searchParams.set("chat", chatId);
+    else url.searchParams.delete("chat");
+    router.replace(url.pathname + url.search, { scroll: false });
+  }
+
+  // Load accounts on mount, restore from URL
   useEffect(() => {
     fetch("/api/admin/growth-ops/linkedin-accounts")
       .then((r) => r.json())
       .then((d) => {
-        setAccounts(d.accounts ?? []);
-        if (d.accounts?.length > 0) setSelectedAccountId(d.accounts[0].unipile_account_id);
+        const list: Account[] = d.accounts ?? [];
+        setAccounts(list);
+        const urlAccount = params.get("account");
+        const initial = urlAccount ?? list[0]?.unipile_account_id ?? "";
+        if (initial) setSelectedAccountId(initial);
       });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Load chats when account changes
   useEffect(() => {
     if (!selectedAccountId) return;
     setLoadingChats(true);
-    setSelectedChat(null);
     setMessages([]);
     fetch(`/api/admin/growth-ops/unipile?action=listChats&accountId=${selectedAccountId}`)
       .then((r) => r.json())
-      .then((d) => { setChats(d.items ?? d.chats ?? []); setLoadingChats(false); });
+      .then((d) => {
+        const list: Chat[] = d.items ?? d.chats ?? [];
+        setChats(list);
+        setLoadingChats(false);
+        // Restore chat from URL
+        const urlChat = params.get("chat");
+        if (urlChat && list.some((c) => c.id === urlChat)) {
+          setSelectedChatId(urlChat);
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId]);
 
-  useEffect(() => {
-    if (!selectedChat) return;
+  // Load messages when chat changes
+  const loadMessages = useCallback(async (chatId: string) => {
+    if (!chatId) return;
     setLoadingMessages(true);
-    fetch(`/api/admin/growth-ops/unipile?action=getChatMessages&chatId=${selectedChat.id}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setMessages(d.items ?? d.messages ?? []);
-        setLoadingMessages(false);
-        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-      });
-  }, [selectedChat]);
+    const d = await fetch(`/api/admin/growth-ops/unipile?action=getChatMessages&chatId=${chatId}`).then((r) => r.json());
+    setMessages(d.items ?? d.messages ?? []);
+    setLoadingMessages(false);
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+  }, []);
+
+  useEffect(() => {
+    if (selectedChatId) loadMessages(selectedChatId);
+  }, [selectedChatId, loadMessages]);
+
+  function selectChat(chat: Chat) {
+    setSelectedChatId(chat.id);
+    updateUrl(selectedAccountId, chat.id);
+  }
+
+  function selectAccount(accountId: string) {
+    setSelectedAccountId(accountId);
+    setSelectedChatId("");
+    setMessages([]);
+    updateUrl(accountId);
+  }
 
   async function sendMessage() {
-    if (!selectedChat || !messageText.trim()) return;
+    if (!selectedChatId || !messageText.trim()) return;
     setSending(true);
     await fetch("/api/admin/growth-ops/unipile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "sendMessage", chatId: selectedChat.id, text: messageText }),
+      body: JSON.stringify({ action: "sendMessage", chatId: selectedChatId, text: messageText }),
     });
     setMessageText("");
     setSending(false);
-    // Reload messages
-    const d = await fetch(`/api/admin/growth-ops/unipile?action=getChatMessages&chatId=${selectedChat.id}`).then((r) => r.json());
-    setMessages(d.items ?? d.messages ?? []);
+    await loadMessages(selectedChatId);
   }
 
   return (
@@ -75,7 +127,7 @@ export default function LinkedInUniboxPage() {
         {accounts.length > 1 && (
           <select
             value={selectedAccountId}
-            onChange={(e) => setSelectedAccountId(e.target.value)}
+            onChange={(e) => selectAccount(e.target.value)}
             className="rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight focus:border-cos-electric focus:outline-none"
           >
             {accounts.map((a) => (
@@ -99,8 +151,8 @@ export default function LinkedInUniboxPage() {
           {chats.map((chat) => (
             <button
               key={chat.id}
-              onClick={() => setSelectedChat(chat)}
-              className={`w-full text-left px-4 py-3 border-b border-cos-border/50 transition-colors ${selectedChat?.id === chat.id ? "bg-cos-electric/8" : "hover:bg-cos-cloud"}`}
+              onClick={() => selectChat(chat)}
+              className={`w-full text-left px-4 py-3 border-b border-cos-border/50 transition-colors ${selectedChatId === chat.id ? "bg-cos-electric/8" : "hover:bg-cos-cloud"}`}
             >
               <p className="text-sm font-medium text-cos-midnight truncate">{chat.name ?? chat.id}</p>
               {chat.last_message && <p className="text-xs text-cos-slate mt-0.5 truncate">{chat.last_message}</p>}
@@ -122,13 +174,31 @@ export default function LinkedInUniboxPage() {
               <div className="border-b border-cos-border px-5 py-3">
                 <p className="font-medium text-sm text-cos-midnight">{selectedChat.name ?? selectedChat.id}</p>
               </div>
-              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-                {loadingMessages && <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-cos-electric" /></div>}
-                {messages.map((m) => (
-                  <div key={m.id} className="rounded-cos-lg bg-cos-cloud px-3 py-2 text-sm text-cos-midnight max-w-[80%]">
-                    {m.text ?? m.body}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+                {loadingMessages && (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
                   </div>
-                ))}
+                )}
+                {messages.map((m) => {
+                  const isMine = m.is_sender === true;
+                  return (
+                    <div
+                      key={m.id}
+                      className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                    >
+                      <div
+                        className={`rounded-2xl px-3 py-2 text-sm max-w-[75%] ${
+                          isMine
+                            ? "bg-cos-electric text-white rounded-br-sm"
+                            : "bg-cos-cloud text-cos-midnight rounded-bl-sm"
+                        }`}
+                      >
+                        {m.text ?? m.body}
+                      </div>
+                    </div>
+                  );
+                })}
                 <div ref={bottomRef} />
               </div>
               <div className="border-t border-cos-border px-4 py-3 flex gap-2">
@@ -152,5 +222,13 @@ export default function LinkedInUniboxPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LinkedInUniboxPage() {
+  return (
+    <Suspense>
+      <LinkedInUniboxInner />
+    </Suspense>
   );
 }
