@@ -245,7 +245,7 @@ async function syncContacts(limit: number) {
         `
         UNWIND $items AS item
         MERGE (p:Person {sourceId: item.sourceId, source: item.source})
-        SET p:Contact,
+        SET p.personTypes = CASE WHEN p.personTypes IS NULL THEN ['contact'] WHEN NOT 'contact' IN p.personTypes THEN p.personTypes + ['contact'] ELSE p.personTypes END,
             p.name = item.name,
             p.firstName = item.firstName,
             p.lastName = item.lastName,
