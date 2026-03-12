@@ -1007,6 +1007,14 @@ export default function CustomerDetailPage() {
                         >
                           {u.role}
                         </span>
+                        {u.userId && (
+                          <button
+                            onClick={() => router.push(`/admin/users/${u.userId}`)}
+                            className="text-[10px] text-cos-electric hover:underline shrink-0"
+                          >
+                            View →
+                          </button>
+                        )}
                       </div>
                     ))}
                     {allUsers.length > 5 && (
@@ -1269,6 +1277,16 @@ export default function CustomerDetailPage() {
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => router.push(`/admin/users/${m.userId}`)}
+                                  title="View user detail"
+                                  className="h-8 gap-1.5 px-2.5 text-xs text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  View
+                                </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
