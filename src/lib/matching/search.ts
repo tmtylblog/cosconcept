@@ -18,11 +18,12 @@ import { deepRank } from "./deep-ranker";
 import { loadAbstractionProfile } from "./abstraction-generator";
 import type { SearchQuery, SearchResult, SearchFilters } from "./types";
 
-// Default to PostgreSQL search.
-// Neo4j legacy firms lack a consistent ID bridge to PostgreSQL service_firms,
-// so Neo4j results return firmId=null and break the discover profile flow.
-// Only opt into Neo4j explicitly via SEARCH_MODE=neo4j.
-const USE_PG_SEARCH = process.env.SEARCH_MODE !== "neo4j";
+// Always use PostgreSQL search.
+// Neo4j legacy firms lack a consistent ID bridge to PostgreSQL service_firms
+// (only 4/1050 firms have a valid f.id mapping), so Neo4j results return
+// firmId=null and break the discover profile flow. Neo4j path is disabled
+// until a reliable ID bridge is built.
+const USE_PG_SEARCH = true;
 
 /**
  * Execute a full cascading search.

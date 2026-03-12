@@ -114,8 +114,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Tools are available for any authenticated user with a firm — not gated behind onboarding
-    const hasToolAccess = !!firmId;
+    // Tools are available for any authenticated user with a firm, OR on the discover page
+    // (discover can search without the user having a registered firm profile)
+    const hasToolAccess = !!firmId || firmSection === "discover";
 
     // ─── Check for existing partner preferences (from guest migration or previous onboarding) ───
     // This prevents re-onboarding users who completed preferences as a guest and then signed up.
@@ -256,9 +257,10 @@ export async function POST(req: Request) {
     const startTime = Date.now();
     const capturedConvId = conversationId; // Capture for closure
 
-    // Tools available for any authenticated user with a firm profile
-    // (not gated behind onboarding — users can skip onboarding and ask directly)
-    const tools = hasToolAccess && organizationId && firmId
+    // Tools available for any authenticated user with a firm profile,
+    // or any authenticated user on the discover page.
+    // firmId is optional — search_partners works without it (just won't do bidirectional scoring).
+    const tools = hasToolAccess && organizationId
       ? createOssyTools(organizationId, firmId)
       : undefined;
 

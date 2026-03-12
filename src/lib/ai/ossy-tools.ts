@@ -54,7 +54,7 @@ type ToolInput = z.infer<typeof toolInputSchema>;
  * Creates Ossy AI tools with DB access baked in.
  * Tools execute server-side and persist confirmed data.
  */
-export function createOssyTools(organizationId: string, firmId: string) {
+export function createOssyTools(organizationId: string, firmId?: string) {
   return {
     navigate_section: tool({
       description:
@@ -86,6 +86,7 @@ export function createOssyTools(organizationId: string, firmId: string) {
         "You can call this multiple times per response for different fields.",
       inputSchema: toolInputSchema,
       execute: async ({ field, value }: ToolInput) => {
+        if (!firmId) return { success: false as const, field, error: "No firm profile available in this context" };
         try {
           const result = await updateProfileField(firmId, field, value);
 
@@ -166,7 +167,7 @@ export function createOssyTools(organizationId: string, firmId: string) {
         try {
           const result = await executeSearch({
             rawQuery: query,
-            searcherFirmId: firmId,
+            searcherFirmId: firmId ?? undefined,
             skipLlmRanking: skipDeepRanking ?? false,
           });
 
@@ -272,6 +273,7 @@ export function createOssyTools(organizationId: string, firmId: string) {
         "Use when the user asks 'what do you know about us?' or wants to review their profile.",
       inputSchema: z.object({}),
       execute: async () => {
+        if (!firmId) return { found: false, message: "No firm profile available in this context." };
         try {
           return await lookupFirmDetail(firmId, { byId: true });
         } catch (err) {
