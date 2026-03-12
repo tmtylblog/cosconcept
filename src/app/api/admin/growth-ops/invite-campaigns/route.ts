@@ -31,23 +31,30 @@ export async function GET() {
       accountName: growthOpsLinkedInAccounts.displayName,
       accountStatus: growthOpsLinkedInAccounts.status,
       listName: growthOpsTargetLists.name,
-      queuedCount: sql<number>`(
-        SELECT count(*)::int FROM growth_ops_invite_queue
-        WHERE campaign_id = ${growthOpsInviteCampaigns.id}
-        AND status = 'queued'
-      )`,
     })
     .from(growthOpsInviteCampaigns)
     .leftJoin(growthOpsLinkedInAccounts, eq(growthOpsLinkedInAccounts.id, growthOpsInviteCampaigns.linkedinAccountId))
     .leftJoin(growthOpsTargetLists, eq(growthOpsTargetLists.id, growthOpsInviteCampaigns.targetListId))
     .orderBy(desc(growthOpsInviteCampaigns.createdAt));
 
+  // Get queued counts per campaign in one query
+  const queueCounts = await db
+    .select({
+      campaignId: growthOpsInviteQueue.campaignId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(growthOpsInviteQueue)
+    .where(eq(growthOpsInviteQueue.status, "queued"))
+    .groupBy(growthOpsInviteQueue.campaignId);
+
+  const countMap = Object.fromEntries(queueCounts.map((r) => [r.campaignId, r.count]));
+
   const campaigns = rows.map((r) => ({
     ...r.campaign,
     accountName: r.accountName ?? "",
     accountStatus: r.accountStatus ?? "",
     listName: r.listName ?? "",
-    queuedCount: r.queuedCount ?? 0,
+    queuedCount: countMap[r.campaign.id] ?? 0,
   }));
 
   return NextResponse.json({ campaigns });
