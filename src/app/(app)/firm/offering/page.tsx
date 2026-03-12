@@ -17,13 +17,26 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { useEffect } from "react";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useFirmServices, type FirmService } from "@/hooks/use-firm-services";
 
 export default function FirmOfferingPage() {
   const { data: activeOrg } = useActiveOrganization();
-  const { status: enrichmentStatus, result: enrichmentResult } = useEnrichment();
+  const { status: enrichmentStatus, result: enrichmentResult, triggerEnrichment } = useEnrichment();
+
+  // If enrichment hasn't run yet and we have an org, kick it off from the firm's website
+  useEffect(() => {
+    if (enrichmentStatus !== "idle" || !activeOrg?.id) return;
+    fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        const website = data?.enrichmentData?.url || data?.website;
+        if (website) triggerEnrichment(website);
+      })
+      .catch(() => {});
+  }, [enrichmentStatus, activeOrg?.id, triggerEnrichment]);
   const {
     services,
     total,
@@ -129,11 +142,18 @@ export default function FirmOfferingPage() {
 
       {/* Loading states */}
       {(isLoading || enrichmentStatus === "loading") && (
-        <div className="flex items-center gap-2 rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-4 py-3">
-          <Loader2 className="h-4 w-4 animate-spin text-cos-electric" />
-          <p className="text-sm font-medium text-cos-electric">
-            Scanning your website for services...
-          </p>
+        <div className="rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-4 py-4">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-cos-electric" />
+            <p className="text-sm font-medium text-cos-electric">
+              Scanning your website for services...
+            </p>
+          </div>
+          {enrichmentResult?.domain && (
+            <p className="mt-1.5 ml-6 text-xs text-cos-electric/70">
+              Crawling {enrichmentResult.domain} — services will appear here once the scan completes (30–60 seconds).
+            </p>
+          )}
         </div>
       )}
 

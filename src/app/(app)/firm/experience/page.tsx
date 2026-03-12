@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   FileText,
   Loader2,
@@ -28,7 +28,19 @@ const PAGE_SIZE = 25;
 
 export default function FirmExperiencePage() {
   const { data: activeOrg } = useActiveOrganization();
-  const { status: enrichmentStatus, result: enrichmentResult } = useEnrichment();
+  const { status: enrichmentStatus, result: enrichmentResult, triggerEnrichment } = useEnrichment();
+
+  // If enrichment hasn't run yet and we have an org, kick it off from the firm's website
+  useEffect(() => {
+    if (enrichmentStatus !== "idle" || !activeOrg?.id) return;
+    fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        const website = data?.enrichmentData?.url || data?.website;
+        if (website) triggerEnrichment(website);
+      })
+      .catch(() => {});
+  }, [enrichmentStatus, activeOrg?.id, triggerEnrichment]);
   const {
     caseStudies,
     total,
@@ -117,6 +129,21 @@ export default function FirmExperiencePage() {
           <p className="text-[11px] text-cos-slate-dim">
             Auto-discovered from{" "}
             <span className="font-medium text-cos-midnight">{enrichmentResult.domain}</span>
+          </p>
+        </div>
+      )}
+
+      {/* Enrichment scanning banner */}
+      {enrichmentStatus === "loading" && total === 0 && !isLoading && (
+        <div className="rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-4 py-4">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-cos-electric" />
+            <p className="text-sm font-medium text-cos-electric">
+              Scanning your website for case studies...
+            </p>
+          </div>
+          <p className="mt-1.5 ml-6 text-xs text-cos-electric/70">
+            We&apos;re crawling {enrichmentResult?.domain ?? "your website"} to find your portfolio. This takes about 30–60 seconds.
           </p>
         </div>
       )}

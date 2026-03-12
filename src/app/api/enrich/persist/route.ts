@@ -1,9 +1,13 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+import { after } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { serviceFirms } from "@/lib/db/schema";
+import { serviceFirms, firmCaseStudies, firmServices } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import { writeFirmToGraph } from "@/lib/enrichment/graph-writer";
+import { enqueue } from "@/lib/jobs/queue";
+import { runNextJob } from "@/lib/jobs/runner";
 
 export const dynamic = "force-dynamic";
 
@@ -146,6 +150,84 @@ export async function POST(req: Request) {
       });
 
     console.log(`[Enrich/Persist] Saved enrichment for org ${organizationId} (entityType: ${entityType})`);
+
+    // ─── Auto-seed firmServices from discovered services ────
+    // Only seed if no firmServices rows exist yet for this firm (first-time enrichment)
+    const discoveredServices = (extracted?.services as string[] | undefined) ?? [];
+    if (discoveredServices.length > 0 && !isBrand) {
+      const [existingService] = await db
+        .select({ id: firmServices.id })
+        .from(firmServices)
+        .where(eq(firmServices.firmId, firmId))
+        .limit(1);
+
+      if (!existingService) {
+        const now = new Date();
+        await db.insert(firmServices).values(
+          discoveredServices.map((name, i) => ({
+            id: `svc_${Date.now().toString(36)}_${i.toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+            firmId,
+            organizationId,
+            name: name.trim(),
+            description: null,
+            sourceUrl: url || null,
+            sourcePageTitle: domain ? `${domain} — auto-discovered` : "Auto-discovered",
+            subServices: [] as string[],
+            isHidden: false,
+            displayOrder: i,
+            createdAt: now,
+            updatedAt: now,
+          }))
+        ).onConflictDoNothing();
+        console.log(`[Enrich/Persist] Seeded ${discoveredServices.length} services for firm ${firmId}`);
+      }
+    }
+
+    // ─── Auto-queue case study ingestion for discovered URLs ─
+    const discoveredCsUrls = (extracted?.caseStudyUrls as string[] | undefined) ?? [];
+    if (discoveredCsUrls.length > 0 && !isBrand) {
+      let queued = 0;
+      for (const csUrl of discoveredCsUrls.slice(0, 30)) { // cap at 30 to avoid flooding
+        try {
+          // Skip if already exists
+          const [existing] = await db
+            .select({ id: firmCaseStudies.id })
+            .from(firmCaseStudies)
+            .where(
+              and(
+                eq(firmCaseStudies.firmId, firmId),
+                eq(firmCaseStudies.sourceUrl, csUrl)
+              )
+            )
+            .limit(1);
+          if (existing) continue;
+
+          const csId = `cs_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+          await db.insert(firmCaseStudies).values({
+            id: csId,
+            firmId,
+            organizationId,
+            sourceUrl: csUrl,
+            sourceType: "url",
+            status: "pending",
+          });
+          await enqueue("firm-case-study-ingest", {
+            caseStudyId: csId,
+            firmId,
+            organizationId,
+            sourceUrl: csUrl,
+            sourceType: "url",
+          });
+          queued++;
+        } catch (err) {
+          console.warn(`[Enrich/Persist] Failed to queue case study ${csUrl}:`, err);
+        }
+      }
+      if (queued > 0) {
+        after(runNextJob().catch(() => {}));
+        console.log(`[Enrich/Persist] Queued ${queued} case studies for ingestion (firm ${firmId})`);
+      }
+    }
 
     // ─── Write to Neo4j Knowledge Graph (best-effort) ───
     try {
