@@ -19,6 +19,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return NextResponse.json(
+      { error: "Stripe is not yet configured", code: "stripe_not_configured" },
+      { status: 503 }
+    );
+  }
+
   try {
     const { organizationId, plan, interval } = (await req.json()) as {
       organizationId: string;
@@ -49,11 +56,19 @@ export async function POST(req: NextRequest) {
     const stripe = getStripe();
     let customerId = sub?.stripeCustomerId;
 
-    if (!customerId) {
+    // Treat placeholder IDs (set before first upgrade) as if there's no customer yet
+    if (!customerId || customerId.startsWith("pending_")) {
       const customer = await stripe.customers.create({
         metadata: { organizationId },
       });
       customerId = customer.id;
+      // Store real customer ID now so subsequent requests don't create duplicates
+      if (sub) {
+        await db
+          .update(subscriptions)
+          .set({ stripeCustomerId: customerId, updatedAt: new Date() })
+          .where(eq(subscriptions.organizationId, organizationId));
+      }
     }
 
     const session = await stripe.checkout.sessions.create({

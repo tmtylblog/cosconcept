@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { usePlan } from "@/hooks/use-plan";
@@ -12,6 +13,7 @@ import {
   type PlanId,
 } from "@/lib/billing/plan-limits";
 import { cn } from "@/lib/utils";
+import { CheckCircle, XCircle, AlertCircle } from "lucide-react";
 
 const plans: PlanId[] = ["free", "pro", "enterprise"];
 
@@ -19,12 +21,30 @@ export default function BillingPage() {
   const { data: activeOrg } = useActiveOrganization();
   const { plan: currentPlan, usage, isLoading: planLoading } = usePlan();
   const [loading, setLoading] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+  const searchParams = useSearchParams();
 
   const orgId = activeOrg?.id ?? "";
+
+  // Handle Stripe redirect params
+  useEffect(() => {
+    if (searchParams.get("success") === "true") {
+      setNotice({ type: "success", message: "Your plan has been upgraded. Welcome aboard!" });
+      // Clean URL
+      window.history.replaceState({}, "", "/settings/billing");
+    } else if (searchParams.get("canceled") === "true") {
+      setNotice({ type: "info", message: "Checkout canceled — no changes were made." });
+      window.history.replaceState({}, "", "/settings/billing");
+    }
+  }, [searchParams]);
 
   async function handleUpgrade(plan: "pro" | "enterprise") {
     if (!orgId) return;
     setLoading(plan);
+    setNotice(null);
     try {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
@@ -35,8 +55,24 @@ export default function BillingPage() {
           interval: "monthly",
         }),
       });
-      const { url } = await res.json();
-      if (url) window.location.href = url;
+      const data = await res.json();
+
+      if (res.status === 503 || data.code === "stripe_not_configured") {
+        setNotice({
+          type: "info",
+          message: "Billing is not yet active — check back soon.",
+        });
+        return;
+      }
+
+      if (!res.ok) {
+        setNotice({ type: "error", message: data.error ?? "Something went wrong." });
+        return;
+      }
+
+      if (data.url) window.location.href = data.url;
+    } catch {
+      setNotice({ type: "error", message: "Network error — please try again." });
     } finally {
       setLoading(null);
     }
@@ -45,18 +81,41 @@ export default function BillingPage() {
   async function handleManageBilling() {
     if (!orgId) return;
     setLoading("portal");
+    setNotice(null);
     try {
       const res = await fetch("/api/stripe/portal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ organizationId: orgId }),
       });
-      const { url } = await res.json();
-      if (url) window.location.href = url;
+      const data = await res.json();
+
+      if (res.status === 503 || data.code === "stripe_not_configured") {
+        setNotice({
+          type: "info",
+          message: "Billing portal is not yet active — check back soon.",
+        });
+        return;
+      }
+
+      if (!res.ok) {
+        setNotice({ type: "error", message: data.error ?? "Something went wrong." });
+        return;
+      }
+
+      if (data.url) window.location.href = data.url;
+    } catch {
+      setNotice({ type: "error", message: "Network error — please try again." });
     } finally {
       setLoading(null);
     }
   }
+
+  const noticeIcon = {
+    success: <CheckCircle className="h-4 w-4 shrink-0 text-cos-signal" />,
+    error: <XCircle className="h-4 w-4 shrink-0 text-red-500" />,
+    info: <AlertCircle className="h-4 w-4 shrink-0 text-cos-electric" />,
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-6">
@@ -70,6 +129,21 @@ export default function BillingPage() {
         </p>
       </div>
 
+      {/* Notice banner */}
+      {notice && (
+        <div
+          className={cn(
+            "flex items-start gap-2.5 rounded-cos-xl border p-4 text-sm",
+            notice.type === "success" && "border-cos-signal/30 bg-cos-signal/5 text-cos-signal-dark",
+            notice.type === "error" && "border-red-200 bg-red-50 text-red-700",
+            notice.type === "info" && "border-cos-electric/30 bg-cos-electric/5 text-cos-midnight"
+          )}
+        >
+          {noticeIcon[notice.type]}
+          <p>{notice.message}</p>
+        </div>
+      )}
+
       {/* Current plan + usage */}
       <div className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-5">
         <p className="text-sm text-cos-slate">Current Plan</p>
@@ -81,16 +155,22 @@ export default function BillingPage() {
           <div className="mt-3 space-y-1 text-xs text-cos-slate">
             <p>
               Matches this week: {usage.matchesThisWeek} /{" "}
-              {PLAN_LIMITS[currentPlan].potentialMatchesPerWeek}
+              {PLAN_LIMITS[currentPlan].potentialMatchesPerWeek === Infinity
+                ? "∞"
+                : PLAN_LIMITS[currentPlan].potentialMatchesPerWeek}
             </p>
             <p>
               AI Perfect Matches: {usage.aiPerfectMatches} /{" "}
-              {PLAN_LIMITS[currentPlan].aiPerfectMatchesPerMonth}
+              {PLAN_LIMITS[currentPlan].aiPerfectMatchesPerMonth === Infinity
+                ? "∞"
+                : PLAN_LIMITS[currentPlan].aiPerfectMatchesPerMonth}
             </p>
             {PLAN_LIMITS[currentPlan].opportunityResponsesPerMonth > 0 && (
               <p>
                 Opportunity responses: {usage.opportunityResponses} /{" "}
-                {PLAN_LIMITS[currentPlan].opportunityResponsesPerMonth}
+                {PLAN_LIMITS[currentPlan].opportunityResponsesPerMonth === Infinity
+                  ? "∞"
+                  : PLAN_LIMITS[currentPlan].opportunityResponsesPerMonth}
               </p>
             )}
           </div>
@@ -138,9 +218,7 @@ export default function BillingPage() {
 
               <ul className="mt-4 space-y-2 text-sm text-cos-slate-dim">
                 <li>
-                  {limits.members === Infinity
-                    ? "Unlimited"
-                    : limits.members}{" "}
+                  {limits.members === Infinity ? "Unlimited" : limits.members}{" "}
                   {limits.members === 1 ? "seat" : "seats"}
                 </li>
                 <li>
@@ -154,14 +232,10 @@ export default function BillingPage() {
                     ? "Unlimited"
                     : limits.aiPerfectMatchesPerMonth}{" "}
                   AI Perfect{" "}
-                  {limits.aiPerfectMatchesPerMonth === 1
-                    ? "Match"
-                    : "Matches"}
+                  {limits.aiPerfectMatchesPerMonth === 1 ? "Match" : "Matches"}
                   /mo
                   {plan === "free" && (
-                    <span className="ml-1 text-xs text-cos-warm">
-                      (trial)
-                    </span>
+                    <span className="ml-1 text-xs text-cos-warm">(trial)</span>
                   )}
                 </li>
                 <li>
@@ -210,10 +284,7 @@ export default function BillingPage() {
                     size="sm"
                     className="w-full"
                     onClick={() =>
-                      window.open(
-                        "https://joincollectiveos.com/contact",
-                        "_blank"
-                      )
+                      window.open("https://joincollectiveos.com/contact", "_blank")
                     }
                   >
                     Contact Us

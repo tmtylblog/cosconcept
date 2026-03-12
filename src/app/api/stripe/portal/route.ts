@@ -19,6 +19,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return NextResponse.json(
+      { error: "Stripe is not yet configured", code: "stripe_not_configured" },
+      { status: 503 }
+    );
+  }
+
   try {
     const { organizationId } = (await req.json()) as {
       organizationId: string;
