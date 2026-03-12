@@ -1,8 +1,8 @@
 # STATUS — Multi-Agent Coordination
 
-> **Updated:** 2026-03-12 ~10:30pm ET
+> **Updated:** 2026-03-12 ~11:45pm ET
 > **Production:** https://cos-concept.vercel.app — LIVE and HEALTHY ✅
-> **Last successful deploy:** commit `62d0173` (fix: escape apostrophe breaking Vercel build)
+> **Last successful deploy:** commit `f5cc17b` (fix: trim Stripe env vars)
 
 ## ⚠️ CRITICAL: READ BEFORE PUSHING
 
@@ -51,10 +51,11 @@ The top entry must show `● Ready`, NOT `● Error`.
 
 | Agent | Area | Key Files | Status |
 |-------|------|-----------|--------|
-| **Agent A (this session)** | PDL team discovery, expert enrichment, admin expert roster | `team-import/`, `experts/enrich-all/`, admin `[orgId]/page.tsx` (Users & Team tab), `expert-card.tsx`, `use-db-experts.ts`, `experts/route.ts` | ✅ Done — deployed |
-| **Agent B** | Discover feature, search/matching, chat tools | `discover/`, `matching/`, `ossy-tools.ts`, `ossy-prompt.ts`, `chat-panel.tsx` | Active |
-| **Agent C** | Services, case studies, offerings | `firm/services/`, `firm/case-studies/`, `firm/offering/`, `firm/experience/` | Active |
-| **Agent D** | Billing, settings, network | `settings/`, `billing/`, `network/`, `partnerships/` | Active |
+| **Agent A** | PDL team discovery, expert enrichment, admin expert roster | `team-import/`, `experts/enrich-all/`, admin `[orgId]/page.tsx`, `expert-card.tsx` | ✅ Done — deployed |
+| **Agent B** | Discover feature, search/matching, chat tools | `discover/`, `matching/`, `ossy-tools.ts`, `chat-panel.tsx` | ✅ Done — deployed |
+| **Agent C** | Services, case studies, offerings | `firm/services/`, `firm/case-studies/`, `firm/offering/`, `firm/experience/` | ✅ Done — deployed |
+| **Agent D** | Billing, settings, network | `settings/`, `billing/`, `network/`, `partnerships/` | ✅ Done — deployed |
+| **Data Agent** | Bulk enrichment, embeddings, firm connections | `scripts/_bulk_enrich_legacy.mjs`, `scripts/_backfill_all_embeddings.mjs`, `scripts/_populate_firm_services.mjs`, `scripts/_discover_case_studies.mjs` | ✅ Done — 1,152 firms enriched + embedded; discovery running in bg |
 
 ### Shared Files — COORDINATE BEFORE EDITING
 
@@ -88,13 +89,26 @@ These files are touched by multiple agents. If you need to edit one, check STATU
 - 6-month PDL skip logic to save credits
 
 ### Agent B (Discover / Search)
-- Discover feature with firm detail pages
-- Chat tool wiring for discover_search
-- Services/case study auto-seeding
+- Discover page: Ossy-driven, fit tiers (Strong/Good/Worth Exploring), no match %
+- `/discover/[firmId]`: trust-first firm profile page with dynamic sections
+- Fixed: `USE_PG_SEARCH = true` hardcoded — Neo4j routing eliminated
+- Fixed: `firmId` optional in `ossy-tools.ts` — tools work from discover without a firm
+- Fixed: `hasToolAccess = !!firmId || firmSection === "discover"` — discover unlocks tools
+- Fixed: Jina embedding dimensions 1536 → 1024
+- `discover_search` tool wired to panel result display
 
 ### Agent C (Firm pages)
 - Coming soon pages for Network, Partnerships
 - Chat UX fixes
+- Services/case study auto-seeding on first page load with multi-layer cache fallback
 
 ### Agent D (Billing)
 - Self-healing org activation on billing page
+- Stripe env var whitespace fix
+
+### Data Agent (Enrichment & Firm Connections)
+- Bulk enriched all 1,152 firms: Jina scrape + Gemini classify + abstraction profile + 1024-dim embedding
+- `firm_services`: 7,301 rows, 1,105 firms (96%) — from `enrichment_data.extracted.services`
+- `firm_case_studies`: 773+ rows, 150+ firms — website crawl via `_discover_case_studies.mjs` (still running ~2h bg process)
+- `expert_profiles`: 5,899 rows, 910 firms — PDL team discovery
+- Scripts: `_bulk_enrich_legacy.mjs`, `_backfill_all_embeddings.mjs`, `_populate_firm_services.mjs`, `_discover_case_studies.mjs`, `_populate_expert_profiles.mjs`

@@ -156,8 +156,8 @@
 - **Global firm database import pipeline** — no bulk import of 1.5M+ firms
 - **Global client database** — Client nodes are created per-firm enrichment, no global dedup pipeline
 - **Client logo recognition pipeline** — no vision model integration for identifying client logos from websites
-- **pgvector not live** — extension enabled on Neon but no embeddings generated, abstraction profiles table exists but empty
-- **Abstraction profile computation** — `src/lib/matching/abstraction-generator.ts` exists but not triggered automatically
+- ~~**pgvector not live**~~ — **RESOLVED (2026-03-12).** 1,152 firms have Jina embeddings in `abstraction_profiles`.
+- **Abstraction profile auto-computation** — `src/lib/matching/abstraction-generator.ts` exists but not triggered automatically on content changes
 - **Website re-crawl scheduler** — Inngest cron `weekly-recrawl.ts` exists but unclear if running in production
 - **Periodic rebuild** — no weekly full re-computation of abstraction profiles
 
@@ -184,8 +184,15 @@
   - Request partnership directly from search results
   - Search stats display (candidate counts, cost, duration)
 
+**What's done (2026-03-12 additions):**
+- PostgreSQL search hardcoded (`USE_PG_SEARCH = true`) — Neo4j routing eliminated; all 1,152 firms searchable
+- 1,152 abstraction profiles with 1024-dim Jina embeddings — Layer 2 vector search fully operational
+- `firm_services`: 7,301 rows covering 1,105 firms (96%) — auto-populated from `enrichment_data.extracted.services`
+- `firm_case_studies`: 773+ rows, 150+ firms — ongoing website crawl discovery via `_discover_case_studies.mjs`
+- `expert_profiles`: 5,899 rows, 910 firms — PDL batch discovery complete
+- `/discover` page fixed: tool access unlocked for discover section, `firmId` optional in `ossy-tools.ts`
+
 **What's not done (gaps):**
-- **Vector search is a fallback** — pgvector has no embeddings, so Layer 2 falls back to text overlap scoring
 - **Abstraction profiles not auto-triggered** — no Inngest job to compute profiles when content changes
 - **Bidirectional matching needs real data** — logic exists but untested at scale
 - **Match explanation quality** — depends on having rich abstraction profiles
@@ -303,8 +310,8 @@
 
 ### Critical (blocks core value proposition)
 
-1. **Knowledge graph needs real firm data** — taxonomy is seeded, but few ServiceFirm nodes in Neo4j. `POST /api/admin/import/populate-graph` is built but not yet run. Search tools are wired but return thin results without graph data.
-2. **pgvector embeddings not generated** — abstraction profiles table exists but is empty; Layer 2 search falls back to text overlap
+1. ~~**Knowledge graph needs real firm data**~~ — **RESOLVED (2026-03-12).** All 1,152 customer firms are enriched (scrape + classify). PostgreSQL search is now hardcoded (`USE_PG_SEARCH = true`); Neo4j routing eliminated. `abstraction_profiles` table has 1,152 rows with 1024-dim Jina embeddings. `/discover` now returns results.
+2. ~~**pgvector embeddings not generated**~~ — **RESOLVED (2026-03-12).** All 1,152 enriched firms have Jina `jina-embeddings-v3` embeddings (1024-dim) in `abstraction_profiles`. Layer 2 vector search is operational. Dimension bug (1536→1024) fixed in admin backfill route.
 3. **Abstraction profile auto-computation** — no Inngest trigger when content changes; profiles must be manually triggered
 4. **Graph-sync incomplete** — only syncs firm-level data, not full entity graph (experts, case studies, clients as separate nodes with edges)
 
@@ -395,6 +402,19 @@ From git log (most recent first, as of 2026-03-09):
 
 **Focus:** Offering/Experience page population fix — multi-layer enrichment cache fallback with HTTP redirect resolution. Admin Knowledge Graph expert grouping by tier.
 
+### Recent Activity (2026-03-12 evening — Data Agent)
+
+| Commit | Description |
+|--------|-------------|
+| `4f5e254` | data: add bulk enrichment, embedding backfill, and firm connection scripts |
+| `f5cc17b` | fix: trim Stripe env vars to prevent whitespace corruption |
+| `d8aae16` | chore: add Stripe connectivity test endpoint |
+| `6554221` | fix: default to PostgreSQL search — Neo4j firmIds don't map to service_firms |
+| `c86e361` | fix: unlock search_partners for discover page without a firm profile |
+| `3308b18` | fix: correct Jina embedding dimensions from 1536 to 1024 in admin backfill route |
+
+**Focus:** Data completeness — all 1,152 firms enriched + embedded; discover page search working end-to-end. Firm connections (services, case studies, experts) wired to profile pages.
+
 ---
 
 ## Phase Dependencies
@@ -425,9 +445,9 @@ Phase 0 (Scaffold) ──→ Phase 1 (Chat) ──→ Phase 2 (Profiles)
 
 ## Critical Blockers
 
-1. **Graph needs firm data** — Taxonomy nodes are seeded but few ServiceFirm nodes exist in Neo4j. The `POST /api/admin/import/populate-graph` route is built to batch-sync enriched `service_firms` → Neo4j. Running it will unblock search. Ossy's 5 search tools are wired but return thin results without this data.
+1. ~~**Graph needs firm data**~~ — **RESOLVED (2026-03-12).** All 1,152 firms enriched + PostgreSQL search hardcoded. Search is bypassing Neo4j and using `abstraction_profiles` vector search directly. Discover page returns results.
 
-2. **pgvector not operational** — The abstraction layer (Phase 4's core innovation) is architecturally complete but has no data. No embeddings have been generated. The `abstractionProfiles` table in Postgres exists but is empty.
+2. ~~**pgvector not operational**~~ — **RESOLVED (2026-03-12).** 1,152 abstraction profiles with 1024-dim embeddings. Dimension bug fixed (was 1536, Jina max is 1024).
 
 3. **Graph-sync is shallow** — The Inngest function `graph-sync-firm` only calls `writeFirmToGraph()` for top-level firm data. It does not create Expert, CaseStudy, or Client nodes with their full relationship edges. This means even enriched firms are only partially represented in Neo4j.
 

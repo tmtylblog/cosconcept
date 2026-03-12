@@ -1,6 +1,6 @@
 # Discover Page
 
-> Last updated: 2026-03-12
+> Last updated: 2026-03-12 (evening — merge conflict resolved, profile page built, search wired)
 
 ## Overview
 
@@ -147,10 +147,10 @@ User → clicks "View Profile" on a card
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `src/app/(app)/discover/page.tsx` | Main page — Ossy-driven result display | Merge conflict — needs resolution |
-| `src/hooks/use-discover-results.tsx` | React context — Ossy pushes results here | Working |
-| `src/components/discover/discover-drawer.tsx` | Side drawer (from discarded version) | Can be deleted or repurposed |
-| `src/app/(app)/discover/[firmId]/page.tsx` | Firm profile page | Not yet built |
+| `src/app/(app)/discover/page.tsx` | Main page — Ossy-driven result display | ✅ Working |
+| `src/hooks/use-discover-results.tsx` | React context — Ossy pushes results here | ✅ Working |
+| `src/components/discover/discover-drawer.tsx` | Side drawer component | Available (unused) |
+| `src/app/(app)/discover/[firmId]/page.tsx` | Firm profile page — trust-first, dynamic | ✅ Built |
 
 ### API Endpoints
 
@@ -162,14 +162,15 @@ User → clicks "View Profile" on a card
 
 ### Known Issues
 
-| Issue | File | Notes |
-|-------|------|-------|
-| Unresolved merge conflict | `src/app/(app)/discover/page.tsx` | Keep upstream (Option A), discard stashed |
-| No `/discover/[firmId]` page | — | API exists, frontend page not built |
-| No auth on `POST /api/search` | `src/app/api/search/route.ts` | Needs auth check before production |
-| Firm entity query missing `Company` label | `src/app/api/discover/entity/route.ts:50` | Should be `MATCH (f:Company:ServiceFirm ...)` |
-| Fit tier logic not yet implemented | — | Currently returns raw scores; needs tier bucketing |
-| Search context not passed to profile page | — | Required for contextual section ordering |
+| Issue | File | Status | Notes |
+|-------|------|--------|-------|
+| ~~Unresolved merge conflict~~ | `src/app/(app)/discover/page.tsx` | ✅ RESOLVED | Conflict resolved; Ossy-driven architecture kept |
+| ~~No `/discover/[firmId]` page~~ | `src/app/(app)/discover/[firmId]/page.tsx` | ✅ BUILT | Trust-first profile page with sections + Ask Ossy CTA |
+| ~~Fit tier logic not yet implemented~~ | `src/app/(app)/discover/page.tsx` | ✅ DONE | Strong Fit / Good Fit / Worth Exploring tiers |
+| No auth on `POST /api/search` | `src/app/api/search/route.ts` | ⚠️ Open | Needs auth check before production hardening |
+| Firm entity query missing `Company` label | `src/app/api/discover/entity/route.ts:50` | ⚠️ Open | Should be `MATCH (f:Company:ServiceFirm ...)` |
+| Search context not passed to profile page | — | ⚠️ Partial | URL `?context=` param exists but ordering logic not fully wired |
+| Expert profile pages | — | ⚠️ Not built | `/discover/[expertId]` page not yet built |
 
 ---
 
