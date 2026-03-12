@@ -209,3 +209,38 @@ export async function GET(
     );
   }
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ orgId: string }> }
+) {
+  try {
+    const headersList = await headers();
+    const session = await auth.api.getSession({ headers: headersList });
+    if (!session?.user || session.user.role !== "superadmin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { orgId } = await params;
+
+  try {
+    const check = await db.execute(sql`SELECT id, name FROM organizations WHERE id = ${orgId} LIMIT 1`);
+    if (check.rows.length === 0) {
+      return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+    }
+
+    // Delete the organization. FK cascades:
+    //   members (cascade), invitations (cascade), subscriptions (cascade)
+    //   service_firms.organization_id SET NULL — firm record stays for historical data
+    // Members deletion cascades to their user sessions but NOT to the user records themselves.
+    await db.execute(sql`DELETE FROM organizations WHERE id = ${orgId}`);
+
+    return NextResponse.json({ success: true, deletedOrgId: orgId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: "Failed to delete organization", detail: message }, { status: 500 });
+  }
+}

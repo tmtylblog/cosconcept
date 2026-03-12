@@ -38,6 +38,9 @@ import {
   Download,
   Zap,
   AlertCircle,
+  Trash2,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -439,6 +442,13 @@ export default function CustomerDetailPage() {
 
   const [impersonating, setImpersonating] = useState<string | null>(null);
 
+  // Delete org modal
+  const [showDeleteOrgModal, setShowDeleteOrgModal] = useState(false);
+  const [deleteOrgConfirmText, setDeleteOrgConfirmText] = useState("");
+  const [deleteOrgChecked, setDeleteOrgChecked] = useState(false);
+  const [deletingOrg, setDeletingOrg] = useState(false);
+  const [deleteOrgError, setDeleteOrgError] = useState<string | null>(null);
+
   // Expert roster state
   const [experts, setExperts] = useState<AdminExpert[]>([]);
   const [expertsLoading, setExpertsLoading] = useState(false);
@@ -806,6 +816,20 @@ export default function CustomerDetailPage() {
     }
   }
 
+  async function handleDeleteOrg() {
+    setDeletingOrg(true);
+    setDeleteOrgError(null);
+    try {
+      const res = await fetch(`/api/admin/customers/${orgId}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Delete failed");
+      router.push("/admin/customers");
+    } catch (err) {
+      setDeleteOrgError(err instanceof Error ? err.message : "Delete failed");
+      setDeletingOrg(false);
+    }
+  }
+
   // Loading state
   if (loading) {
     return (
@@ -862,6 +886,7 @@ export default function CustomerDetailPage() {
   ];
 
   return (
+    <>
     <div className="space-y-6">
       {/* Back button */}
       <button
@@ -2509,8 +2534,8 @@ export default function CustomerDetailPage() {
 
             {/* Danger Zone */}
             <div className="rounded-cos-lg border-2 border-cos-ember/30 bg-white p-5">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-ember mb-4">
-                Danger Zone
+              <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-cos-ember">
+                <AlertTriangle className="h-3.5 w-3.5" /> Danger Zone
               </h3>
               <p className="text-xs text-cos-slate mb-4">
                 These actions are irreversible. Use with extreme caution.
@@ -2528,6 +2553,12 @@ export default function CustomerDetailPage() {
                 >
                   Force Neo4j Re-sync
                 </button>
+                <button
+                  className="flex items-center gap-2 rounded-cos border border-cos-ember/40 bg-cos-ember/5 px-4 py-2 text-xs font-medium text-cos-ember hover:bg-cos-ember/10 transition-colors"
+                  onClick={() => { setShowDeleteOrgModal(true); setDeleteOrgConfirmText(""); setDeleteOrgChecked(false); setDeleteOrgError(null); }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete Organisation
+                </button>
               </div>
             </div>
           </div>
@@ -2535,5 +2566,87 @@ export default function CustomerDetailPage() {
 
       </div>
     </div>
+
+    {/* ── Delete Organisation Modal ──────────────────────────── */}
+    {showDeleteOrgModal && data && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="relative w-full max-w-md rounded-cos-xl border-2 border-cos-ember/30 bg-white p-6 shadow-xl">
+          <button
+            onClick={() => setShowDeleteOrgModal(false)}
+            className="absolute right-4 top-4 rounded p-1 text-cos-slate hover:bg-cos-cloud transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cos-ember/10">
+              <AlertTriangle className="h-5 w-5 text-cos-ember" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-cos-midnight">Delete organisation</h2>
+              <p className="text-xs text-cos-slate">This is permanent and cannot be undone.</p>
+            </div>
+          </div>
+
+          <div className="mb-4 rounded-cos bg-cos-ember/5 border border-cos-ember/20 p-3 text-xs text-cos-ember space-y-1">
+            <p><strong>This will permanently delete:</strong></p>
+            <ul className="ml-3 list-disc space-y-0.5 text-cos-ember/80">
+              <li>The organisation and all memberships</li>
+              <li>All invitations and subscription records</li>
+              <li>User accounts are NOT deleted (only removed from org)</li>
+              <li>The firm profile record remains for historical data</li>
+            </ul>
+          </div>
+
+          <div className="mb-4">
+            <label className="mb-1.5 block text-xs font-medium text-cos-midnight">
+              Type <span className="font-mono font-bold">{data.org.name}</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={deleteOrgConfirmText}
+              onChange={(e) => setDeleteOrgConfirmText(e.target.value)}
+              placeholder={data.org.name}
+              className="w-full rounded-cos-lg border border-cos-border bg-cos-cloud/30 px-3 py-2 text-sm font-mono text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-ember focus:outline-none focus:ring-1 focus:ring-cos-ember/30"
+            />
+          </div>
+
+          <label className="mb-5 flex cursor-pointer items-start gap-2.5 text-xs text-cos-slate">
+            <input
+              type="checkbox"
+              checked={deleteOrgChecked}
+              onChange={(e) => setDeleteOrgChecked(e.target.checked)}
+              className="mt-0.5 shrink-0 accent-cos-ember"
+            />
+            I understand this action is permanent and cannot be reversed.
+          </label>
+
+          {deleteOrgError && (
+            <p className="mb-3 rounded-cos bg-cos-ember/5 px-3 py-2 text-xs text-cos-ember border border-cos-ember/20">{deleteOrgError}</p>
+          )}
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setShowDeleteOrgModal(false)}
+              disabled={deletingOrg}
+            >
+              Cancel
+            </Button>
+            <button
+              onClick={handleDeleteOrg}
+              disabled={deleteOrgConfirmText !== data.org.name || !deleteOrgChecked || deletingOrg}
+              className="flex flex-1 items-center justify-center gap-2 rounded-cos-lg bg-cos-ember px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cos-ember/90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {deletingOrg ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {deletingOrg ? "Deleting…" : "Delete Permanently"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

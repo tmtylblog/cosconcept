@@ -160,3 +160,42 @@ export async function GET(
     return NextResponse.json({ error: "Failed to fetch user", detail: message }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ userId: string }> }
+) {
+  let callerId: string | undefined;
+  try {
+    const headersList = await headers();
+    const session = await auth.api.getSession({ headers: headersList });
+    if (!session?.user || session.user.role !== "superadmin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    callerId = session.user.id;
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { userId } = await params;
+
+  if (callerId === userId) {
+    return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
+  }
+
+  try {
+    const check = await db.execute(sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`);
+    if (check.rows.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Cascades via FK: sessions, members, conversations (→ messages),
+    // memory_entries, onboarding_events, ai_usage_log
+    await db.execute(sql`DELETE FROM users WHERE id = ${userId}`);
+
+    return NextResponse.json({ success: true, deletedUserId: userId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: "Failed to delete user", detail: message }, { status: 500 });
+  }
+}

@@ -7,7 +7,7 @@ import {
   Loader2, User, Building2, CreditCard, Globe, Linkedin,
   Phone, Briefcase, Clock, Cpu, FileText, ExternalLink,
   Search, Shield, Eye, EyeOff, Ban, Sparkles, Monitor,
-  ChevronRight, Brain,
+  ChevronRight, Brain, Trash2, AlertTriangle, X,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -265,6 +265,13 @@ export default function UserDetailPage() {
   // Actions
   const [impersonating, setImpersonating] = useState(false);
 
+  // Delete modal
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteChecked, setDeleteChecked] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   // Primary load
   useEffect(() => {
     fetch(`/api/admin/users/${userId}`)
@@ -361,6 +368,21 @@ export default function UserDetailPage() {
     }
   }
 
+  async function handleDeleteUser() {
+    if (!data) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Delete failed");
+      router.push(data.membership ? `/admin/customers/${data.membership.orgId}` : "/admin/customers");
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed");
+      setDeleting(false);
+    }
+  }
+
   // ── Loading / error states ──────────────────────────────────
   if (loading) return (
     <div className="flex items-center justify-center py-24">
@@ -386,6 +408,7 @@ export default function UserDetailPage() {
   const lastSeen = stats.lastAiCallAt || stats.lastConversationAt;
 
   return (
+    <>
     <div className="space-y-6">
       {/* Back */}
       <button
@@ -558,6 +581,7 @@ export default function UserDetailPage() {
 
         {/* OVERVIEW */}
         {activeTab === "overview" && (
+          <>
           <div className="grid gap-5 lg:grid-cols-3">
             <div className="space-y-5 lg:col-span-2">
 
@@ -754,6 +778,21 @@ export default function UserDetailPage() {
 
             </div>
           </div>
+
+          {/* Danger Zone */}
+          <div className="mt-5 rounded-cos-lg border-2 border-cos-ember/30 bg-white p-5">
+            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-cos-ember">
+              <AlertTriangle className="h-3.5 w-3.5" /> Danger Zone
+            </h3>
+            <p className="mb-4 text-xs text-cos-slate">Permanently delete this user account and all associated data. This cannot be undone.</p>
+            <button
+              onClick={() => { setShowDeleteModal(true); setDeleteConfirmText(""); setDeleteChecked(false); setDeleteError(null); }}
+              className="flex items-center gap-2 rounded-cos border border-cos-ember/40 bg-cos-ember/5 px-4 py-2 text-xs font-medium text-cos-ember hover:bg-cos-ember/10 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete User Account
+            </button>
+          </div>
+          </>
         )}
 
         {/* EMAILS */}
@@ -1006,5 +1045,88 @@ export default function UserDetailPage() {
 
       </div>
     </div>
+
+    {/* ── Delete User Modal ──────────────────────────────────── */}
+    {showDeleteModal && data && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+        <div className="relative w-full max-w-md rounded-cos-xl border-2 border-cos-ember/30 bg-white p-6 shadow-xl">
+          <button
+            onClick={() => setShowDeleteModal(false)}
+            className="absolute right-4 top-4 rounded p-1 text-cos-slate hover:bg-cos-cloud transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cos-ember/10">
+              <AlertTriangle className="h-5 w-5 text-cos-ember" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-cos-midnight">Delete user account</h2>
+              <p className="text-xs text-cos-slate">This is permanent and cannot be undone.</p>
+            </div>
+          </div>
+
+          <div className="mb-4 rounded-cos bg-cos-ember/5 border border-cos-ember/20 p-3 text-xs text-cos-ember space-y-1">
+            <p><strong>This will permanently delete:</strong></p>
+            <ul className="ml-3 list-disc space-y-0.5 text-cos-ember/80">
+              <li>All conversations and messages</li>
+              <li>All memory entries</li>
+              <li>All AI usage logs</li>
+              <li>All sessions and login records</li>
+              <li>Org membership (org itself is not deleted)</li>
+            </ul>
+          </div>
+
+          <div className="mb-4">
+            <label className="mb-1.5 block text-xs font-medium text-cos-midnight">
+              Type <span className="font-mono font-bold">{data.user.email}</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder={data.user.email}
+              className="w-full rounded-cos-lg border border-cos-border bg-cos-cloud/30 px-3 py-2 text-sm font-mono text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-ember focus:outline-none focus:ring-1 focus:ring-cos-ember/30"
+            />
+          </div>
+
+          <label className="mb-5 flex cursor-pointer items-start gap-2.5 text-xs text-cos-slate">
+            <input
+              type="checkbox"
+              checked={deleteChecked}
+              onChange={(e) => setDeleteChecked(e.target.checked)}
+              className="mt-0.5 shrink-0 accent-cos-ember"
+            />
+            I understand this action is permanent and cannot be reversed.
+          </label>
+
+          {deleteError && (
+            <p className="mb-3 rounded-cos bg-cos-ember/5 px-3 py-2 text-xs text-cos-ember border border-cos-ember/20">{deleteError}</p>
+          )}
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setShowDeleteModal(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <button
+              onClick={handleDeleteUser}
+              disabled={deleteConfirmText !== data.user.email || !deleteChecked || deleting}
+              className="flex flex-1 items-center justify-center gap-2 rounded-cos-lg bg-cos-ember px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cos-ember/90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {deleting ? "Deleting…" : "Delete Permanently"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
