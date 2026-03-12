@@ -16,6 +16,7 @@ import { z } from "zod/v4";
 import { db } from "@/lib/db";
 import { abstractionProfiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { generateFirmEmbedding } from "./vector-search";
 import type { AbstractionProfile } from "./types";
 
 const openrouter = createOpenRouter({
@@ -232,6 +233,23 @@ Be specific and factual. Avoid generic language.`,
         updatedAt: new Date(),
       },
     });
+
+  // Generate and store embedding for the abstraction profile
+  try {
+    const embeddingText = `${profile.hiddenNarrative}\n\nServices: ${profile.topServices?.join(", ")}\nSkills: ${profile.topSkills?.join(", ")}\nIndustries: ${profile.topIndustries?.join(", ")}`;
+    const embeddingVector = await generateFirmEmbedding(embeddingText);
+    if (embeddingVector.length > 0) {
+      await db
+        .update(abstractionProfiles)
+        .set({ embedding: embeddingVector })
+        .where(eq(abstractionProfiles.id, profile.id));
+    }
+  } catch (embeddingErr) {
+    console.warn(
+      "[AbstractionGenerator] Failed to generate embedding, profile saved without embedding:",
+      embeddingErr
+    );
+  }
 
   return profile;
 }

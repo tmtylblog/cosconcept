@@ -569,6 +569,69 @@ export default function MigrationDashboard() {
           })}
         </div>
       </div>
+
+      {/* Vector Embeddings Backfill */}
+      <EmbeddingBackfillSection />
+    </div>
+  );
+}
+
+function EmbeddingBackfillSection() {
+  const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [result, setResult] = useState<string | null>(null);
+
+  async function runBackfill() {
+    setStatus("running");
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/embeddings/backfill", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setStatus("error");
+        setResult(data.error ?? "Unknown error");
+      } else {
+        setStatus("done");
+        setResult(data.message ?? `Processed: ${data.processed}, Errors: ${data.errors}`);
+      }
+    } catch (err) {
+      setStatus("error");
+      setResult(String(err));
+    }
+  }
+
+  return (
+    <div className="mt-8 rounded-xl border border-cos-signal/20 bg-cos-signal/5 p-6">
+      <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-cos-midnight">
+        <Database className="h-5 w-5 text-cos-signal" />
+        Vector Embeddings Backfill
+      </h2>
+      <p className="mb-5 text-sm text-cos-midnight/50">
+        Generate Jina AI embeddings for all firm abstraction profiles that are missing them.
+        Processes in batches of 10 with rate-limit delays. Idempotent — only processes profiles without embeddings.
+      </p>
+      <div className="flex items-start gap-4 rounded-lg border border-cos-border/30 bg-white/80 p-4">
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-cos-midnight">Backfill Firm Embeddings</p>
+          <p className="text-xs text-cos-midnight/50">
+            Finds all firm abstraction profiles where hiddenNarrative is set but embedding is NULL, then calls Jina AI (jina-embeddings-v3, 1536-dim) to generate and store embeddings.
+          </p>
+          {result && (
+            <p className={`mt-1.5 text-xs font-mono ${status === "error" ? "text-cos-ember" : "text-cos-signal"}`}>
+              {result}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={runBackfill}
+          disabled={status === "running"}
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-cos-signal px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-cos-signal/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {status === "running" && <Loader2 className="h-3 w-3 animate-spin" />}
+          {status === "done" && <CheckCircle2 className="h-3 w-3" />}
+          {status === "error" && <XCircle className="h-3 w-3" />}
+          {status === "running" ? "Running…" : "Run Backfill"}
+        </button>
+      </div>
     </div>
   );
 }

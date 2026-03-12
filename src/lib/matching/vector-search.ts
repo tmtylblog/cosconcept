@@ -16,43 +16,79 @@ import { inArray, sql } from "drizzle-orm";
 import type { MatchCandidate } from "./types";
 
 /**
- * Generate an embedding for a search query using OpenAI.
+ * Generate an embedding for a search query using Jina AI.
  *
- * Uses text-embedding-3-small (1536-dim) for cost efficiency.
- * Cost: ~$0.00002 per query.
+ * Uses jina-embeddings-v3 (1536-dim) with task "retrieval.query".
+ * Used for the query side of asymmetric retrieval.
  */
 export async function generateQueryEmbedding(
   queryText: string
 ): Promise<number[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.JINA_API_KEY;
   if (!apiKey) {
-    console.warn("[VectorSearch] OPENAI_API_KEY not set, skipping embedding");
+    console.warn("[VectorSearch] JINA_API_KEY not set, skipping embedding");
     return [];
   }
 
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
+  const response = await fetch("https://api.jina.ai/v1/embeddings", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "text-embedding-3-small",
-      input: queryText,
+      model: "jina-embeddings-v3",
+      input: [queryText],
+      dimensions: 1536,
+      task: "retrieval.query",
     }),
   });
 
   if (!response.ok) {
-    console.error("[VectorSearch] Embedding failed:", response.statusText);
+    console.error("[VectorSearch] Jina embedding failed:", response.statusText);
     return [];
   }
 
   const data = await response.json();
-  if (!data.data?.[0]?.embedding) {
-    console.error("[VectorSearch] No embedding returned from OpenAI");
+  return data.data?.[0]?.embedding ?? [];
+}
+
+/**
+ * Generate an embedding for a firm's abstraction profile using Jina AI.
+ *
+ * Uses jina-embeddings-v3 (1536-dim) with task "retrieval.passage".
+ * Used for the document/passage side of asymmetric retrieval.
+ */
+export async function generateFirmEmbedding(
+  narrativeText: string
+): Promise<number[]> {
+  const apiKey = process.env.JINA_API_KEY;
+  if (!apiKey) {
+    console.warn("[VectorSearch] JINA_API_KEY not set, skipping embedding");
     return [];
   }
-  return data.data[0].embedding;
+
+  const response = await fetch("https://api.jina.ai/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "jina-embeddings-v3",
+      input: [narrativeText],
+      dimensions: 1536,
+      task: "retrieval.passage",
+    }),
+  });
+
+  if (!response.ok) {
+    console.error("[VectorSearch] Jina firm embedding failed:", response.statusText);
+    return [];
+  }
+
+  const data = await response.json();
+  return data.data?.[0]?.embedding ?? [];
 }
 
 /**
@@ -133,7 +169,7 @@ export async function vectorRerank(
     return scored.slice(0, topK);
   }
 
-  // ── Text-overlap fallback (no OpenAI key or embedding failed) ──
+  // ── Text-overlap fallback (no Jina key or embedding failed) ──
   const profiles = await db
     .select({ entityId: abstractionProfiles.entityId, hiddenNarrative: abstractionProfiles.hiddenNarrative })
     .from(abstractionProfiles)
