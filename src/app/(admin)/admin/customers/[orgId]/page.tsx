@@ -1744,171 +1744,156 @@ export default function CustomerDetailPage() {
                     Add First Expert
                   </Button>
                 </div>
-              ) : (
-                <div className="overflow-hidden rounded-cos-lg border border-cos-border">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-cos-border bg-cos-cloud/50">
-                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Expert</th>
-                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Title</th>
-                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Tier</th>
-                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Profiles</th>
-                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Claim Status</th>
-                        <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-cos-border/60">
-                      {experts.map((ep) => (
-                        <tr key={ep.id} className="transition-colors hover:bg-cos-electric/[0.02]">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              {ep.photoUrl ? (
-                                <img src={ep.photoUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
-                              ) : (
-                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-xs font-semibold text-cos-signal">
-                                  {(ep.fullName ?? ep.firstName ?? "?").charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <div>
-                                <span className="font-medium text-cos-midnight">
-                                  {ep.fullName ?? [ep.firstName, ep.lastName].filter(Boolean).join(" ") ?? "Unnamed"}
-                                </span>
-                                {ep.email && <p className="font-mono text-[10px] text-cos-slate">{ep.email}</p>}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-xs text-cos-slate">{ep.title ?? "—"}</td>
-                          <td className="px-4 py-3">
-                            <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
-                              ep.expertTier === "expert"
-                                ? "bg-emerald-50 text-emerald-600"
-                                : ep.expertTier === "potential_expert"
-                                ? "bg-amber-50 text-amber-600"
-                                : ep.expertTier === "not_expert"
-                                ? "bg-cos-cloud text-cos-slate"
-                                : "bg-cos-cloud/50 text-cos-slate-light"
-                            }`}>
-                              {ep.expertTier === "expert" ? "Expert" :
-                               ep.expertTier === "potential_expert" ? "Potential" :
-                               ep.expertTier === "not_expert" ? "Not Expert" :
-                               ep.division === "collective_member" ? "CM" :
-                               ep.division === "trusted_expert" ? "Trusted" : "—"}
-                            </span>
-                            {ep.isFullyEnriched && (
-                              <span title="Fully enriched">
-                                <Sparkles className="ml-1.5 inline-block h-3 w-3 text-cos-electric" />
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            {ep.profileCount === 0 ? (
-                              <span className="text-[10px] text-cos-slate-light">0</span>
-                            ) : (
-                              <span className="text-xs text-cos-midnight">
-                                {ep.strongProfiles > 0 && <span className="text-emerald-600">{ep.strongProfiles} Strong</span>}
-                                {ep.strongProfiles > 0 && ep.partialProfiles > 0 && " · "}
-                                {ep.partialProfiles > 0 && <span className="text-cos-warm">{ep.partialProfiles} Partial</span>}
-                                {ep.strongProfiles === 0 && ep.partialProfiles === 0 && `${ep.profileCount}`}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            {ep.claimStatus === "claimed" ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-600">
-                                <Check className="h-3 w-3" />
-                                Claimed
-                              </span>
-                            ) : ep.claimStatus === "invited" ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-electric/8 px-2.5 py-0.5 text-[10px] font-medium text-cos-electric">
-                                <Mail className="h-3 w-3" />
-                                Invited
-                              </span>
-                            ) : ep.claimStatus === "expired" ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-warm/10 px-2.5 py-0.5 text-[10px] font-medium text-cos-warm">
-                                <Clock className="h-3 w-3" />
-                                Expired
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 text-[10px] text-cos-slate-light">
-                                Unclaimed
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1">
-                              {ep.linkedinUrl && (
-                                <a
-                                  href={ep.linkedinUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex h-7 w-7 items-center justify-center rounded text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
-                                  title="View LinkedIn"
-                                >
-                                  <Linkedin className="h-3.5 w-3.5" />
-                                </a>
-                              )}
-                              {!ep.userId && ep.email && (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleSendInvite(ep.id)}
-                                    disabled={invitingExpert === ep.id}
-                                    title="Send invite email"
-                                    className="h-7 gap-1 px-2 text-[10px] text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
-                                  >
-                                    {invitingExpert === ep.id ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      <Mail className="h-3 w-3" />
-                                    )}
-                                    Invite
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleCopyLink(ep.id)}
-                                    title="Copy claim link"
-                                    className="h-7 gap-1 px-2 text-[10px] text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
-                                  >
-                                    {copiedLink === ep.id ? (
-                                      <Check className="h-3 w-3 text-emerald-500" />
-                                    ) : (
-                                      <Copy className="h-3 w-3" />
-                                    )}
-                                    {copiedLink === ep.id ? "Copied!" : "Link"}
-                                  </Button>
-                                </>
-                              )}
-                              {!ep.userId && !ep.email && (
-                                <span className="text-[10px] text-cos-slate-light">No email</span>
-                              )}
-                              {/* Enrich button — shown for non-fully-enriched experts with LinkedIn */}
-                              {!ep.isFullyEnriched && (ep.linkedinUrl || ep.fullName) && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleManualEnrich(ep.id)}
-                                  disabled={enrichingExpert === ep.id}
-                                  title="Enrich with PDL (1 credit)"
-                                  className="h-7 gap-1 px-2 text-[10px] text-cos-warm hover:text-cos-warm hover:bg-cos-warm/5"
-                                >
-                                  {enrichingExpert === ep.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <Sparkles className="h-3 w-3" />
-                                  )}
-                                  Enrich
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              ) : (() => {
+                // Group experts by tier
+                const tierExperts = experts.filter((ep) => ep.expertTier === "expert");
+                const tierPotential = experts.filter((ep) => ep.expertTier === "potential_expert");
+                const tierNotExpert = experts.filter((ep) => ep.expertTier === "not_expert");
+                const tierOther = experts.filter((ep) => !ep.expertTier || !["expert", "potential_expert", "not_expert"].includes(ep.expertTier));
+
+                const renderExpertRow = (ep: AdminExpert, showEnrich: boolean) => (
+                  <div key={ep.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-cos-electric/[0.02]">
+                    {/* Avatar */}
+                    {ep.photoUrl ? (
+                      <img src={ep.photoUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-xs font-semibold text-cos-signal">
+                        {(ep.fullName ?? ep.firstName ?? "?").charAt(0).toUpperCase()}
+                      </div>
+                    )}
+
+                    {/* Name + Title */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-medium text-cos-midnight">
+                          {ep.fullName ?? [ep.firstName, ep.lastName].filter(Boolean).join(" ") ?? "Unnamed"}
+                        </span>
+                        {ep.isFullyEnriched && (
+                          <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Fully enriched" />
+                        )}
+                      </div>
+                      <p className="truncate text-xs text-cos-slate">{ep.title ?? "—"}</p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex shrink-0 items-center gap-1">
+                      {ep.linkedinUrl && (
+                        <a
+                          href={ep.linkedinUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex h-7 w-7 items-center justify-center rounded text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
+                          title="View LinkedIn"
+                        >
+                          <Linkedin className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                      {showEnrich && !ep.isFullyEnriched && (ep.linkedinUrl || ep.fullName) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleManualEnrich(ep.id)}
+                          disabled={enrichingExpert === ep.id}
+                          title="Enrich with PDL (1 credit)"
+                          className="h-7 gap-1 px-2 text-[10px] text-cos-warm hover:text-cos-warm hover:bg-cos-warm/5"
+                        >
+                          {enrichingExpert === ep.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3 w-3" />
+                          )}
+                          Enrich
+                        </Button>
+                      )}
+                      {!ep.userId && ep.email && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSendInvite(ep.id)}
+                          disabled={invitingExpert === ep.id}
+                          title="Send invite email"
+                          className="h-7 gap-1 px-2 text-[10px] text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
+                        >
+                          {invitingExpert === ep.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Mail className="h-3 w-3" />
+                          )}
+                          Invite
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+
+                return (
+                  <div className="space-y-4">
+                    {/* ── Experts Section ── */}
+                    {tierExperts.length > 0 && (
+                      <div className="overflow-hidden rounded-cos-lg border border-emerald-200">
+                        <div className="flex items-center justify-between bg-emerald-50 px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-emerald-700">Experts</span>
+                            <span className="rounded-cos-pill bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{tierExperts.length}</span>
+                          </div>
+                          <span className="text-[10px] text-emerald-600/70">Client-facing roles — enrichable</span>
+                        </div>
+                        <div className="divide-y divide-emerald-100">
+                          {tierExperts.map((ep) => renderExpertRow(ep, true))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Potential Experts Section ── */}
+                    {tierPotential.length > 0 && (
+                      <div className="overflow-hidden rounded-cos-lg border border-amber-200">
+                        <div className="flex items-center justify-between bg-amber-50 px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-amber-700">Potential Experts</span>
+                            <span className="rounded-cos-pill bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">{tierPotential.length}</span>
+                          </div>
+                          <span className="text-[10px] text-amber-600/70">Ambiguous roles — may be client-facing</span>
+                        </div>
+                        <div className="divide-y divide-amber-100">
+                          {tierPotential.map((ep) => renderExpertRow(ep, true))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Not Experts Section ── */}
+                    {tierNotExpert.length > 0 && (
+                      <div className="overflow-hidden rounded-cos-lg border border-cos-border/60">
+                        <div className="flex items-center justify-between bg-cos-cloud/50 px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-cos-slate">Not Experts</span>
+                            <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-bold text-cos-slate">{tierNotExpert.length}</span>
+                          </div>
+                          <span className="text-[10px] text-cos-slate/70">Internal ops — HR, admin, sales, etc.</span>
+                        </div>
+                        <div className="divide-y divide-cos-border/30">
+                          {tierNotExpert.map((ep) => renderExpertRow(ep, false))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Unclassified (legacy imports without PDL data) ── */}
+                    {tierOther.length > 0 && (
+                      <div className="overflow-hidden rounded-cos-lg border border-cos-border/60">
+                        <div className="flex items-center justify-between bg-cos-cloud/30 px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-cos-slate">Unclassified</span>
+                            <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-bold text-cos-slate">{tierOther.length}</span>
+                          </div>
+                          <span className="text-[10px] text-cos-slate/70">Not yet classified by PDL</span>
+                        </div>
+                        <div className="divide-y divide-cos-border/30">
+                          {tierOther.map((ep) => renderExpertRow(ep, true))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </Section>
           </div>
         )}
