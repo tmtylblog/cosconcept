@@ -10,15 +10,14 @@ import {
   X,
   Search,
   Loader2,
-  ExternalLink,
-  Mail,
-  Shield,
   Clock,
-  CreditCard,
   Sparkles,
   Globe,
   UserCheck,
+  Eye,
 } from "lucide-react";
+import { authClient } from "@/lib/auth-client";
+import { Button } from "@/components/ui/button";
 
 /* ── Types ────────────────────────────────────────────────────────── */
 
@@ -63,6 +62,20 @@ interface OrgDetails {
   enrichmentStats: Record<string, EnrichmentStat>;
 }
 
+// Flat user row for the Users tab
+interface CustomerUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  banned: boolean;
+  createdAt: string;
+  orgName?: string;
+  orgSlug?: string;
+  orgPlan?: string;
+}
+
+type Tab = "companies" | "users";
 type FilterStatus = "all" | "active" | "free" | "pro" | "enterprise";
 
 const PLAN_COLORS: Record<string, string> = {
@@ -85,6 +98,9 @@ const PHASE_COLORS: Record<string, string> = {
 /* ── Component ────────────────────────────────────────────────────── */
 
 export default function CustomersPage() {
+  const [activeTab, setActiveTab] = useState<Tab>("companies");
+
+  // ── Companies tab state ──
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -95,6 +111,13 @@ export default function CustomersPage() {
   const [editingPlan, setEditingPlan] = useState<string | null>(null);
   const [pendingPlan, setPendingPlan] = useState<string>("");
   const [saving, setSaving] = useState(false);
+
+  // ── Users tab state ──
+  const [customerUsers, setCustomerUsers] = useState<CustomerUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersLoaded, setUsersLoaded] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [impersonating, setImpersonating] = useState<string | null>(null);
 
   // Load all organizations
   useEffect(() => {
@@ -110,6 +133,94 @@ export default function CustomersPage() {
       });
   }, []);
 
+  // Load customer users when tab switches to "users"
+  useEffect(() => {
+    if (activeTab !== "users" || usersLoaded) return;
+    setUsersLoading(true);
+
+    // Fetch all users and filter out admins (show only regular "user" role)
+    authClient.admin
+      .listUsers({ query: { limit: 500 } })
+      .then(async (res) => {
+        if (!res.data?.users) return;
+
+        const regularUsers = res.data.users
+          .filter((u) => {
+            const role = (u as unknown as { role: string }).role ?? "user";
+            return role === "user";
+          })
+          .map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: (u as unknown as { role: string }).role ?? "user",
+            banned: (u as unknown as { banned: boolean }).banned ?? false,
+            createdAt: u.createdAt
+              ? new Date(u.createdAt).toLocaleDateString()
+              : "",
+          }));
+
+        // Enrich with org membership data
+        // Build a lookup from the org details we already have or fetch them
+        const enriched: CustomerUser[] = [];
+
+        // Quick approach: use the orgs list we already loaded and
+        // fetch details for any org we haven't expanded yet
+        const orgLookup = new Map<string, OrgRow>();
+        for (const org of orgs) {
+          orgLookup.set(org.id, org);
+        }
+
+        // For each user, try to find their org via the details API
+        // But a faster approach: just add all org member info we already know
+        const memberToOrg = new Map<string, { orgName: string; orgSlug: string; orgPlan: string }>();
+
+        // Fetch all org details to build the member-to-org map
+        try {
+          const detailsPromises = orgs.map(async (org) => {
+            if (orgDetails[org.id]) return { orgId: org.id, details: orgDetails[org.id] };
+            try {
+              const r = await fetch(`/api/admin/organizations/${org.id}/details`);
+              if (r.ok) {
+                const data = await r.json();
+                return { orgId: org.id, details: data as OrgDetails };
+              }
+            } catch { /* skip */ }
+            return null;
+          });
+
+          const results = await Promise.all(detailsPromises);
+          for (const result of results) {
+            if (!result) continue;
+            const org = orgLookup.get(result.orgId);
+            if (!org) continue;
+            for (const member of result.details.members) {
+              memberToOrg.set(member.userId, {
+                orgName: org.name,
+                orgSlug: org.slug,
+                orgPlan: org.plan,
+              });
+            }
+          }
+        } catch { /* skip enrichment */ }
+
+        for (const user of regularUsers) {
+          const orgInfo = memberToOrg.get(user.id);
+          enriched.push({
+            ...user,
+            orgName: orgInfo?.orgName,
+            orgSlug: orgInfo?.orgSlug,
+            orgPlan: orgInfo?.orgPlan,
+          });
+        }
+
+        setCustomerUsers(enriched);
+        setUsersLoaded(true);
+      })
+      .catch(console.error)
+      .finally(() => setUsersLoading(false));
+  }, [activeTab, usersLoaded, orgs, orgDetails]);
+
   // Load org details on expand
   const toggleExpand = useCallback(
     async (orgId: string) => {
@@ -119,7 +230,7 @@ export default function CustomersPage() {
       }
       setExpandedOrg(orgId);
 
-      if (orgDetails[orgId]) return; // Already loaded
+      if (orgDetails[orgId]) return;
 
       setDetailsLoading(orgId);
       try {
@@ -164,9 +275,20 @@ export default function CustomersPage() {
     [pendingPlan]
   );
 
+  // Impersonate user
+  async function handleImpersonate(userId: string) {
+    setImpersonating(userId);
+    try {
+      await authClient.admin.impersonateUser({ userId });
+      window.location.href = "/dashboard";
+    } catch (err) {
+      console.error("Impersonation failed:", err);
+      setImpersonating(null);
+    }
+  }
+
   // Filter organizations
   const filtered = orgs.filter((org) => {
-    // Search filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       if (
@@ -176,8 +298,6 @@ export default function CustomersPage() {
         return false;
       }
     }
-
-    // Plan filter
     if (filterStatus !== "all" && filterStatus !== "active") {
       return org.plan === filterStatus;
     }
@@ -186,6 +306,18 @@ export default function CustomersPage() {
     }
     return true;
   });
+
+  // Filter users
+  const filteredUsers = userSearch
+    ? customerUsers.filter((u) => {
+        const q = userSearch.toLowerCase();
+        return (
+          u.name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          (u.orgName?.toLowerCase().includes(q) ?? false)
+        );
+      })
+    : customerUsers;
 
   // Stats
   const stats = {
@@ -211,7 +343,7 @@ export default function CustomersPage() {
         <div className="flex items-center gap-3">
           <div className="rounded-cos bg-cos-electric/5 px-3 py-1.5 text-center">
             <div className="text-lg font-bold text-cos-electric">{stats.total}</div>
-            <div className="text-[10px] font-medium uppercase text-cos-slate">Customers</div>
+            <div className="text-[10px] font-medium uppercase text-cos-slate">Companies</div>
           </div>
           <div className="rounded-cos bg-cos-signal/5 px-3 py-1.5 text-center">
             <div className="text-lg font-bold text-cos-signal">{stats.totalMembers}</div>
@@ -220,309 +352,512 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Search + Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
-          <input
-            type="text"
-            placeholder="Search customers..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-cos-lg border border-cos-border bg-white py-2 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
-          />
-        </div>
-        <div className="flex gap-1">
-          {(
-            [
-              { key: "all", label: "All" },
-              { key: "free", label: `Free (${stats.free})` },
-              { key: "pro", label: `Pro (${stats.pro})` },
-              { key: "enterprise", label: `Enterprise (${stats.enterprise})` },
-            ] as { key: FilterStatus; label: string }[]
-          ).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setFilterStatus(key)}
-              className={`rounded-cos-pill px-3 py-1.5 text-xs font-medium transition-colors ${
-                filterStatus === key
-                  ? "bg-cos-electric text-white"
-                  : "bg-cos-cloud text-cos-slate hover:bg-cos-cloud-dim"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-cos-border">
+        <button
+          onClick={() => setActiveTab("companies")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "companies"
+              ? "border-cos-electric text-cos-electric"
+              : "border-transparent text-cos-slate hover:text-cos-midnight"
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          Companies
+          <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-semibold text-cos-slate">
+            {stats.total}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab("users")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            activeTab === "users"
+              ? "border-cos-electric text-cos-electric"
+              : "border-transparent text-cos-slate hover:text-cos-midnight"
+          }`}
+        >
+          <Users className="h-4 w-4" />
+          Users
+          <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-semibold text-cos-slate">
+            {stats.totalMembers}
+          </span>
+        </button>
       </div>
 
-      {/* Customer list */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
-          <Building2 className="h-8 w-8 text-cos-slate-light" />
-          <p className="mt-2 text-sm text-cos-slate">No customers found</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filtered.map((org) => {
-            const isExpanded = expandedOrg === org.id;
-            const details = orgDetails[org.id];
-            const isLoadingDetails = detailsLoading === org.id;
-
-            return (
-              <div
-                key={org.id}
-                className="overflow-hidden rounded-cos-lg border border-cos-border bg-white transition-shadow hover:shadow-sm"
-              >
-                {/* Main row */}
+      {/* ── COMPANIES TAB ── */}
+      {activeTab === "companies" && (
+        <>
+          {/* Search + Filters */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
+              <input
+                type="text"
+                placeholder="Search companies..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-cos-lg border border-cos-border bg-white py-2 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+              />
+            </div>
+            <div className="flex gap-1">
+              {(
+                [
+                  { key: "all", label: "All" },
+                  { key: "free", label: `Free (${stats.free})` },
+                  { key: "pro", label: `Pro (${stats.pro})` },
+                  { key: "enterprise", label: `Enterprise (${stats.enterprise})` },
+                ] as { key: FilterStatus; label: string }[]
+              ).map(({ key, label }) => (
                 <button
-                  onClick={() => toggleExpand(org.id)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                  key={key}
+                  onClick={() => setFilterStatus(key)}
+                  className={`rounded-cos-pill px-3 py-1.5 text-xs font-medium transition-colors ${
+                    filterStatus === key
+                      ? "bg-cos-electric text-white"
+                      : "bg-cos-cloud text-cos-slate hover:bg-cos-cloud-dim"
+                  }`}
                 >
-                  <span className="text-cos-slate-light">
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                  </span>
-
-                  {/* Name */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-cos-midnight">
-                        {org.name}
-                      </span>
-                      <span className="text-xs text-cos-slate-light">/{org.slug}</span>
-                    </div>
-                  </div>
-
-                  {/* Plan badge */}
-                  <div className="flex items-center gap-2">
-                    {editingPlan === org.id ? (
-                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                        <select
-                          value={pendingPlan}
-                          onChange={(e) => setPendingPlan(e.target.value)}
-                          className="rounded-cos border border-cos-border px-2 py-1 text-xs"
-                        >
-                          <option value="free">Free</option>
-                          <option value="pro">Pro</option>
-                          <option value="enterprise">Enterprise</option>
-                        </select>
-                        <button
-                          onClick={() => savePlan(org.id)}
-                          disabled={saving}
-                          className="rounded-cos bg-cos-electric p-1 text-white hover:bg-cos-electric-hover disabled:opacity-50"
-                        >
-                          <Save className="h-3 w-3" />
-                        </button>
-                        <button
-                          onClick={() => setEditingPlan(null)}
-                          className="rounded-cos p-1 text-cos-slate hover:bg-cos-cloud"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingPlan(org.id);
-                          setPendingPlan(org.plan);
-                        }}
-                        className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                          PLAN_COLORS[org.plan] ?? PLAN_COLORS.free
-                        }`}
-                        title="Click to edit plan"
-                      >
-                        {org.plan}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Member count */}
-                  <div className="flex items-center gap-1 text-xs text-cos-slate">
-                    <Users className="h-3.5 w-3.5" />
-                    <span>{org.members}</span>
-                  </div>
-
-                  {/* Created date */}
-                  <div className="hidden items-center gap-1 text-xs text-cos-slate-light sm:flex">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>{org.createdAt}</span>
-                  </div>
+                  {label}
                 </button>
+              ))}
+            </div>
+          </div>
 
-                {/* Expanded details */}
-                {isExpanded && (
-                  <div className="border-t border-cos-border bg-cos-cloud/30">
-                    {isLoadingDetails ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
-                      </div>
-                    ) : details ? (
-                      <div className="grid gap-4 p-4 lg:grid-cols-2">
-                        {/* Users section */}
-                        <div className="rounded-cos border border-cos-border bg-white p-3">
-                          <div className="mb-3 flex items-center gap-2">
-                            <UserCheck className="h-4 w-4 text-cos-electric" />
-                            <h3 className="text-sm font-semibold text-cos-midnight">
-                              Users ({details.members.length})
-                            </h3>
-                          </div>
-                          {details.members.length === 0 ? (
-                            <p className="text-xs text-cos-slate-light">No members</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {details.members.map((m) => (
-                                <div
-                                  key={m.id}
-                                  className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-3 py-2"
-                                >
-                                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-cos-electric/10 text-xs font-bold text-cos-electric">
-                                    {(m.userName ?? m.userEmail ?? "?")
-                                      .charAt(0)
-                                      .toUpperCase()}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-xs font-medium text-cos-midnight">
-                                      {m.userName ?? "Unnamed"}
-                                    </p>
-                                    <p className="truncate text-[10px] text-cos-slate">
-                                      {m.userEmail}
-                                    </p>
-                                  </div>
-                                  <span
-                                    className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
-                                      m.role === "owner"
-                                        ? "bg-cos-warm/10 text-cos-warm"
-                                        : m.role === "admin"
-                                        ? "bg-cos-electric/10 text-cos-electric"
-                                        : "bg-cos-cloud text-cos-slate"
-                                    }`}
-                                  >
-                                    {m.role}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+          {/* Company list */}
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
+              <Building2 className="h-8 w-8 text-cos-slate-light" />
+              <p className="mt-2 text-sm text-cos-slate">No companies found</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filtered.map((org) => {
+                const isExpanded = expandedOrg === org.id;
+                const details = orgDetails[org.id];
+                const isLoadingDetails = detailsLoading === org.id;
+
+                return (
+                  <div
+                    key={org.id}
+                    className="overflow-hidden rounded-cos-lg border border-cos-border bg-white transition-shadow hover:shadow-sm"
+                  >
+                    {/* Main row */}
+                    <button
+                      onClick={() => toggleExpand(org.id)}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                    >
+                      <span className="text-cos-slate-light">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </span>
+
+                      {/* Name */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold text-cos-midnight">
+                            {org.name}
+                          </span>
+                          <span className="text-xs text-cos-slate-light">/{org.slug}</span>
                         </div>
+                      </div>
 
-                        {/* Firms section */}
-                        <div className="rounded-cos border border-cos-border bg-white p-3">
-                          <div className="mb-3 flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-cos-signal" />
-                            <h3 className="text-sm font-semibold text-cos-midnight">
-                              Linked Firms ({details.firms.length})
-                            </h3>
+                      {/* Plan badge */}
+                      <div className="flex items-center gap-2">
+                        {editingPlan === org.id ? (
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <select
+                              value={pendingPlan}
+                              onChange={(e) => setPendingPlan(e.target.value)}
+                              className="rounded-cos border border-cos-border px-2 py-1 text-xs"
+                            >
+                              <option value="free">Free</option>
+                              <option value="pro">Pro</option>
+                              <option value="enterprise">Enterprise</option>
+                            </select>
+                            <button
+                              onClick={() => savePlan(org.id)}
+                              disabled={saving}
+                              className="rounded-cos bg-cos-electric p-1 text-white hover:bg-cos-electric-hover disabled:opacity-50"
+                            >
+                              <Save className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={() => setEditingPlan(null)}
+                              className="rounded-cos p-1 text-cos-slate hover:bg-cos-cloud"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
                           </div>
-                          {details.firms.length === 0 ? (
-                            <p className="text-xs text-cos-slate-light">No linked firms</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {details.firms.map((firm) => {
-                                const enrichment = details.enrichmentStats[firm.id];
-                                return (
-                                  <div
-                                    key={firm.id}
-                                    className="rounded-cos bg-cos-cloud/50 p-3"
-                                  >
-                                    <div className="flex items-start justify-between">
-                                      <div className="min-w-0">
-                                        <p className="truncate text-xs font-semibold text-cos-midnight">
-                                          {firm.name}
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingPlan(org.id);
+                              setPendingPlan(org.plan);
+                            }}
+                            className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                              PLAN_COLORS[org.plan] ?? PLAN_COLORS.free
+                            }`}
+                            title="Click to edit plan"
+                          >
+                            {org.plan}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Member count */}
+                      <div className="flex items-center gap-1 text-xs text-cos-slate">
+                        <Users className="h-3.5 w-3.5" />
+                        <span>{org.members}</span>
+                      </div>
+
+                      {/* Created date */}
+                      <div className="hidden items-center gap-1 text-xs text-cos-slate-light sm:flex">
+                        <Clock className="h-3.5 w-3.5" />
+                        <span>{org.createdAt}</span>
+                      </div>
+                    </button>
+
+                    {/* Expanded details */}
+                    {isExpanded && (
+                      <div className="border-t border-cos-border bg-cos-cloud/30">
+                        {isLoadingDetails ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
+                          </div>
+                        ) : details ? (
+                          <div className="grid gap-4 p-4 lg:grid-cols-2">
+                            {/* Users section */}
+                            <div className="rounded-cos border border-cos-border bg-white p-3">
+                              <div className="mb-3 flex items-center gap-2">
+                                <UserCheck className="h-4 w-4 text-cos-electric" />
+                                <h3 className="text-sm font-semibold text-cos-midnight">
+                                  Users ({details.members.length})
+                                </h3>
+                              </div>
+                              {details.members.length === 0 ? (
+                                <p className="text-xs text-cos-slate-light">No members</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {details.members.map((m) => (
+                                    <div
+                                      key={m.id}
+                                      className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-3 py-2"
+                                    >
+                                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-cos-electric/10 text-xs font-bold text-cos-electric">
+                                        {(m.userName ?? m.userEmail ?? "?")
+                                          .charAt(0)
+                                          .toUpperCase()}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-xs font-medium text-cos-midnight">
+                                          {m.userName ?? "Unnamed"}
                                         </p>
-                                        {firm.website && (
-                                          <a
-                                            href={
-                                              firm.website.startsWith("http")
-                                                ? firm.website
-                                                : `https://${firm.website}`
-                                            }
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="mt-0.5 flex items-center gap-1 text-[10px] text-cos-electric hover:underline"
-                                          >
-                                            <Globe className="h-3 w-3" />
-                                            {firm.website}
-                                          </a>
+                                        <p className="truncate text-[10px] text-cos-slate">
+                                          {m.userEmail}
+                                        </p>
+                                      </div>
+                                      <span
+                                        className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
+                                          m.role === "owner"
+                                            ? "bg-cos-warm/10 text-cos-warm"
+                                            : m.role === "admin"
+                                            ? "bg-cos-electric/10 text-cos-electric"
+                                            : "bg-cos-cloud text-cos-slate"
+                                        }`}
+                                      >
+                                        {m.role}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Firms section */}
+                            <div className="rounded-cos border border-cos-border bg-white p-3">
+                              <div className="mb-3 flex items-center gap-2">
+                                <Building2 className="h-4 w-4 text-cos-signal" />
+                                <h3 className="text-sm font-semibold text-cos-midnight">
+                                  Linked Firms ({details.firms.length})
+                                </h3>
+                              </div>
+                              {details.firms.length === 0 ? (
+                                <p className="text-xs text-cos-slate-light">No linked firms</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {details.firms.map((firm) => {
+                                    const enrichment = details.enrichmentStats[firm.id];
+                                    return (
+                                      <div
+                                        key={firm.id}
+                                        className="rounded-cos bg-cos-cloud/50 p-3"
+                                      >
+                                        <div className="flex items-start justify-between">
+                                          <div className="min-w-0">
+                                            <p className="truncate text-xs font-semibold text-cos-midnight">
+                                              {firm.name}
+                                            </p>
+                                            {firm.website && (
+                                              <a
+                                                href={
+                                                  firm.website.startsWith("http")
+                                                    ? firm.website
+                                                    : `https://${firm.website}`
+                                                }
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="mt-0.5 flex items-center gap-1 text-[10px] text-cos-electric hover:underline"
+                                              >
+                                                <Globe className="h-3 w-3" />
+                                                {firm.website}
+                                              </a>
+                                            )}
+                                          </div>
+                                          {firm.profileCompleteness !== null && (
+                                            <div className="text-right">
+                                              <div className="text-[10px] font-medium text-cos-slate">
+                                                Profile
+                                              </div>
+                                              <div className="text-xs font-bold text-cos-electric">
+                                                {firm.profileCompleteness}%
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        <div className="mt-2 flex flex-wrap gap-1">
+                                          {firm.firmType && (
+                                            <span className="rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-medium text-cos-signal">
+                                              {firm.firmType}
+                                            </span>
+                                          )}
+                                          {firm.sizeBand && (
+                                            <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] text-cos-slate">
+                                              {firm.sizeBand}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Enrichment stats */}
+                                        {enrichment && (
+                                          <div className="mt-2 border-t border-cos-border/50 pt-2">
+                                            <div className="flex items-center gap-1 text-[10px] text-cos-slate">
+                                              <Sparkles className="h-3 w-3" />
+                                              <span>
+                                                {enrichment.entries} enrichment
+                                                {enrichment.entries !== 1 ? "s" : ""} ·{" "}
+                                                ${enrichment.cost.toFixed(2)}
+                                              </span>
+                                            </div>
+                                            <div className="mt-1 flex flex-wrap gap-1">
+                                              {enrichment.phases.map((phase) => (
+                                                <span
+                                                  key={phase}
+                                                  className={`rounded-cos-pill px-1.5 py-0.5 text-[9px] font-medium ${
+                                                    PHASE_COLORS[phase] ??
+                                                    "bg-cos-cloud text-cos-slate"
+                                                  }`}
+                                                >
+                                                  {phase}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
                                         )}
                                       </div>
-                                      {firm.profileCompleteness !== null && (
-                                        <div className="text-right">
-                                          <div className="text-[10px] font-medium text-cos-slate">
-                                            Profile
-                                          </div>
-                                          <div className="text-xs font-bold text-cos-electric">
-                                            {firm.profileCompleteness}%
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className="mt-2 flex flex-wrap gap-1">
-                                      {firm.firmType && (
-                                        <span className="rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-medium text-cos-signal">
-                                          {firm.firmType}
-                                        </span>
-                                      )}
-                                      {firm.sizeBand && (
-                                        <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] text-cos-slate">
-                                          {firm.sizeBand}
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    {/* Enrichment stats */}
-                                    {enrichment && (
-                                      <div className="mt-2 border-t border-cos-border/50 pt-2">
-                                        <div className="flex items-center gap-1 text-[10px] text-cos-slate">
-                                          <Sparkles className="h-3 w-3" />
-                                          <span>
-                                            {enrichment.entries} enrichment
-                                            {enrichment.entries !== 1 ? "s" : ""} ·{" "}
-                                            ${enrichment.cost.toFixed(2)}
-                                          </span>
-                                        </div>
-                                        <div className="mt-1 flex flex-wrap gap-1">
-                                          {enrichment.phases.map((phase) => (
-                                            <span
-                                              key={phase}
-                                              className={`rounded-cos-pill px-1.5 py-0.5 text-[9px] font-medium ${
-                                                PHASE_COLORS[phase] ??
-                                                "bg-cos-cloud text-cos-slate"
-                                              }`}
-                                            >
-                                              {phase}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-4 text-center text-xs text-cos-slate-light">
-                        Failed to load details
+                          </div>
+                        ) : (
+                          <div className="p-4 text-center text-xs text-cos-slate-light">
+                            Failed to load details
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── USERS TAB ── */}
+      {activeTab === "users" && (
+        <>
+          {/* Search */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
+            <input
+              type="text"
+              placeholder="Search users by name, email, or company..."
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              className="w-full rounded-cos-lg border border-cos-border bg-white py-2.5 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+            />
+            {userSearch && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-cos-pill bg-cos-electric/10 px-2.5 py-0.5 text-xs font-medium text-cos-electric">
+                {filteredUsers.length} result{filteredUsers.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+
+          {usersLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+              <span className="ml-2 text-sm text-cos-slate">Loading customer users...</span>
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-12">
+              <Users className="h-8 w-8 text-cos-slate-light" />
+              <p className="mt-2 text-sm text-cos-slate">
+                {userSearch ? "No users match your search" : "No customer users found"}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-cos-xl border border-cos-border bg-cos-surface">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-cos-border bg-cos-cloud/50">
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                      User
+                    </th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                      Email
+                    </th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                      Company
+                    </th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                      Plan
+                    </th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                      Status
+                    </th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                      Joined
+                    </th>
+                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-cos-border/60">
+                  {filteredUsers.map((user) => (
+                    <tr
+                      key={user.id}
+                      className="transition-colors hover:bg-cos-electric/[0.02]"
+                    >
+                      {/* Name */}
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
+                            {user.name?.charAt(0)?.toUpperCase() || "?"}
+                          </div>
+                          <span className="font-medium text-cos-midnight">
+                            {user.name}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Email */}
+                      <td className="px-5 py-3">
+                        <span className="font-mono text-xs text-cos-slate">
+                          {user.email}
+                        </span>
+                      </td>
+
+                      {/* Company */}
+                      <td className="px-5 py-3">
+                        {user.orgName ? (
+                          <button
+                            onClick={() => {
+                              setActiveTab("companies");
+                              setSearchQuery(user.orgName ?? "");
+                            }}
+                            className="flex items-center gap-1.5 text-xs font-medium text-cos-electric hover:underline"
+                          >
+                            <Building2 className="h-3 w-3" />
+                            {user.orgName}
+                          </button>
+                        ) : (
+                          <span className="text-xs italic text-cos-slate-light">
+                            No company
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Plan */}
+                      <td className="px-5 py-3">
+                        {user.orgPlan ? (
+                          <span
+                            className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                              PLAN_COLORS[user.orgPlan] ?? PLAN_COLORS.free
+                            }`}
+                          >
+                            {user.orgPlan}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-cos-slate-light">—</span>
+                        )}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-5 py-3">
+                        {user.banned ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-ember/8 px-2.5 py-1 text-xs font-medium text-cos-ember">
+                            <span className="h-1.5 w-1.5 rounded-full bg-cos-ember" />
+                            Banned
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-signal/8 px-2.5 py-1 text-xs font-medium text-cos-signal">
+                            <span className="h-1.5 w-1.5 rounded-full bg-cos-signal" />
+                            Active
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Joined */}
+                      <td className="px-5 py-3 text-xs text-cos-slate">
+                        {user.createdAt}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-5 py-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleImpersonate(user.id)}
+                          disabled={impersonating === user.id}
+                          title="Impersonate this user"
+                          className="h-7 w-7 p-0 text-cos-slate hover:text-cos-electric"
+                        >
+                          {impersonating === user.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Eye className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

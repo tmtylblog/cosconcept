@@ -16,6 +16,7 @@ import {
   UserCheck,
   Mail,
   MapPin,
+  ShieldCheck,
 } from "lucide-react";
 
 interface AdminUser {
@@ -63,6 +64,11 @@ const CLASSIFICATION_COLORS: Record<
   },
 };
 
+const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
+  superadmin: { bg: "bg-cos-ember/10", text: "text-cos-ember" },
+  admin: { bg: "bg-cos-electric/10", text: "text-cos-electric" },
+};
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,17 +84,21 @@ export default function AdminUsersPage() {
       .listUsers({ query: { limit: 100 } })
       .then((res) => {
         if (res.data?.users) {
+          // Only show admin and superadmin users (internal staff)
+          const allUsers = res.data.users.map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: (u as unknown as { role: string }).role ?? "user",
+            banned: (u as unknown as { banned: boolean }).banned ?? false,
+            createdAt: u.createdAt
+              ? new Date(u.createdAt).toLocaleDateString()
+              : "",
+          }));
           setUsers(
-            res.data.users.map((u) => ({
-              id: u.id,
-              name: u.name,
-              email: u.email,
-              role: (u as unknown as { role: string }).role ?? "user",
-              banned: (u as unknown as { banned: boolean }).banned ?? false,
-              createdAt: u.createdAt
-                ? new Date(u.createdAt).toLocaleDateString()
-                : "",
-            }))
+            allUsers.filter(
+              (u) => u.role === "admin" || u.role === "superadmin"
+            )
           );
         }
       })
@@ -110,8 +120,13 @@ export default function AdminUsersPage() {
     );
   }
 
-  async function handleSetRole(userId: string, role: "user" | "admin") {
-    await authClient.admin.setRole({ userId, role });
+  async function handleSetRole(userId: string, role: string) {
+    // Better Auth SDK types only accept "admin" | "user", but our DB also supports "superadmin".
+    // Use type assertion for the API call while the DB column accepts any string.
+    await authClient.admin.setRole({
+      userId,
+      role: role as "admin" | "user",
+    });
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, role } : u))
     );
@@ -184,14 +199,36 @@ export default function AdminUsersPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
-          Users
-        </h1>
-        <p className="mt-1 text-sm text-cos-slate">
-          {users.length} registered user{users.length !== 1 ? "s" : ""} on the
-          platform. Click a row to see linked expert profiles.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
+            Administrative Staff
+          </h1>
+          <p className="mt-1 text-sm text-cos-slate">
+            {users.length} admin user{users.length !== 1 ? "s" : ""} with
+            platform management access. Click a row to see linked expert profiles.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-cos bg-cos-ember/5 px-3 py-1.5">
+            <ShieldCheck className="h-4 w-4 text-cos-ember" />
+            <div className="text-center">
+              <span className="text-sm font-bold text-cos-ember">
+                {users.filter((u) => u.role === "superadmin").length}
+              </span>
+              <span className="ml-1 text-[10px] text-cos-slate">superadmin</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-cos bg-cos-electric/5 px-3 py-1.5">
+            <Shield className="h-4 w-4 text-cos-electric" />
+            <div className="text-center">
+              <span className="text-sm font-bold text-cos-electric">
+                {users.filter((u) => u.role === "admin").length}
+              </span>
+              <span className="ml-1 text-[10px] text-cos-slate">admin</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Search */}
@@ -201,7 +238,7 @@ export default function AdminUsersPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search users by name or email..."
+          placeholder="Search staff by name or email..."
           className="w-full rounded-cos-xl border border-cos-border bg-cos-surface py-3 pl-11 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light transition-colors focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
         />
         {search && (
@@ -218,7 +255,7 @@ export default function AdminUsersPage() {
             <tr className="border-b border-cos-border bg-cos-cloud/50">
               <th className="w-8 px-2 py-3.5" />
               <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                User
+                Staff Member
               </th>
               <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                 Email
@@ -241,6 +278,8 @@ export default function AdminUsersPage() {
             {filtered.map((user) => {
               const isExpanded = expandedUserId === user.id;
               const expertData = expertProfiles[user.id];
+              const roleColor =
+                ROLE_COLORS[user.role] ?? ROLE_COLORS.admin;
 
               return (
                 <tr key={user.id} className="group">
@@ -271,7 +310,7 @@ export default function AdminUsersPage() {
                         onClick={() => handleExpandUser(user.id)}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-cos-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-xs font-semibold text-cos-electric">
+                          <div className={`flex h-8 w-8 items-center justify-center rounded-cos-full text-xs font-semibold ${roleColor.bg} ${roleColor.text}`}>
                             {user.name?.charAt(0)?.toUpperCase() || "?"}
                           </div>
                           <span className="font-medium text-cos-midnight">
@@ -290,15 +329,11 @@ export default function AdminUsersPage() {
                         <select
                           value={user.role}
                           onChange={(e) =>
-                            handleSetRole(
-                              user.id,
-                              e.target.value as "user" | "admin"
-                            )
+                            handleSetRole(user.id, e.target.value)
                           }
                           onClick={(e) => e.stopPropagation()}
                           className="rounded-cos-md border border-cos-border bg-cos-cloud px-2.5 py-1 text-xs font-medium text-cos-midnight transition-colors focus:border-cos-electric focus:outline-none"
                         >
-                          <option value="user">User</option>
                           <option value="admin">Admin</option>
                           <option value="superadmin">Superadmin</option>
                         </select>
@@ -503,7 +538,7 @@ export default function AdminUsersPage() {
                   colSpan={7}
                   className="px-5 py-12 text-center text-sm text-cos-slate"
                 >
-                  {search ? "No users match your search." : "No users found."}
+                  {search ? "No staff members match your search." : "No admin users found."}
                 </td>
               </tr>
             )}
