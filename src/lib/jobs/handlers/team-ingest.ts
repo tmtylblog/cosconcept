@@ -164,18 +164,23 @@ export async function handleTeamIngest(
 
   let allPeople: Awaited<ReturnType<typeof searchPeopleAtCompany>>["people"] = [];
   let total = 0;
-  let from = 0;
+  let scrollToken: string | null = null;
 
   while (allPeople.length < effectiveLimit) {
     const batchSize = Math.min(MAX_PER_PAGE, effectiveLimit - allPeople.length);
-    const result = await searchPeopleAtCompany({ domain, limit: batchSize, from });
+    const result = await searchPeopleAtCompany({
+      domain,
+      limit: batchSize,
+      scrollToken: scrollToken ?? undefined,
+    });
 
     total = result.total;
     if (result.people.length === 0) break;
     allPeople = allPeople.concat(result.people);
-    from += result.people.length;
+    scrollToken = result.scrollToken;
 
     if (result.people.length < batchSize) break; // no more results
+    if (!scrollToken) break; // no more pages available
     if (allPeople.length >= effectiveLimit) break;
   }
 

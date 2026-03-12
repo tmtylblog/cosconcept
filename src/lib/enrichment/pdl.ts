@@ -222,22 +222,23 @@ export interface PdlPersonSearchResult {
  * Only fetches current jobs (job_is_primary=true).
  * Does NOT request experience/education to keep payload slim (cost is the same).
  *
- * @param domain  Bare domain, e.g. "agency.com" (no protocol/www)
- * @param limit   Max records to return. Default 5. PDL max per page is 100.
- * @param from    Offset for pagination.
+ * @param domain       Bare domain, e.g. "agency.com" (no protocol/www)
+ * @param limit        Max records to return. Default 5. PDL max per page is 100.
+ * @param scrollToken  Cursor token from previous page (PDL scroll_token pagination).
  */
 export async function searchPeopleAtCompany(params: {
   domain: string;
   limit?: number;
-  from?: number;
-}): Promise<{ people: PdlPersonSearchResult[]; total: number }> {
+  scrollToken?: string;
+}): Promise<{ people: PdlPersonSearchResult[]; total: number; scrollToken: string | null }> {
   const domain = params.domain
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
     .split("/")[0]
     .toLowerCase();
 
-  const body = {
+  // Build request body — PDL uses cursor-based scroll_token pagination (not offset)
+  const body: Record<string, unknown> = {
     query: {
       bool: {
         must: [
@@ -247,7 +248,6 @@ export async function searchPeopleAtCompany(params: {
       },
     },
     size: params.limit ?? 5,
-    from: params.from ?? 0,
     dataset: "resume",
     // Select only the fields we need — cost is per record regardless, but
     // keeping the select list small reduces payload size and avoids storing
@@ -270,6 +270,11 @@ export async function searchPeopleAtCompany(params: {
     ],
   };
 
+  // Cursor-based pagination: pass scroll_token from previous response
+  if (params.scrollToken) {
+    body.scroll_token = params.scrollToken;
+  }
+
   const response = await fetch(`${PDL_BASE}/person/search`, {
     method: "POST",
     headers: {
@@ -280,7 +285,7 @@ export async function searchPeopleAtCompany(params: {
   });
 
   if (response.status === 404) {
-    return { people: [], total: 0 };
+    return { people: [], total: 0, scrollToken: null };
   }
 
   if (!response.ok) {
@@ -292,6 +297,7 @@ export async function searchPeopleAtCompany(params: {
 
   return {
     total: data.total ?? 0,
+    scrollToken: (data.scroll_token as string) ?? null,
     people: (data.data ?? []).map((p: Record<string, unknown>) => ({
       id: (p.id as string) ?? "",
       fullName: (p.full_name as string) ?? "",

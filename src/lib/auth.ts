@@ -7,6 +7,7 @@ import * as schema from "./db/schema";
 import { PLAN_LIMITS } from "./billing/plan-limits";
 import { createFreeSubscription } from "./billing/create-free-subscription";
 import { enqueue } from "./jobs/queue";
+import { isPersonalEmail, CORPORATE_EMAIL_ERROR } from "./email-validation";
 
 // Define access control with admin-level statements
 const ac = createAccessControl({
@@ -41,6 +42,23 @@ export const auth = betterAuth({
     enabled: false,
   },
 
+  /**
+   * Declare all custom user columns so Better Auth includes them in
+   * getSession() return types. Admin plugin fields (role, banned, etc.)
+   * are defined in the plugin schema but not always inferred by TS.
+   */
+  user: {
+    additionalFields: {
+      role: { type: "string", input: false },
+      banned: { type: "boolean", input: false },
+      banReason: { type: "string", input: false },
+      banExpires: { type: "date", input: false },
+      jobTitle: { type: "string" },
+      phone: { type: "string" },
+      linkedinUrl: { type: "string" },
+    },
+  },
+
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
@@ -53,10 +71,17 @@ export const auth = betterAuth({
     },
   },
 
-  // Auto-assign superadmin role to @joincollectiveos.com team members on signup
+  // Block personal email registrations (server-side enforcement)
+  // + Auto-assign superadmin role to @joincollectiveos.com team members
   databaseHooks: {
     user: {
       create: {
+        before: async (user, _ctx) => {
+          if (user.email && isPersonalEmail(user.email)) {
+            throw new Error(CORPORATE_EMAIL_ERROR);
+          }
+          return user;
+        },
         after: async (user) => {
           if (user.email?.endsWith("@joincollectiveos.com")) {
             await db
