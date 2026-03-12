@@ -28,7 +28,9 @@ export async function GET() {
       SELECT
         p.id,
         fa.name AS "firmAName",
+        fa.organization_id AS "firmAOrgId",
         fb.name AS "firmBName",
+        fb.organization_id AS "firmBOrgId",
         p.status,
         p.type,
         p.match_score AS "matchScore",

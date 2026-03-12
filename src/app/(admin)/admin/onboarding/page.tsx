@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   BarChart3,
   RefreshCw,
@@ -237,6 +238,7 @@ function SessionStatusBadge({ session }: { session: RecentSession }) {
 const PAGE_SIZE = 100;
 
 export default function AdminOnboardingPage() {
+  const router = useRouter();
   const [data, setData] = useState<OnboardingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>("30d");
@@ -600,7 +602,27 @@ export default function AdminOnboardingPage() {
                   .slice((sessionsPage - 1) * PAGE_SIZE, sessionsPage * PAGE_SIZE)
                   .map((s, i) => (
                   <tr key={`${s.domain}-${i}`} className="text-cos-midnight">
-                    <td className="py-2 pr-4 font-medium">{s.domain}</td>
+                    <td className="py-2 pr-4">
+                      <div className="font-medium">{s.domain}</div>
+                      <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        {s.organizationId && (
+                          <button
+                            onClick={() => router.push(`/admin/customers/${s.organizationId}`)}
+                            className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-1.5 py-0.5 text-[10px] font-medium text-cos-electric hover:bg-cos-electric hover:text-white transition-colors"
+                          >
+                            Org
+                          </button>
+                        )}
+                        {s.userId && (
+                          <button
+                            onClick={() => router.push(`/admin/users/${s.userId}`)}
+                            className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-signal/10 px-1.5 py-0.5 text-[10px] font-medium text-cos-signal hover:bg-cos-signal hover:text-white transition-colors"
+                          >
+                            User
+                          </button>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2 pr-4">
                       {s.visitCount > 1 ? (
                         <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[10px] font-medium text-cos-electric">

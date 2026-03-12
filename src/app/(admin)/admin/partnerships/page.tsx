@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Handshake,
   ArrowRight,
@@ -13,7 +14,9 @@ import {
 interface Partnership {
   id: string;
   firmAName: string;
+  firmAOrgId: string | null;
   firmBName: string;
+  firmBOrgId: string | null;
   status: string;
   type: string;
   matchScore: number | null;
@@ -44,6 +47,7 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> =
 const PAGE_SIZE = 100;
 
 export default function AdminPartnershipsPage() {
+  const router = useRouter();
   const [partnerships, setPartnerships] = useState<Partnership[]>([]);
   const [stats, setStats] = useState<PartnershipStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -229,14 +233,26 @@ export default function AdminPartnershipsPage() {
                   key={p.id}
                   className="transition-colors hover:bg-cos-electric/[0.02]"
                 >
-                  <td className="px-5 py-3.5 font-medium text-cos-midnight">
-                    {p.firmAName}
+                  <td className="px-5 py-3.5">
+                    {p.firmAOrgId ? (
+                      <button onClick={() => router.push(`/admin/customers/${p.firmAOrgId}`)} className="font-medium text-cos-midnight hover:text-cos-electric hover:underline text-left">
+                        {p.firmAName}
+                      </button>
+                    ) : (
+                      <span className="font-medium text-cos-midnight">{p.firmAName}</span>
+                    )}
                   </td>
                   <td className="px-2 py-3.5">
                     <Handshake className="h-3.5 w-3.5 text-cos-slate-light" />
                   </td>
-                  <td className="px-5 py-3.5 font-medium text-cos-midnight">
-                    {p.firmBName}
+                  <td className="px-5 py-3.5">
+                    {p.firmBOrgId ? (
+                      <button onClick={() => router.push(`/admin/customers/${p.firmBOrgId}`)} className="font-medium text-cos-midnight hover:text-cos-electric hover:underline text-left">
+                        {p.firmBName}
+                      </button>
+                    ) : (
+                      <span className="font-medium text-cos-midnight">{p.firmBName}</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     <span

@@ -146,6 +146,51 @@ export async function updateNotificationPreferences(
   return { ok: true };
 }
 
+export interface CioCampaign {
+  id: number;
+  name: string;
+  state: string;          // "draft" | "sending" | "sent" | "paused" | "stopped" | "archived"
+  type: string;           // "regular" | "automated" | "transactional"
+  created: number;        // Unix timestamp
+  updated: number;
+  emails_sent: number;
+  active_customers: number;
+}
+
+export interface CioWorkspaceMessage {
+  id: string;
+  recipient: string;
+  subject: string;
+  type: string;
+  campaign_id: number | null;
+  created: number;
+  metrics: {
+    sent?: number;
+    delivered?: number;
+    opened?: number;
+  };
+}
+
+/**
+ * List all campaigns in the workspace.
+ */
+export async function getCioCampaigns(): Promise<CioCampaign[]> {
+  const res = await fetch(`${BASE}/campaigns`, { headers: authHeader() });
+  if (!res.ok) return [];
+  const data = await res.json() as { campaigns?: CioCampaign[] };
+  return data.campaigns ?? [];
+}
+
+/**
+ * List recent workspace-level messages (not per-customer).
+ */
+export async function getCioWorkspaceMessages(limit = 50): Promise<CioWorkspaceMessage[]> {
+  const res = await fetch(`${BASE}/messages?limit=${limit}`, { headers: authHeader() });
+  if (!res.ok) return [];
+  const data = await res.json() as { messages?: CioWorkspaceMessage[] };
+  return data.messages ?? [];
+}
+
 /**
  * Get messages sent to a specific Customer.io customer.
  * Uses the customer's cio_id (internal ID) — not the external customer id.

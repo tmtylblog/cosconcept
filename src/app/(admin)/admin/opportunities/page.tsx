@@ -40,6 +40,7 @@ interface OppData {
     status: string;
     source: string;
     firmName: string | null;
+    firmOrgId: string | null;
     requiredCategories: string[] | null;
     createdAt: string;
   }[];
@@ -49,6 +50,7 @@ interface OppData {
     status: string;
     qualityScore: number;
     firmName: string | null;
+    firmOrgId: string | null;
     timeline: string | null;
     estimatedValue: string | null;
     requiredCategories: string[] | null;
@@ -349,7 +351,15 @@ export default function AdminOpportunitiesPage() {
                           </p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-cos-slate">{opp.firmName ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        {opp.firmOrgId ? (
+                          <button onClick={(e) => { e.stopPropagation(); router.push(`/admin/customers/${opp.firmOrgId}`); }} className="text-cos-slate hover:text-cos-electric hover:underline text-left text-sm">
+                            {opp.firmName}
+                          </button>
+                        ) : (
+                          <span className="text-cos-slate">{opp.firmName ?? "—"}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 rounded-cos-pill px-2 py-0.5 text-xs font-medium ${
                           opp.signalType === "latent"
@@ -445,7 +455,15 @@ export default function AdminOpportunitiesPage() {
                           <p className="mt-0.5 text-xs italic text-cos-slate">Client anonymized</p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-cos-slate">{lead.firmName ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        {lead.firmOrgId ? (
+                          <button onClick={(e) => { e.stopPropagation(); router.push(`/admin/customers/${lead.firmOrgId}`); }} className="text-cos-slate hover:text-cos-electric hover:underline text-left text-sm">
+                            {lead.firmName}
+                          </button>
+                        ) : (
+                          <span className="text-cos-slate">{lead.firmName ?? "—"}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 rounded-cos-pill px-2 py-0.5 text-xs font-semibold ${qualityColor(lead.qualityScore)}`}>
                           <Star className="h-2.5 w-2.5" />

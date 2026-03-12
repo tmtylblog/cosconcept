@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -72,6 +73,7 @@ const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
 const PAGE_SIZE = 100;
 
 export default function AdminUsersPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -212,7 +214,7 @@ export default function AdminUsersPage() {
           </h1>
           <p className="mt-1 text-sm text-cos-slate">
             {users.length} admin user{users.length !== 1 ? "s" : ""} with
-            platform management access. Click a row to see linked expert profiles.
+            platform management access. Click a name to open their profile.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -313,13 +315,13 @@ export default function AdminUsersPage() {
                       {/* User */}
                       <div
                         className="flex-1 px-5 py-3.5 cursor-pointer"
-                        onClick={() => handleExpandUser(user.id)}
+                        onClick={() => router.push(`/admin/users/${user.id}`)}
                       >
                         <div className="flex items-center gap-3">
                           <div className={`flex h-8 w-8 items-center justify-center rounded-cos-full text-xs font-semibold ${roleColor.bg} ${roleColor.text}`}>
                             {user.name?.charAt(0)?.toUpperCase() || "?"}
                           </div>
-                          <span className="font-medium text-cos-midnight">
+                          <span className="font-medium text-cos-midnight hover:text-cos-electric hover:underline">
                             {user.name}
                           </span>
                         </div>
@@ -342,6 +344,8 @@ export default function AdminUsersPage() {
                         >
                           <option value="admin">Admin</option>
                           <option value="superadmin">Superadmin</option>
+                          <option value="growth_ops">Growth Ops</option>
+                          <option value="customer_success">Customer Success</option>
                         </select>
                       </div>
 

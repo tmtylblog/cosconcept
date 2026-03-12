@@ -117,6 +117,7 @@ export async function GET(req: Request) {
         source: opportunities.source,
         firmId: opportunities.firmId,
         firmName: serviceFirms.name,
+        firmOrgId: serviceFirms.organizationId,
         requiredCategories: opportunities.requiredCategories,
         createdAt: opportunities.createdAt,
       })
@@ -134,6 +135,7 @@ export async function GET(req: Request) {
         qualityScore: leads.qualityScore,
         firmId: leads.firmId,
         firmName: serviceFirms.name,
+        firmOrgId: serviceFirms.organizationId,
         timeline: leads.timeline,
         estimatedValue: leads.estimatedValue,
         requiredCategories: leads.requiredCategories,

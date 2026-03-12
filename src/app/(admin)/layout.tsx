@@ -25,6 +25,8 @@ import {
   BarChart3,
   Send,
   Target,
+  HeartPulse,
+  BarChart2,
 } from "lucide-react";
 
 /**
@@ -51,9 +53,15 @@ export default async function AdminLayout({
     redirect("/login");
   }
 
-  if (session.user.role !== "superadmin") {
+  const ALLOWED_ROLES = ["superadmin", "growth_ops", "customer_success"];
+  if (!ALLOWED_ROLES.includes(session.user.role ?? "")) {
     redirect("/dashboard");
   }
+
+  const role = session.user.role ?? "";
+  const isSuperadmin = role === "superadmin";
+  const canSeeGrowthOps = isSuperadmin || role === "growth_ops";
+  const canSeeCustomerSuccess = isSuperadmin || role === "customer_success";
 
   return (
     <div className="flex min-h-screen bg-cos-cloud">
@@ -82,46 +90,66 @@ export default async function AdminLayout({
         <nav className="flex-1 px-3 pt-4 space-y-0.5 overflow-y-auto">
           <AdminNavLink href="/admin" icon={<LayoutDashboard className="h-4 w-4" />} label="Overview" />
 
-          <SectionHeader label="Knowledge Graph" />
-          <AdminNavLink
-            href="/admin/knowledge-graph"
-            icon={<Share2 className="h-4 w-4" />}
-            label="Knowledge Graph"
-            accent
-          />
+          {isSuperadmin && (
+            <>
+              <SectionHeader label="Knowledge Graph" />
+              <AdminNavLink
+                href="/admin/knowledge-graph"
+                icon={<Share2 className="h-4 w-4" />}
+                label="Knowledge Graph"
+                accent
+              />
 
-          <SectionHeader label="Platform" />
-          <AdminNavLink href="/admin/customers" icon={<Building2 className="h-4 w-4" />} label="Customers" />
-          <AdminNavLink href="/admin/users" icon={<Users className="h-4 w-4" />} label="Staff" />
-          <AdminNavLink href="/admin/roles" icon={<Shield className="h-4 w-4" />} label="Role Management" />
+              <SectionHeader label="Platform" />
+              <AdminNavLink href="/admin/customers" icon={<Building2 className="h-4 w-4" />} label="Customers" />
+              <AdminNavLink href="/admin/users" icon={<Users className="h-4 w-4" />} label="Staff" />
+              <AdminNavLink href="/admin/roles" icon={<Shield className="h-4 w-4" />} label="Role Management" />
 
-          <SectionHeader label="Operations" />
-          <AdminNavLink href="/admin/subscriptions" icon={<CreditCard className="h-4 w-4" />} label="Subscriptions" />
-          <AdminNavLink href="/admin/finance" icon={<Cpu className="h-4 w-4" />} label="AI Costs" />
-          <AdminNavLink href="/admin/api-health" icon={<Activity className="h-4 w-4" />} label="API Health" />
-          <AdminNavLink href="/admin/partnerships" icon={<Handshake className="h-4 w-4" />} label="Partnerships" />
+              <SectionHeader label="Operations" />
+              <AdminNavLink href="/admin/subscriptions" icon={<CreditCard className="h-4 w-4" />} label="Subscriptions" />
+              <AdminNavLink href="/admin/finance" icon={<Cpu className="h-4 w-4" />} label="AI Costs" />
+              <AdminNavLink href="/admin/api-health" icon={<Activity className="h-4 w-4" />} label="API Health" />
+              <AdminNavLink href="/admin/partnerships" icon={<Handshake className="h-4 w-4" />} label="Partnerships" />
 
-          <SectionHeader label="Matching" />
-          <AdminNavLink href="/admin/search" icon={<Search className="h-4 w-4" />} label="Search Test" />
-          <AdminNavLink href="/admin/onboarding" icon={<TrendingUp className="h-4 w-4" />} label="Onboarding" />
-          <AdminNavLink href="/admin/opportunities" icon={<Lightbulb className="h-4 w-4" />} label="Opportunities" />
-          <AdminNavLink href="/admin/calls" icon={<Phone className="h-4 w-4" />} label="Call Transcripts" />
+              <SectionHeader label="Matching" />
+              <AdminNavLink href="/admin/search" icon={<Search className="h-4 w-4" />} label="Search Test" />
+              <AdminNavLink href="/admin/onboarding" icon={<TrendingUp className="h-4 w-4" />} label="Onboarding" />
+              <AdminNavLink href="/admin/opportunities" icon={<Lightbulb className="h-4 w-4" />} label="Opportunities" />
+              <AdminNavLink href="/admin/calls" icon={<Phone className="h-4 w-4" />} label="Call Transcripts" />
+            </>
+          )}
 
-          <SectionHeader label="Growth Ops" />
-          <AdminNavLink href="/admin/growth-ops" icon={<TrendingUp className="h-4 w-4" />} label="Overview" />
-          <AdminNavLink href="/admin/growth-ops/linkedin" icon={<Linkedin className="h-4 w-4" />} label="LinkedIn Inbox" />
-          <AdminNavLink href="/admin/growth-ops/linkedin/accounts" icon={<Users className="h-4 w-4" />} label="LinkedIn Accounts" />
-          <AdminNavLink href="/admin/growth-ops/linkedin/campaigns" icon={<Send className="h-4 w-4" />} label="Invite Campaigns" />
-          <AdminNavLink href="/admin/growth-ops/linkedin/targets" icon={<Target className="h-4 w-4" />} label="Target Lists" />
-          <AdminNavLink href="/admin/growth-ops/instantly" icon={<Mail className="h-4 w-4" />} label="Instantly" />
-          <AdminNavLink href="/admin/growth-ops/hubspot" icon={<Share2 className="h-4 w-4" />} label="HubSpot" />
-          <AdminNavLink href="/admin/growth-ops/attribution" icon={<BarChart3 className="h-4 w-4" />} label="Attribution" />
+          {canSeeGrowthOps && (
+            <>
+              <SectionHeader label="Growth Ops" />
+              <AdminNavLink href="/admin/growth-ops" icon={<TrendingUp className="h-4 w-4" />} label="Overview" />
+              <AdminNavLink href="/admin/growth-ops/linkedin" icon={<Linkedin className="h-4 w-4" />} label="LinkedIn Inbox" />
+              <AdminNavLink href="/admin/growth-ops/linkedin/accounts" icon={<Users className="h-4 w-4" />} label="LinkedIn Accounts" />
+              <AdminNavLink href="/admin/growth-ops/linkedin/campaigns" icon={<Send className="h-4 w-4" />} label="Invite Campaigns" />
+              <AdminNavLink href="/admin/growth-ops/linkedin/targets" icon={<Target className="h-4 w-4" />} label="Target Lists" />
+              <AdminNavLink href="/admin/growth-ops/instantly" icon={<Mail className="h-4 w-4" />} label="Instantly" />
+              <AdminNavLink href="/admin/growth-ops/hubspot" icon={<Share2 className="h-4 w-4" />} label="HubSpot" />
+              <AdminNavLink href="/admin/growth-ops/attribution" icon={<BarChart3 className="h-4 w-4" />} label="Attribution" />
+            </>
+          )}
 
-          <SectionHeader label="Tools" />
-          <AdminNavLink href="/admin/neo4j" icon={<Database className="h-4 w-4" />} label="Neo4j" />
-          <AdminNavLink href="/admin/apis" icon={<Globe className="h-4 w-4" />} label="APIs" />
-          <AdminNavLink href="/admin/migration" icon={<FileUp className="h-4 w-4" />} label="Data Import" />
-          <AdminNavLink href="/admin/enrichment" icon={<Sparkles className="h-4 w-4" />} label="Enrichment" />
+          {canSeeCustomerSuccess && (
+            <>
+              <SectionHeader label="Customer Success" />
+              <AdminNavLink href="/admin/customer-success/cio" icon={<BarChart2 className="h-4 w-4" />} label="CIO Dashboard" />
+              <AdminNavLink href="/admin/customer-success/health" icon={<HeartPulse className="h-4 w-4" />} label="Customer Health" />
+            </>
+          )}
+
+          {isSuperadmin && (
+            <>
+              <SectionHeader label="Tools" />
+              <AdminNavLink href="/admin/neo4j" icon={<Database className="h-4 w-4" />} label="Neo4j" />
+              <AdminNavLink href="/admin/apis" icon={<Globe className="h-4 w-4" />} label="APIs" />
+              <AdminNavLink href="/admin/migration" icon={<FileUp className="h-4 w-4" />} label="Data Import" />
+              <AdminNavLink href="/admin/enrichment" icon={<Sparkles className="h-4 w-4" />} label="Enrichment" />
+            </>
+          )}
         </nav>
 
         <div className="h-px bg-gradient-to-r from-transparent via-cos-border to-transparent" />
