@@ -1168,6 +1168,7 @@ export const legacyUsers = pgTable("legacy_users", {
   }),
 
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  migratedAt: timestamp("migrated_at"), // Set when promoted to standard users table
 });
 
 // ─── Settings (key-value store) ───────────────────────
