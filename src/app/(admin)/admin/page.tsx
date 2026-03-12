@@ -20,8 +20,8 @@ interface Metrics {
   activeSubscriptions: number;
   mrr: number;
   planDistribution: Record<string, number>;
-  totalExperts: number;
-  totalClients: number;
+  totalExperts?: number;
+  totalClients?: number;
 }
 
 const PLAN_COLORS: Record<string, { bg: string; bar: string; text: string }> = {
@@ -113,14 +113,14 @@ export default function AdminOverviewPage() {
           iconColor="text-cos-warm"
           iconBg="bg-cos-warm/10"
           label="Expert Profiles"
-          value={metrics.totalExperts.toLocaleString()}
+          value={(metrics.totalExperts ?? 0).toLocaleString()}
         />
         <StatCard
           icon={<Briefcase className="h-4 w-4" />}
           iconColor="text-cos-ember"
           iconBg="bg-cos-ember/10"
           label="Clients"
-          value={metrics.totalClients.toLocaleString()}
+          value={(metrics.totalClients ?? 0).toLocaleString()}
         />
         <StatCard
           icon={<CreditCard className="h-4 w-4" />}
