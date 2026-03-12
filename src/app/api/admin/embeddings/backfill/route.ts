@@ -29,7 +29,7 @@ async function generatePassageEmbedding(text: string): Promise<number[]> {
     body: JSON.stringify({
       model: "jina-embeddings-v3",
       input: [text],
-      dimensions: 1536,
+      dimensions: 1024,
       task: "retrieval.passage",
     }),
   });
