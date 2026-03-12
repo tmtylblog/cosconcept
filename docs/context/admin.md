@@ -154,6 +154,53 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 - **Purpose:** Platform-wide visibility into the opportunity-to-lead funnel. Period filter (7d/30d/90d/all). Four stat cards (Total Opportunities, Action Rate, Leads Posted, Network Claim Rate). Two breakdown panels: opportunity breakdown by signal type/priority/source, and lead quality distribution (tier bar chart + status pills). Recent Opportunities table (title, firm, signal/priority/resolution badges, status, date). Recent Leads table (title, firm, quality score+tier, status, value, timeline, date).
 - **API:** `GET /api/admin/opportunities?period=30d`
 
+### 20. Growth Ops — Overview
+- **Route:** `/admin/growth-ops`
+- **File:** `src/app/(admin)/admin/growth-ops/page.tsx`
+- **Purpose:** Landing page for the Growth Ops section. Shows a 2-column grid of cards linking to LinkedIn, Instantly, HubSpot, and Attribution sub-sections.
+
+### 21. Growth Ops — LinkedIn Inbox (Unibox)
+- **Route:** `/admin/growth-ops/linkedin`
+- **File:** `src/app/(admin)/admin/growth-ops/linkedin/page.tsx`
+- **Purpose:** Unified LinkedIn inbox. Account selector (if multiple accounts), chat list from Unipile, message thread viewer, and reply composer. Real-time send via Unipile API.
+- **API:** `GET /api/admin/growth-ops/linkedin-accounts`, `GET /api/admin/growth-ops/unipile?action=listChats&accountId=`, `GET /api/admin/growth-ops/unipile?action=getChatMessages&chatId=`, `POST /api/admin/growth-ops/unipile` (action: sendMessage)
+
+### 22. Growth Ops — LinkedIn Accounts
+- **Route:** `/admin/growth-ops/linkedin/accounts`
+- **File:** `src/app/(admin)/admin/growth-ops/linkedin/accounts/page.tsx`
+- **Purpose:** Manage connected LinkedIn accounts. Shows account table with status badges (OK/CONNECTING/CREDENTIALS/ERROR). "Connect Account" button generates a Unipile hosted auth link. "Reconnect" button for errored accounts.
+- **API:** `GET /api/admin/growth-ops/linkedin-accounts`, `POST /api/admin/growth-ops/unipile` (action: generateAuthLink, generateReconnectLink)
+
+### 23. Growth Ops — LinkedIn Invite Campaigns
+- **Route:** `/admin/growth-ops/linkedin/campaigns`
+- **File:** `src/app/(admin)/admin/growth-ops/linkedin/campaigns/page.tsx`
+- **Purpose:** LinkedIn connection invite campaigns. Create campaigns (name, target list, account, daily min/max 15–19, invite message). Status management (draft → active → paused → active). Campaign table with status badges.
+- **API:** `GET /api/admin/growth-ops/invite-campaigns`, `POST /api/admin/growth-ops/invite-campaigns`, `PATCH /api/admin/growth-ops/invite-campaigns/[id]`, `GET /api/admin/growth-ops/linkedin-accounts`, `GET /api/admin/growth-ops/target-lists`
+
+### 24. Growth Ops — Target Lists
+- **Route:** `/admin/growth-ops/linkedin/targets`
+- **File:** `src/app/(admin)/admin/growth-ops/linkedin/targets/page.tsx`
+- **Purpose:** LinkedIn invite target lists. Create lists, import targets via CSV (firstName, linkedinUrl). Expandable accordion rows showing target table per list with status badges (pending/invited/failed/skipped).
+- **API:** `GET /api/admin/growth-ops/target-lists`, `POST /api/admin/growth-ops/target-lists`, `GET /api/admin/growth-ops/target-lists/[id]/targets`, `POST /api/admin/growth-ops/target-lists/[id]/targets`
+
+### 25. Growth Ops — Instantly Email Campaigns
+- **Route:** `/admin/growth-ops/instantly`
+- **File:** `src/app/(admin)/admin/growth-ops/instantly/page.tsx`
+- **Purpose:** Email outreach campaign performance dashboard. Summary stat cards (sent, opened, clicked, replied totals). Campaign table with open/click/reply rate columns. Analytics loaded for up to 20 campaigns.
+- **API:** `GET /api/admin/growth-ops/instantly?action=listCampaigns`, `POST /api/admin/growth-ops/instantly` (action: getAnalytics)
+
+### 26. Growth Ops — HubSpot Kanban
+- **Route:** `/admin/growth-ops/hubspot`
+- **File:** `src/app/(admin)/admin/growth-ops/hubspot/page.tsx`
+- **Purpose:** HubSpot pipeline Kanban board. Drag-and-drop deal cards between stage columns. Pipeline selector if multiple pipelines. Optimistic UI updates on drag-drop, then persists via API.
+- **API:** `GET /api/admin/growth-ops/hubspot?action=listPipelines`, `GET /api/admin/growth-ops/hubspot?action=getAllDeals&pipelineId=`, `POST /api/admin/growth-ops/hubspot` (action: updateDealStage)
+
+### 27. Growth Ops — Attribution Report
+- **Route:** `/admin/growth-ops/attribution`
+- **File:** `src/app/(admin)/admin/growth-ops/attribution/page.tsx`
+- **Purpose:** Cross-channel attribution. On-demand "Run Report" cross-references COS platform users against Instantly email leads (by email) and LinkedIn invited targets (by first name). Shows matched users with which campaign attributed them.
+- **API:** `GET /api/admin/users?limit=500`, `GET /api/admin/growth-ops/instantly?action=listCampaigns`, `POST /api/admin/growth-ops/instantly` (action: listLeads), `GET /api/admin/growth-ops/target-lists`, `GET /api/admin/growth-ops/target-lists/[id]/targets`
+
 ---
 
 ## Admin API Endpoints
@@ -271,13 +318,14 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 
 **File:** `src/app/(admin)/layout.tsx`
 
-The layout renders a fixed sidebar (240px) with a main content area (max-width 6xl). The sidebar has five nav sections:
+The layout renders a fixed sidebar (240px) with a main content area (max-width 6xl). The sidebar has six nav sections:
 
 1. **Knowledge Graph** -- Knowledge Graph (accent link)
 2. **Platform** -- Organizations, Users
 3. **Operations** -- Subscriptions, AI Costs, API Health, Partnerships
 4. **Matching** -- Search Test, Onboarding
-5. **Tools** -- Neo4j, APIs, Data Import, Enrichment
+5. **Growth Ops** -- Overview, LinkedIn, Instantly, HubSpot, Attribution
+6. **Tools** -- Neo4j, APIs, Data Import, Enrichment
 
 Footer: "Back to App" link to `/dashboard`.
 
@@ -326,3 +374,11 @@ Knowledge Graph tab components:
 | **Email Settings** | `/admin/email-settings` | Test mode toggle, whitelist management |
 | **Experts** | `/admin/experts` | Legacy view (redirects to KG) |
 | **Clients** | `/admin/clients` | Legacy view (redirects to KG) |
+| **Growth Ops Overview** | `/admin/growth-ops` | Landing page with links to all Growth Ops sub-sections |
+| **LinkedIn Inbox** | `/admin/growth-ops/linkedin` | Unified inbox, chat list, message thread, reply composer |
+| **LinkedIn Accounts** | `/admin/growth-ops/linkedin/accounts` | Connect/reconnect LinkedIn accounts via Unipile |
+| **LinkedIn Campaigns** | `/admin/growth-ops/linkedin/campaigns` | Invite campaigns with daily limits, status management |
+| **Target Lists** | `/admin/growth-ops/linkedin/targets` | Target lists with CSV import and status tracking |
+| **Instantly** | `/admin/growth-ops/instantly` | Email campaign analytics (sent/open/click/reply rates) |
+| **HubSpot Kanban** | `/admin/growth-ops/hubspot` | Drag-and-drop deal pipeline board |
+| **Attribution** | `/admin/growth-ops/attribution` | Cross-channel user attribution against outbound campaigns |
