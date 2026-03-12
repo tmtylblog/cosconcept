@@ -1,0 +1,141 @@
+/**
+ * POST /api/webhooks/unipile
+ *
+ * Receives real-time events from Unipile (new messages, account status changes).
+ * Register this URL in your Unipile dashboard as the notify_url.
+ *
+ * Events handled:
+ *  - message_received → upsert message + update conversation preview
+ *  - OK/CREDENTIALS/ERROR/CONNECTING/STOPPED → update account status
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { growthOpsLinkedInAccounts, growthOpsConversations, growthOpsMessages } from "@/lib/db/schema";
+import { validateUnipileWebhook, resolveMessageDirection } from "@/lib/growth-ops/UnipileClient";
+import { eq, and } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
+
+function randomId() {
+  return crypto.randomUUID();
+}
+
+export async function POST(req: NextRequest) {
+  // Validate webhook signature
+  const headerMap: Record<string, string | null> = {
+    "unipile-auth": req.headers.get("unipile-auth"),
+    "Unipile-Auth": req.headers.get("Unipile-Auth"),
+  };
+  if (!validateUnipileWebhook(headerMap)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Bad JSON" }, { status: 400 });
+  }
+
+  const event = (body.event ?? body.status ?? "") as string;
+
+  try {
+    // ── Account status changes ─────────────────────────────────────────────
+    if (["OK", "CREDENTIALS", "ERROR", "CONNECTING", "STOPPED"].includes(event)) {
+      const unipileAccountId = (body.account_id ?? body.id) as string;
+      if (unipileAccountId) {
+        await db
+          .update(growthOpsLinkedInAccounts)
+          .set({ status: event, updatedAt: new Date() })
+          .where(eq(growthOpsLinkedInAccounts.unipileAccountId, unipileAccountId));
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── New message received ───────────────────────────────────────────────
+    if (event === "message_received" || body.object === "Message") {
+      const msg = body.message as Record<string, unknown> | undefined ?? body;
+      const chatId = (msg.chat_id ?? msg.chatId) as string | undefined;
+      const messageId = (msg.id ?? msg.message_id) as string | undefined;
+      const text = (msg.text ?? msg.body ?? "") as string;
+      const senderId = msg.sender_id as string | undefined;
+      const accountId = (msg.account_id ?? body.account_id) as string | undefined;
+      const timestamp = msg.timestamp as string | undefined;
+
+      if (!chatId || !messageId) {
+        return NextResponse.json({ ok: true, skipped: "missing chatId or messageId" });
+      }
+
+      // Look up the account in our DB
+      const accountRows = accountId
+        ? await db
+            .select()
+            .from(growthOpsLinkedInAccounts)
+            .where(eq(growthOpsLinkedInAccounts.unipileAccountId, accountId))
+            .limit(1)
+        : [];
+
+      const acctDbId = accountRows[0]?.id;
+
+      // Get participant provider ID for direction resolution
+      const convoRows = acctDbId
+        ? await db
+            .select({ participantProviderId: growthOpsConversations.participantProviderId })
+            .from(growthOpsConversations)
+            .where(
+              and(
+                eq(growthOpsConversations.linkedinAccountId, acctDbId),
+                eq(growthOpsConversations.chatId, chatId),
+              ),
+            )
+            .limit(1)
+        : [];
+      const participantProviderId = convoRows[0]?.participantProviderId ?? null;
+
+      const isOutbound = resolveMessageDirection(
+        { id: messageId, is_sender: msg.is_sender as boolean | undefined, sender_id: senderId },
+        participantProviderId,
+      );
+
+      // Upsert message
+      if (acctDbId) {
+        await db
+          .insert(growthOpsMessages)
+          .values({
+            id: randomId(),
+            linkedinAccountId: acctDbId,
+            chatId,
+            messageId,
+            senderProviderId: senderId ?? "",
+            isOutbound,
+            body: text,
+            sentAt: timestamp ? new Date(timestamp) : new Date(),
+          })
+          .onConflictDoNothing();
+
+        // Update conversation preview
+        await db
+          .update(growthOpsConversations)
+          .set({
+            lastMessagePreview: text.slice(0, 200),
+            lastMessageAt: timestamp ? new Date(timestamp) : new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(growthOpsConversations.linkedinAccountId, acctDbId),
+              eq(growthOpsConversations.chatId, chatId),
+            ),
+          );
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    return NextResponse.json({ ok: true, event: "unhandled" });
+  } catch (err) {
+    console.error("[unipile-webhook]", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
+}

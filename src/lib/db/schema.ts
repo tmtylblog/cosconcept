@@ -1740,10 +1740,56 @@ export const growthOpsLinkedInAccounts = pgTable("growth_ops_linkedin_accounts",
   unipileAccountId: text("unipile_account_id").notNull().unique(),
   displayName: text("display_name").notNull().default(""),
   linkedinUsername: text("linkedin_username"),
+  accountType: text("account_type").notNull().default("basic"), // basic | premium | sales_navigator | recruiter
   status: text("status").notNull().default("CONNECTING"), // CONNECTING | OK | CREDENTIALS | ERROR
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+/** Cached LinkedIn conversations (enriched with participant name/avatar). */
+export const growthOpsConversations = pgTable("growth_ops_conversations", {
+  id: text("id").primaryKey(),
+  linkedinAccountId: text("linkedin_account_id").notNull().references(() => growthOpsLinkedInAccounts.id, { onDelete: "cascade" }),
+  chatId: text("chat_id").notNull(),
+  participantProviderId: text("participant_provider_id").notNull().default(""),
+  participantName: text("participant_name").notNull().default(""),
+  participantHeadline: text("participant_headline"),
+  participantProfileUrl: text("participant_profile_url"),
+  participantAvatarUrl: text("participant_avatar_url"),
+  lastMessageAt: timestamp("last_message_at"),
+  lastMessagePreview: text("last_message_preview"),
+  unreadCount: integer("unread_count").notNull().default(0),
+  isInmailThread: boolean("is_inmail_thread").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [{ name: "growth_ops_conversations_account_chat_unique", columns: [t.linkedinAccountId, t.chatId] }]);
+
+/** Cached LinkedIn messages. Always fetch live; this is a fallback cache. */
+export const growthOpsMessages = pgTable("growth_ops_messages", {
+  id: text("id").primaryKey(),
+  linkedinAccountId: text("linkedin_account_id").notNull().references(() => growthOpsLinkedInAccounts.id, { onDelete: "cascade" }),
+  chatId: text("chat_id").notNull(),
+  messageId: text("message_id").notNull().unique(),
+  senderProviderId: text("sender_provider_id").notNull().default(""),
+  isOutbound: boolean("is_outbound").notNull().default(false),
+  body: text("body").notNull().default(""),
+  isRead: boolean("is_read").notNull().default(false),
+  isInmail: boolean("is_inmail").notNull().default(false),
+  sentAt: timestamp("sent_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/** Daily usage tracking per LinkedIn account. */
+export const growthOpsDailyUsage = pgTable("growth_ops_daily_usage", {
+  id: text("id").primaryKey(),
+  linkedinAccountId: text("linkedin_account_id").notNull().references(() => growthOpsLinkedInAccounts.id, { onDelete: "cascade" }),
+  date: text("date").notNull(), // YYYY-MM-DD
+  invitesSent: integer("invites_sent").notNull().default(0),
+  messagesSent: integer("messages_sent").notNull().default(0),
+  inmailsSent: integer("inmails_sent").notNull().default(0),
+  profileViews: integer("profile_views").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [{ name: "growth_ops_daily_usage_account_date_unique", columns: [t.linkedinAccountId, t.date] }]);
 
 export const growthOpsTargetLists = pgTable("growth_ops_target_lists", {
   id: text("id").primaryKey(),
