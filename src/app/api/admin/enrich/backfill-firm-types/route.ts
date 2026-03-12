@@ -124,9 +124,13 @@ export async function POST(req: NextRequest) {
     if (!data) { skipped++; continue; }
 
     const pdl = data.pdl as Record<string, unknown> | null;
+    const companyData = data.companyData as Record<string, unknown> | null;
     const classification = data.classification as Record<string, unknown> | null;
 
-    const employeeCount = (pdl?.employeeCount as number) ?? null;
+    // Check both pdl.employeeCount (deep-crawl format) and companyData.employeeCount (legacy format)
+    const employeeCount = (pdl?.employeeCount as number)
+      ?? (companyData?.employeeCount as number)
+      ?? null;
     const categories = (classification?.categories as string[]) ?? [];
 
     const newSizeBand = deriveSizeBand(employeeCount);
