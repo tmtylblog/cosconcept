@@ -44,14 +44,46 @@ export async function POST(req: NextRequest) {
       where: eq(subscriptions.organizationId, organizationId),
     });
 
-    // No Stripe customer yet — nothing to sync
-    if (!sub?.stripeCustomerId || sub.stripeCustomerId.startsWith("pending_")) {
+    const stripe = getStripe();
+    let stripeCustomerId = sub?.stripeCustomerId ?? null;
+
+    // If no real Stripe customer yet, try to discover it from recent checkout sessions.
+    // This handles the flow where Stripe Checkout auto-creates the customer.
+    if (!stripeCustomerId || stripeCustomerId.startsWith("pending_")) {
+      try {
+        // Look up recent completed checkout sessions to find the auto-created customer
+        const sessions = await stripe.checkout.sessions.list({ limit: 10 });
+        const matchingSession = sessions.data.find(
+          (s) =>
+            s.metadata?.organizationId === organizationId &&
+            s.status === "complete" &&
+            s.customer
+        );
+        if (matchingSession?.customer) {
+          stripeCustomerId =
+            typeof matchingSession.customer === "string"
+              ? matchingSession.customer
+              : matchingSession.customer.id;
+
+          // Persist the discovered customer ID so future syncs skip the lookup
+          if (sub) {
+            await db
+              .update(subscriptions)
+              .set({ stripeCustomerId, updatedAt: new Date() })
+              .where(eq(subscriptions.organizationId, organizationId));
+          }
+        }
+      } catch (e) {
+        console.error("[Stripe] Failed to look up checkout sessions:", e);
+      }
+    }
+
+    if (!stripeCustomerId || stripeCustomerId.startsWith("pending_")) {
       return NextResponse.json({ synced: false, reason: "no_stripe_customer", plan: "free" });
     }
 
-    const stripe = getStripe();
     const stripeSubs = await stripe.subscriptions.list({
-      customer: sub.stripeCustomerId,
+      customer: stripeCustomerId,
       status: "all",
       limit: 5,
     });

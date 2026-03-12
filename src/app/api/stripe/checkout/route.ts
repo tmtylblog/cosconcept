@@ -58,34 +58,28 @@ export async function POST(req: NextRequest) {
 
     step = "stripe_init";
     const stripe = getStripe();
-    let customerId = sub?.stripeCustomerId;
+    const existingCustomerId = sub?.stripeCustomerId;
 
-    // Treat placeholder IDs (set before first upgrade) as if there's no customer yet
-    if (!customerId || customerId.startsWith("pending_")) {
-      step = "stripe_create_customer";
-      const customer = await stripe.customers.create({
-        metadata: { organizationId },
-      });
-      customerId = customer.id;
-      // Store real customer ID now so subsequent requests don't create duplicates
-      if (sub) {
-        step = "db_update_customer";
-        await db
-          .update(subscriptions)
-          .set({ stripeCustomerId: customerId, updatedAt: new Date() })
-          .where(eq(subscriptions.organizationId, organizationId));
-      }
-    }
+    // Only use customer ID if it's a real Stripe customer (starts with "cus_")
+    const hasRealCustomer =
+      existingCustomerId && existingCustomerId.startsWith("cus_");
 
     step = "stripe_create_session";
-    const checkoutSession = await stripe.checkout.sessions.create({
-      customer: customerId,
-      mode: "subscription",
+    // Build session params — if no real customer, let Stripe Checkout create one
+    // automatically. This avoids needing rak_customer_write permission on restricted keys.
+    const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
+      mode: "subscription" as const,
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${process.env.BETTER_AUTH_URL}/settings/billing?success=true`,
       cancel_url: `${process.env.BETTER_AUTH_URL}/settings/billing?canceled=true`,
       metadata: { organizationId, plan },
-    });
+    };
+
+    if (hasRealCustomer) {
+      sessionParams.customer = existingCustomerId;
+    }
+
+    const checkoutSession = await stripe.checkout.sessions.create(sessionParams);
 
     return NextResponse.json({ url: checkoutSession.url });
   } catch (error) {
