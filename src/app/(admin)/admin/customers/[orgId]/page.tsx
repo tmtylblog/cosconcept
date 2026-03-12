@@ -2381,7 +2381,7 @@ export default function CustomerDetailPage() {
 
                 {/* Admin: Gift Subscription (always visible) */}
                 <Section title="Gift Subscription" icon={<Sparkles className="h-4 w-4 text-purple-500" />}>
-                    {billingData.subscription.giftExpiresAt ? (
+                    {billingData.subscription?.giftExpiresAt ? (
                       <div className="space-y-3">
                         <div className="rounded-cos border border-purple-200 bg-purple-50 p-3 text-sm">
                           <p className="font-medium text-purple-800">
