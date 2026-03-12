@@ -42,7 +42,7 @@ export default function NetworkPage() {
         </h2>
         <p className="text-base text-cos-slate leading-relaxed">
           Business development runs on relationships. Collective OS will map the
-          network you've already built — so when we surface a perfect match, you
+          network you&apos;ve already built — so when we surface a perfect match, you
           know straight away whether you have a warm path in.
         </p>
       </div>
