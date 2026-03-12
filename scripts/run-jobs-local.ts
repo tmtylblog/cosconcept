@@ -34,7 +34,7 @@ async function main(): Promise<void> {
     while (true) {
       const result = await drainQueue(5);
       totalProcessed += result.processed ?? 0;
-      totalFailed += result.failed ?? 0;
+      totalFailed += result.stuck ?? 0;
 
       if ((result.processed ?? 0) === 0) {
         console.log("\n[LocalRunner] Queue empty — done.");
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
   } else {
     const result = await drainQueue(maxJobs);
     totalProcessed = result.processed ?? 0;
-    totalFailed = result.failed ?? 0;
+    totalFailed = result.stuck ?? 0;
   }
 
   console.log(`\n[LocalRunner] Done. Processed: ${totalProcessed} | Failed: ${totalFailed}`);

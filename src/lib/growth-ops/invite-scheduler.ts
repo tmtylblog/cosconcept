@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+
 /**
  * Builds a schedule of invite timestamps for a campaign.
  * Rules:
@@ -40,10 +42,9 @@ export function buildInviteSchedule(
   scheduledAt: Date;
   status: string;
 }> {
-  const { randomUUID } = require("crypto") as { randomUUID: () => string };
   const queue: ReturnType<typeof buildInviteSchedule> = [];
   const lambda = (dailyMin + dailyMax) / 2;
-  let remaining = [...targetIds];
+  const remaining = [...targetIds];
 
   // Start from next valid business day
   let day = new Date(startFrom);
