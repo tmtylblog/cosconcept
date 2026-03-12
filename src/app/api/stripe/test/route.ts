@@ -1,48 +1,67 @@
 import { NextResponse } from "next/server";
-import { getStripe } from "@/lib/stripe";
+import Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/stripe/test
  * Quick connectivity test for the Stripe API key.
- * Returns key type, permissions check, etc.
+ * Checks for env var corruption (whitespace), key type, connectivity.
  */
 export async function GET() {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) {
+  const rawKey = process.env.STRIPE_SECRET_KEY;
+  if (!rawKey) {
     return NextResponse.json({ ok: false, error: "STRIPE_SECRET_KEY not set" });
   }
 
-  const keyType = key.startsWith("sk_live_")
+  // Check for common env var corruption
+  const trimmedKey = rawKey.trim();
+  const hasWhitespace = rawKey !== trimmedKey;
+  const keyLength = rawKey.length;
+  const trimmedLength = trimmedKey.length;
+
+  const keyType = trimmedKey.startsWith("sk_live_")
     ? "live_secret"
-    : key.startsWith("sk_test_")
+    : trimmedKey.startsWith("sk_test_")
       ? "test_secret"
-      : key.startsWith("rk_live_")
+      : trimmedKey.startsWith("rk_live_")
         ? "live_restricted"
-        : key.startsWith("rk_test_")
+        : trimmedKey.startsWith("rk_test_")
           ? "test_restricted"
           : "unknown";
 
-  const priceId = process.env.STRIPE_PRO_MONTHLY_PRICE_ID ?? "(not set)";
+  const priceId = (process.env.STRIPE_PRO_MONTHLY_PRICE_ID ?? "(not set)").trim();
 
+  // Use trimmed key for the actual test
   try {
-    const stripe = getStripe();
-    // Simple read-only call to test connectivity
+    const stripe = new Stripe(trimmedKey, {
+      apiVersion: "2026-02-25.clover",
+      typescript: true,
+      timeout: 10000,
+    });
+
     const balance = await stripe.balance.retrieve();
     return NextResponse.json({
       ok: true,
       keyType,
-      priceId: priceId.substring(0, 20) + "...",
+      keyLength,
+      trimmedLength,
+      hasWhitespace,
+      priceId: priceId.substring(0, 25) + "...",
       balanceCurrency: balance.available?.[0]?.currency ?? "unknown",
       message: "Stripe connection OK",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const errorType = (error as { type?: string })?.type ?? "unknown";
     return NextResponse.json({
       ok: false,
       keyType,
-      priceId: priceId.substring(0, 20) + "...",
+      keyLength,
+      trimmedLength,
+      hasWhitespace,
+      priceId: priceId.substring(0, 25) + "...",
+      errorType,
       error: message,
     });
   }

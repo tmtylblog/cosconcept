@@ -9,7 +9,7 @@ let stripeInstance: Stripe | null = null;
 
 export function getStripe(): Stripe {
   if (!stripeInstance) {
-    const key = process.env.STRIPE_SECRET_KEY;
+    const key = process.env.STRIPE_SECRET_KEY?.trim();
     if (!key) {
       throw new Error("STRIPE_SECRET_KEY is not configured");
     }
@@ -26,11 +26,11 @@ export function getStripe(): Stripe {
  */
 export const STRIPE_PRICES = {
   pro: {
-    monthly: process.env.STRIPE_PRO_MONTHLY_PRICE_ID ?? "",
-    yearly: process.env.STRIPE_PRO_YEARLY_PRICE_ID ?? "",
+    monthly: (process.env.STRIPE_PRO_MONTHLY_PRICE_ID ?? "").trim(),
+    yearly: (process.env.STRIPE_PRO_YEARLY_PRICE_ID ?? "").trim(),
   },
   enterprise: {
-    monthly: process.env.STRIPE_ENTERPRISE_MONTHLY_PRICE_ID ?? "",
-    yearly: process.env.STRIPE_ENTERPRISE_YEARLY_PRICE_ID ?? "",
+    monthly: (process.env.STRIPE_ENTERPRISE_MONTHLY_PRICE_ID ?? "").trim(),
+    yearly: (process.env.STRIPE_ENTERPRISE_YEARLY_PRICE_ID ?? "").trim(),
   },
 } as const;
