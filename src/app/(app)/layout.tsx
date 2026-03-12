@@ -893,6 +893,7 @@ function AppLayoutInner({
                 firmSection={firmSection}
                 onRequestLogin={handleRequestLogin}
                 onSearchResults={pathname === "/discover" ? handleSearchResults : undefined}
+                onSearchStart={pathname === "/discover" ? () => discover?.setSearching(true) : undefined}
               />
             </aside>
 
@@ -923,6 +924,7 @@ function AppLayoutInner({
                     firmSection={firmSection}
                     onRequestLogin={handleRequestLogin}
                     onSearchResults={pathname === "/discover" ? handleSearchResults : undefined}
+                    onSearchStart={pathname === "/discover" ? () => discover?.setSearching(true) : undefined}
                   />
                 </div>
               </div>

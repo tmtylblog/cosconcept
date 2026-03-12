@@ -179,9 +179,10 @@ interface ChatPanelProps {
   firmSection?: string | null;
   onRequestLogin?: () => void;
   onSearchResults?: (results: DiscoverResult[], query: string) => void;
+  onSearchStart?: () => void;
 }
 
-export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount, firmSection, onRequestLogin, onSearchResults }: ChatPanelProps) {
+export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount, firmSection, onRequestLogin, onSearchResults, onSearchStart }: ChatPanelProps) {
   const router = useRouter();
   const { data: activeOrg } = useActiveOrganization();
   const pathname = usePathname();
@@ -735,6 +736,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     isNearBottomRef.current = true;
     sendMessage({ text: input });
     setInput("");
+    // Keep focus in the textarea (before the next render disables it)
+    inputRef.current?.focus();
   };
 
   const handleAnalyseTranscript = async () => {
@@ -813,10 +816,29 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   // The textarea is disabled during loading, so focus is lost. Re-acquire it.
   useEffect(() => {
     if (status === "ready" && !atGuestLimit) {
-      const timer = setTimeout(() => inputRef.current?.focus(), 50);
+      const timer = setTimeout(() => inputRef.current?.focus(), 100);
       return () => clearTimeout(timer);
     }
   }, [status, atGuestLimit]);
+
+  // Signal the discover panel to show skeleton loading as soon as Ossy
+  // calls search_partners (before results arrive).
+  useEffect(() => {
+    if (!onSearchStart) return;
+    for (const msg of messages) {
+      if (msg.role !== "assistant") continue;
+      for (const part of msg.parts) {
+        if (
+          part.type === "tool-discover_search" &&
+          "state" in part &&
+          (part.state === "call" || part.state === "partial-call")
+        ) {
+          onSearchStart();
+          return;
+        }
+      }
+    }
+  }, [messages, onSearchStart]);
 
   return (
     <div className="relative flex h-full flex-col bg-cos-midnight">
@@ -1325,7 +1347,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       {/* Input area */}
       <div className="shrink-0 border-t border-white/10 px-4 py-3">
         <form onSubmit={handleSubmit}>
-          <div className="flex items-end gap-1.5 rounded-cos-xl border border-white/20 bg-white/95 px-3 py-1.5 shadow-lg transition-colors focus-within:border-cos-electric focus-within:ring-2 focus-within:ring-cos-electric/40">
+          <div className="flex items-end gap-1.5 rounded-cos-xl border border-white/20 bg-white/95 px-3 py-1.5 shadow-lg">
             <textarea
               ref={inputRef}
               value={input}
