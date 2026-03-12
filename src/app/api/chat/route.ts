@@ -259,9 +259,11 @@ export async function POST(req: Request) {
 
     // Tools available for any authenticated user with a firm profile,
     // or any authenticated user on the discover page.
-    // firmId is optional — search_partners works without it (just won't do bidirectional scoring).
-    const tools = hasToolAccess && organizationId
-      ? createOssyTools(organizationId, firmId)
+    // On the discover page, enable tools even if organizationId hasn't resolved yet —
+    // discover_search only needs firmId (optional) for bidirectional scoring, not orgId.
+    const toolsEnabled = hasToolAccess && (organizationId || firmSection === "discover");
+    const tools = toolsEnabled
+      ? createOssyTools(organizationId ?? "discover-mode", firmId)
       : undefined;
 
     const result = streamText({

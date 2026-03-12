@@ -822,7 +822,9 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   }, [status, atGuestLimit]);
 
   // Signal the discover panel to show skeleton loading as soon as Ossy
-  // calls search_partners (before results arrive).
+  // starts calling discover_search (before results arrive).
+  // AI SDK v6 states: "input-streaming" | "input-available" (in-progress),
+  // "output-available" (completed). Trigger loading on any non-completed state.
   useEffect(() => {
     if (!onSearchStart) return;
     for (const msg of messages) {
@@ -831,7 +833,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         if (
           (part.type === "tool-discover_search" || part.type === "tool-search_partners") &&
           "state" in part &&
-          (part.state === "call" || part.state === "partial-call")
+          (part as { state: string }).state !== "output-available"
         ) {
           onSearchStart();
           return;
@@ -907,8 +909,12 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         <div className="space-y-2">
         {messages.map((message, idx) => {
           const text = getMessageText(message);
-          // Skip messages with no text content (e.g. tool-only responses)
-          if (!text) return null;
+          // Show messages that have text OR tool parts (tool-only messages show
+          // the in-progress search indicator while discover_search is running).
+          // Without this, the loading spinner disappears as soon as the model
+          // starts calling a tool, leaving a blank gap until results arrive.
+          const hasToolParts = message.parts.some((p) => p.type.startsWith("tool-"));
+          if (!text && !hasToolParts) return null;
 
           const prevMessage = idx > 0 ? messages[idx - 1] : null;
           const isNewSpeaker = !prevMessage || prevMessage.role !== message.role;
