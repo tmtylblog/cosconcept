@@ -671,7 +671,7 @@ export function EnrichmentProvider({
       if (hasAnyData) {
         const cachePayload = {
           url: normalized,
-          domain,
+          domain: domain.toLowerCase(),
           companyData: stageData.pdlCompanyData,
           companyCard: stageData.pdlCompanyCard,
           groundTruth: stageData.scrapeGroundTruth,
@@ -697,7 +697,7 @@ export function EnrichmentProvider({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             url: normalized,
-            domain,
+            domain: domain.toLowerCase(),
             organizationId,
             companyData: stageData.pdlCompanyData,
             companyCard: stageData.pdlCompanyCard,

@@ -64,6 +64,8 @@ interface NavBarProps {
   isGuest?: boolean;
   onRequestLogin?: () => void;
   onSimulateNewUser?: () => void;
+  /** Hide the Overview item (used post-onboarding since its content lives elsewhere) */
+  hideOverview?: boolean;
 }
 
 export function NavBar({
@@ -72,6 +74,7 @@ export function NavBar({
   isGuest,
   onRequestLogin,
   onSimulateNewUser,
+  hideOverview,
 }: NavBarProps) {
   const pathname = usePathname();
   const { data: activeOrg } = useActiveOrganization();
@@ -80,10 +83,13 @@ export function NavBar({
 
   const showLabels = !collapsed || hovering;
 
-  // In guest mode, only show Overview and a sign-in prompt
+  // In guest mode, only show Overview and a sign-in prompt.
+  // Post-onboarding, hide Overview since its content lives in other sections.
   const visibleItems = isGuest
     ? navItems.filter((item) => item.href === "/dashboard")
-    : navItems;
+    : hideOverview
+      ? navItems.filter((item) => item.href !== "/dashboard")
+      : navItems;
 
   const toggleMenu = (href: string) => {
     setExpandedMenus((prev) => {

@@ -1933,6 +1933,25 @@ export const acqDeals = pgTable("acq_deals", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ─── Extraction Outcomes (self-learning feedback loop) ────
+// Tracks extraction success/failure per domain for self-learning.
+
+export const extractionOutcomes = pgTable("extraction_outcomes", {
+  id: text("id").primaryKey(),
+  domain: text("domain").notNull(),
+  firmId: text("firm_id"),
+  extractionType: text("extraction_type").notNull(), // "services" | "case_studies"
+  autoExtractedCount: integer("auto_extracted_count").notNull().default(0),
+  manuallyAddedCount: integer("manually_added_count").notNull().default(0),
+  manuallyAddedItems: jsonb("manually_added_items"), // what the user added that we missed
+  failureReason: text("failure_reason"), // "no_services_page" | "regex_filtered" | "ai_empty" | "blocked" | "no_case_study_urls"
+  retryCount: integer("retry_count").notNull().default(0),
+  lastRetryAt: timestamp("last_retry_at"),
+  resolved: boolean("resolved").notNull().default(false), // true once user has data (auto or manual)
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const attributionEvents = pgTable("attribution_events", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().unique(),
