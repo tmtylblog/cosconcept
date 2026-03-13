@@ -71,6 +71,7 @@ export function useDbExperts(
             division?: string | null;
             expertTier?: string | null;
             isFullyEnriched?: boolean;
+            enrichmentStatus?: string | null;
             topSkills?: string[] | null;
             topIndustries?: string[] | null;
             specialistProfiles?: Array<{
@@ -136,6 +137,7 @@ export function useDbExperts(
               profileUrl: `/experts/${ep.id}/edit`,
               expertTier: (ep.expertTier as Expert["expertTier"]) ?? null,
               isFullyEnriched: ep.isFullyEnriched ?? false,
+              enrichmentStatus: (ep.enrichmentStatus as Expert["enrichmentStatus"]) ?? "roster",
               specialistProfiles:
                 specialistProfiles.length > 0 ? specialistProfiles : undefined,
             } satisfies Expert;

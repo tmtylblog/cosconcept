@@ -1379,6 +1379,9 @@ export const expertProfiles = pgTable("expert_profiles", {
   // Track A: canonical Person node link
   personNodeId: text("person_node_id"), // Neo4j Person node ID
 
+  // Enrichment status: roster = basic PDL search data, enriched = full work history
+  enrichmentStatus: text("enrichment_status").notNull().default("roster"),
+
   // Meta
   isPublic: boolean("is_public").notNull().default(true),
   profileCompleteness: real("profile_completeness").default(0),
@@ -1962,5 +1965,52 @@ export const attributionEvents = pgTable("attribution_events", {
   linkedinInviteTargetId: text("linkedin_invite_target_id").references(() => growthOpsInviteTargets.id, { onDelete: "set null" }),
   matchMethod: text("match_method").notNull().default("none"), // email_exact | linkedin_url | name_domain | none
   matchedAt: timestamp("matched_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Enrichment Credits ──────────────────────────────────────────────────────
+
+export const creditTransactionTypeEnum = pgEnum("credit_transaction_type", [
+  "free_auto",       // 5 free auto-enrichments on signup
+  "pro_grant",       // 100 credits granted on Pro upgrade
+  "boost_pack",      // 50 credits purchased for $100
+  "manual_grant",    // Admin-granted credits
+  "enrichment_use",  // Credit consumed for expert enrichment
+]);
+
+/**
+ * enrichmentCredits — per-org credit balance for expert enrichment.
+ * Free tier gets 5 auto-enrichments. Pro gets 100 credits. Boost Packs add 50.
+ */
+export const enrichmentCredits = pgTable("enrichment_credits", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .unique()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  totalCredits: integer("total_credits").notNull().default(5), // lifetime granted
+  usedCredits: integer("used_credits").notNull().default(0),   // lifetime consumed
+  freeAutoUsed: integer("free_auto_used").notNull().default(0), // of the 5 free auto-enrichments
+  proCreditsGranted: boolean("pro_credits_granted").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * enrichmentCreditTransactions — audit trail for every credit change.
+ * Positive amount = credits added, negative = credits consumed.
+ */
+export const enrichmentCreditTransactions = pgTable("enrichment_credit_transactions", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  type: creditTransactionTypeEnum("type").notNull(),
+  amount: integer("amount").notNull(), // +N granted, -1 consumed
+  balanceBefore: integer("balance_before").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  expertProfileId: text("expert_profile_id"), // which expert was enriched
+  stripePaymentIntentId: text("stripe_payment_intent_id"), // for boost packs
+  note: text("note"), // admin notes for manual grants
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

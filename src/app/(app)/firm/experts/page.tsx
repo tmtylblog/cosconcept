@@ -9,17 +9,19 @@ import {
   Mail,
   Copy,
   Check,
-  Lock,
   ArrowUpRight,
   Sparkles,
   Star,
+  Zap,
+  ShieldCheck,
+  CheckCircle2,
 } from "lucide-react";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useDbExperts } from "@/hooks/use-db-experts";
+import { useEnrichmentCredits } from "@/hooks/use-enrichment-credits";
 import { usePlan } from "@/hooks/use-plan";
 import { Button } from "@/components/ui/button";
-import { PLAN_LIMITS, type PlanId } from "@/lib/billing/plan-limits";
 import type { Expert } from "@/types/cos-data";
 
 export default function FirmExpertsPage() {
@@ -33,6 +35,12 @@ export default function FirmExpertsPage() {
     total: dbTotalExperts,
     isLoading: dbLoading,
   } = useDbExperts(activeOrg?.id);
+
+  const {
+    credits,
+    isLoading: creditsLoading,
+    refetch: refetchCredits,
+  } = useEnrichmentCredits();
 
   // Group experts by tier
   const { tierExperts, tierPotential, tierOther } = useMemo(() => {
@@ -50,14 +58,16 @@ export default function FirmExpertsPage() {
   const totalExperts = dbTotalExperts;
   const expertsLoading = dbLoading;
 
-  // Plan limits
-  const expertLimit = PLAN_LIMITS[plan as PlanId]?.expertRosterLimit ?? 5;
-  const isUnlimited = expertLimit === -1;
-  const slotsUsed = totalExperts;
-  const slotsTotal = isUnlimited ? slotsUsed : expertLimit;
-  const slotsRemaining = isUnlimited ? Infinity : Math.max(0, expertLimit - slotsUsed);
-  const atLimit = !isUnlimited && slotsUsed >= expertLimit;
-  const usagePercent = isUnlimited ? 0 : Math.min(100, Math.round((slotsUsed / slotsTotal) * 100));
+  // Credit info
+  const availableCredits = credits?.availableCredits ?? 0;
+  const totalCredits = credits?.totalCredits ?? 0;
+  const usedCredits = credits?.usedCredits ?? 0;
+  const isPro = plan === "pro" || plan === "enterprise";
+  const isEnterprise = plan === "enterprise";
+
+  // Count enriched vs roster
+  const enrichedCount = dbExperts.filter((e) => e.enrichmentStatus === "enriched" || e.isFullyEnriched).length;
+  const rosterCount = dbExperts.filter((e) => e.enrichmentStatus !== "enriched" && !e.isFullyEnriched).length;
 
   // UI state
   const [showAddExpert, setShowAddExpert] = useState(false);
@@ -66,17 +76,13 @@ export default function FirmExpertsPage() {
   const [invitingExpert, setInvitingExpert] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [expandedExpert, setExpandedExpert] = useState<string | null>(null);
-
-  // Expert is beyond the free limit? (only matters on free plan)
-  const isExpertLocked = useCallback(
-    (index: number) => !isUnlimited && index >= expertLimit,
-    [isUnlimited, expertLimit]
-  );
+  const [enrichingExpert, setEnrichingExpert] = useState<string | null>(null);
+  const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
+  const [batchEnriching, setBatchEnriching] = useState(false);
 
   // Add expert handler
   async function handleAddExpert() {
     if (!addForm.firstName && !addForm.lastName) return;
-    if (atLimit) return;
     setAddingExpert(true);
     try {
       const res = await fetch("/api/experts/create", {
@@ -123,88 +129,177 @@ export default function FirmExpertsPage() {
     }
   }
 
-  // Render a single expert row inside a tier section
-  function renderExpertRow(expert: Expert, globalIndex: number) {
-    const locked = isExpertLocked(globalIndex);
-    if (locked) {
-      return (
-        <div
-          key={expert.id}
-          className="flex items-center justify-between px-4 py-3 opacity-50"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cos-cloud text-cos-slate-light">
-              <Lock className="h-3.5 w-3.5" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-cos-slate">{expert.name}</p>
-              <p className="text-xs text-cos-slate-dim">{expert.role}</p>
-            </div>
-          </div>
-          <a
-            href="/settings/billing"
-            className="flex items-center gap-1.5 rounded-cos-pill bg-cos-electric/10 px-3 py-1.5 text-xs font-medium text-cos-electric transition-colors hover:bg-cos-electric/20"
-          >
-            <Lock className="h-3 w-3" />
-            Upgrade
-          </a>
-        </div>
-      );
+  // Enrich a single expert
+  async function handleEnrich(expertId: string) {
+    if (availableCredits <= 0) return;
+    setEnrichingExpert(expertId);
+    try {
+      const res = await fetch("/api/experts/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expertProfileId: expertId }),
+      });
+      if (res.ok) {
+        refetchCredits();
+      } else {
+        const data = await res.json();
+        console.error("Enrich failed:", data.error);
+      }
+    } catch (err) {
+      console.error("Failed to enrich:", err);
+    } finally {
+      setEnrichingExpert(null);
     }
+  }
 
+  // Batch enrich selected experts
+  async function handleBatchEnrich() {
+    if (selectedForBatch.size === 0 || availableCredits < selectedForBatch.size) return;
+    setBatchEnriching(true);
+    try {
+      const res = await fetch("/api/experts/enrich-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expertProfileIds: Array.from(selectedForBatch) }),
+      });
+      if (res.ok) {
+        setSelectedForBatch(new Set());
+        refetchCredits();
+      }
+    } catch (err) {
+      console.error("Failed to batch enrich:", err);
+    } finally {
+      setBatchEnriching(false);
+    }
+  }
+
+  // Toggle expert in batch selection
+  const toggleBatchSelect = useCallback((expertId: string) => {
+    setSelectedForBatch((prev) => {
+      const next = new Set(prev);
+      if (next.has(expertId)) next.delete(expertId);
+      else next.add(expertId);
+      return next;
+    });
+  }, []);
+
+  // Render a single expert row inside a tier section
+  function renderExpertRow(expert: Expert) {
+    const isEnriched = expert.enrichmentStatus === "enriched" || expert.isFullyEnriched;
+    const isRoster = !isEnriched;
     const sps = expert.specialistProfiles ?? [];
     const strongCount = sps.filter((s) => s.qualityStatus === "strong").length;
     const partialCount = sps.filter((s) => s.qualityStatus === "partial").length;
     const primarySp = sps.find((sp) => sp.isPrimary) ?? sps.find((sp) => sp.qualityStatus === "strong");
     const isExpanded = expandedExpert === expert.id;
+    const isEnriching = enrichingExpert === expert.id;
+    const isSelected = selectedForBatch.has(expert.id);
 
     return (
       <div key={expert.id}>
-        <button
-          onClick={() => setExpandedExpert(isExpanded ? null : expert.id)}
-          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-cos-electric/[0.02]"
-        >
-          {/* Avatar */}
-          {expert.photoUrl ? (
-            <img src={expert.photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
-          ) : (
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-xs font-semibold text-cos-signal">
-              {expert.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-            </div>
+        <div className="flex w-full items-center gap-3 px-4 py-3">
+          {/* Batch select checkbox (only for enrichable roster experts) */}
+          {isRoster && (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => toggleBatchSelect(expert.id)}
+              className="h-3.5 w-3.5 shrink-0 rounded border-cos-border accent-cos-electric"
+            />
           )}
 
-          {/* Name + Title + Specialist summary */}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="truncate text-sm font-medium text-cos-midnight">
-                {expert.name}
-              </span>
-              {expert.isFullyEnriched && (
-                <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Fully enriched with work history" />
+          {/* Clickable area for expand */}
+          <button
+            onClick={() => setExpandedExpert(isExpanded ? null : expert.id)}
+            className="flex flex-1 items-center gap-3 text-left transition-colors hover:bg-cos-electric/[0.02] rounded-cos-md -mx-1 px-1"
+          >
+            {/* Avatar */}
+            {expert.photoUrl ? (
+              <img src={expert.photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-xs font-semibold text-cos-signal">
+                {expert.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+              </div>
+            )}
+
+            {/* Name + Title + Status */}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-medium text-cos-midnight">
+                  {expert.name}
+                </span>
+                {isEnriched && (
+                  <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Fully enriched with work history" />
+                )}
+                {isRoster && (
+                  <span className="inline-flex items-center gap-0.5 rounded-cos-pill bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-600">
+                    Roster
+                  </span>
+                )}
+              </div>
+              <p className="truncate text-xs text-cos-slate">
+                {primarySp?.qualityStatus === "strong" ? primarySp.title : expert.role}
+              </p>
+              {sps.length > 0 && (strongCount > 0 || partialCount > 0) && (
+                <p className="mt-0.5 flex items-center gap-1 text-[10px] text-cos-signal">
+                  <Star className="h-2.5 w-2.5" />
+                  {[
+                    strongCount > 0 ? `${strongCount} Strong` : null,
+                    partialCount > 0 ? `${partialCount} Partial` : null,
+                  ].filter(Boolean).join(" · ")}
+                  {" profile"}{sps.length === 1 ? "" : "s"}
+                </p>
+              )}
+              {sps.length === 0 && isEnriched && (
+                <p className="mt-0.5 text-[10px] italic text-cos-slate-light">
+                  No specialist profiles yet
+                </p>
               )}
             </div>
-            <p className="truncate text-xs text-cos-slate">
-              {primarySp?.qualityStatus === "strong" ? primarySp.title : expert.role}
-            </p>
-            {sps.length > 0 && (strongCount > 0 || partialCount > 0) && (
-              <p className="mt-0.5 flex items-center gap-1 text-[10px] text-cos-signal">
-                <Star className="h-2.5 w-2.5" />
-                {[
-                  strongCount > 0 ? `${strongCount} Strong` : null,
-                  partialCount > 0 ? `${partialCount} Partial` : null,
-                ].filter(Boolean).join(" · ")}
-                {" profile"}{sps.length === 1 ? "" : "s"}
-              </p>
-            )}
-            {sps.length === 0 && (
-              <p className="mt-0.5 text-[10px] italic text-cos-slate-light">
-                No specialist profiles yet
-              </p>
-            )}
-          </div>
+          </button>
 
           {/* Actions */}
           <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {/* Enrich button for roster experts */}
+            {isRoster && (
+              availableCredits > 0 ? (
+                <button
+                  onClick={() => handleEnrich(expert.id)}
+                  disabled={isEnriching}
+                  className="flex h-7 items-center gap-1 rounded-cos-pill bg-cos-electric px-2.5 text-[10px] font-medium text-white transition-colors hover:bg-cos-electric/90 disabled:opacity-50"
+                  title="Enrich this expert (uses 1 credit)"
+                >
+                  {isEnriching ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Zap className="h-3 w-3" />
+                  )}
+                  Enrich
+                </button>
+              ) : !isPro ? (
+                <a
+                  href="/settings/billing"
+                  className="flex h-7 items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2.5 text-[10px] font-medium text-cos-electric transition-colors hover:bg-cos-electric/20"
+                >
+                  <ArrowUpRight className="h-3 w-3" />
+                  Upgrade
+                </a>
+              ) : (
+                <a
+                  href="/settings/billing"
+                  className="flex h-7 items-center gap-1 rounded-cos-pill bg-cos-signal/10 px-2.5 text-[10px] font-medium text-cos-signal transition-colors hover:bg-cos-signal/20"
+                >
+                  <Zap className="h-3 w-3" />
+                  Buy Credits
+                </a>
+              )
+            )}
+            {isEnriched && (
+              <span className="flex h-7 items-center gap-1 rounded-cos-pill bg-emerald-50 px-2 text-[10px] font-medium text-emerald-600">
+                <CheckCircle2 className="h-3 w-3" />
+                Enriched
+              </span>
+            )}
             {expert.linkedinUrl && (
               <a
                 href={expert.linkedinUrl}
@@ -246,7 +341,7 @@ export default function FirmExpertsPage() {
               </button>
             )}
           </div>
-        </button>
+        </div>
 
         {/* Expanded detail */}
         {isExpanded && (
@@ -328,9 +423,6 @@ export default function FirmExpertsPage() {
     );
   }
 
-  // Track global index for plan-limit locking across all tier groups
-  let globalIndex = 0;
-
   return (
     <div className="cos-scrollbar mx-auto max-w-3xl space-y-5 overflow-y-auto p-6">
       {/* Page header */}
@@ -339,61 +431,89 @@ export default function FirmExpertsPage() {
           Team &amp; Experts
         </h2>
         <p className="mt-1 text-xs text-cos-slate-dim">
-          Manage your team roster. Invite members to claim and edit their profiles.
+          Your full team roster pulled from PDL. Enrich experts to unlock full work history, skills, and specialist profiles.
         </p>
       </div>
 
-      {/* Usage bar */}
-      {!planLoading && (
+      {/* Credit bar */}
+      {!planLoading && !creditsLoading && credits && (
         <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5 text-sm font-medium text-cos-midnight">
-                <Users className="h-4 w-4 text-cos-electric" />
-                Expert Slots:
+                <Zap className="h-4 w-4 text-cos-electric" />
+                Enrichment Credits:
                 <span className="font-bold text-cos-electric">
-                  {slotsUsed}
+                  {availableCredits}
                 </span>
-                {!isUnlimited && (
-                  <span className="text-cos-slate">/ {slotsTotal} used</span>
+                {!isEnterprise && (
+                  <span className="text-cos-slate">/ {totalCredits} remaining</span>
                 )}
-                {isUnlimited && (
-                  <span className="text-cos-slate">experts</span>
+                {isEnterprise && (
+                  <span className="text-cos-slate">unlimited</span>
                 )}
               </div>
-              {!isUnlimited && (
-                <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-medium uppercase text-cos-slate">
-                  {plan} plan
-                </span>
+              <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-medium uppercase text-cos-slate">
+                {plan} plan
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {!isPro && (
+                <a
+                  href="/settings/billing"
+                  className="flex items-center gap-1 text-xs font-medium text-cos-electric transition-colors hover:text-cos-electric/80"
+                >
+                  Upgrade to Pro for 100 credits
+                  <ArrowUpRight className="h-3 w-3" />
+                </a>
+              )}
+              {isPro && !isEnterprise && availableCredits < 10 && (
+                <a
+                  href="/settings/billing"
+                  className="flex items-center gap-1 text-xs font-medium text-cos-signal transition-colors hover:text-cos-signal/80"
+                >
+                  Buy Boost Pack (50 credits)
+                  <ArrowUpRight className="h-3 w-3" />
+                </a>
               )}
             </div>
-            {!isUnlimited && (
-              <a
-                href="/settings/billing"
-                className="flex items-center gap-1 text-xs font-medium text-cos-electric transition-colors hover:text-cos-electric/80"
-              >
-                Upgrade to Pro for unlimited
-                <ArrowUpRight className="h-3 w-3" />
-              </a>
-            )}
           </div>
-          {!isUnlimited && (
+
+          {/* Progress bar */}
+          {!isEnterprise && totalCredits > 0 && (
             <div className="mt-3">
               <div className="h-2 w-full overflow-hidden rounded-full bg-cos-cloud">
                 <div
                   className={`h-full rounded-full transition-all ${
-                    atLimit ? "bg-cos-ember" : usagePercent > 60 ? "bg-cos-warm" : "bg-cos-electric"
+                    availableCredits === 0 ? "bg-cos-ember" : availableCredits < 5 ? "bg-cos-warm" : "bg-cos-electric"
                   }`}
-                  style={{ width: `${usagePercent}%` }}
+                  style={{ width: `${Math.min(100, Math.round((usedCredits / totalCredits) * 100))}%` }}
                 />
               </div>
-              <p className="mt-1 text-[10px] text-cos-slate-dim">
-                {slotsRemaining > 0
-                  ? `${slotsRemaining} slot${slotsRemaining === 1 ? "" : "s"} remaining`
-                  : "No slots remaining — upgrade to add more experts"}
-              </p>
+              <div className="mt-1 flex items-center justify-between text-[10px] text-cos-slate-dim">
+                <span>{usedCredits} credits used</span>
+                <span>
+                  {enrichedCount} enriched · {rosterCount} roster
+                </span>
+              </div>
             </div>
           )}
+
+          {/* Stat pills */}
+          <div className="mt-3 flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-cos-pill bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-600">
+              <CheckCircle2 className="h-3 w-3" />
+              {enrichedCount} Enriched
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-cos-pill bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-600">
+              <Users className="h-3 w-3" />
+              {rosterCount} Roster
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-cloud px-2 py-1 text-[10px] font-medium text-cos-slate">
+              <ShieldCheck className="h-3 w-3" />
+              {totalExperts} Total
+            </span>
+          </div>
         </div>
       )}
 
@@ -403,7 +523,6 @@ export default function FirmExpertsPage() {
           variant="outline"
           size="sm"
           onClick={() => setShowAddExpert(true)}
-          disabled={atLimit}
           className="h-8 gap-1.5 text-xs"
         >
           <UserPlus className="h-3.5 w-3.5" />
@@ -419,6 +538,26 @@ export default function FirmExpertsPage() {
           <Linkedin className="h-3.5 w-3.5" />
           Import from LinkedIn
         </Button>
+
+        {/* Batch enrich button */}
+        {selectedForBatch.size > 0 && (
+          <Button
+            size="sm"
+            onClick={handleBatchEnrich}
+            disabled={batchEnriching || availableCredits < selectedForBatch.size}
+            className="h-8 gap-1.5 text-xs bg-cos-electric text-white hover:bg-cos-electric/90"
+          >
+            {batchEnriching ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Zap className="h-3.5 w-3.5" />
+            )}
+            Enrich Selected ({selectedForBatch.size})
+            {availableCredits < selectedForBatch.size && (
+              <span className="text-white/60 ml-1">— not enough credits</span>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Add Expert Dialog */}
@@ -495,11 +634,7 @@ export default function FirmExpertsPage() {
                 <span className="text-[10px] text-emerald-600/70">Client-facing specialists</span>
               </div>
               <div className="divide-y divide-emerald-100">
-                {tierExperts.map((expert) => {
-                  const row = renderExpertRow(expert, globalIndex);
-                  globalIndex++;
-                  return row;
-                })}
+                {tierExperts.map((expert) => renderExpertRow(expert))}
               </div>
             </div>
           )}
@@ -517,11 +652,7 @@ export default function FirmExpertsPage() {
                 <span className="text-[10px] text-amber-600/70">May be client-facing</span>
               </div>
               <div className="divide-y divide-amber-100">
-                {tierPotential.map((expert) => {
-                  const row = renderExpertRow(expert, globalIndex);
-                  globalIndex++;
-                  return row;
-                })}
+                {tierPotential.map((expert) => renderExpertRow(expert))}
               </div>
             </div>
           )}
@@ -539,11 +670,7 @@ export default function FirmExpertsPage() {
                 <span className="text-[10px] text-cos-slate/70">Manually added or unclassified</span>
               </div>
               <div className="divide-y divide-cos-border/30">
-                {tierOther.map((expert) => {
-                  const row = renderExpertRow(expert, globalIndex);
-                  globalIndex++;
-                  return row;
-                })}
+                {tierOther.map((expert) => renderExpertRow(expert))}
               </div>
             </div>
           )}
@@ -575,7 +702,7 @@ export default function FirmExpertsPage() {
             No team members yet
           </p>
           <p className="mt-1 text-xs text-cos-slate-dim">
-            Add experts manually or ask Ossy to help discover your team.
+            Add experts manually or your team roster will be auto-pulled when your firm profile is set up.
           </p>
           <Button
             variant="outline"
@@ -586,25 +713,6 @@ export default function FirmExpertsPage() {
             <UserPlus className="h-3.5 w-3.5" />
             Add Your First Expert
           </Button>
-        </div>
-      )}
-
-      {/* Locked slots placeholder for free plan */}
-      {!isUnlimited && dbExperts.length > 0 && dbExperts.length < expertLimit && (
-        <div className="space-y-2">
-          {Array.from({ length: Math.min(2, expertLimit - dbExperts.length) }).map((_, i) => (
-            <div
-              key={`locked-${i}`}
-              className="flex items-center justify-between rounded-cos-xl border border-dashed border-cos-border/50 bg-cos-surface/30 p-4"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-cos-border bg-cos-cloud/50">
-                  <UserPlus className="h-4 w-4 text-cos-slate-light" />
-                </div>
-                <span className="text-xs text-cos-slate-dim">Empty slot — add an expert</span>
-              </div>
-            </div>
-          ))}
         </div>
       )}
     </div>

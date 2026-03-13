@@ -345,6 +345,89 @@ export async function writeFirmToGraph(
   return result;
 }
 
+// ─── Roster Stub Writer (PDL Person Search → basic Person stubs) ──────────
+
+export interface RosterStubPerson {
+  id: string;       // PDL person ID
+  fullName: string;
+  firstName: string;
+  lastName: string;
+  jobTitle: string;
+  headline: string | null;
+  linkedinUrl: string | null;
+  location: string | null;
+}
+
+/**
+ * Write basic Person stubs to Neo4j for all roster members pulled from PDL.
+ * These are lightweight nodes with enrichmentStatus="stub" — no skills,
+ * industries, or specialist profiles. Those get added when the person
+ * is fully enriched via expert-linkedin.
+ *
+ * Uses UNWIND for batched writes (much faster than individual MERGE calls).
+ */
+export async function writeRosterStubsToGraph(
+  firmId: string,
+  people: RosterStubPerson[]
+): Promise<{ written: number; errors: string[] }> {
+  const errors: string[] = [];
+  if (!people.length) return { written: 0, errors };
+
+  // Batch in groups of 50 to avoid oversized transactions
+  const BATCH_SIZE = 50;
+  let written = 0;
+
+  for (let i = 0; i < people.length; i += BATCH_SIZE) {
+    const batch = people.slice(i, i + BATCH_SIZE).map((p) => ({
+      id: `exp_pdl_${p.id}`,
+      fullName: p.fullName,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      title: p.jobTitle,
+      headline: p.headline ?? "",
+      linkedinUrl: p.linkedinUrl ?? "",
+      location: p.location ?? "",
+    }));
+
+    try {
+      await neo4jWrite(
+        `MATCH (f:Company {id: $firmId})
+         UNWIND $members AS m
+         MERGE (p:Person {id: m.id})
+         ON CREATE SET
+           p.personTypes = ['expert'],
+           p.fullName = m.fullName,
+           p.firstName = m.firstName,
+           p.lastName = m.lastName,
+           p.headline = m.headline,
+           p.linkedinUrl = CASE WHEN m.linkedinUrl = '' THEN null ELSE m.linkedinUrl END,
+           p.location = CASE WHEN m.location = '' THEN null ELSE m.location END,
+           p.firmId = $firmId,
+           p.enrichmentStatus = "stub",
+           p.source = "pdl_search",
+           p.emails = [],
+           p.createdAt = datetime()
+         ON MATCH SET
+           p.fullName = COALESCE(m.fullName, p.fullName),
+           p.headline = CASE WHEN p.enrichmentStatus = "stub" THEN COALESCE(m.headline, p.headline) ELSE p.headline END
+         MERGE (p)-[r:CURRENTLY_AT]->(f)
+         SET r.isPrimary = true,
+             r.source = "pdl_search",
+             r.engagementType = "full_time"`,
+        { firmId, members: batch }
+      );
+      written += batch.length;
+    } catch (err) {
+      const msg = `[GraphWriter] Roster stub batch ${i}-${i + batch.length}: ${err}`;
+      console.error(msg);
+      errors.push(msg);
+    }
+  }
+
+  console.log(`[GraphWriter] Wrote ${written} roster stubs for firm ${firmId}`);
+  return { written, errors };
+}
+
 // ─── Person Graph Writer (Track A: was Expert) ───────────
 
 export interface GraphExpertData {

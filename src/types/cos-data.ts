@@ -121,6 +121,8 @@ export interface Expert {
   expertTier?: "expert" | "potential_expert" | "not_expert" | null;
   /** Whether this expert has been fully enriched (has work history from PDL) */
   isFullyEnriched?: boolean;
+  /** Enrichment status: roster (basic PDL data) | enriched (full work history) */
+  enrichmentStatus?: "roster" | "enriched";
   /** Specialist sub-profiles — focused expertise combos */
   specialistProfiles?: ExpertSpecialistProfile[];
 }
