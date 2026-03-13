@@ -13,6 +13,7 @@ import {
   acqCompanies,
   acqContacts,
   acqDeals,
+  acqPipelineStages,
 } from "@/lib/db/schema";
 import { HubSpotClient } from "@/lib/growth-ops/HubSpotClient";
 import { eq } from "drizzle-orm";
@@ -168,6 +169,17 @@ export async function handleHubSpotSync(
     const isWon = p.dealstage?.includes("closedwon") || stageInfo?.label?.toLowerCase().includes("customer");
     const isLost = p.dealstage?.includes("closedlost");
 
+    // Resolve COS pipeline stage_id from hubspot_stage_id
+    let cosStageId: string | null = null;
+    if (p.dealstage) {
+      const [cosStage] = await db
+        .select({ id: acqPipelineStages.id })
+        .from(acqPipelineStages)
+        .where(eq(acqPipelineStages.hubspotStageId, p.dealstage))
+        .limit(1);
+      cosStageId = cosStage?.id ?? null;
+    }
+
     await db
       .insert(acqDeals)
       .values({
@@ -175,12 +187,15 @@ export async function handleHubSpotSync(
         name: p.dealname ?? "Untitled Deal",
         contactId,
         companyId,
+        stageId: cosStageId,
         hubspotDealId: d.id,
         hubspotPipelineId: stageInfo?.pipelineId ?? p.pipeline ?? null,
         hubspotStageId: p.dealstage ?? null,
         stageLabel: stageInfo?.label ?? p.dealstage ?? "",
         dealValue: p.amount ?? null,
         status: isWon ? "won" : isLost ? "lost" : "open",
+        source: "hubspot_sync",
+        sourceChannel: "hubspot",
         closedAt: p.closedate ? new Date(p.closedate) : null,
         hubspotSyncedAt: now,
       })
@@ -190,6 +205,7 @@ export async function handleHubSpotSync(
           name: p.dealname ?? "Untitled Deal",
           contactId,
           companyId,
+          stageId: cosStageId,
           hubspotPipelineId: stageInfo?.pipelineId ?? p.pipeline ?? null,
           hubspotStageId: p.dealstage ?? null,
           stageLabel: stageInfo?.label ?? p.dealstage ?? "",

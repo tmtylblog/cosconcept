@@ -1923,21 +1923,84 @@ export const acqContacts = pgTable("acq_contacts", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const acqPipelineStages = pgTable("acq_pipeline_stages", {
+  id: text("id").primaryKey(),
+  pipelineId: text("pipeline_id").notNull().default("default"),
+  label: text("label").notNull(),
+  displayOrder: integer("display_order").notNull().default(0),
+  isClosedWon: boolean("is_closed_won").notNull().default(false),
+  isClosedLost: boolean("is_closed_lost").notNull().default(false),
+  hubspotStageId: text("hubspot_stage_id"), // maps to HubSpot stage for sync
+  color: text("color").notNull().default("#6366f1"), // stage color for UI
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const acqDeals = pgTable("acq_deals", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   contactId: text("contact_id").references(() => acqContacts.id, { onDelete: "set null" }),
   companyId: text("company_id").references(() => acqCompanies.id, { onDelete: "set null" }),
+  stageId: text("stage_id").references(() => acqPipelineStages.id, { onDelete: "set null" }),
   hubspotDealId: text("hubspot_deal_id").unique(),
   hubspotPipelineId: text("hubspot_pipeline_id"),
   hubspotStageId: text("hubspot_stage_id"),
   stageLabel: text("stage_label").notNull().default(""),
   dealValue: text("deal_value"),
   status: text("status").notNull().default("open"), // open | won | lost
+  source: text("source").notNull().default("hubspot_sync"), // hubspot_sync | instantly_auto | linkedin_auto | manual
+  sourceChannel: text("source_channel"), // instantly | linkedin | hubspot | null
+  sourceCampaignId: text("source_campaign_id"),
+  sourceCampaignName: text("source_campaign_name"),
+  sourceMessageId: text("source_message_id"),
+  notes: text("notes"),
+  customFields: jsonb("custom_fields"),
+  priority: text("priority").notNull().default("normal"), // low | normal | high | urgent
+  lastActivityAt: timestamp("last_activity_at"),
+  sentimentScore: real("sentiment_score"), // 0.0–1.0
   closedAt: timestamp("closed_at"),
   hubspotSyncedAt: timestamp("hubspot_synced_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const acqDealActivities = pgTable("acq_deal_activities", {
+  id: text("id").primaryKey(),
+  dealId: text("deal_id").notNull().references(() => acqDeals.id, { onDelete: "cascade" }),
+  activityType: text("activity_type").notNull(), // stage_change | note_added | email_replied | linkedin_message | hubspot_sync | auto_created | sentiment_analyzed
+  description: text("description"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const acqDealQueue = pgTable("acq_deal_queue", {
+  id: text("id").primaryKey(),
+  contactEmail: text("contact_email"),
+  contactName: text("contact_name"),
+  contactLinkedinUrl: text("contact_linkedin_url"),
+  companyName: text("company_name"),
+  companyDomain: text("company_domain"),
+  source: text("source").notNull(), // instantly_auto | linkedin_auto
+  sourceChannel: text("source_channel").notNull(), // instantly | linkedin
+  sourceCampaignId: text("source_campaign_id"),
+  sourceCampaignName: text("source_campaign_name"),
+  sourceMessageId: text("source_message_id"),
+  messageText: text("message_text"),
+  sentiment: text("sentiment"), // positive | negative | neutral | unsubscribe
+  sentimentScore: real("sentiment_score"),
+  status: text("status").notNull().default("pending"), // pending | approved | rejected
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: text("reviewed_by"),
+  createdDealId: text("created_deal_id").references(() => acqDeals.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const acqInstantlyReplyWatermarks = pgTable("acq_instantly_reply_watermarks", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").notNull(),
+  leadEmail: text("lead_email").notNull(),
+  lastReplyCount: integer("last_reply_count").notNull().default(0),
+  checkedAt: timestamp("checked_at").notNull().defaultNow(),
 });
 
 // ─── Extraction Outcomes (self-learning feedback loop) ────
