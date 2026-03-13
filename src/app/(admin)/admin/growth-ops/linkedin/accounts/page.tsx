@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Plus, Link2, Loader2, RefreshCw, Copy, Check, X, ExternalLink, AlertTriangle, Trash2 } from "lucide-react";
 
 interface Account {
@@ -10,6 +10,14 @@ interface Account {
   linkedinUsername: string | null;
   status: string;
   createdAt: string;
+}
+
+interface SyncProgress {
+  seeded: number;
+  enriched?: number;
+  pages: number;
+  phase: "fetching" | "enriching" | "complete" | "error";
+  error?: string;
 }
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
@@ -23,7 +31,7 @@ export default function LinkedInAccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [revoking, setRevoking] = useState<string | null>(null); // account id being revoked
+  const [revoking, setRevoking] = useState<string | null>(null);
 
   // Connect my account
   const [connecting, setConnecting] = useState(false);
@@ -33,13 +41,14 @@ export default function LinkedInAccountsPage() {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Force re-sync conversations
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ seeded: number; enriching: number } | null>(null);
+  // Full conversation sync
+  const [syncingAccount, setSyncingAccount] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "done" | "error">("idle");
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
-    // ?sync=true imports any Unipile accounts not yet in our DB
     const d = await fetch("/api/admin/growth-ops/linkedin-accounts?sync=true").then((r) => r.json());
     setAccounts(d.accounts ?? []);
     if (!silent) setLoading(false); else setRefreshing(false);
@@ -47,10 +56,14 @@ export default function LinkedInAccountsPage() {
 
   useEffect(() => {
     load();
-    // Poll every 10s so newly connected accounts appear without manual refresh
     const timer = setInterval(() => load(true), 10_000);
     return () => clearInterval(timer);
   }, [load]);
+
+  // Clean up poll on unmount
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
 
   async function connectMyAccount() {
     setConnecting(true);
@@ -103,15 +116,45 @@ export default function LinkedInAccountsPage() {
     if (url) window.open(url, "_blank");
   }
 
-  async function resyncConversations(unipileAccountId: string) {
-    setSyncing(true);
-    setSyncResult(null);
+  function startPolling(unipileAccountId: string) {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const d = await fetch(
+          `/api/admin/growth-ops/unipile?action=getSyncStatus&accountId=${unipileAccountId}`
+        ).then((r) => r.json());
+        const status = d.syncStatus as typeof syncStatus;
+        setSyncStatus(status);
+        if (d.progress) setSyncProgress(d.progress);
+        if (status === "done" || status === "error" || status === "idle") {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      } catch {
+        // ignore poll errors
+      }
+    }, 2000);
+  }
+
+  async function startFullSync(unipileAccountId: string) {
+    setSyncingAccount(unipileAccountId);
+    setSyncStatus("syncing");
+    setSyncProgress(null);
     try {
-      const d = await fetch(`/api/admin/growth-ops/unipile?action=resyncConversations&accountId=${unipileAccountId}`).then((r) => r.json());
-      if (d.ok) setSyncResult({ seeded: d.seeded, enriching: d.enriching });
-      else alert(d.error ?? "Re-sync failed");
-    } finally {
-      setSyncing(false);
+      const d = await fetch("/api/admin/growth-ops/unipile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resyncConversations", accountId: unipileAccountId }),
+      }).then((r) => r.json());
+
+      if (d.alreadySyncing) {
+        setSyncProgress(d.progress);
+      }
+      // Start polling for progress
+      startPolling(unipileAccountId);
+    } catch {
+      setSyncStatus("error");
+      setSyncProgress({ seeded: 0, pages: 0, phase: "error", error: "Failed to start sync" });
     }
   }
 
@@ -125,6 +168,8 @@ export default function LinkedInAccountsPage() {
       setRevoking(null);
     }
   }
+
+  const isSyncing = syncStatus === "syncing";
 
   return (
     <div>
@@ -252,10 +297,11 @@ export default function LinkedInAccountsPage() {
               {accounts.map((a) => {
                 const style = STATUS_STYLE[a.status] ?? STATUS_STYLE.CONNECTING;
                 const isRevoking = revoking === a.id;
+                const isThisSyncing = isSyncing && syncingAccount === a.unipileAccountId;
                 return (
                   <tr key={a.id} className="border-b border-cos-border/50 last:border-0 hover:bg-cos-cloud/30 transition-colors">
                     <td className="px-4 py-3 font-medium text-cos-midnight">{a.displayName || a.unipileAccountId}</td>
-                    <td className="px-4 py-3 text-cos-slate">{a.linkedinUsername ? `@${a.linkedinUsername}` : "—"}</td>
+                    <td className="px-4 py-3 text-cos-slate">{a.linkedinUsername ? `@${a.linkedinUsername}` : "\u2014"}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${style.bg} ${style.text}`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
@@ -265,19 +311,19 @@ export default function LinkedInAccountsPage() {
                     <td className="px-4 py-3 text-xs text-cos-slate">
                       {a.createdAt && !isNaN(new Date(a.createdAt).getTime())
                         ? new Date(a.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-                        : "—"}
+                        : "\u2014"}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-3">
                         {a.status === "OK" && (
                           <button
-                            onClick={() => resyncConversations(a.unipileAccountId)}
-                            disabled={syncing}
+                            onClick={() => startFullSync(a.unipileAccountId)}
+                            disabled={isSyncing}
                             className="inline-flex items-center gap-1 text-xs text-cos-electric hover:underline disabled:opacity-40"
-                            title="Delete cached conversations and re-fetch from Unipile"
+                            title="Full 12-month conversation sync from Unipile"
                           >
-                            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
-                            Re-sync
+                            <RefreshCw className={`h-3.5 w-3.5 ${isThisSyncing ? "animate-spin" : ""}`} />
+                            {isThisSyncing ? "Syncing\u2026" : "Full sync"}
                           </button>
                         )}
                         {(a.status === "CREDENTIALS" || a.status === "ERROR") && (
@@ -308,10 +354,42 @@ export default function LinkedInAccountsPage() {
         </div>
       )}
 
-      {syncResult && (
+      {/* Sync progress banner */}
+      {syncingAccount && syncStatus === "syncing" && (
+        <div className="mt-4 rounded-cos-lg border border-cos-electric/30 bg-cos-electric/5 px-4 py-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Loader2 className="h-4 w-4 animate-spin text-cos-electric" />
+            <p className="text-sm font-medium text-cos-electric">
+              {syncProgress?.phase === "enriching" ? "Enriching profiles\u2026" : "Syncing conversations\u2026"}
+            </p>
+          </div>
+          {syncProgress && (
+            <p className="text-xs text-cos-slate ml-6">
+              {syncProgress.seeded.toLocaleString()} conversations fetched across {syncProgress.pages} pages
+              {syncProgress.phase === "enriching" && " \u2014 now resolving names and avatars"}
+            </p>
+          )}
+          <p className="text-[10px] text-cos-slate-dim ml-6 mt-1">
+            Fetching up to 12 months of history. This may take a few minutes. You can leave this page.
+          </p>
+        </div>
+      )}
+
+      {syncingAccount && syncStatus === "done" && syncProgress && (
         <div className="mt-4 rounded-cos-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           <Check className="mb-0.5 mr-1.5 inline h-4 w-4" />
-          Re-synced {syncResult.seeded} conversations. {syncResult.enriching > 0 && `Enriching ${syncResult.enriching} profiles in background.`}
+          Full sync complete: {syncProgress.seeded.toLocaleString()} conversations synced across {syncProgress.pages} pages.
+          {(syncProgress.enriched ?? 0) > 0 && ` ${syncProgress.enriched} profiles enriched.`}
+        </div>
+      )}
+
+      {syncingAccount && syncStatus === "error" && (
+        <div className="mt-4 rounded-cos-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertTriangle className="mb-0.5 mr-1.5 inline h-4 w-4" />
+          Sync failed{syncProgress?.error ? `: ${syncProgress.error}` : ""}
+          {syncProgress && syncProgress.seeded > 0 && (
+            <span className="ml-1 text-red-500">({syncProgress.seeded} conversations were synced before the error)</span>
+          )}
         </div>
       )}
     </div>

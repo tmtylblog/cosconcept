@@ -1752,6 +1752,10 @@ export const growthOpsLinkedInAccounts = pgTable("growth_ops_linkedin_accounts",
   linkedinUsername: text("linkedin_username"),
   accountType: text("account_type").notNull().default("basic"), // basic | premium | sales_navigator | recruiter
   status: text("status").notNull().default("CONNECTING"), // CONNECTING | OK | CREDENTIALS | ERROR
+  syncStatus: text("sync_status").notNull().default("idle"), // idle | syncing | done | error
+  syncProgress: text("sync_progress"), // JSON string: { seeded, enriching, pages, error? }
+  syncStartedAt: timestamp("sync_started_at"),
+  syncCompletedAt: timestamp("sync_completed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
