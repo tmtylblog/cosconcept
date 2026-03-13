@@ -127,7 +127,7 @@ export async function GET(req: NextRequest) {
 
       // If empty, seed from Unipile live
       if (convos.length === 0) {
-        const live = await UnipileClient.listChats(accountId, { limit: 50 });
+        const live = await UnipileClient.listChats(accountId, { limit: 100 });
         const items = live.items ?? [];
 
         for (const chat of items) {
@@ -165,9 +165,9 @@ export async function GET(req: NextRequest) {
           .orderBy(desc(growthOpsConversations.lastMessageAt))
           .limit(50);
 
-        // Kick off background enrichment for missing avatars/names
+        // Kick off background enrichment for missing avatars/names or empty names
         const toEnrich = convos
-          .filter((c) => !c.participantAvatarUrl && c.participantProviderId)
+          .filter((c) => (!c.participantAvatarUrl || !c.participantName) && c.participantProviderId)
           .map((c) => ({ id: c.id, participantProviderId: c.participantProviderId }));
         if (toEnrich.length > 0) {
           enrichConversations(toEnrich, accountId).catch(() => {});
@@ -342,9 +342,19 @@ export async function GET(req: NextRequest) {
         .delete(growthOpsConversations)
         .where(eq(growthOpsConversations.linkedinAccountId, acct.id));
 
-      // Re-seed from Unipile live
-      const live = await UnipileClient.listChats(accountId, { limit: 50 });
-      const items = live.items ?? [];
+      // Re-seed from Unipile live — paginate up to 250
+      const allItems: Awaited<ReturnType<typeof UnipileClient.listChats>>["items"] = [];
+      let cursor: string | undefined;
+      const RESYNC_LIMIT = 250;
+      while (allItems.length < RESYNC_LIMIT) {
+        const batch = Math.min(100, RESYNC_LIMIT - allItems.length);
+        const page = await UnipileClient.listChats(accountId, { limit: batch, cursor });
+        const pageItems = page.items ?? [];
+        allItems.push(...pageItems);
+        cursor = page.cursor;
+        if (!cursor || pageItems.length === 0) break;
+      }
+      const items = allItems;
       let seeded = 0;
 
       for (const chat of items) {
@@ -379,9 +389,9 @@ export async function GET(req: NextRequest) {
         .select()
         .from(growthOpsConversations)
         .where(eq(growthOpsConversations.linkedinAccountId, acct.id))
-        .limit(50);
+        .limit(250);
       const toEnrich = convos
-        .filter((c) => !c.participantAvatarUrl && c.participantProviderId)
+        .filter((c) => (!c.participantAvatarUrl || !c.participantName) && c.participantProviderId)
         .map((c) => ({ id: c.id, participantProviderId: c.participantProviderId }));
       if (toEnrich.length > 0) {
         enrichConversations(toEnrich, accountId).catch(() => {});
