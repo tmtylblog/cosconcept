@@ -8,10 +8,8 @@ import {
   DollarSign,
   AlertCircle,
   RefreshCw,
-  Play,
   LayoutGrid,
   Table2,
-  Plus,
   Mail,
   Linkedin,
   Globe,
@@ -107,8 +105,6 @@ export default function PipelinePage() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadingDeals, setLoadingDeals] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [dragging, setDragging] = useState<{ dealId: string; fromStageId: string } | null>(null);
   const [view, setView] = useState<"kanban" | "table">("kanban");
   const [tableStageFilter, setTableStageFilter] = useState<string | "all">("all");
@@ -170,50 +166,6 @@ export default function PipelinePage() {
     loadData(true);
     loadQueue();
   }, [loadData, loadQueue]);
-
-  async function seedStages() {
-    setSyncing(true);
-    setSyncMsg(null);
-    try {
-      const res = await fetch("/api/admin/growth-ops/pipeline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "seedStages" }),
-      });
-      const data = await res.json();
-      if (data.error) {
-        setSyncMsg(`Error: ${data.error}`);
-      } else {
-        setSyncMsg(`Seeded ${data.seeded} stages from HubSpot pipeline "${data.pipeline}"`);
-        await loadData();
-      }
-    } catch (e) {
-      setSyncMsg(String(e));
-    }
-    setSyncing(false);
-  }
-
-  async function syncFromHubSpot() {
-    setSyncing(true);
-    setSyncMsg(null);
-    try {
-      const res = await fetch("/api/admin/growth-ops/pipeline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "syncFromHubSpot" }),
-      });
-      const data = await res.json();
-      if (data.error) {
-        setSyncMsg(`Error: ${data.error}`);
-      } else {
-        setSyncMsg(`Synced ${data.companiesUpserted ?? 0} companies, ${data.contactsUpserted ?? 0} contacts, ${data.dealsUpserted ?? 0} deals`);
-        await loadData();
-      }
-    } catch (e) {
-      setSyncMsg(String(e));
-    }
-    setSyncing(false);
-  }
 
   async function handleDrop(toStageId: string) {
     if (!dragging || dragging.fromStageId === toStageId) { setDragging(null); return; }
@@ -313,36 +265,8 @@ export default function PipelinePage() {
             <RefreshCw className={`h-3.5 w-3.5 ${loadingDeals ? "animate-spin" : ""}`} />
             Refresh
           </button>
-
-          {stages.length === 0 ? (
-            <button
-              onClick={seedStages}
-              disabled={syncing}
-              className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-2 text-sm font-medium text-white hover:bg-cos-electric-hover disabled:opacity-50 transition-colors"
-            >
-              {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-              Seed Stages from HubSpot
-            </button>
-          ) : (
-            <button
-              onClick={syncFromHubSpot}
-              disabled={syncing}
-              className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-2 text-sm font-medium text-white hover:bg-cos-electric-hover disabled:opacity-50 transition-colors"
-            >
-              {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-              Sync from HubSpot
-            </button>
-          )}
         </div>
       </div>
-
-      {/* Sync message */}
-      {syncMsg && (
-        <div className={`mb-4 rounded-cos-lg px-4 py-2.5 text-sm flex items-center gap-2 ${syncMsg.startsWith("Error") ? "bg-red-50 text-red-700 border border-red-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
-          {syncMsg.startsWith("Error") ? <AlertCircle className="h-4 w-4 shrink-0" /> : <RefreshCw className="h-4 w-4 shrink-0" />}
-          {syncMsg}
-        </div>
-      )}
 
       {/* Error */}
       {error && (
@@ -429,18 +353,10 @@ export default function PipelinePage() {
       ) : !error && stages.length === 0 ? (
         <div className="rounded-cos-xl border border-dashed border-cos-border bg-white p-12 text-center">
           <p className="text-sm font-medium text-cos-slate">No pipeline stages configured</p>
-          <p className="text-xs text-cos-slate mt-1">Click &ldquo;Seed Stages from HubSpot&rdquo; to import your pipeline stages.</p>
+          <p className="text-xs text-cos-slate mt-1">Run the pipeline seed script to import stages.</p>
         </div>
       ) : !error && view === "kanban" ? (
         <>
-          {totalDeals === 0 && !loadingDeals && (
-            <div className="mb-4 rounded-cos-lg bg-amber-50 border border-amber-200 px-4 py-2.5 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
-              <p className="text-sm text-amber-700">
-                Pipeline loaded but no deals found. Click <strong>Sync from HubSpot</strong> to pull your deals.
-              </p>
-            </div>
-          )}
           <div className="flex gap-4 overflow-x-auto pb-2" style={{ height: "calc(100vh - 260px)" }}>
             {columns.map((col) => {
               const shown = col.deals.slice(0, KANBAN_LIMIT);
