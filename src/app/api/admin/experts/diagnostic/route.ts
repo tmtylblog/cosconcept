@@ -252,6 +252,17 @@ export async function GET(req: NextRequest) {
         AND jsonb_array_length(COALESCE(enrichment_data->'extracted'->'teamMembers', '[]'::jsonb)) > 0
     `);
 
+    // Check extracted keys for a sample enriched firm
+    const extractedKeys = await db.execute(sql`
+      SELECT id, name,
+        CASE WHEN jsonb_typeof(enrichment_data->'extracted') = 'object'
+          THEN (SELECT jsonb_agg(k) FROM jsonb_object_keys(enrichment_data->'extracted') k)
+          ELSE NULL END as extracted_keys
+      FROM service_firms
+      WHERE enrichment_data->'extracted' IS NOT NULL
+      LIMIT 3
+    `);
+
     // Check background_jobs detail for team-ingest
     const allTeamJobs = await db.execute(sql`
       SELECT id, status, payload->>'firmId' AS firm_id, payload->>'domain' AS domain,
@@ -283,6 +294,7 @@ export async function GET(req: NextRequest) {
         cacheTeamData: cacheTeamData.rows[0],
         auditEntries: auditEntries.rows,
         sampleEnrichment: sampleEnrichment.rows,
+        extractedKeys: extractedKeys.rows,
         totalTeamMembers: totalTeamMembers.rows[0]?.total ?? 0,
         topFirmsByTeamSize: sampleTeamData.rows,
       },
