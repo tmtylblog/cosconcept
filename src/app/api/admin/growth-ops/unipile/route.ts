@@ -134,7 +134,11 @@ export async function GET(req: NextRequest) {
           const other = chat.attendees?.find((a) => !a.is_self);
           const participantProviderId =
             other?.attendee_provider_id ?? chat.attendee_provider_id ?? "";
-          const participantName = other?.attendee_name ?? chat.name ?? "";
+          // Use attendee name if available; fall back to chat.name only if it
+          // doesn't look like a generic subject (e.g. "Referral?", "InMail").
+          const rawChatName = chat.name ?? "";
+          const chatNameIsGeneric = /^(referral\??|inmail|sponsored|hi|hey|hello|\s*)$/i.test(rawChatName.trim());
+          const participantName = other?.attendee_name || (!chatNameIsGeneric ? rawChatName : "") || "";
           const isInmail = chat.content_type === "inmail";
           const lastText = chat.last_message?.text ?? null;
           const lastAt = chat.timestamp ? new Date(chat.timestamp) : null;

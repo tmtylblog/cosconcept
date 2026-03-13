@@ -491,8 +491,8 @@ function LinkedInUniboxInner() {
             </div>
           )}
 
-          {/* Account selector */}
-          {accounts.length > 1 && (
+          {/* Account selector — always visible for unibox or single-account view */}
+          {accounts.length > 0 && (
             <select
               value={selectedAccountId}
               onChange={(e) => selectAccount(e.target.value)}
@@ -554,7 +554,7 @@ function LinkedInUniboxInner() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
                   <p className="text-sm font-medium text-cos-midnight truncate leading-tight">
-                    {convo.participantName || convo.chatId}
+                    {convo.participantName || (convo.participantHeadline ? "Unknown" : `Chat ${convo.chatId.slice(0, 8)}…`)}
                   </p>
                   {convo.isInmailThread && (
                     <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 leading-none">
