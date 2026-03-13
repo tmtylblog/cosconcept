@@ -18,6 +18,10 @@ import {
   RefreshCw,
   Share2,
   Linkedin,
+  Bot,
+  Pencil,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────
@@ -61,6 +65,7 @@ interface SyncProgress {
 const TABS = [
   { key: "pipeline", label: "Pipeline", icon: <Share2 className="h-3.5 w-3.5" /> },
   { key: "linkedin", label: "LinkedIn Accounts", icon: <Linkedin className="h-3.5 w-3.5" /> },
+  { key: "reply-ai", label: "Reply AI", icon: <Bot className="h-3.5 w-3.5" /> },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -132,6 +137,9 @@ export default function GrowthOpsSettingsPage() {
       )}
       {activeTab === "linkedin" && (
         <LinkedInAccountsSettings setError={setError} />
+      )}
+      {activeTab === "reply-ai" && (
+        <ReplyKnowledgeBaseSettings setError={setError} flash={flash} />
       )}
     </div>
   );
@@ -714,6 +722,286 @@ function LinkedInAccountsSettings({ setError }: { setError: (e: string | null) =
           Sync failed{syncProgress?.error ? `: ${syncProgress.error}` : ""}
         </div>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Reply AI Knowledge Base Settings Tab
+// ═══════════════════════════════════════════════════════════════
+
+interface KBEntry {
+  id: string;
+  category: string;
+  title: string;
+  content: string;
+  isActive: boolean;
+  displayOrder: number;
+}
+
+const KB_CATEGORIES = [
+  { key: "tone_guide", label: "Tone Guide" },
+  { key: "company_info", label: "Company Info" },
+  { key: "product_info", label: "Product Info" },
+  { key: "pricing", label: "Pricing" },
+  { key: "objection_handling", label: "Objection Handling" },
+  { key: "custom", label: "Custom" },
+];
+
+function ReplyKnowledgeBaseSettings({
+  setError,
+  flash,
+}: {
+  setError: (e: string | null) => void;
+  flash: (msg: string) => void;
+}) {
+  const [entries, setEntries] = useState<KBEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<KBEntry | null>(null);
+  const [isNew, setIsNew] = useState(false);
+  const [form, setForm] = useState({ category: "custom", title: "", content: "" });
+
+  async function load() {
+    try {
+      setLoading(true);
+      const d = await fetch("/api/admin/growth-ops/knowledge-base").then((r) => r.json());
+      setEntries(d.entries ?? []);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function startNew() {
+    setIsNew(true);
+    setEditing(null);
+    setForm({ category: "custom", title: "", content: "" });
+  }
+
+  function startEdit(entry: KBEntry) {
+    setEditing(entry);
+    setIsNew(false);
+    setForm({ category: entry.category, title: entry.title, content: entry.content });
+  }
+
+  async function saveEntry() {
+    setSaving(true);
+    try {
+      if (editing) {
+        await fetch("/api/admin/growth-ops/knowledge-base", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "update", id: editing.id, ...form }),
+        });
+        flash("Entry updated");
+      } else {
+        await fetch("/api/admin/growth-ops/knowledge-base", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "create", ...form }),
+        });
+        flash("Entry created");
+      }
+      setEditing(null);
+      setIsNew(false);
+      setForm({ category: "custom", title: "", content: "" });
+      await load();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteEntry(id: string) {
+    if (!confirm("Delete this knowledge base entry?")) return;
+    try {
+      await fetch("/api/admin/growth-ops/knowledge-base", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", id }),
+      });
+      flash("Entry deleted");
+      await load();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  async function toggleActive(id: string, isActive: boolean) {
+    try {
+      await fetch("/api/admin/growth-ops/knowledge-base", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggleActive", id, isActive }),
+      });
+      setEntries((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, isActive } : e))
+      );
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-cos-xl border border-cos-border bg-white p-6">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h2 className="text-base font-semibold text-cos-midnight">Reply Knowledge Base</h2>
+            <p className="text-xs text-cos-slate mt-0.5">
+              These entries provide context to the AI when generating LinkedIn reply suggestions. Add product info, objection handling scripts, tone guidelines, etc.
+            </p>
+          </div>
+          <button
+            onClick={startNew}
+            className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-1.5 text-xs font-medium text-white hover:bg-cos-electric-hover transition-colors"
+          >
+            <Plus className="h-3 w-3" /> Add Entry
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {entries.length === 0 && (
+            <p className="text-sm text-cos-slate py-8 text-center">
+              No entries yet. Add knowledge base entries to improve AI reply quality.
+            </p>
+          )}
+          {entries.map((entry) => {
+            const catLabel = KB_CATEGORIES.find((c) => c.key === entry.category)?.label ?? entry.category;
+            return (
+              <div
+                key={entry.id}
+                className={`rounded-cos-lg border p-4 transition-colors ${
+                  entry.isActive
+                    ? "border-cos-border hover:bg-cos-cloud/30"
+                    : "border-cos-border/50 bg-cos-cloud/20 opacity-60"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="rounded-full bg-cos-electric/10 px-2 py-0.5 text-[10px] font-medium text-cos-electric">
+                        {catLabel}
+                      </span>
+                      <h3 className="text-sm font-medium text-cos-midnight">{entry.title}</h3>
+                    </div>
+                    <p className="text-xs text-cos-slate leading-relaxed line-clamp-3">
+                      {entry.content}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => toggleActive(entry.id, !entry.isActive)}
+                      className="text-cos-slate hover:text-cos-midnight transition-colors"
+                      title={entry.isActive ? "Disable" : "Enable"}
+                    >
+                      {entry.isActive ? (
+                        <ToggleRight className="h-5 w-5 text-cos-electric" />
+                      ) : (
+                        <ToggleLeft className="h-5 w-5" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => startEdit(entry)}
+                      className="text-cos-slate hover:text-cos-electric transition-colors"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => deleteEntry(entry.id)}
+                      className="text-cos-slate-dim hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Add/Edit Form */}
+        {(isNew || editing) && (
+          <div className="mt-4 rounded-cos-lg border border-cos-electric/30 bg-cos-electric/5 p-4">
+            <h3 className="text-sm font-semibold text-cos-midnight mb-3">
+              {editing ? `Edit: ${editing.title}` : "New Entry"}
+            </h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">Category</label>
+                  <select
+                    value={form.category}
+                    onChange={(e) => setForm({ ...form, category: e.target.value })}
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-1.5 text-sm focus:border-cos-electric focus:outline-none"
+                  >
+                    {KB_CATEGORIES.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">Title</label>
+                  <input
+                    type="text"
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    placeholder="e.g. How to handle pricing questions"
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-1.5 text-sm focus:border-cos-electric focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-cos-slate mb-1 block">Content</label>
+                <textarea
+                  value={form.content}
+                  onChange={(e) => setForm({ ...form, content: e.target.value })}
+                  rows={4}
+                  placeholder="Write the knowledge, talking points, or guidelines the AI should use when generating replies..."
+                  className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                onClick={saveEntry}
+                disabled={saving || !form.title.trim() || !form.content.trim()}
+                className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-4 py-1.5 text-xs font-medium text-white hover:bg-cos-electric-hover disabled:opacity-50 transition-colors"
+              >
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                {editing ? "Update" : "Create"}
+              </button>
+              <button
+                onClick={() => {
+                  setIsNew(false);
+                  setEditing(null);
+                }}
+                className="rounded-cos-lg border border-cos-border px-4 py-1.5 text-xs font-medium text-cos-slate hover:text-cos-midnight transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

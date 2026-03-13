@@ -2008,6 +2008,19 @@ export const acqDealSources = pgTable("acq_deal_sources", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ─── Reply Knowledge Base (AI context for auto-reply generation) ─────────────
+
+export const replyKnowledgeBase = pgTable("reply_knowledge_base", {
+  id: text("id").primaryKey(),
+  category: text("category").notNull(), // product_info | objection_handling | pricing | tone_guide | company_info | custom
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  displayOrder: integer("display_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const acqInstantlyReplyWatermarks = pgTable("acq_instantly_reply_watermarks", {
   id: text("id").primaryKey(),
   campaignId: text("campaign_id").notNull(),

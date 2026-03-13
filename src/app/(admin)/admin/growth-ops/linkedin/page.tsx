@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   MessageSquare, Send, Loader2, Search, X, PenSquare,
-  Zap, AlertCircle,
+  Zap, AlertCircle, Sparkles, Check, Copy, Pencil, ChevronRight,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -331,6 +331,11 @@ function LinkedInUniboxInner() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [showNewMessage, setShowNewMessage] = useState(false);
+  const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [sendingSequence, setSendingSequence] = useState(false);
+  const [sentCount, setSentCount] = useState(0);
+  const [editingSuggestion, setEditingSuggestion] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const selectedConvo = conversations.find((c) => c.chatId === selectedChatId) ?? null;
@@ -467,6 +472,8 @@ function LinkedInUniboxInner() {
 
   function selectChat(chatId: string) {
     setSelectedChatId(chatId);
+    setSuggestedReplies([]);
+    setEditingSuggestion(null);
     updateUrl(selectedAccountId, chatId);
   }
 
@@ -496,6 +503,70 @@ function LinkedInUniboxInner() {
     setSending(false);
     await loadMessages(selectedChatId);
     // Refresh usage for single-account view
+    if (!isAllAccounts) {
+      fetch(`/api/admin/growth-ops/unipile?action=getUsage&accountId=${acctId}`)
+        .then((r) => r.json()).then(setUsage).catch(() => {});
+    }
+  }
+
+  async function suggestReply() {
+    if (!selectedConvo || messages.length === 0) return;
+    setSuggestLoading(true);
+    setSuggestedReplies([]);
+    setEditingSuggestion(null);
+    setSentCount(0);
+    try {
+      const d = await fetch("/api/admin/growth-ops/reply-suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          participantName: selectedConvo.participantName,
+          participantHeadline: selectedConvo.participantHeadline,
+          recentMessages: messages.map((m) => ({ text: m.text, is_sender: m.is_sender })),
+          accountName: convoAccountName || undefined,
+        }),
+      }).then((r) => r.json());
+      if (d.messages?.length) {
+        setSuggestedReplies(d.messages);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setSuggestLoading(false);
+    }
+  }
+
+  async function sendSuggestedSequence() {
+    if (!selectedChatId || suggestedReplies.length === 0) return;
+    const acctId = selectedConvo?._accountId || activeAccountId;
+    if (!acctId) return;
+    setSendingSequence(true);
+    setSentCount(0);
+
+    for (let i = 0; i < suggestedReplies.length; i++) {
+      const text = suggestedReplies[i];
+      if (!text.trim()) continue;
+      await fetch("/api/admin/growth-ops/unipile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "sendMessage",
+          chatId: selectedChatId,
+          accountId: acctId,
+          text,
+        }),
+      });
+      setSentCount(i + 1);
+      // Small delay between messages to look natural
+      if (i < suggestedReplies.length - 1) {
+        await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+      }
+    }
+
+    setSendingSequence(false);
+    setSuggestedReplies([]);
+    setSentCount(0);
+    await loadMessages(selectedChatId);
     if (!isAllAccounts) {
       fetch(`/api/admin/growth-ops/unipile?action=getUsage&accountId=${acctId}`)
         .then((r) => r.json()).then(setUsage).catch(() => {});
@@ -793,6 +864,105 @@ function LinkedInUniboxInner() {
                 <div ref={bottomRef} />
               </div>
 
+              {/* AI Suggested Replies */}
+              {suggestedReplies.length > 0 && (
+                <div className="border-t border-cos-electric/20 bg-cos-electric/5 px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-cos-electric" />
+                      <span className="text-xs font-medium text-cos-electric">
+                        Suggested reply ({suggestedReplies.length} messages)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {sendingSequence ? (
+                        <span className="text-[10px] text-cos-electric">
+                          Sending {sentCount}/{suggestedReplies.length}...
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => { setSuggestedReplies([]); setEditingSuggestion(null); }}
+                            className="text-[10px] text-cos-slate hover:text-cos-midnight transition-colors"
+                          >
+                            Dismiss
+                          </button>
+                          <button
+                            onClick={suggestReply}
+                            className="text-[10px] text-cos-electric hover:underline"
+                          >
+                            Regenerate
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    {suggestedReplies.map((text, i) => (
+                      <div key={i} className="flex items-start gap-2 group">
+                        <ChevronRight className="h-3 w-3 text-cos-electric/50 mt-1.5 shrink-0" />
+                        {editingSuggestion === i ? (
+                          <div className="flex-1 flex gap-1.5">
+                            <input
+                              autoFocus
+                              value={text}
+                              onChange={(e) => {
+                                const updated = [...suggestedReplies];
+                                updated[i] = e.target.value;
+                                setSuggestedReplies(updated);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") setEditingSuggestion(null);
+                                if (e.key === "Escape") setEditingSuggestion(null);
+                              }}
+                              className="flex-1 rounded-cos-md border border-cos-electric/30 bg-white px-2 py-1 text-xs focus:border-cos-electric focus:outline-none"
+                            />
+                            <button
+                              onClick={() => setEditingSuggestion(null)}
+                              className="text-cos-electric"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex items-start gap-1.5">
+                            <p className="flex-1 text-xs text-cos-midnight leading-relaxed">{text}</p>
+                            <button
+                              onClick={() => setEditingSuggestion(i)}
+                              className="opacity-0 group-hover:opacity-100 text-cos-slate hover:text-cos-electric transition-all shrink-0"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      onClick={sendSuggestedSequence}
+                      disabled={sendingSequence}
+                      className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3.5 py-1.5 text-xs font-medium text-white hover:bg-cos-electric-hover disabled:opacity-50 transition-colors"
+                    >
+                      {sendingSequence ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Send className="h-3.5 w-3.5" />
+                      )}
+                      Send all {suggestedReplies.length} messages
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(suggestedReplies.join("\n\n"));
+                      }}
+                      className="flex items-center gap-1 rounded-cos-lg border border-cos-border px-3 py-1.5 text-xs text-cos-slate hover:text-cos-midnight transition-colors"
+                    >
+                      <Copy className="h-3 w-3" /> Copy all
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Reply input */}
               <div className="border-t border-cos-border px-4 py-3">
                 {isAllAccounts && convoAccountName && (
@@ -808,6 +978,14 @@ function LinkedInUniboxInner() {
                     placeholder="Type a reply&hellip;"
                     className="flex-1 rounded-cos-lg border border-cos-border bg-cos-surface px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
                   />
+                  <button
+                    onClick={suggestReply}
+                    disabled={suggestLoading || messages.length === 0}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-cos-electric/30 text-cos-electric disabled:opacity-30 hover:bg-cos-electric/10 transition-colors"
+                    title="AI Suggest Reply"
+                  >
+                    {suggestLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  </button>
                   <button
                     onClick={sendReply}
                     disabled={sending || !messageText.trim()}
