@@ -225,7 +225,10 @@ export async function GET(req: NextRequest) {
     // Sample: what does a firm's enrichment_data look like?
     const sampleEnrichment = await db.execute(sql`
       SELECT id, name,
-        CASE WHEN enrichment_data IS NOT NULL THEN jsonb_object_keys(enrichment_data) END as top_keys
+        jsonb_typeof(enrichment_data) as data_type,
+        CASE WHEN jsonb_typeof(enrichment_data) = 'object'
+          THEN (SELECT jsonb_agg(k) FROM jsonb_object_keys(enrichment_data) k)
+          ELSE NULL END as top_keys
       FROM service_firms
       WHERE enrichment_data IS NOT NULL
       LIMIT 3
