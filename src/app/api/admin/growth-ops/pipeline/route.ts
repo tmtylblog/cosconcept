@@ -301,24 +301,81 @@ async function seedStagesFromHubSpot() {
     seeded++;
   }
 
-  // Backfill stage_id on existing deals
-  await backfillStageIds();
+  // Build alias map for old pipeline stages → closest Self Sign Up stage
+  const seededStages = await db.select().from(acqPipelineStages).where(eq(acqPipelineStages.pipelineId, "default"));
+  const aliasMap = new Map<string, string>(); // old hubspot_stage_id → COS stage id
 
-  return { seeded, pipeline: pipeline.label };
+  for (const otherPipeline of pipelines.results) {
+    if (otherPipeline.id === pipeline.id) continue; // skip the primary pipeline
+    for (const oldStage of otherPipeline.stages ?? []) {
+      const match = findClosestStage(oldStage.label, seededStages);
+      if (match) aliasMap.set(oldStage.id, match.id);
+    }
+  }
+
+  // Backfill stage_id on existing deals
+  await backfillStageIds(aliasMap);
+
+  return { seeded, pipeline: pipeline.label, aliases: aliasMap.size };
+}
+
+/** Find the closest COS stage for an old pipeline stage label */
+function findClosestStage(
+  oldLabel: string,
+  cosStages: { id: string; label: string; displayOrder: number; isClosedWon: boolean; isClosedLost: boolean }[]
+) {
+  const norm = oldLabel.toLowerCase().trim();
+
+  // Direct label match
+  const exact = cosStages.find((s) => s.label.toLowerCase().trim() === norm);
+  if (exact) return exact;
+
+  // Keyword mapping: common stage names → logical equivalent
+  const keywords: [RegExp, string[]][] = [
+    [/prospect|lead|new|awareness/i, ["prospect", "lead"]],
+    [/contact|outreach|connect|approach/i, ["contacted", "outreach"]],
+    [/qualif|discovery|evaluate/i, ["qualified", "discovery"]],
+    [/demo|present|meeting|call/i, ["demo", "presentation", "meeting"]],
+    [/proposal|negotiat|quote|offer/i, ["proposal", "negotiation"]],
+    [/customer|closed.?won|won|deal.?won|convert/i, ["customer", "closed won"]],
+    [/lost|closed.?lost|dead|reject/i, ["lost", "closed lost"]],
+  ];
+
+  for (const [pattern, matchLabels] of keywords) {
+    if (pattern.test(norm)) {
+      const found = cosStages.find((s) =>
+        matchLabels.some((ml) => s.label.toLowerCase().includes(ml))
+      );
+      if (found) return found;
+    }
+  }
+
+  // Fallback: closed stages map to closed, everything else → first open stage
+  if (/close|won|lost|dead/i.test(norm)) {
+    return cosStages.find((s) => s.isClosedWon || s.isClosedLost) ?? cosStages[0];
+  }
+
+  // Default to first stage (Prospect)
+  const sorted = [...cosStages].sort((a, b) => a.displayOrder - b.displayOrder);
+  return sorted[0] ?? null;
 }
 
 /** Backfill stage_id on acq_deals that have hubspot_stage_id but no stage_id */
-async function backfillStageIds() {
+async function backfillStageIds(aliasMap?: Map<string, string>) {
   const stages = await db.select().from(acqPipelineStages);
+  // Direct hubspot_stage_id → COS stage id
   const stageMap = new Map(stages.filter((s) => s.hubspotStageId).map((s) => [s.hubspotStageId!, s.id]));
 
   const deals = await db.select({ id: acqDeals.id, hubspotStageId: acqDeals.hubspotStageId }).from(acqDeals);
 
   for (const deal of deals) {
-    if (deal.hubspotStageId && stageMap.has(deal.hubspotStageId)) {
+    if (!deal.hubspotStageId) continue;
+    // Try direct match first, then alias
+    const cosStageId = stageMap.get(deal.hubspotStageId) ?? aliasMap?.get(deal.hubspotStageId);
+    if (cosStageId) {
       await db
         .update(acqDeals)
-        .set({ stageId: stageMap.get(deal.hubspotStageId)! })
+        .set({ stageId: cosStageId })
         .where(eq(acqDeals.id, deal.id));
     }
   }
