@@ -30,6 +30,12 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Names that LinkedIn/Unipile returns for thread types — not real participant names */
+const GENERIC_CHAT_NAMES = new Set([
+  "referrals", "referral", "inmail", "sponsored", "linkedin member",
+  "linkedin user", "unknown",
+]);
+
 // ── Background: persist messages to local cache ──────────────────────────────
 
 async function persistMessages(
@@ -76,7 +82,7 @@ async function enrichConversations(
           await db
             .update(growthOpsConversations)
             .set({
-              participantName: name || undefined,
+              ...(name ? { participantName: name } : {}),
               participantHeadline: profile.headline ?? null,
               participantProfileUrl: profile.public_identifier
                 ? `https://linkedin.com/in/${profile.public_identifier}`
@@ -134,7 +140,8 @@ export async function GET(req: NextRequest) {
           const other = chat.attendees?.find((a) => !a.is_self);
           const participantProviderId =
             other?.attendee_provider_id ?? chat.attendee_provider_id ?? "";
-          const participantName = other?.attendee_name ?? chat.name ?? "";
+          const rawName = other?.attendee_name ?? chat.name ?? "";
+          const participantName = GENERIC_CHAT_NAMES.has(rawName.toLowerCase().trim()) ? "" : rawName;
           const isInmail = chat.content_type === "inmail";
           const lastText = chat.last_message?.text ?? null;
           const lastAt = chat.timestamp ? new Date(chat.timestamp) : null;
@@ -171,6 +178,120 @@ export async function GET(req: NextRequest) {
       }
 
       return NextResponse.json({ conversations: convos });
+    }
+
+    // ── syncConversations — re-fetch from Unipile and update DB ────────────
+    if (action === "syncConversations") {
+      const accountId = req.nextUrl.searchParams.get("accountId") ?? "";
+      const accountRow = await db
+        .select()
+        .from(growthOpsLinkedInAccounts)
+        .where(eq(growthOpsLinkedInAccounts.unipileAccountId, accountId))
+        .limit(1);
+      if (!accountRow.length) return NextResponse.json({ conversations: [] });
+      const acct = accountRow[0];
+
+      // Fetch live conversations from Unipile
+      const live = await UnipileClient.listChats(accountId, { limit: 50 });
+      const items = live.items ?? [];
+
+      for (const chat of items) {
+        const other = chat.attendees?.find((a) => !a.is_self);
+        const participantProviderId =
+          other?.attendee_provider_id ?? chat.attendee_provider_id ?? "";
+        const rawName = other?.attendee_name ?? chat.name ?? "";
+        const participantName = GENERIC_CHAT_NAMES.has(rawName.toLowerCase().trim()) ? "" : rawName;
+        const isInmail = chat.content_type === "inmail";
+        const lastText = chat.last_message?.text ?? null;
+        const lastAt = chat.timestamp ? new Date(chat.timestamp) : null;
+
+        // Upsert: insert new or update existing conversations
+        const existing = await db
+          .select({ id: growthOpsConversations.id, participantName: growthOpsConversations.participantName })
+          .from(growthOpsConversations)
+          .where(
+            and(
+              eq(growthOpsConversations.linkedinAccountId, acct.id),
+              eq(growthOpsConversations.chatId, chat.id),
+            ),
+          )
+          .limit(1);
+
+        if (existing.length) {
+          // Update last message + fix bad names
+          const updates: Record<string, unknown> = {
+            lastMessagePreview: lastText,
+            lastMessageAt: lastAt,
+            isInmailThread: isInmail,
+            updatedAt: new Date(),
+          };
+          // Fix name if current name is empty, a generic label, or a raw ID-like string
+          const curName = existing[0].participantName ?? "";
+          const nameIsBad = !curName
+            || GENERIC_CHAT_NAMES.has(curName.toLowerCase().trim())
+            || /^[a-zA-Z0-9_-]{15,}$/.test(curName); // looks like a raw ID
+          if (nameIsBad && participantName) {
+            updates.participantName = participantName;
+          }
+          if (participantProviderId) {
+            updates.participantProviderId = participantProviderId;
+          }
+          await db
+            .update(growthOpsConversations)
+            .set(updates)
+            .where(eq(growthOpsConversations.id, existing[0].id));
+        } else {
+          await db
+            .insert(growthOpsConversations)
+            .values({
+              id: randomId(),
+              linkedinAccountId: acct.id,
+              chatId: chat.id,
+              participantProviderId,
+              participantName,
+              lastMessageAt: lastAt,
+              lastMessagePreview: lastText,
+              isInmailThread: isInmail,
+            })
+            .onConflictDoNothing();
+        }
+      }
+
+      // Re-read all conversations
+      const convos = await db
+        .select()
+        .from(growthOpsConversations)
+        .where(eq(growthOpsConversations.linkedinAccountId, acct.id))
+        .orderBy(desc(growthOpsConversations.lastMessageAt))
+        .limit(50);
+
+      // Enrich any that still have bad names or missing avatars
+      const toEnrich = convos
+        .filter((c) => {
+          if (!c.participantProviderId) return false;
+          const name = c.participantName ?? "";
+          const nameIsBad = !name
+            || GENERIC_CHAT_NAMES.has(name.toLowerCase().trim())
+            || /^[a-zA-Z0-9_-]{15,}$/.test(name);
+          return nameIsBad || !c.participantAvatarUrl;
+        })
+        .map((c) => ({ id: c.id, participantProviderId: c.participantProviderId }));
+
+      if (toEnrich.length > 0) {
+        // Run enrichment inline (not background) so response has updated names
+        await enrichConversations(toEnrich, accountId);
+
+        // Re-read after enrichment
+        const updated = await db
+          .select()
+          .from(growthOpsConversations)
+          .where(eq(growthOpsConversations.linkedinAccountId, acct.id))
+          .orderBy(desc(growthOpsConversations.lastMessageAt))
+          .limit(50);
+        return NextResponse.json({ conversations: updated, synced: items.length, enriched: toEnrich.length });
+      }
+
+      return NextResponse.json({ conversations: convos, synced: items.length, enriched: 0 });
     }
 
     // ── getMessages — always live, 3-tier direction, persist in BG ────────
