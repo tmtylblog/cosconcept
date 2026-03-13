@@ -14,8 +14,14 @@ import { randomUUID } from 'crypto';
 // Load env
 const env = readFileSync('.env.local', 'utf8');
 for (const line of env.split('\n')) {
-  const [key, ...rest] = line.split('=');
-  if (key && rest.length) process.env[key.trim()] = rest.join('=').trim();
+  const match = line.match(/^([^=]+)=(.*)/);
+  if (match) {
+    let val = match[2].trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    process.env[match[1].trim()] = val;
+  }
 }
 
 const sql = neon(process.env.DATABASE_URL);
