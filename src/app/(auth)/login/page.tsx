@@ -2,10 +2,21 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { signIn, signUp } from "@/lib/auth-client";
+import { signIn, signUp, authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { isPersonalEmail, CORPORATE_EMAIL_ERROR } from "@/lib/email-validation";
 import { ArrowLeft, Loader2 } from "lucide-react";
+
+const ADMIN_ROLES = ["superadmin", "admin", "growth_ops", "customer_success"];
+
+async function getPostLoginRedirect(): Promise<string> {
+  try {
+    const { data: session } = await authClient.getSession();
+    const role = (session?.user as { role?: string } | undefined)?.role ?? "user";
+    if (ADMIN_ROLES.includes(role)) return "/admin";
+  } catch { /* fall through */ }
+  return "/dashboard";
+}
 
 type View = "login" | "signup" | "forgot" | "forgot-sent";
 
@@ -81,7 +92,7 @@ export default function LoginPage() {
         }
         setStatus("Signed in! Redirecting...");
       }
-      window.location.href = "/dashboard";
+      window.location.href = await getPostLoginRedirect();
     } catch (err) {
       setError("Error: " + (err instanceof Error ? err.message : String(err)));
       setStatus("");

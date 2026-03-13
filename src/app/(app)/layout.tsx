@@ -98,19 +98,20 @@ function AppLayoutInner({
     ownerEmailMasked: string;
   } | null>(null);
 
-  // ─── Internal team redirect ─────────────────────────────────────────────────
-  // @joincollectiveos.com users are internal team — send straight to /admin,
-  // skip customer onboarding entirely.
+  // ─── Admin user redirect ────────────────────────────────────────────────────
+  // Admin users (any admin role) are sent to /admin — they should not be customers.
   // Only redirect from root/dashboard — allow access to specific feature pages
   // (e.g. /settings/network) so internal team can test app features.
+  const ADMIN_ROLES = ["superadmin", "admin", "growth_ops", "customer_success"];
   useEffect(() => {
     if (!session?.user || sessionPending) return;
-    if (session.user.email?.endsWith("@joincollectiveos.com")) {
+    const userRole = (session.user as { role?: string }).role ?? "user";
+    if (ADMIN_ROLES.includes(userRole)) {
       if (pathname === "/" || pathname === "/dashboard") {
         router.replace("/admin");
       }
     }
-  }, [session?.user?.email, sessionPending, router, pathname]);
+  }, [session?.user, sessionPending, router, pathname]);
 
   const isDevMode = process.env.NODE_ENV === "development";
 
