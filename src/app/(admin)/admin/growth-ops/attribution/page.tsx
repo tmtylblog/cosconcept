@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   BarChart3, Loader2, RefreshCw, ChevronDown, ChevronRight,
   MessageCircle, Megaphone, AlertTriangle, Download, Users,
-  TrendingUp, Target, Zap, CreditCard,
+  TrendingUp, Target, Zap, CreditCard, Building2, UserSearch, Linkedin,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -13,6 +13,9 @@ import {
 
 interface ConvoSummary { participantName: string; lastMessageAt: string | null; messageCount: number }
 interface CampaignActivity { campaignName: string; inviteStatus: string; sentAt: string | null; acceptedAt: string | null }
+
+interface CompanyMatchDetail { participantName: string; headline: string; conversationId: string }
+interface NameFuzzyDetail { participantName: string; headline: string; profileUrl: string; conversationId: string }
 
 interface AttributionRow {
   id: string;
@@ -23,6 +26,11 @@ interface AttributionRow {
   linkedinCampaignId: string | null;
   hasLinkedinOrganic: boolean;
   hasLinkedinCampaign: boolean;
+  hasCompanyLinkedinMatch: boolean;
+  companyLinkedinDetails: CompanyMatchDetail[] | null;
+  hasNameFuzzyMatch: boolean;
+  nameFuzzyDetails: NameFuzzyDetail[] | null;
+  pdlLookupStatus: string | null;
   matchedAt: string | null;
   createdAt: string;
   userName: string | null;
@@ -53,7 +61,7 @@ interface Summary {
   matched: number;
   matchRate: number;
   byMethod: Record<string, number>;
-  byChannel: { instantly: number; linkedinCampaign: number; linkedinOrganic: number; direct: number; unattributed: number };
+  byChannel: { instantly: number; linkedinCampaign: number; linkedinOrganic: number; companyLinkedin: number; nameFuzzy: number; direct: number; unattributed: number };
   conversion: { signedUp: number; onboarded: number; paying: number; conversionRate: number };
   avgTimeToConversion: number | null;
 }
@@ -72,11 +80,14 @@ interface Funnel {
    ═══════════════════════════════════════════════════════════════════════ */
 
 const METHOD_STYLE: Record<string, { label: string; bg: string; text: string }> = {
-  email_exact:  { label: "Email exact",   bg: "bg-emerald-50",        text: "text-emerald-700" },
-  instantly:    { label: "Instantly",      bg: "bg-cos-signal/10",     text: "text-cos-signal" },
-  linkedin_url: { label: "LinkedIn URL",  bg: "bg-cos-electric/10",   text: "text-cos-electric" },
-  name_domain:  { label: "Name + domain", bg: "bg-amber-50",          text: "text-amber-700" },
-  none:         { label: "Unattributed",  bg: "bg-cos-cloud",         text: "text-cos-slate-dim" },
+  email_exact:      { label: "Email exact",      bg: "bg-emerald-50",        text: "text-emerald-700" },
+  instantly:        { label: "Instantly",         bg: "bg-cos-signal/10",     text: "text-cos-signal" },
+  linkedin_url:     { label: "LinkedIn URL",     bg: "bg-cos-electric/10",   text: "text-cos-electric" },
+  linkedin_pdl:     { label: "LinkedIn (PDL)",   bg: "bg-indigo-50",         text: "text-indigo-700" },
+  name_domain:      { label: "Name + domain",    bg: "bg-amber-50",          text: "text-amber-700" },
+  name_fuzzy:       { label: "Name match",       bg: "bg-orange-50",         text: "text-orange-700" },
+  company_linkedin: { label: "2nd Degree",       bg: "bg-violet-50",         text: "text-violet-700" },
+  none:             { label: "Unattributed",     bg: "bg-cos-cloud",         text: "text-cos-slate-dim" },
 };
 
 const JOURNEY_STAGES = [
@@ -86,11 +97,12 @@ const JOURNEY_STAGES = [
   { key: "paying", label: "Paying", color: "bg-emerald-500" },
 ];
 
-type TabKey = "all" | "linkedin_organic" | "linkedin_campaign" | "instantly" | "unattributed" | "converted";
+type TabKey = "all" | "linkedin_organic" | "linkedin_campaign" | "company_match" | "instantly" | "unattributed" | "converted";
 const TABS: { key: TabKey; label: string }[] = [
   { key: "all", label: "All Users" },
   { key: "linkedin_organic", label: "LinkedIn Organic" },
   { key: "linkedin_campaign", label: "LinkedIn Campaign" },
+  { key: "company_match", label: "2nd Degree" },
   { key: "instantly", label: "Instantly" },
   { key: "unattributed", label: "Unattributed" },
   { key: "converted", label: "Converted" },
@@ -234,7 +246,7 @@ function SummaryCards({ summary }: { summary: Summary }) {
     { label: "Via Instantly", value: summary.byChannel.instantly, icon: Zap, color: "text-cos-signal" },
     { label: "Via LinkedIn Campaign", value: summary.byChannel.linkedinCampaign, icon: Megaphone, color: "text-cos-electric" },
     { label: "Via LinkedIn Organic", value: summary.byChannel.linkedinOrganic, icon: MessageCircle, color: "text-blue-600" },
-    { label: "Conversion Rate", value: `${summary.conversion.conversionRate}%`, icon: CreditCard, color: "text-emerald-600" },
+    { label: "2nd Degree (Company)", value: summary.byChannel.companyLinkedin, icon: Building2, color: "text-violet-600" },
     { label: "Avg Days to Convert", value: summary.avgTimeToConversion ?? "&mdash;", icon: TrendingUp, color: "text-amber-600" },
     { label: "Active Paying", value: summary.conversion.paying, icon: CreditCard, color: "text-emerald-600" },
   ];
@@ -334,7 +346,7 @@ function AttributionTableRow({ row, expanded, onToggle }: { row: AttributionRow;
         </td>
         {/* LinkedIn */}
         <td className="px-4 py-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {organicCount > 0 && (
               <span className="inline-flex items-center gap-1 rounded-cos-pill bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
                 <MessageCircle className="h-3 w-3" /> {organicCount}
@@ -345,7 +357,24 @@ function AttributionTableRow({ row, expanded, onToggle }: { row: AttributionRow;
                 <Megaphone className="h-3 w-3" /> {campaignCount}
               </span>
             )}
-            {organicCount === 0 && campaignCount === 0 && <span className="text-[10px] text-cos-slate-dim">&mdash;</span>}
+            {row.hasCompanyLinkedinMatch && (
+              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700" title="2nd degree: company match">
+                <Building2 className="h-3 w-3" /> 2nd°
+              </span>
+            )}
+            {row.hasNameFuzzyMatch && (
+              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700" title="Matched by name">
+                <UserSearch className="h-3 w-3" /> Name
+              </span>
+            )}
+            {row.pdlLookupStatus === "found" && (
+              <span className="inline-flex items-center gap-0.5 rounded-cos-pill bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600" title="LinkedIn URL found via PDL">
+                <Linkedin className="h-2.5 w-2.5" />
+              </span>
+            )}
+            {organicCount === 0 && campaignCount === 0 && !row.hasCompanyLinkedinMatch && !row.hasNameFuzzyMatch && (
+              <span className="text-[10px] text-cos-slate-dim">&mdash;</span>
+            )}
           </div>
         </td>
         {/* Journey */}
@@ -417,6 +446,30 @@ function ExpandedRow({ row }: { row: AttributionRow }) {
 
   if (row.instantlyCampaignName) {
     events.push({ date: row.matchedAt ?? row.createdAt, label: `Instantly campaign: ${row.instantlyCampaignName}`, icon: "zap", color: "text-cos-signal" });
+  }
+
+  // Company-level matches
+  if (row.companyLinkedinDetails) {
+    for (const cm of row.companyLinkedinDetails) {
+      events.push({
+        date: row.createdAt, // best we have
+        label: `2nd degree: ${cm.participantName} (${cm.headline})`,
+        icon: "building",
+        color: "text-violet-600",
+      });
+    }
+  }
+
+  // Name fuzzy matches
+  if (row.nameFuzzyDetails) {
+    for (const nf of row.nameFuzzyDetails) {
+      events.push({
+        date: row.createdAt,
+        label: `Name match: ${nf.participantName} (${nf.headline})`,
+        icon: "search",
+        color: "text-orange-600",
+      });
+    }
   }
 
   events.push({ date: row.createdAt, label: "Signed up on COS", icon: "user", color: "text-cos-electric" });
@@ -510,10 +563,12 @@ function filterRows(rows: AttributionRow[], tab: TabKey): AttributionRow[] {
       return rows.filter((r) => r.hasLinkedinOrganic || r.linkedinOrganicConversations.length > 0);
     case "linkedin_campaign":
       return rows.filter((r) => r.hasLinkedinCampaign || r.linkedinCampaignActivity.length > 0);
+    case "company_match":
+      return rows.filter((r) => r.hasCompanyLinkedinMatch || r.hasNameFuzzyMatch);
     case "instantly":
       return rows.filter((r) => r.instantlyCampaignId != null);
     case "unattributed":
-      return rows.filter((r) => r.matchMethod === "none" && !r.hasLinkedinOrganic && !r.hasLinkedinCampaign);
+      return rows.filter((r) => r.matchMethod === "none" && !r.hasLinkedinOrganic && !r.hasLinkedinCampaign && !r.hasCompanyLinkedinMatch);
     case "converted":
       return rows.filter((r) => r.subscriptionPlan != null && r.subscriptionPlan !== "free");
     default:

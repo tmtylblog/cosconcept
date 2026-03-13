@@ -1,15 +1,20 @@
 /**
  * attribution-check job handler
  *
- * Runs after a new user signs up. Attempts to attribute their signup to
- * an acquisition campaign (Instantly email campaign or LinkedIn invite campaign).
+ * Runs after a new user signs up (account owners only — not experts).
+ * Attempts to attribute their signup to an acquisition campaign
+ * (Instantly email, LinkedIn invite, LinkedIn organic, or company-level match).
  *
  * Attribution cascade:
+ *   0. PDL LinkedIn URL lookup → enrichPerson({ email }) to find LinkedIn URL
  *   1. Email exact match → acq_contacts.email
  *   2. Instantly lead match → POST /api/v2/leads/list by email
  *   3. LinkedIn URL match → growth_ops_invite_targets.linkedin_url
  *   4. Name + domain fallback → acq_contacts first_name + email domain
- *   5. Record "none" if no match found
+ *  4b. Company/2nd-degree match → growth_ops_conversations by headline/company
+ *  4c. Name fuzzy match → growth_ops_conversations by participant_name
+ *   5. Record attribution event
+ *   6. Record ALL touchpoints (multi-touch)
  *
  * After matching, pushes cos_user_id back to HubSpot if a contact is found.
  *
@@ -21,6 +26,7 @@ import {
   attributionEvents,
   attributionTouchpoints,
   acqContacts,
+  acqCompanies,
   acqDeals,
   growthOpsInviteTargets,
   growthOpsInviteCampaigns,
@@ -31,6 +37,7 @@ import {
 } from "@/lib/db/schema";
 import { HubSpotClient } from "@/lib/growth-ops/HubSpotClient";
 import { InstantlyClient } from "@/lib/growth-ops/InstantlyClient";
+import { enrichPerson } from "@/lib/enrichment/pdl";
 import { eq, and, ilike, sql } from "drizzle-orm";
 
 function randomId() {
@@ -48,8 +55,9 @@ type AttributionPayload = {
 export async function handleAttributionCheck(
   payload: Record<string, unknown>
 ): Promise<unknown> {
-  const { userId, email, linkedinUrl, firstName } =
+  const { userId, email, firstName, lastName } =
     payload as AttributionPayload;
+  let { linkedinUrl } = payload as AttributionPayload;
 
   if (!userId || !email) {
     return { skipped: true, reason: "Missing userId or email" };
@@ -75,6 +83,67 @@ export async function handleAttributionCheck(
   let linkedinCampaignId: string | null = null;
   let linkedinInviteTargetId: string | null = null;
   let matchMethod = "none";
+  let pdlLookupStatus: string | null = null;
+
+  // Company/2nd-degree + name fuzzy results
+  let hasCompanyLinkedinMatch = false;
+  let companyLinkedinDetails: { participantName: string; headline: string; conversationId: string }[] = [];
+  let hasNameFuzzyMatch = false;
+  let nameFuzzyDetails: { participantName: string; headline: string; profileUrl: string; conversationId: string }[] = [];
+
+  // ── Step 0: PDL LinkedIn URL Lookup ─────────────────────────────────────
+  // Account owners only — uses PDL enrichPerson({ email }) to discover their
+  // LinkedIn URL. Does NOT consume user enrichment credits (platform cost).
+  if (!linkedinUrl) {
+    // Check if we've already tried PDL for this user
+    const [userRow] = await db
+      .select({
+        linkedinUrl: users.linkedinUrl,
+        pdlLinkedinLookedUp: users.pdlLinkedinLookedUp,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (userRow?.linkedinUrl) {
+      // User already has a LinkedIn URL (set manually or from previous lookup)
+      linkedinUrl = userRow.linkedinUrl;
+      pdlLookupStatus = "found";
+    } else if (!userRow?.pdlLinkedinLookedUp) {
+      // PDL hasn't been queried yet — try now
+      try {
+        const pdlPerson = await enrichPerson({ email: normalizedEmail });
+        if (pdlPerson?.linkedinUrl) {
+          linkedinUrl = pdlPerson.linkedinUrl;
+          pdlLookupStatus = "found";
+          // Save to user record
+          await db
+            .update(users)
+            .set({
+              linkedinUrl: pdlPerson.linkedinUrl,
+              pdlLinkedinLookedUp: true,
+              updatedAt: now,
+            })
+            .where(eq(users.id, userId));
+          console.log(`[Attribution] PDL found LinkedIn for ${normalizedEmail}: ${pdlPerson.linkedinUrl}`);
+        } else {
+          pdlLookupStatus = "not_found";
+          await db
+            .update(users)
+            .set({ pdlLinkedinLookedUp: true, updatedAt: now })
+            .where(eq(users.id, userId));
+          console.log(`[Attribution] PDL no match for ${normalizedEmail}`);
+        }
+      } catch (err) {
+        // PDL failure — do NOT mark as looked up (allow retry next time)
+        pdlLookupStatus = "error";
+        console.error(`[Attribution] PDL lookup error for ${normalizedEmail}:`, err);
+      }
+    } else {
+      // Already tried PDL before and didn't find anything
+      pdlLookupStatus = "not_found";
+    }
+  }
 
   // ── Step 1: Email exact match in acq_contacts ────────────────────────────
   const contactRows = await db
@@ -183,7 +252,8 @@ export async function handleAttributionCheck(
     if (targetRows.length > 0) {
       const target = targetRows[0];
       linkedinInviteTargetId = target.id;
-      matchMethod = "linkedin_url";
+      // Distinguish between user-provided LinkedIn URL and PDL-discovered one
+      matchMethod = pdlLookupStatus === "found" ? "linkedin_pdl" : "linkedin_url";
 
       // Find which campaign this target was part of
       const queueRow = await db
@@ -263,6 +333,99 @@ export async function handleAttributionCheck(
     }
   }
 
+  // ── Step 4b: Company/2nd-degree LinkedIn match ──────────────────────────
+  // Runs regardless of 1st-degree match — supplementary data.
+  // Checks if anyone at the same company had LinkedIn conversations with us.
+  try {
+    const domain = normalizedEmail.split("@")[1];
+    if (domain) {
+      // Try to find company name from acq_companies
+      const [company] = await db
+        .select({ name: acqCompanies.name })
+        .from(acqCompanies)
+        .where(eq(acqCompanies.domain, domain))
+        .limit(1);
+
+      // Derive company name from domain if not in acq_companies
+      // e.g., "acme.com" → "acme", "smith-consulting.co.uk" → "smith-consulting"
+      const companyName = company?.name ?? domain.split(".")[0];
+
+      if (companyName && companyName.length > 2) {
+        // Search conversations by headline containing company name
+        const companyConvos = await db
+          .select({
+            id: growthOpsConversations.id,
+            participantName: growthOpsConversations.participantName,
+            participantHeadline: growthOpsConversations.participantHeadline,
+          })
+          .from(growthOpsConversations)
+          .where(ilike(growthOpsConversations.participantHeadline, `%${companyName}%`))
+          .limit(10);
+
+        if (companyConvos.length > 0) {
+          hasCompanyLinkedinMatch = true;
+          companyLinkedinDetails = companyConvos.map((c) => ({
+            participantName: c.participantName ?? "",
+            headline: c.participantHeadline ?? "",
+            conversationId: c.id,
+          }));
+
+          if (matchMethod === "none") {
+            matchMethod = "company_linkedin";
+          }
+        }
+      }
+    }
+  } catch {
+    // Company matching failure is non-critical
+  }
+
+  // ── Step 4c: Name fuzzy match ───────────────────────────────────────────
+  // Only if LinkedIn URL is still null AND no 1st-degree match found.
+  if (!linkedinUrl && matchMethod === "none" && firstName) {
+    try {
+      const fullName = [firstName, lastName].filter(Boolean).join(" ");
+      if (fullName.length > 2) {
+        const nameConvos = await db
+          .select({
+            id: growthOpsConversations.id,
+            participantName: growthOpsConversations.participantName,
+            participantHeadline: growthOpsConversations.participantHeadline,
+            participantProfileUrl: growthOpsConversations.participantProfileUrl,
+          })
+          .from(growthOpsConversations)
+          .where(sql`LOWER(${growthOpsConversations.participantName}) = LOWER(${fullName})`)
+          .limit(5);
+
+        if (nameConvos.length > 0) {
+          hasNameFuzzyMatch = true;
+          nameFuzzyDetails = nameConvos.map((c) => ({
+            participantName: c.participantName ?? "",
+            headline: c.participantHeadline ?? "",
+            profileUrl: c.participantProfileUrl ?? "",
+            conversationId: c.id,
+          }));
+          matchMethod = "name_fuzzy";
+
+          // If exactly 1 match, auto-populate LinkedIn URL (high confidence)
+          if (nameConvos.length === 1 && nameConvos[0].participantProfileUrl) {
+            linkedinUrl = nameConvos[0].participantProfileUrl;
+            await db
+              .update(users)
+              .set({
+                linkedinUrl: nameConvos[0].participantProfileUrl,
+                updatedAt: now,
+              })
+              .where(eq(users.id, userId));
+            console.log(`[Attribution] Name fuzzy matched ${fullName} → ${nameConvos[0].participantProfileUrl}`);
+          }
+        }
+      }
+    } catch {
+      // Name fuzzy matching failure is non-critical
+    }
+  }
+
   // ── Step 5: Write attribution event ─────────────────────────────────────
   await db.insert(attributionEvents).values({
     id: randomId(),
@@ -273,6 +436,11 @@ export async function handleAttributionCheck(
     linkedinCampaignId,
     linkedinInviteTargetId,
     matchMethod,
+    hasCompanyLinkedinMatch,
+    companyLinkedinDetails: companyLinkedinDetails.length > 0 ? companyLinkedinDetails : null,
+    hasNameFuzzyMatch,
+    nameFuzzyDetails: nameFuzzyDetails.length > 0 ? nameFuzzyDetails : null,
+    pdlLookupStatus,
     matchedAt: matchMethod !== "none" ? now : null,
   });
 
@@ -283,7 +451,7 @@ export async function handleAttributionCheck(
     await recordTouchpoints(userId, normalizedEmail, linkedinUrl ?? null, {
       instantlyCampaignId,
       instantlyCampaignName,
-    });
+    }, companyLinkedinDetails);
   } catch {
     // Touchpoint recording failure is non-critical — never blocks attribution
   }
@@ -294,18 +462,22 @@ export async function handleAttributionCheck(
     contactId,
     instantlyCampaignId,
     linkedinCampaignId,
+    pdlLookupStatus,
+    hasCompanyLinkedinMatch,
+    hasNameFuzzyMatch,
   };
 }
 
 /**
  * Record all touchpoints for a user across LinkedIn organic, LinkedIn campaigns,
- * and Instantly campaigns. Updates the boolean flags on attribution_events.
+ * Instantly campaigns, and company-level matches. Updates the boolean flags on attribution_events.
  */
 async function recordTouchpoints(
   userId: string,
   email: string,
   linkedinUrl: string | null,
-  instantly: { instantlyCampaignId: string | null; instantlyCampaignName: string | null }
+  instantly: { instantlyCampaignId: string | null; instantlyCampaignName: string | null },
+  companyMatches: { participantName: string; headline: string; conversationId: string }[]
 ): Promise<void> {
   const touchpoints: {
     channel: string;
@@ -424,6 +596,17 @@ async function recordTouchpoints(
     });
   }
 
+  // ── Company/2nd-degree touchpoints ─────────────────────────────────────
+  for (const match of companyMatches) {
+    touchpoints.push({
+      channel: "company_linkedin_conversation",
+      sourceId: match.conversationId,
+      sourceName: match.participantName,
+      touchpointAt: new Date(),
+      interactionType: "company_match",
+    });
+  }
+
   // ── Write touchpoints ─────────────────────────────────────────────────
   if (touchpoints.length > 0) {
     await db.insert(attributionTouchpoints).values(
@@ -478,8 +661,6 @@ async function markDealAsWon(
     };
     const dealId = assoc.results?.[0]?.id;
     if (dealId) {
-      // "closedwon" is the standard HubSpot closed-won stage ID
-      // The actual stage ID depends on the pipeline, but updating via property works
       await HubSpotClient.updateDeal(dealId, {
         dealstage: "closedwon",
         cos_customer: "true",

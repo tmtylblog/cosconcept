@@ -85,6 +85,7 @@ export const users = pgTable("users", {
   jobTitle: text("job_title"),
   phone: text("phone"),       // E.164 format e.g. +14155552671 (for future WhatsApp)
   linkedinUrl: text("linkedin_url"),
+  pdlLinkedinLookedUp: boolean("pdl_linkedin_looked_up").notNull().default(false),
   // Admin plugin fields
   role: text("role").default("user"), // user | admin | superadmin
   banned: boolean("banned").default(false),
@@ -2030,11 +2031,17 @@ export const attributionEvents = pgTable("attribution_events", {
   instantlyCampaignName: text("instantly_campaign_name"),
   linkedinCampaignId: text("linkedin_campaign_id").references(() => growthOpsInviteCampaigns.id, { onDelete: "set null" }),
   linkedinInviteTargetId: text("linkedin_invite_target_id").references(() => growthOpsInviteTargets.id, { onDelete: "set null" }),
-  matchMethod: text("match_method").notNull().default("none"), // email_exact | instantly | linkedin_url | name_domain | none
+  matchMethod: text("match_method").notNull().default("none"), // email_exact | instantly | linkedin_url | linkedin_pdl | name_domain | name_fuzzy | company_linkedin | none
   // Multi-touch flags (set by attribution-check step 6)
   hasLinkedinOrganic: boolean("has_linkedin_organic").notNull().default(false),
   hasLinkedinCampaign: boolean("has_linkedin_campaign").notNull().default(false),
   linkedinConversationCount: integer("linkedin_conversation_count").notNull().default(0),
+  // Company/2nd-degree + name fuzzy matching
+  hasCompanyLinkedinMatch: boolean("has_company_linkedin_match").notNull().default(false),
+  companyLinkedinDetails: jsonb("company_linkedin_details"),
+  hasNameFuzzyMatch: boolean("has_name_fuzzy_match").notNull().default(false),
+  nameFuzzyDetails: jsonb("name_fuzzy_details"),
+  pdlLookupStatus: text("pdl_lookup_status"), // "found" | "not_found" | "error" | null
   matchedAt: timestamp("matched_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
