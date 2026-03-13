@@ -53,13 +53,13 @@ export default async function AdminLayout({
     redirect("/login");
   }
 
-  const ALLOWED_ROLES = ["superadmin", "growth_ops", "customer_success"];
+  const ALLOWED_ROLES = ["superadmin", "admin", "growth_ops", "customer_success"];
   if (!ALLOWED_ROLES.includes(session.user.role ?? "")) {
     redirect("/dashboard");
   }
 
   const role = session.user.role ?? "";
-  const isSuperadmin = role === "superadmin";
+  const isSuperadmin = role === "superadmin" || role === "admin";
   const canSeeGrowthOps = isSuperadmin || role === "growth_ops";
   const canSeeCustomerSuccess = isSuperadmin || role === "customer_success";
 
