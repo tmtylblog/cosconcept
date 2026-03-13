@@ -278,7 +278,7 @@ export default function PipelinePage() {
 
           {/* Settings */}
           <Link
-            href="/admin/growth-ops/pipeline/settings"
+            href="/admin/growth-ops/settings"
             className="flex items-center gap-1.5 rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-slate hover:text-cos-midnight transition-colors"
           >
             <Settings className="h-3.5 w-3.5" />

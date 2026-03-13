@@ -39,8 +39,8 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   let session;
+  const headersList = await headers();
   try {
-    const headersList = await headers();
     session = await auth.api.getSession({
       headers: headersList,
     });
@@ -62,6 +62,27 @@ export default async function AdminLayout({
   const isSuperadmin = role === "superadmin" || role === "admin";
   const canSeeGrowthOps = isSuperadmin || role === "growth_ops";
   const canSeeCustomerSuccess = isSuperadmin || role === "customer_success";
+  const isSpecializedRole = role === "growth_ops" || role === "customer_success";
+
+  // Route-level protection: specialized roles can only access their sections
+  if (isSpecializedRole) {
+    const pathname =
+      headersList.get("x-pathname") ??
+      headersList.get("x-invoke-path") ??
+      "";
+
+    const allowedPrefixes: string[] = [];
+    if (role === "growth_ops") allowedPrefixes.push("/admin/growth-ops");
+    if (role === "customer_success") allowedPrefixes.push("/admin/customer-success");
+
+    const isAllowed =
+      allowedPrefixes.some((prefix) => pathname.startsWith(prefix));
+
+    if (pathname && !isAllowed) {
+      // Redirect to the first allowed section
+      redirect(allowedPrefixes[0] ?? "/dashboard");
+    }
+  }
 
   return (
     <div className="flex min-h-screen bg-cos-cloud">
@@ -88,7 +109,9 @@ export default async function AdminLayout({
 
         {/* Main nav */}
         <nav className="flex-1 px-3 pt-4 space-y-0.5 overflow-y-auto">
-          <AdminNavLink href="/admin" icon={<LayoutDashboard className="h-4 w-4" />} label="Overview" />
+          {isSuperadmin && (
+            <AdminNavLink href="/admin" icon={<LayoutDashboard className="h-4 w-4" />} label="Overview" />
+          )}
 
           {isSuperadmin && (
             <>
@@ -122,14 +145,12 @@ export default async function AdminLayout({
           {canSeeGrowthOps && (
             <>
               <SectionHeader label="Growth Ops" />
-              <AdminNavLink href="/admin/growth-ops" icon={<TrendingUp className="h-4 w-4" />} label="Overview" />
+              <AdminNavLink href="/admin/growth-ops/pipeline" icon={<Share2 className="h-4 w-4" />} label="Pipeline" />
               <AdminNavLink href="/admin/growth-ops/linkedin" icon={<Linkedin className="h-4 w-4" />} label="LinkedIn Inbox" />
-              <AdminNavLink href="/admin/growth-ops/linkedin/accounts" icon={<Users className="h-4 w-4" />} label="LinkedIn Accounts" />
               <AdminNavLink href="/admin/growth-ops/linkedin/campaigns" icon={<Send className="h-4 w-4" />} label="Campaigns &amp; Targets" />
               <AdminNavLink href="/admin/growth-ops/instantly" icon={<Mail className="h-4 w-4" />} label="Instantly" />
-              <AdminNavLink href="/admin/growth-ops/pipeline" icon={<Share2 className="h-4 w-4" />} label="Pipeline" />
-              <AdminNavLink href="/admin/growth-ops/pipeline/settings" icon={<Settings className="h-4 w-4" />} label="Pipeline Settings" />
               <AdminNavLink href="/admin/growth-ops/attribution" icon={<BarChart3 className="h-4 w-4" />} label="Attribution" />
+              <AdminNavLink href="/admin/growth-ops/settings" icon={<Settings className="h-4 w-4" />} label="Settings" />
             </>
           )}
 

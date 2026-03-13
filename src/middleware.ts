@@ -43,12 +43,17 @@ export async function middleware(req: NextRequest) {
 
   // Rewrite root URL to /dashboard (URL stays as /, content from /dashboard)
   if (pathname === "/") {
-    return NextResponse.rewrite(new URL("/dashboard", req.url));
+    const response = NextResponse.rewrite(new URL("/dashboard", req.url));
+    response.headers.set("x-pathname", pathname);
+    return response;
   }
 
   // Only protect specific API routes
   if (!isProtectedPath(pathname)) {
-    return NextResponse.next();
+    // Pass the pathname to server components via custom header
+    const response = NextResponse.next();
+    response.headers.set("x-pathname", pathname);
+    return response;
   }
 
   // Check for session cookie — just existence, no API call
@@ -63,7 +68,9 @@ export async function middleware(req: NextRequest) {
     );
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+  response.headers.set("x-pathname", pathname);
+  return response;
 }
 
 export const config = {
