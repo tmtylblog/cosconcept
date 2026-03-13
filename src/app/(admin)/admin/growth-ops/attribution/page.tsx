@@ -247,7 +247,7 @@ function SummaryCards({ summary }: { summary: Summary }) {
     { label: "Via LinkedIn Campaign", value: summary.byChannel.linkedinCampaign, icon: Megaphone, color: "text-cos-electric" },
     { label: "Via LinkedIn Organic", value: summary.byChannel.linkedinOrganic, icon: MessageCircle, color: "text-blue-600" },
     { label: "2nd Degree (Company)", value: summary.byChannel.companyLinkedin, icon: Building2, color: "text-violet-600" },
-    { label: "Avg Days to Convert", value: summary.avgTimeToConversion ?? "&mdash;", icon: TrendingUp, color: "text-amber-600" },
+    { label: "Avg Days to Convert", value: summary.avgTimeToConversion ?? "\u2014", icon: TrendingUp, color: "text-amber-600" },
     { label: "Active Paying", value: summary.conversion.paying, icon: CreditCard, color: "text-emerald-600" },
   ];
 
@@ -373,7 +373,7 @@ function AttributionTableRow({ row, expanded, onToggle }: { row: AttributionRow;
               </span>
             )}
             {organicCount === 0 && campaignCount === 0 && !row.hasCompanyLinkedinMatch && !row.hasNameFuzzyMatch && (
-              <span className="text-[10px] text-cos-slate-dim">&mdash;</span>
+              <span className="text-[10px] text-cos-slate-dim">{"\u2014"}</span>
             )}
           </div>
         </td>
