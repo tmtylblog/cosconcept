@@ -263,6 +263,16 @@ export async function GET(req: NextRequest) {
       LIMIT 3
     `);
 
+    // Check raw teamMembers values for sample firms
+    const sampleTeamValues = await db.execute(sql`
+      SELECT id, name,
+        enrichment_data->'extracted'->'teamMembers' as team_raw,
+        jsonb_typeof(enrichment_data->'extracted'->'teamMembers') as team_type
+      FROM service_firms
+      WHERE enrichment_data->'extracted'->'teamMembers' IS NOT NULL
+      LIMIT 5
+    `);
+
     // Check background_jobs detail for team-ingest
     const allTeamJobs = await db.execute(sql`
       SELECT id, status, payload->>'firmId' AS firm_id, payload->>'domain' AS domain,
@@ -295,6 +305,7 @@ export async function GET(req: NextRequest) {
         auditEntries: auditEntries.rows,
         sampleEnrichment: sampleEnrichment.rows,
         extractedKeys: extractedKeys.rows,
+        sampleTeamValues: sampleTeamValues.rows,
         totalTeamMembers: totalTeamMembers.rows[0]?.total ?? 0,
         topFirmsByTeamSize: sampleTeamData.rows,
       },
