@@ -33,6 +33,9 @@ export const auth = betterAuth({
 
   trustedOrigins: [
     process.env.BETTER_AUTH_URL!,
+    // Allow Vercel preview/deployment URLs alongside custom domain
+    ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+    ...(process.env.VERCEL_PROJECT_PRODUCTION_URL ? [`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`] : []),
   ],
 
   // Rate limiting disabled — Better Auth's built-in rate limiter corrupts JSON
