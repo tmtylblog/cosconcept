@@ -48,3 +48,7 @@ next-env.d.ts
 .vercel
 .env.prod
 .env.vercel
+
+# claude code (worktrees and agent-local state)
+.claude/worktrees/
+.claude/todos/

@@ -140,6 +140,21 @@ drizzle.config.ts                   # Drizzle Kit config
 5. **Bidirectional Matching:** Both parties must want what the other offers
 6. **Progressive Disclosure:** Get basic info first, enrich over time
 
+## Development Automation
+
+The project has automated guardrails to prevent broken deploys and enforce quality:
+
+| Tool | What it does | Runs when |
+|------|-------------|-----------|
+| **Husky + lint-staged** | ESLint on staged `.ts`/`.tsx` files | Every `git commit` |
+| **GitHub Actions CI** | `npm run lint` + `npm run build` | Every push/PR to main |
+| **PR template** | Checklist for lint, build, context files, schema | Every PR opened |
+| **`npm run verify`** | Lint + build in sequence | Run manually before pushing |
+| **Ownership hook** | Warns on cross-area file edits | Every Edit/Write in Claude Code |
+| **Pre-push hook** | Blocks force push, warns if behind, checks package-lock | Every `git push` in Claude Code |
+
+**ESLint now matches Vercel strictness.** `react/no-unescaped-entities` is set to `error` locally, so `npm run lint` catches the exact same issues that caused 3 broken deploys on 2026-03-12.
+
 ## ⚠️ VERCEL BUILD IS STRICTER THAN LOCAL BUILD
 
 **Vercel's production ESLint catches things that `next build` locally does NOT.** This means your code can compile locally but FAIL on Vercel. Common failures:
@@ -172,23 +187,65 @@ drizzle.config.ts                   # Drizzle Kit config
 
 **This is non-negotiable.** Other developers are actively pushing to main. Skipping this step causes merge conflicts, broken deploys, and lost work.
 
+## Worktree Workflow (DEFAULT for all agents)
+
+Every Claude Code agent MUST run in its own worktree. This gives each agent an isolated copy of the repo — no file conflicts, no stepping on each other.
+
+### Starting a new agent
+
+```bash
+# Set your agent area for ownership hooks, then start in a worktree
+AGENT_AREA=agent-a claude --worktree agent-a/feat/expert-enrichment
+AGENT_AREA=agent-b claude --worktree agent-b/feat/discover-search
+AGENT_AREA=agent-c claude --worktree agent-c/fix/case-study-seed
+AGENT_AREA=agent-d claude --worktree agent-d/feat/billing-portal
+AGENT_AREA=agent-e claude --worktree agent-e/chore/data-scripts
+```
+
+### Agent area assignments
+
+| AGENT_AREA | Owns | Key Paths |
+|------------|------|-----------|
+| `agent-a` | Expert enrichment, PDL, team discovery | `src/app/api/team-import/`, `src/app/api/experts/`, `src/components/experts/` |
+| `agent-b` | Discover, search/matching, Ossy chat tools | `src/app/(app)/discover/`, `src/lib/matching/`, `src/lib/ai/ossy-tools.ts`, `src/components/chat/` |
+| `agent-c` | Firm pages, services, case studies | `src/app/(app)/firm/`, `src/app/api/firm/` |
+| `agent-d` | Billing, settings, partnerships, network | `src/app/(app)/settings/`, `src/app/(app)/partnerships/`, `src/lib/billing/` |
+| `agent-e` | Scripts, data, bulk operations | `scripts/`, `data/` |
+
+The ownership hook (`.claude/hooks/check-ownership.sh`) will **warn** if you edit files outside your area. Update the hook when assignments change.
+
+### Worktree lifecycle
+
+1. Agent starts in worktree (isolated branch + directory)
+2. Agent works, commits to its own branch
+3. Agent opens PR against `main` when ready
+4. Build must pass before merge
+5. Worktree is cleaned up after merge
+
+### Hooks (automatic)
+
+These run automatically via `.claude/settings.json`:
+- **check-ownership.sh** — Warns on Edit/Write if you touch another agent's files
+- **pre-push-check.sh** — Warns on `git push` if you haven't pulled latest, blocks `--force`
+
 ## Multi-Dev Coordination Rules
 
 These rules apply to **all Claude Code instances** working on this repo:
 
-1. **Pull before every push.** Always `git pull --rebase origin main` before pushing. Read changed files from other devs to avoid conflicts.
-2. **One branch per task, one dev per branch.** Never have two devs on the same branch. Use branches when conflict risk is high.
-3. **Branch naming:** `<dev-id>/<type>/<short-description>` (e.g., `dev-1/feat/ossy-chat`). Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`.
-4. **Always branch from latest main.** Pull before you branch.
-5. **Assign area ownership.** Each dev owns specific directories/features. Stay in your lane. If you need to edit outside your area, coordinate first.
-6. **Schema changes are serialized.** Only one dev modifies database schema/migrations at a time. Commit schema changes separately from feature code. Push immediately.
-7. **Never edit existing migrations.** Only add new ones.
-8. **Coordinate new dependencies.** Don't `npm install` new packages without mentioning it. Always commit `package-lock.json` with `package.json`.
-9. **Commit often, commit small.** One concern per commit. Clear messages: `<type>: <what changed>`.
-10. **Build + lint must pass before every PR.** Never merge a broken build.
-11. **Rebase on main before merging.** Resolve conflicts on your branch, not on main.
-12. **Update CLAUDE.md when you establish new patterns.** This is how you communicate decisions to other devs.
-13. **Keep a STATUS.md** at project root listing each dev's current branch, task, and files being modified. Update it before starting and after finishing each task.
-14. **Don't make drive-by fixes.** If you spot something outside your task, make a separate branch/PR.
-15. **Don't let branches live for days.** Merge early and often to avoid drift.
-16. **Always pull before push.** See "Pre-Push Sync Rule" above — this is non-negotiable.
+1. **Use worktrees.** Every agent runs in `claude --worktree`. Never work directly on main in the shared directory.
+2. **Pull before every push.** Always `git pull --rebase origin main` before pushing. Read changed files from other devs to avoid conflicts.
+3. **One branch per task, one dev per branch.** Never have two devs on the same branch.
+4. **Branch naming:** `<agent-id>/<type>/<short-description>` (e.g., `agent-a/feat/ossy-chat`). Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`.
+5. **Always branch from latest main.** Pull before you branch.
+6. **Respect area ownership.** Each agent owns specific directories/features. The ownership hook warns on cross-area edits. If you need to edit outside your area, update STATUS.md first.
+7. **Schema changes are serialized.** Only one agent modifies database schema/migrations at a time. Commit schema changes separately from feature code. Push immediately.
+8. **Never edit existing migrations.** Only add new ones.
+9. **Coordinate new dependencies.** Don't `npm install` new packages without mentioning it. Always commit `package-lock.json` with `package.json`.
+10. **Commit often, commit small.** One concern per commit. Clear messages: `<type>: <what changed>`.
+11. **Build + lint must pass before every PR.** Never merge a broken build.
+12. **Rebase on main before merging.** Resolve conflicts on your branch, not on main.
+13. **Update CLAUDE.md when you establish new patterns.** This is how you communicate decisions to other agents.
+14. **Keep STATUS.md current.** Update it before starting and after finishing each task.
+15. **Don't make drive-by fixes.** If you spot something outside your task, make a separate branch/PR.
+16. **Don't let branches live for days.** Merge early and often to avoid drift.
+17. **Always pull before push.** See "Pre-Push Sync Rule" above — this is non-negotiable.

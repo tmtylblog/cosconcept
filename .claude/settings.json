@@ -1,0 +1,68 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-ownership.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/pre-push-check.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "rules": [
+      {
+        "tool": "Bash",
+        "pattern": "npm (run |)(build|lint|test|dev|start).*",
+        "decision": "allow"
+      },
+      {
+        "tool": "Bash",
+        "pattern": "npx next build.*",
+        "decision": "allow"
+      },
+      {
+        "tool": "Bash",
+        "pattern": "npx (lint-staged|husky).*",
+        "decision": "allow"
+      },
+      {
+        "tool": "Bash",
+        "pattern": "npm run verify.*",
+        "decision": "allow"
+      },
+      {
+        "tool": "Bash",
+        "pattern": "git (status|log|diff|fetch|pull|branch|checkout|worktree).*",
+        "decision": "allow"
+      },
+      {
+        "tool": "Bash",
+        "pattern": "git push --force.*",
+        "decision": "deny"
+      },
+      {
+        "tool": "Bash",
+        "pattern": "git reset --hard.*",
+        "decision": "deny"
+      },
+      {
+        "tool": "Bash",
+        "pattern": "git checkout -- \\.",
+        "decision": "deny"
+      }
+    ]
+  }
+}
