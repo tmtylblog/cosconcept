@@ -326,6 +326,70 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // ── resyncConversations — wipe cached conversations & re-seed from Unipile
+    if (action === "resyncConversations") {
+      const accountId = req.nextUrl.searchParams.get("accountId") ?? "";
+      const accountRow = await db
+        .select()
+        .from(growthOpsLinkedInAccounts)
+        .where(eq(growthOpsLinkedInAccounts.unipileAccountId, accountId))
+        .limit(1);
+      if (!accountRow.length) return NextResponse.json({ error: "Account not found" }, { status: 404 });
+      const acct = accountRow[0];
+
+      // Delete cached conversations for this account
+      await db
+        .delete(growthOpsConversations)
+        .where(eq(growthOpsConversations.linkedinAccountId, acct.id));
+
+      // Re-seed from Unipile live
+      const live = await UnipileClient.listChats(accountId, { limit: 50 });
+      const items = live.items ?? [];
+      let seeded = 0;
+
+      for (const chat of items) {
+        const other = chat.attendees?.find((a) => !a.is_self);
+        const participantProviderId =
+          other?.attendee_provider_id ?? chat.attendee_provider_id ?? "";
+        const rawChatName = chat.name ?? "";
+        const chatNameIsGeneric = /^(referral\??|inmail|sponsored|hi|hey|hello|\s*)$/i.test(rawChatName.trim());
+        const participantName = other?.attendee_name || (!chatNameIsGeneric ? rawChatName : "") || "";
+        const isInmail = chat.content_type === "inmail";
+        const lastText = chat.last_message?.text ?? null;
+        const lastAt = chat.timestamp ? new Date(chat.timestamp) : null;
+
+        await db
+          .insert(growthOpsConversations)
+          .values({
+            id: randomId(),
+            linkedinAccountId: acct.id,
+            chatId: chat.id,
+            participantProviderId,
+            participantName,
+            lastMessageAt: lastAt,
+            lastMessagePreview: lastText,
+            isInmailThread: isInmail,
+          })
+          .onConflictDoNothing();
+        seeded++;
+      }
+
+      // Kick off background enrichment
+      const convos = await db
+        .select()
+        .from(growthOpsConversations)
+        .where(eq(growthOpsConversations.linkedinAccountId, acct.id))
+        .limit(50);
+      const toEnrich = convos
+        .filter((c) => !c.participantAvatarUrl && c.participantProviderId)
+        .map((c) => ({ id: c.id, participantProviderId: c.participantProviderId }));
+      if (toEnrich.length > 0) {
+        enrichConversations(toEnrich, accountId).catch(() => {});
+      }
+
+      return NextResponse.json({ ok: true, seeded, enriching: toEnrich.length });
+    }
+
     // ── legacy: listChats (kept for backward compat) ───────────────────────
     if (action === "listChats") {
       const accountId = req.nextUrl.searchParams.get("accountId") ?? "";

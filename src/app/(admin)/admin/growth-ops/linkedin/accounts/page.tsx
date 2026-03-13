@@ -33,6 +33,10 @@ export default function LinkedInAccountsPage() {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Force re-sync conversations
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ seeded: number; enriching: number } | null>(null);
+
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
     // ?sync=true imports any Unipile accounts not yet in our DB
@@ -97,6 +101,18 @@ export default function LinkedInAccountsPage() {
     }).then((r) => r.json());
     const url = d.url ?? d.link ?? d.hosted_url;
     if (url) window.open(url, "_blank");
+  }
+
+  async function resyncConversations(unipileAccountId: string) {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const d = await fetch(`/api/admin/growth-ops/unipile?action=resyncConversations&accountId=${unipileAccountId}`).then((r) => r.json());
+      if (d.ok) setSyncResult({ seeded: d.seeded, enriching: d.enriching });
+      else alert(d.error ?? "Re-sync failed");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function revokeAccount(id: string, name: string) {
@@ -253,6 +269,17 @@ export default function LinkedInAccountsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-3">
+                        {a.status === "OK" && (
+                          <button
+                            onClick={() => resyncConversations(a.unipileAccountId)}
+                            disabled={syncing}
+                            className="inline-flex items-center gap-1 text-xs text-cos-electric hover:underline disabled:opacity-40"
+                            title="Delete cached conversations and re-fetch from Unipile"
+                          >
+                            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+                            Re-sync
+                          </button>
+                        )}
                         {(a.status === "CREDENTIALS" || a.status === "ERROR") && (
                           <button
                             onClick={() => reconnect(a.unipileAccountId)}
@@ -278,6 +305,13 @@ export default function LinkedInAccountsPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {syncResult && (
+        <div className="mt-4 rounded-cos-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <Check className="mb-0.5 mr-1.5 inline h-4 w-4" />
+          Re-synced {syncResult.seeded} conversations. {syncResult.enriching > 0 && `Enriching ${syncResult.enriching} profiles in background.`}
         </div>
       )}
     </div>
