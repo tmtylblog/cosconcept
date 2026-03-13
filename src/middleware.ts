@@ -24,6 +24,7 @@ const PUBLIC_EXCEPTIONS = [
   "/api/admin/import",         // n8n import endpoints (protected by ADMIN_SECRET header)
   "/api/admin/enrich",         // enrichment backfill endpoints (protected by session OR ADMIN_SECRET)
   "/api/admin/promote-user",   // bootstrap admin role (protected by ADMIN_SECRET header)
+  "/api/admin/experts/diagnostic",  // expert data diagnostic (protected by session OR ADMIN_SECRET)
 ];
 
 function isProtectedPath(pathname: string): boolean {
