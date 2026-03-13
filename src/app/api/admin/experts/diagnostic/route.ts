@@ -193,33 +193,60 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 11. Check enrichment_data for team members (PDL data may be stored here)
+    // 11. Check enrichment_data column on service_firms for team members
     const enrichmentTeamData = await db.execute(sql`
       SELECT
-        COUNT(*)::int AS total_enrichment_rows,
-        COUNT(CASE WHEN extracted->>'teamMembers' IS NOT NULL AND extracted->>'teamMembers' != '[]' AND extracted->>'teamMembers' != 'null' THEN 1 END)::int AS rows_with_team,
-        COUNT(CASE WHEN extracted->'teamMembers' IS NOT NULL THEN 1 END)::int AS rows_with_team_key
-      FROM enrichment_data
+        COUNT(*)::int AS total_firms,
+        COUNT(CASE WHEN enrichment_data IS NOT NULL THEN 1 END)::int AS firms_with_enrichment,
+        COUNT(CASE WHEN enrichment_data->'extracted'->>'teamMembers' IS NOT NULL
+              AND enrichment_data->'extracted'->>'teamMembers' != '[]'
+              AND enrichment_data->'extracted'->>'teamMembers' != 'null' THEN 1 END)::int AS firms_with_team_in_enrichment
+      FROM service_firms
     `);
 
-    // Check a sample of team member data
-    const sampleTeamData = await db.execute(sql`
+    // Check enrichment_cache for team data
+    const cacheTeamData = await db.execute(sql`
       SELECT
-        firm_id,
-        jsonb_array_length(COALESCE(extracted->'teamMembers', '[]'::jsonb)) AS team_count
-      FROM enrichment_data
-      WHERE extracted->'teamMembers' IS NOT NULL
-        AND jsonb_array_length(COALESCE(extracted->'teamMembers', '[]'::jsonb)) > 0
-      ORDER BY jsonb_array_length(extracted->'teamMembers') DESC
+        COUNT(*)::int AS total_cache_rows,
+        COUNT(CASE WHEN enrichment_data->'extracted'->>'teamMembers' IS NOT NULL
+              AND enrichment_data->'extracted'->>'teamMembers' != '[]' THEN 1 END)::int AS rows_with_team
+      FROM enrichment_cache
+    `);
+
+    // Check enrichment_audit_log for team-ingest entries
+    const auditEntries = await db.execute(sql`
+      SELECT firm_id, phase, status, created_at, extracted_data
+      FROM enrichment_audit_log
+      WHERE phase = 'team-ingest'
+      ORDER BY created_at DESC
       LIMIT 10
     `);
 
-    // Total team members across all enrichment_data
+    // Sample: what does a firm's enrichment_data look like?
+    const sampleEnrichment = await db.execute(sql`
+      SELECT id, name,
+        CASE WHEN enrichment_data IS NOT NULL THEN jsonb_object_keys(enrichment_data) END as top_keys
+      FROM service_firms
+      WHERE enrichment_data IS NOT NULL
+      LIMIT 3
+    `);
+
+    // Check if enrichment_data.extracted.teamMembers exists on any firm
+    const sampleTeamData = await db.execute(sql`
+      SELECT id, name,
+        jsonb_array_length(COALESCE(enrichment_data->'extracted'->'teamMembers', '[]'::jsonb)) AS team_count
+      FROM service_firms
+      WHERE enrichment_data->'extracted'->'teamMembers' IS NOT NULL
+        AND jsonb_array_length(COALESCE(enrichment_data->'extracted'->'teamMembers', '[]'::jsonb)) > 0
+      ORDER BY jsonb_array_length(enrichment_data->'extracted'->'teamMembers') DESC
+      LIMIT 10
+    `);
+
     const totalTeamMembers = await db.execute(sql`
-      SELECT SUM(jsonb_array_length(COALESCE(extracted->'teamMembers', '[]'::jsonb)))::int AS total
-      FROM enrichment_data
-      WHERE extracted->'teamMembers' IS NOT NULL
-        AND jsonb_array_length(COALESCE(extracted->'teamMembers', '[]'::jsonb)) > 0
+      SELECT COALESCE(SUM(jsonb_array_length(COALESCE(enrichment_data->'extracted'->'teamMembers', '[]'::jsonb))), 0)::int AS total
+      FROM service_firms
+      WHERE enrichment_data->'extracted'->'teamMembers' IS NOT NULL
+        AND jsonb_array_length(COALESCE(enrichment_data->'extracted'->'teamMembers', '[]'::jsonb)) > 0
     `);
 
     // Check background_jobs detail for team-ingest
@@ -249,7 +276,10 @@ export async function GET(req: NextRequest) {
         adminPagePath: adminPath.rows[0],
       },
       enrichmentData: {
-        stats: enrichmentTeamData.rows[0],
+        firmEnrichment: enrichmentTeamData.rows[0],
+        cacheTeamData: cacheTeamData.rows[0],
+        auditEntries: auditEntries.rows,
+        sampleEnrichment: sampleEnrichment.rows,
         totalTeamMembers: totalTeamMembers.rows[0]?.total ?? 0,
         topFirmsByTeamSize: sampleTeamData.rows,
       },
