@@ -26,6 +26,7 @@ import {
   Send,
   HeartPulse,
   BarChart2,
+  Settings,
 } from "lucide-react";
 
 /**
@@ -127,6 +128,7 @@ export default async function AdminLayout({
               <AdminNavLink href="/admin/growth-ops/linkedin/campaigns" icon={<Send className="h-4 w-4" />} label="Campaigns &amp; Targets" />
               <AdminNavLink href="/admin/growth-ops/instantly" icon={<Mail className="h-4 w-4" />} label="Instantly" />
               <AdminNavLink href="/admin/growth-ops/pipeline" icon={<Share2 className="h-4 w-4" />} label="Pipeline" />
+              <AdminNavLink href="/admin/growth-ops/pipeline/settings" icon={<Settings className="h-4 w-4" />} label="Pipeline Settings" />
               <AdminNavLink href="/admin/growth-ops/attribution" icon={<BarChart3 className="h-4 w-4" />} label="Attribution" />
             </>
           )}

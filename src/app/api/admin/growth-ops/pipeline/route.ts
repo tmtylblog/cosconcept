@@ -8,6 +8,7 @@ import {
   acqPipelineStages,
   acqContacts,
   acqCompanies,
+  acqDealSources,
 } from "@/lib/db/schema";
 import { eq, desc, asc } from "drizzle-orm";
 import { HubSpotClient } from "@/lib/growth-ops/HubSpotClient";
@@ -84,6 +85,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ stages, deals });
     }
 
+    if (action === "getDealSources") {
+      const sources = await db
+        .select()
+        .from(acqDealSources)
+        .orderBy(asc(acqDealSources.displayOrder));
+      return NextResponse.json({ sources });
+    }
+
     if (action === "seedStages") {
       // Fetch HubSpot pipeline stages and seed into COS
       const result = await seedStagesFromHubSpot();
@@ -153,7 +162,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.action === "createDeal") {
-      const { name, contactId, companyId, stageId, dealValue, priority, notes } = body;
+      const { name, contactId, companyId, stageId, dealValue, priority, notes, source } = body;
 
       const [stage] = stageId
         ? await db.select().from(acqPipelineStages).where(eq(acqPipelineStages.id, stageId)).limit(1)
@@ -171,7 +180,7 @@ export async function POST(req: NextRequest) {
         dealValue: dealValue || null,
         priority: priority || "normal",
         notes: notes || null,
-        source: "manual",
+        source: source || "manual",
         lastActivityAt: now,
       });
 
@@ -192,8 +201,33 @@ export async function POST(req: NextRequest) {
       if (fields.dealValue !== undefined) updateData.dealValue = fields.dealValue;
       if (fields.priority !== undefined) updateData.priority = fields.priority;
       if (fields.notes !== undefined) updateData.notes = fields.notes;
+      if (fields.source !== undefined) updateData.source = fields.source;
+      if (fields.sourceChannel !== undefined) updateData.sourceChannel = fields.sourceChannel;
+      if (fields.status !== undefined) updateData.status = fields.status;
+
+      // If stageId is being changed, also update stageLabel and log activity
+      if (fields.stageId !== undefined) {
+        const [stage] = fields.stageId
+          ? await db.select().from(acqPipelineStages).where(eq(acqPipelineStages.id, fields.stageId)).limit(1)
+          : [null];
+        updateData.stageId = fields.stageId || null;
+        updateData.stageLabel = stage?.label ?? "";
+        updateData.hubspotStageId = stage?.hubspotStageId ?? null;
+        if (stage) {
+          updateData.status = stage.isClosedWon ? "won" : stage.isClosedLost ? "lost" : "open";
+          updateData.closedAt = (stage.isClosedWon || stage.isClosedLost) ? now : null;
+        }
+        updateData.lastActivityAt = now;
+      }
 
       await db.update(acqDeals).set(updateData).where(eq(acqDeals.id, dealId));
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "deleteDeal") {
+      const { dealId } = body as { dealId: string };
+      // Activities cascade-delete via FK
+      await db.delete(acqDeals).where(eq(acqDeals.id, dealId));
       return NextResponse.json({ ok: true });
     }
 

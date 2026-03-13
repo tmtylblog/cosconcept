@@ -1996,6 +1996,18 @@ export const acqDealQueue = pgTable("acq_deal_queue", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const acqDealSources = pgTable("acq_deal_sources", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(), // slug: 'hubspot_sync', 'instantly_auto', etc.
+  label: text("label").notNull(), // display name: 'HubSpot Sync', 'Instantly Auto', etc.
+  color: text("color").notNull().default("#6366f1"),
+  icon: text("icon").notNull().default("globe"), // lucide icon name
+  isSystem: boolean("is_system").notNull().default(false), // true = cannot delete (hubspot_sync, manual, etc.)
+  displayOrder: integer("display_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const acqInstantlyReplyWatermarks = pgTable("acq_instantly_reply_watermarks", {
   id: text("id").primaryKey(),
   campaignId: text("campaign_id").notNull(),

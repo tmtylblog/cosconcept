@@ -17,6 +17,8 @@ import {
   Check,
   X,
   ChevronRight,
+  Plus,
+  Settings,
 } from "lucide-react";
 
 interface Stage {
@@ -114,6 +116,12 @@ export default function PipelinePage() {
   const [showQueue, setShowQueue] = useState(false);
   const [queueLoading, setQueueLoading] = useState(false);
 
+  // New deal modal
+  const [showNewDeal, setShowNewDeal] = useState(false);
+  const [newDealForm, setNewDealForm] = useState({ name: "", dealValue: "", stageId: "", priority: "normal", source: "manual", notes: "" });
+  const [creatingDeal, setCreatingDeal] = useState(false);
+  const [dealSources, setDealSources] = useState<{ key: string; label: string }[]>([]);
+
   const loadData = useCallback(async (isInitial = false) => {
     try {
       setLoadingDeals(true);
@@ -165,6 +173,10 @@ export default function PipelinePage() {
   useEffect(() => {
     loadData(true);
     loadQueue();
+    fetch("/api/admin/growth-ops/pipeline?action=getDealSources")
+      .then((r) => r.json())
+      .then((d) => setDealSources(d.sources ?? []))
+      .catch(() => {});
   }, [loadData, loadQueue]);
 
   async function handleDrop(toStageId: string) {
@@ -206,6 +218,32 @@ export default function PipelinePage() {
     }
   }
 
+  async function handleCreateDeal() {
+    setCreatingDeal(true);
+    try {
+      await fetch("/api/admin/growth-ops/pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "createDeal",
+          name: newDealForm.name || "New Deal",
+          dealValue: newDealForm.dealValue || null,
+          stageId: newDealForm.stageId || stages[0]?.id || null,
+          priority: newDealForm.priority,
+          source: newDealForm.source,
+          notes: newDealForm.notes || null,
+        }),
+      });
+      setShowNewDeal(false);
+      setNewDealForm({ name: "", dealValue: "", stageId: "", priority: "normal", source: "manual", notes: "" });
+      await loadData();
+    } catch {
+      // silent
+    } finally {
+      setCreatingDeal(false);
+    }
+  }
+
   function switchToTableForStage(stageId: string) {
     setTableStageFilter(stageId);
     setView("table");
@@ -230,6 +268,22 @@ export default function PipelinePage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* New Deal */}
+          <button
+            onClick={() => setShowNewDeal(true)}
+            className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-2 text-xs font-medium text-white hover:bg-cos-electric-hover transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" /> New Deal
+          </button>
+
+          {/* Settings */}
+          <Link
+            href="/admin/growth-ops/pipeline/settings"
+            className="flex items-center gap-1.5 rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-slate hover:text-cos-midnight transition-colors"
+          >
+            <Settings className="h-3.5 w-3.5" />
+          </Link>
+
           {/* Queue badge */}
           {queueItems.length > 0 && (
             <button
@@ -342,6 +396,112 @@ export default function PipelinePage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* New Deal Modal */}
+      {showNewDeal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowNewDeal(false)}>
+          <div className="w-full max-w-md rounded-cos-xl border border-cos-border bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-cos-midnight">New Deal</h2>
+              <button onClick={() => setShowNewDeal(false)}><X className="h-4 w-4 text-cos-slate" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-cos-slate mb-1 block">Deal Name</label>
+                <input
+                  type="text"
+                  value={newDealForm.name}
+                  onChange={(e) => setNewDealForm({ ...newDealForm, name: e.target.value })}
+                  placeholder="e.g. Acme Corp - Enterprise Plan"
+                  className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
+                  autoFocus
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">Value ($)</label>
+                  <input
+                    type="number"
+                    value={newDealForm.dealValue}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, dealValue: e.target.value })}
+                    placeholder="0"
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">Priority</label>
+                  <select
+                    value={newDealForm.priority}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, priority: e.target.value })}
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
+                  >
+                    <option value="low">Low</option>
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">Stage</label>
+                  <select
+                    value={newDealForm.stageId}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, stageId: e.target.value })}
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
+                  >
+                    <option value="">First stage</option>
+                    {stages.map((s) => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">Source</label>
+                  <select
+                    value={newDealForm.source}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, source: e.target.value })}
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
+                  >
+                    {dealSources.length > 0
+                      ? dealSources.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)
+                      : <>
+                          <option value="manual">Manual</option>
+                          <option value="hubspot_sync">HubSpot Sync</option>
+                          <option value="linkedin_auto">LinkedIn Auto</option>
+                          <option value="instantly_auto">Instantly Auto</option>
+                        </>
+                    }
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-cos-slate mb-1 block">Notes</label>
+                <textarea
+                  value={newDealForm.notes}
+                  onChange={(e) => setNewDealForm({ ...newDealForm, notes: e.target.value })}
+                  rows={2}
+                  placeholder="Optional notes..."
+                  className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button onClick={() => setShowNewDeal(false)} className="rounded-cos-lg border border-cos-border px-4 py-2 text-xs font-medium text-cos-slate hover:text-cos-midnight transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateDeal}
+                disabled={creatingDeal || !newDealForm.name.trim()}
+                className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-4 py-2 text-xs font-medium text-white hover:bg-cos-electric-hover disabled:opacity-50 transition-colors"
+              >
+                {creatingDeal ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                Create Deal
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Loader2,
@@ -15,6 +16,9 @@ import {
   MessageSquare,
   ChevronDown,
   Save,
+  Trash2,
+  Pencil,
+  X,
 } from "lucide-react";
 
 interface Stage {
@@ -92,6 +96,7 @@ function activityIcon(type: string) {
 
 export default function DealDetailPage({ params }: { params: Promise<{ dealId: string }> }) {
   const { dealId } = use(params);
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [deal, setDeal] = useState<Deal | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
@@ -102,6 +107,13 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+
+  // Edit mode
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", dealValue: "", priority: "normal", source: "", stageId: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [dealSources, setDealSources] = useState<{ key: string; label: string }[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -149,6 +161,73 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
       body: JSON.stringify({ action: "updateDeal", dealId: deal.id, notes }),
     });
     setSavingNotes(false);
+  }
+
+  function startEditing() {
+    if (!deal) return;
+    setEditForm({
+      name: deal.name,
+      dealValue: deal.dealValue ?? "",
+      priority: deal.priority,
+      source: deal.source,
+      stageId: deal.stageId ?? "",
+    });
+    setEditing(true);
+    // Load deal sources
+    fetch("/api/admin/growth-ops/pipeline?action=getDealSources")
+      .then((r) => r.json())
+      .then((d) => setDealSources(d.sources ?? []))
+      .catch(() => {});
+  }
+
+  async function saveEdit() {
+    if (!deal) return;
+    setSavingEdit(true);
+    try {
+      await fetch("/api/admin/growth-ops/pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "updateDeal",
+          dealId: deal.id,
+          name: editForm.name,
+          dealValue: editForm.dealValue || null,
+          priority: editForm.priority,
+          source: editForm.source,
+          stageId: editForm.stageId || null,
+        }),
+      });
+      // Reload deal data
+      const res = await fetch(`/api/admin/growth-ops/pipeline/${dealId}`);
+      const data = await res.json();
+      if (!data.error) {
+        setDeal(data.deal);
+        setStages(data.stages ?? []);
+        setActivities(data.activities ?? []);
+      }
+      setEditing(false);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deal) return;
+    if (!confirm(`Delete "${deal.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await fetch("/api/admin/growth-ops/pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "deleteDeal", dealId: deal.id }),
+      });
+      router.push("/admin/growth-ops/pipeline");
+    } catch (e) {
+      setError(String(e));
+      setDeleting(false);
+    }
   }
 
   if (loading) {
@@ -202,15 +281,121 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
               )}
             </div>
           </div>
-          {deal.dealValue && (
-            <div className="text-right">
-              <p className="text-2xl font-bold text-cos-signal flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            {deal.dealValue && (
+              <p className="text-2xl font-bold text-cos-signal flex items-center gap-1 mr-3">
                 <DollarSign className="h-5 w-5" />
                 {Number(deal.dealValue).toLocaleString()}
               </p>
-            </div>
-          )}
+            )}
+            <button
+              onClick={startEditing}
+              className="flex items-center gap-1.5 rounded-cos-lg border border-cos-border bg-white px-3 py-1.5 text-xs font-medium text-cos-slate hover:text-cos-midnight transition-colors"
+            >
+              <Pencil className="h-3 w-3" /> Edit
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex items-center gap-1.5 rounded-cos-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700 disabled:opacity-50 transition-colors"
+            >
+              {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />} Delete
+            </button>
+          </div>
         </div>
+
+        {/* Edit modal */}
+        {editing && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditing(false)}>
+            <div className="w-full max-w-md rounded-cos-xl border border-cos-border bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-cos-midnight">Edit Deal</h2>
+                <button onClick={() => setEditing(false)}><X className="h-4 w-4 text-cos-slate" /></button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">Deal Name</label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-cos-slate mb-1 block">Value ($)</label>
+                    <input
+                      type="number"
+                      value={editForm.dealValue}
+                      onChange={(e) => setEditForm({ ...editForm, dealValue: e.target.value })}
+                      className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-cos-slate mb-1 block">Priority</label>
+                    <select
+                      value={editForm.priority}
+                      onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}
+                      className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
+                    >
+                      <option value="low">Low</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-cos-slate mb-1 block">Stage</label>
+                    <select
+                      value={editForm.stageId}
+                      onChange={(e) => setEditForm({ ...editForm, stageId: e.target.value })}
+                      className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
+                    >
+                      <option value="">None</option>
+                      {stages.map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-cos-slate mb-1 block">Source</label>
+                    <select
+                      value={editForm.source}
+                      onChange={(e) => setEditForm({ ...editForm, source: e.target.value })}
+                      className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
+                    >
+                      {dealSources.length > 0
+                        ? dealSources.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)
+                        : <>
+                            <option value="manual">Manual</option>
+                            <option value="hubspot_sync">HubSpot Sync</option>
+                            <option value="linkedin_auto">LinkedIn Auto</option>
+                            <option value="instantly_auto">Instantly Auto</option>
+                          </>
+                      }
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 mt-4">
+                <button onClick={() => setEditing(false)} className="rounded-cos-lg border border-cos-border px-4 py-2 text-xs font-medium text-cos-slate hover:text-cos-midnight transition-colors">
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  disabled={savingEdit || !editForm.name.trim()}
+                  className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-4 py-2 text-xs font-medium text-white hover:bg-cos-electric-hover disabled:opacity-50 transition-colors"
+                >
+                  {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
