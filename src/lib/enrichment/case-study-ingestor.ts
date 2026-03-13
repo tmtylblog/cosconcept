@@ -12,6 +12,10 @@
 
 import { scrapeUrl } from "./jina-scraper";
 import { logEnrichmentStep } from "./audit-logger";
+import { classifySourceUrl } from "./source-classifier";
+import { ingestYouTube } from "./youtube-ingestor";
+import { ingestVimeo } from "./vimeo-ingestor";
+import { ingestGoogleSlides, ingestPowerPointOnline } from "./slides-ingestor";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod/v4";
@@ -22,17 +26,27 @@ const openrouter = createOpenRouter({
 
 // ─── Types ─────────────────────────────────────────────────
 
-export type CaseStudySourceType = "url" | "pdf" | "text";
+export type CaseStudySourceType =
+  | "url"
+  | "youtube"
+  | "vimeo"
+  | "google_slides"
+  | "powerpoint_online"
+  | "pdf_upload"
+  | "pdf"      // legacy alias — treated as pdf_upload
+  | "text";
 
 export interface CaseStudyIngestionInput {
   firmId: string;
   sourceType: CaseStudySourceType;
   /** URL for web-based case studies */
   url?: string;
-  /** Raw text content (for PDF-extracted or manual paste) */
+  /** Raw text content (for text paste) */
   rawText?: string;
   /** Original filename (for PDFs) */
   filename?: string;
+  /** Vercel Blob URL for uploaded PDFs */
+  fileStorageKey?: string;
 }
 
 export interface CaseStudyCosAnalysis {
@@ -51,6 +65,16 @@ export interface CaseStudyCosAnalysis {
   teamSize?: string;
   isCaseStudy: boolean;
   confidence: number;
+  /** Thumbnail URL from ingestor (YouTube / Vimeo) — stored but not shown to user directly */
+  thumbnailUrl?: string;
+  /** Source-specific metadata for the firmCaseStudies.sourceMetadata column */
+  sourceMetadata?: {
+    videoDuration?: string;
+    slideCount?: number;
+    transcriptLength?: number;
+    videoId?: string;
+    thumbnailSource?: string;
+  };
 }
 
 interface CaseStudyMetric {
@@ -75,8 +99,16 @@ export async function ingestCaseStudy(
   // Step 1: Extract raw text from source
   let rawText: string;
   let sourceTitle = "";
+  let thumbnailUrl: string | undefined;
+  let sourceMetadata: CaseStudyCosAnalysis["sourceMetadata"];
 
-  switch (input.sourceType) {
+  // Auto-classify URL sources so callers don't have to do it manually
+  const effectiveSourceType =
+    input.sourceType === "url" && input.url
+      ? classifySourceUrl(input.url)
+      : input.sourceType;
+
+  switch (effectiveSourceType) {
     case "url": {
       if (!input.url) throw new Error("URL required for url source type");
       const scraped = await scrapeUrl(input.url);
@@ -95,10 +127,58 @@ export async function ingestCaseStudy(
       break;
     }
 
+    case "youtube": {
+      if (!input.url) throw new Error("URL required for youtube source type");
+      const result = await ingestYouTube(input.url);
+      rawText = result.rawText;
+      sourceTitle = "YouTube Video";
+      thumbnailUrl = result.thumbnailUrl ?? undefined;
+      sourceMetadata = result.sourceMetadata;
+      break;
+    }
+
+    case "vimeo": {
+      if (!input.url) throw new Error("URL required for vimeo source type");
+      const result = await ingestVimeo(input.url);
+      rawText = result.rawText;
+      sourceTitle = "Vimeo Video";
+      thumbnailUrl = result.thumbnailUrl ?? undefined;
+      sourceMetadata = result.sourceMetadata;
+      break;
+    }
+
+    case "google_slides": {
+      if (!input.url) throw new Error("URL required for google_slides source type");
+      const result = await ingestGoogleSlides(input.url);
+      rawText = result.rawText;
+      sourceTitle = "Google Slides";
+      sourceMetadata = result.sourceMetadata;
+      break;
+    }
+
+    case "powerpoint_online": {
+      if (!input.url) throw new Error("URL required for powerpoint_online source type");
+      const result = await ingestPowerPointOnline(input.url);
+      rawText = result.rawText;
+      sourceTitle = "PowerPoint Online";
+      sourceMetadata = result.sourceMetadata;
+      break;
+    }
+
+    case "pdf_upload":
     case "pdf": {
-      if (!input.rawText) throw new Error("rawText required for PDF source");
-      rawText = input.rawText;
-      sourceTitle = input.filename ?? "Uploaded PDF";
+      // If a Vercel Blob URL is provided, download and parse the PDF
+      if (input.fileStorageKey) {
+        const buffer = await downloadFromBlob(input.fileStorageKey);
+        rawText = await extractTextFromPdf(buffer);
+        sourceTitle = input.filename ?? "Uploaded PDF";
+      } else if (input.rawText) {
+        // Fallback: pre-extracted text passed directly
+        rawText = input.rawText;
+        sourceTitle = input.filename ?? "Uploaded PDF";
+      } else {
+        throw new Error("fileStorageKey or rawText required for pdf_upload source type");
+      }
       break;
     }
 
@@ -138,7 +218,13 @@ export async function ingestCaseStudy(
   });
 
   if (!analysis?.isCaseStudy) return null;
-  return analysis;
+
+  // Attach thumbnail + source metadata to the analysis object
+  return {
+    ...analysis,
+    thumbnailUrl,
+    sourceMetadata,
+  };
 }
 
 // ─── AI Extraction ─────────────────────────────────────────
@@ -234,51 +320,39 @@ Extract as much detail as the content provides. Be precise about metrics and out
 }
 
 /**
- * Extract text from a PDF buffer.
+ * Extract text from a PDF buffer using pdf-parse.
  *
- * Uses a simple approach: split by common PDF text markers.
- * For production, integrate pdf-parse or pdfjs-dist.
- *
- * This is a placeholder — real PDF extraction would use:
- *   import pdfParse from 'pdf-parse';
- *   const data = await pdfParse(buffer);
- *   return data.text;
+ * Install with: npm install pdf-parse @types/pdf-parse
+ * Caps output at 50k characters to keep AI prompts manageable.
  */
-export async function extractTextFromPdf(
-  buffer: ArrayBuffer
-): Promise<string> {
-  // Attempt to extract readable text from PDF buffer
-  // This is a basic approach — converts buffer to string and extracts text-like content
-  const bytes = new Uint8Array(buffer);
-  const text: string[] = [];
-
-  // Look for text between BT/ET (Begin Text/End Text) operators
-  // This handles simple PDFs. Complex ones need a real parser.
-  let current = "";
-  for (let i = 0; i < bytes.length; i++) {
-    const char = bytes[i];
-    if (char >= 32 && char < 127) {
-      current += String.fromCharCode(char);
-    } else if (current.length > 3) {
-      // Only keep meaningful strings
-      if (
-        current.length > 10 &&
-        /[a-zA-Z]{3,}/.test(current) &&
-        !/^[0-9\s.]+$/.test(current)
-      ) {
-        text.push(current.trim());
-      }
-      current = "";
-    } else {
-      current = "";
-    }
+export async function extractTextFromPdf(buffer: Buffer): Promise<string> {
+  try {
+    // Dynamic import so the package is optional at build time
+    const pdfParse = (await import("pdf-parse" as string as any)).default;
+    const data = await pdfParse(buffer);
+    return (data.text as string).slice(0, 50000);
+  } catch (err) {
+    console.error("[CaseStudyIngestor] pdf-parse failed:", err);
+    // Surface a meaningful error rather than returning empty string
+    throw new Error(
+      `PDF text extraction failed: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
+}
 
-  const extracted = text.join(" ").replace(/\s+/g, " ");
-
-  if (extracted.length < 50) {
-    console.warn("[PDF] Minimal text extracted — may need pdf-parse for this document");
+/**
+ * Download a file from Vercel Blob by its URL.
+ *
+ * The storageKey for Vercel Blob IS the public URL returned at upload time.
+ * Requires the Blob store to allow public reads (the default for @vercel/blob).
+ */
+export async function downloadFromBlob(blobUrl: string): Promise<Buffer> {
+  const res = await fetch(blobUrl);
+  if (!res.ok) {
+    throw new Error(
+      `[CaseStudyIngestor] Failed to download from Blob: ${res.status} ${res.statusText}`
+    );
   }
-
-  return extracted;
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }

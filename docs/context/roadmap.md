@@ -9,7 +9,7 @@
 | 0 | Project Scaffold | Done | Next.js 15, Drizzle, Neo4j, Better Auth, Vercel deploy, design tokens |
 | 1 | Ossy Chat Core | Done | Claude Sonnet chat, streaming, conversation persistence, voice I/O shell |
 | 2 | Org & Expert Profiles | Done | Orgs, members, expert profiles, enrichment pipeline, billing, admin |
-| 3 | Knowledge Graph | In Progress | Neo4j schema + seed done, graph-sync Inngest partial, pgvector not live, partner sync API live |
+| 3 | Knowledge Graph | In Progress | Neo4j schema + seed done, graph-sync Inngest partial, pgvector not live, partner sync API live. Case study edges expanded (CREATED_BY, USES_SERVICE, IN_MARKET added 2026-03-12) |
 | 4 | Search & Matching | In Progress | Three-layer search + 5 Ossy tools wired, graph population admin route built, needs firm data in graph |
 | 5 | Partnerships & Opportunities | In Progress | Partnership CRUD, referrals, intros, opportunity extraction — UI built, partner sync API live |
 | 6 | Call Intelligence | In Progress | Recall.ai integration, post-call analysis pipeline, coaching reports — early MVP |

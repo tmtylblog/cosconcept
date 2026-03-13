@@ -75,9 +75,11 @@ All enrichment routes require authentication unless noted.
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | GET | `/api/profile` | Returns confirmed enrichment data + partner preferences for the user's firm. Merges `serviceFirms.enrichmentData.confirmed` with `partnerPreferences`. | Yes |
-| GET | `/api/firm/case-studies` | Lists firm's case studies by `organizationId`. Excludes soft-deleted entries. | Yes |
-| POST | `/api/firm/case-studies` | Submits a new case study (URL, text paste, or PDF upload). Queues Inngest pipeline (`enrich/firm-case-study-ingest`). Max 10MB for PDFs. | Yes |
+| GET | `/api/firm/case-studies` | Lists firm's case studies by `organizationId`. Returns `previewImageUrl`, `cosAnalysis`, `sourceType`. Excludes soft-deleted entries. | Yes |
+| POST | `/api/firm/case-studies` | Submits a new case study. Accepts `sourceType` (url/youtube/vimeo/google_slides/powerpoint_online/pdf_upload), `sourceUrl`, `fileStorageKey` (for PDF blob). Queues Inngest pipeline (`enrich/firm-case-study-ingest`). | Yes |
+| GET | `/api/firm/case-studies/[id]` | Fetches a single case study detail with full `cosAnalysis`. Verifies org membership. | Yes |
 | DELETE | `/api/firm/case-studies/[id]` | Soft-deletes a case study. Verifies org membership. | Yes |
+| POST | `/api/firm/case-studies/upload-token` | Generates a Vercel Blob client upload token for direct browser→blob PDF upload. Enforces PDF-only, 50MB max. | Yes |
 
 ---
 

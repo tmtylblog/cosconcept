@@ -115,26 +115,29 @@ All 14 functions are registered in the serve handler at `/api/inngest`.
 | **Event** | `enrich/firm-case-study-ingest` |
 | **Retries** | 2 |
 | **Concurrency** | 3 |
-| **Durable** | Yes (8 steps) |
+| **Durable** | Yes (10 steps) |
 | **Status** | Working |
 
-**Purpose:** Full user-facing case study pipeline. Unlike `case-study-ingest`, this manages the `firmCaseStudies` DB table lifecycle (status tracking, visible/hidden layers, abstraction profiles).
+**Purpose:** Full user-facing case study pipeline. Unlike `case-study-ingest`, this manages the `firmCaseStudies` DB table lifecycle (status tracking, visible/hidden layers, abstraction profiles, preview image, entity linking).
 
 **Steps:**
 1. `set-ingesting` -- Update `firmCaseStudies.status` to "ingesting"
-2. `ingest-and-extract` -- Multi-format content ingestion
+2. `ingest-and-extract` -- Multi-format content ingestion (url / youtube / vimeo / google_slides / powerpoint_online / pdf_upload)
 3. `mark-not-case-study` -- If validation fails, set status "failed" with user-friendly message
 4. `generate-summary` -- AI visible layer (summary + auto-tags)
 5. `generate-abstraction` -- AI hidden layer (capability proof, partnership signals, referral profile)
-6. `graph-write` -- Write to Neo4j
+6. `graph-write` -- Write to Neo4j with full edge set (CREATED_BY, FOR_CLIENT, DEMONSTRATES_SKILL, USES_SERVICE, IN_INDUSTRY, IN_MARKET)
 7. `upsert-abstraction` -- Upsert `abstractionProfiles` row
 8. `finalize` -- Update `firmCaseStudies` row with all results, set status "active"
+9. `generate-preview` -- Acquire thumbnail/screenshot → Nano Banana Pro device mockup composite → store in `previewImageUrl`. Falls back to Microlink screenshot if API key not set.
+10. `link-entities` -- Fuzzy-match extracted `clientName` against `serviceFirms`. If match ≥ 0.75 confidence, re-writes `FOR_CLIENT` edge to the matched `Company` node.
 
-**Input:** `{ caseStudyId, firmId, organizationId, sourceUrl, sourceType, rawText?, filename? }`
-**Output:** Case study ID, status, title, summary, tags, evidence strength, graph result.
+**Input:** `{ caseStudyId, firmId, organizationId, sourceUrl, sourceType, fileStorageKey?, rawText?, filename? }`
+**Output:** Case study ID, status, title, summary, tags, evidence strength, graph result, previewImageUrl.
 
 **Triggered by:**
 - `POST /api/firm/case-studies` (user submits case study via firm dashboard)
+- `scripts/import-legacy-case-studies.ts` (one-time legacy import)
 
 ---
 

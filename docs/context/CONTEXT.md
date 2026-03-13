@@ -26,6 +26,7 @@
 | 18 | Roadmap & Status | [roadmap.md](roadmap.md) | Build phases, what's done, gaps, TODOs |
 | 19 | Growth Operations | [growth-ops.md](growth-ops.md) | Unipile/LinkedIn, Instantly, HubSpot, invite scheduler, attribution |
 | 20 | CRM & Acquisition | [crm-acquisition.md](crm-acquisition.md) | HubSpot sync, acquisition pipeline vs marketplace pipeline, attribution |
+| 21 | Case Studies | [case-studies.md](case-studies.md) | Multi-format ingestion (6 source types), AI analysis pipeline, graph mapping, preview generation, UX spec |
 
 ## Rules for Claude Agents
 

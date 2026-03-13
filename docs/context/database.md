@@ -801,25 +801,32 @@ Case studies from legacy platform.
 ## Firm Case Studies (User-Managed)
 
 ### `firm_case_studies`
-Case studies submitted by firms (URL-based ingestion).
+Case studies submitted by firms — auto-discovered from website crawl or manually added via URL/PDF upload. Supports 6 source types.
 
 | Column | Type | Notes |
 |--------|------|-------|
 | id | text PK | |
 | firm_id | text FK -> service_firms (cascade) | |
 | organization_id | text NOT NULL | |
-| source_url | text NOT NULL | User-provided URL |
-| source_type | text (default "url") | url \| pdf_url |
+| source_url | text NOT NULL | User-provided URL or blob URL for PDFs |
+| source_type | text (default "url") | url \| youtube \| vimeo \| google_slides \| powerpoint_online \| pdf_upload |
+| file_storage_key | text | Vercel Blob URL for uploaded PDFs |
 | user_notes | text | |
-| status | case_study_status (default "pending") | |
-| status_message | text | Error/progress message |
+| status | case_study_status (default "pending") | pending \| ingesting \| active \| blocked \| failed \| deleted |
+| status_message | text | Error/progress message shown to user |
 | title | text | AI-generated |
-| summary | text | AI-generated 2-sentence summary |
-| auto_tags | jsonb | { skills, industries, services, clientName } |
-| cos_analysis | jsonb | Full AI analysis |
-| graph_node_id | text | Neo4j node ID |
-| abstraction_profile_id | text | |
+| summary | text | AI-generated 2-sentence summary (hidden, used for search) |
+| thumbnail_url | text | og:image or raw thumbnail from source (YouTube/Vimeo/OG tag) |
+| preview_image_url | text | Device mockup composite image from Nano Banana Pro |
+| auto_tags | jsonb | { skills, industries, services, markets, languages, clientName } |
+| source_metadata | jsonb | { videoDuration, slideCount, transcriptLength, videoId, thumbnailSource } |
+| cos_analysis | jsonb | Full AI extraction (CaseStudyCosAnalysis) — not editable by user |
+| graph_node_id | text | Neo4j CaseStudy node ID |
+| abstraction_profile_id | text | FK into abstraction_profiles |
+| is_hidden | boolean (default false) | User can hide (not delete) from their profile |
 | ingested_at, last_ingested_at | timestamp | |
+
+**Migration:** `drizzle/0011_case_study_preview.sql` — adds `file_storage_key`, `source_metadata`, `preview_image_url`.
 
 ---
 

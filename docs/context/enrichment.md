@@ -115,13 +115,52 @@ All modules live in `src/lib/enrichment/`.
 - **Model:** Gemini Flash via OpenRouter
 - **Cost:** ~$0.0001 per page (only for ambiguous cases)
 
+### source-classifier.ts — Source Type Detection
+
+- **Purpose:** Classify any URL or input into one of 6 source types
+- **Exported:** `classifySourceUrl(url)`, `getSourceTypeLabel(type)`, `getSourceTypePlaceholderIcon(type)`
+- **Types:** `url` | `youtube` | `vimeo` | `google_slides` | `powerpoint_online` | `pdf_upload`
+- **Cost:** Free (regex-based, no API calls)
+
+### youtube-ingestor.ts — YouTube Video Ingestion
+
+- **Purpose:** Extract text content from YouTube case study videos
+- **Strategy:** YouTube Data API v3 for metadata + `youtube-transcript` npm for auto-captions
+- **Output:** `{ rawText, thumbnailUrl, sourceMetadata: { videoId, videoDuration, transcriptLength } }`
+- **Env:** `YOUTUBE_API_KEY`
+- **Fallback:** If no transcript, uses title + description only
+
+### vimeo-ingestor.ts — Vimeo Video Ingestion
+
+- **Purpose:** Extract text content from Vimeo case study videos
+- **Strategy:** oEmbed API (free) for metadata + Vimeo API texttracks for VTT transcript
+- **Output:** `{ rawText, thumbnailUrl, sourceMetadata: { videoId, videoDuration, transcriptLength } }`
+- **Env:** `VIMEO_ACCESS_TOKEN`
+- **Fallback:** If no texttracks, uses title + description only
+
+### slides-ingestor.ts — Presentation Ingestion
+
+- **Purpose:** Extract text from Google Slides and PowerPoint Online presentations
+- **Google Slides:** Fetches `/export/txt` endpoint (no API key needed on public decks). Jina scrape of `/pub` URL as fallback.
+- **PowerPoint Online:** Jina scrape of viewer URL (best-effort HTML render)
+- **Output:** `{ rawText, thumbnailUrl: null, sourceMetadata: { slideCount } }`
+
+### preview-generator.ts — Device Mockup Preview Generation
+
+- **Purpose:** Generate device-framed preview images for case study cards
+- **Strategy:** Acquire raw image (YouTube/Vimeo thumbnail, or Microlink screenshot for URLs) → pass to Nano Banana Pro API for device mockup compositing
+- **Env:** `NANO_BANANA_PRO_API_KEY` — if not set, returns raw image URL as fallback (graceful degradation)
+- **Interim screenshot:** Microlink.io free tier (`api.microlink.io?url=...&screenshot=true`)
+- **File:** `src/lib/enrichment/preview-generator.ts`
+
 ### case-study-ingestor.ts — Multi-Format Case Study Ingestion
 
-- **Purpose:** Ingest case studies from URL, PDF, or raw text
-- **Formats:** `url` (Jina scrape), `pdf` (basic text extraction from buffer), `text` (direct)
-- **Output:** `CaseStudyCosAnalysis` — title, clientName, clientIndustry, challenge, solution, approach, outcomes, metrics, servicesUsed, skillsDemonstrated, industries, projectDuration, teamSize, isCaseStudy flag, confidence
+- **Purpose:** Ingest case studies from all 6 supported source types
+- **Formats:** `url` (Jina scrape), `youtube` (YouTube API + transcript), `vimeo` (Vimeo API + transcript), `google_slides` (export/txt), `powerpoint_online` (Jina scrape), `pdf_upload` (Vercel Blob → `pdf-parse`)
+- **Output:** `CaseStudyCosAnalysis` — title, clientName, clientIndustry, challenge, solution, approach, outcomes, metrics, servicesUsed, skillsDemonstrated, industries, projectDuration, teamSize, isCaseStudy flag, confidence. Also includes `thumbnailUrl` and `sourceMetadata`.
 - **Model:** Gemini Flash for structured extraction
-- **Includes:** `extractTextFromPdf()` — basic PDF text extraction (placeholder; needs pdf-parse for production)
+- **PDF:** Real `pdf-parse` extraction (replaced placeholder). `downloadFromBlob(blobUrl)` fetches from Vercel Blob.
+- **PDF storage:** Client uploads directly to Vercel Blob via `/api/firm/case-studies/upload-token` (bypasses 4.5MB API route limit). Max 50MB.
 
 ### case-study-analyzer.ts — Proprietary Analysis Pipeline
 

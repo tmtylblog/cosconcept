@@ -532,50 +532,84 @@ export async function writeSpecialistProfileToGraph(
 export interface GraphCaseStudyData {
   caseStudyId: string;
   firmId: string;
+  /** Organization ID from Better Auth — stored as node property */
+  organizationId?: string;
   title: string;
   description?: string;
   clientName?: string;
   sourceUrl?: string;
+  /** Source type — stored as node property */
+  sourceType?: string;
   skills?: string[];
+  /** Services used — writes USES_SERVICE edges */
+  services?: string[];
   industries?: string[];
+  /** Markets from abstraction taxonomyMapping — writes IN_MARKET edges */
+  markets?: string[];
   outcomes?: string[];
+  previewImageUrl?: string;
+  evidenceStrength?: string;
+  confidence?: number;
 }
 
 /**
  * Write a fully ingested case study to Neo4j.
+ *
+ * Creates/updates the CaseStudy node with all properties, then writes:
+ * - CREATED_BY edge to the ServiceFirm Company node (always)
+ * - HAS_CASE_STUDY edge from the ServiceFirm Company node (always)
+ * - FOR_CLIENT edge to a Company stub (if clientName provided)
+ * - DEMONSTRATES_SKILL edges (skills)
+ * - USES_SERVICE edges (services)
+ * - IN_INDUSTRY edges (industries)
+ * - IN_MARKET edges (markets)
+ *
  * Track A: Client → Company for client nodes.
  */
 export async function writeCaseStudyToGraph(
   data: GraphCaseStudyData
-): Promise<{ skills: number; industries: number; errors: string[] }> {
+): Promise<{ skills: number; industries: number; services: number; errors: string[] }> {
   const errors: string[] = [];
 
   try {
-    // Create/update case study node
+    // Create/update case study node with full property set
+    // CREATED_BY links the CaseStudy back to its owning ServiceFirm Company node.
     await neo4jWrite(
       `MERGE (cs:CaseStudy {id: $id})
        SET cs.title = $title,
            cs.description = $description,
            cs.sourceUrl = $sourceUrl,
+           cs.sourceType = $sourceType,
            cs.firmId = $firmId,
+           cs.organizationId = $organizationId,
            cs.status = "ingested",
            cs.outcomes = $outcomes,
+           cs.previewImageUrl = $previewImageUrl,
+           cs.evidenceStrength = $evidenceStrength,
+           cs.confidence = $confidence,
            cs.updatedAt = datetime()
        WITH cs
        MATCH (f:Company {id: $firmId})
-       MERGE (f)-[:HAS_CASE_STUDY]->(cs)`,
+       MERGE (f)-[:HAS_CASE_STUDY]->(cs)
+       MERGE (cs)-[:CREATED_BY]->(f)`,
       {
         id: data.caseStudyId,
         title: data.title,
         description: data.description ?? null,
         sourceUrl: data.sourceUrl ?? null,
+        sourceType: data.sourceType ?? "url",
         firmId: data.firmId,
+        organizationId: data.organizationId ?? null,
         outcomes: data.outcomes ?? [],
+        previewImageUrl: data.previewImageUrl ?? null,
+        evidenceStrength: data.evidenceStrength ?? null,
+        confidence: data.confidence ?? null,
       }
     );
 
     // Link to client Company (Track A: Company instead of Client)
     // Merged by name stub; enrichmentStatus = "stub" queues PDL domain lookup.
+    // The link-entities Inngest step will later upgrade this to a real Company match.
     if (data.clientName) {
       await neo4jWrite(
         `MATCH (cs:CaseStudy {id: $id})
@@ -590,7 +624,7 @@ export async function writeCaseStudyToGraph(
       );
     }
 
-    // Link skills
+    // Link skills (DEMONSTRATES_SKILL)
     if (data.skills?.length) {
       await neo4jWrite(
         `MATCH (cs:CaseStudy {id: $id})
@@ -601,7 +635,18 @@ export async function writeCaseStudyToGraph(
       );
     }
 
-    // Link industries
+    // Link services (USES_SERVICE)
+    if (data.services?.length) {
+      await neo4jWrite(
+        `MATCH (cs:CaseStudy {id: $id})
+         UNWIND $services AS svcName
+         MERGE (s:Service {name: svcName})
+         MERGE (cs)-[:USES_SERVICE]->(s)`,
+        { id: data.caseStudyId, services: data.services }
+      );
+    }
+
+    // Link industries (IN_INDUSTRY)
     if (data.industries?.length) {
       await neo4jWrite(
         `MATCH (cs:CaseStudy {id: $id})
@@ -612,15 +657,27 @@ export async function writeCaseStudyToGraph(
       );
     }
 
+    // Link markets (IN_MARKET) — from abstraction taxonomyMapping
+    if (data.markets?.length) {
+      await neo4jWrite(
+        `MATCH (cs:CaseStudy {id: $id})
+         UNWIND $markets AS mktName
+         MERGE (m:Market {name: mktName})
+         MERGE (cs)-[:IN_MARKET]->(m)`,
+        { id: data.caseStudyId, markets: data.markets }
+      );
+    }
+
     return {
       skills: data.skills?.length ?? 0,
       industries: data.industries?.length ?? 0,
+      services: data.services?.length ?? 0,
       errors,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     errors.push(msg);
-    return { skills: 0, industries: 0, errors };
+    return { skills: 0, industries: 0, services: 0, errors };
   }
 }
 

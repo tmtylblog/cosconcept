@@ -1120,6 +1120,17 @@ export const firmCaseStudies = pgTable("firm_case_studies", {
   graphNodeId: text("graph_node_id"),
   abstractionProfileId: text("abstraction_profile_id"),
 
+  // Multi-format ingestion — new columns (migration 0011_case_study_preview)
+  fileStorageKey: text("file_storage_key"),
+  sourceMetadata: jsonb("source_metadata").$type<{
+    videoDuration?: string;
+    slideCount?: number;
+    transcriptLength?: number;
+    videoId?: string;
+    thumbnailSource?: string;
+  }>(),
+  previewImageUrl: text("preview_image_url"),
+
   // Timestamps
   ingestedAt: timestamp("ingested_at"),
   lastIngestedAt: timestamp("last_ingested_at"),

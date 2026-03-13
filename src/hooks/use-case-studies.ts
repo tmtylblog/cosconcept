@@ -20,6 +20,7 @@ export interface CaseStudy {
   title: string | null;
   summary: string | null;
   thumbnailUrl: string | null;
+  previewImageUrl: string | null;
   userNotes: string | null;
   isHidden: boolean;
   autoTags: {
@@ -29,6 +30,21 @@ export interface CaseStudy {
     markets: string[];
     languages: string[];
     clientName: string | null;
+  } | null;
+  cosAnalysis: {
+    confidence?: number;
+    title?: string;
+    clientName?: string;
+    clientIndustry?: string;
+    projectDuration?: string;
+    teamSize?: string;
+    challenge?: string;
+    solution?: string;
+    approach?: string;
+    outcomes?: string[];
+    metrics?: Array<{ value: string; label: string; improvement?: string }>;
+    evidenceStrength?: string;
+    evidenceReasoning?: string;
   } | null;
   createdAt: string;
   ingestedAt: string | null;

@@ -32,8 +32,15 @@ export const firmCaseStudyIngest = inngest.createFunction(
   },
   { event: "enrich/firm-case-study-ingest" },
   async ({ event, step }) => {
-    const { caseStudyId, firmId, organizationId, sourceUrl, rawText } =
-      event.data;
+    const {
+      caseStudyId,
+      firmId,
+      organizationId,
+      sourceUrl,
+      rawText,
+      sourceType,
+      fileStorageKey,
+    } = event.data;
 
     // Step 1: Set status → "ingesting"
     await step.run("set-ingesting", async () => {
@@ -47,10 +54,19 @@ export const firmCaseStudyIngest = inngest.createFunction(
         .where(eq(firmCaseStudies.id, caseStudyId));
     });
 
-    // Step 2: Ingest content via existing multi-format ingestor
+    // Step 2: Ingest content via multi-format ingestor (routes by sourceType)
     const analysis = await step.run("ingest-and-extract", async () => {
-      // If raw text was provided (PDF upload or text paste), use it directly
-      if (rawText) {
+      // pdf_upload: download from Vercel Blob then parse
+      if (sourceType === "pdf_upload" && fileStorageKey) {
+        return ingestCaseStudy({
+          firmId,
+          sourceType: "pdf_upload",
+          fileStorageKey,
+          filename: event.data.filename,
+        });
+      }
+      // Text paste: use rawText directly
+      if (rawText && (!sourceType || sourceType === "text")) {
         return ingestCaseStudy({
           firmId,
           sourceType: "text",
@@ -58,11 +74,13 @@ export const firmCaseStudyIngest = inngest.createFunction(
           filename: event.data.filename,
         });
       }
-      // Otherwise, scrape the URL
+      // URL-based sources (url, youtube, vimeo, google_slides, powerpoint_online)
+      // The ingestor will auto-classify if sourceType is "url"
       return ingestCaseStudy({
         firmId,
-        sourceType: "url",
+        sourceType: sourceType ?? "url",
         url: sourceUrl,
+        fileStorageKey,
       });
     });
 
@@ -133,15 +151,21 @@ export const firmCaseStudyIngest = inngest.createFunction(
       return writeCaseStudyToGraph({
         caseStudyId: graphNodeId,
         firmId,
+        organizationId,
         title: analysis.title,
         description: [analysis.challenge, analysis.solution]
           .filter(Boolean)
           .join(" → "),
         clientName: analysis.clientName,
         sourceUrl,
+        sourceType: sourceType ?? "url",
         skills: analysis.skillsDemonstrated,
+        services: analysis.servicesUsed,
         industries: analysis.industries,
         outcomes: analysis.outcomes,
+        previewImageUrl: (analysis as any).previewImageUrl ?? undefined,
+        evidenceStrength: abstraction?.evidenceStrength ?? undefined,
+        confidence: analysis.confidence,
       });
     });
 
@@ -212,11 +236,68 @@ export const firmCaseStudyIngest = inngest.createFunction(
           cosAnalysis: analysis,
           graphNodeId,
           abstractionProfileId,
+          // Persist multi-format ingestion metadata
+          sourceMetadata: (analysis as any).sourceMetadata ?? null,
           ingestedAt: new Date(),
           lastIngestedAt: new Date(),
           updatedAt: new Date(),
         })
         .where(eq(firmCaseStudies.id, caseStudyId));
+    });
+
+    // Step 9: Generate preview image (device mockup via Nano Banana Pro, or raw thumbnail fallback)
+    await step.run("generate-preview", async () => {
+      const { generateCaseStudyPreview } = await import(
+        "@/lib/enrichment/preview-generator"
+      );
+      const previewUrl = await generateCaseStudyPreview({
+        sourceType: (sourceType as any) ?? "url",
+        rawThumbnailUrl: (analysis as any).thumbnailUrl,
+        sourceUrl: sourceUrl ?? "",
+        title: analysis.title,
+      });
+      if (previewUrl) {
+        await db
+          .update(firmCaseStudies)
+          .set({ previewImageUrl: previewUrl, updatedAt: new Date() })
+          .where(eq(firmCaseStudies.id, caseStudyId));
+      }
+      return { previewUrl };
+    });
+
+    // Step 10: Link client entity — fuzzy-match extracted clientName against serviceFirms
+    await step.run("link-entities", async () => {
+      if (!analysis.clientName) return { linked: false };
+
+      // Load a batch of firms for fuzzy matching (name-based, no vector needed)
+      const firms = await db
+        .select({ id: serviceFirms.id, name: serviceFirms.name })
+        .from(serviceFirms)
+        .limit(500);
+
+      const normalized = analysis.clientName.toLowerCase().trim();
+      const match = firms.find((f) => {
+        const fname = (f.name ?? "").toLowerCase().trim();
+        if (!fname) return false;
+        if (fname === normalized) return true;
+        // Simple contains check as fuzzy fallback
+        if (fname.includes(normalized) || normalized.includes(fname)) return true;
+        return false;
+      });
+
+      if (match) {
+        // Re-write the FOR_CLIENT edge to the actual ServiceFirm/Company node
+        const { neo4jWrite } = await import("@/lib/neo4j");
+        await neo4jWrite(
+          `MATCH (cs:CaseStudy {id: $caseStudyId})
+           MATCH (f:Company {id: $matchedFirmId})
+           MERGE (cs)-[:FOR_CLIENT]->(f)`,
+          { caseStudyId: graphNodeId, matchedFirmId: match.id }
+        );
+        return { linked: true, matchedFirmId: match.id };
+      }
+
+      return { linked: false };
     });
 
     return {

@@ -32,7 +32,7 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 | `ServiceFirm` | *(role label on Company)* | Not a standalone node. Marks a `Company` as a COS service-provider. Query with `MATCH (f:Company:ServiceFirm)` or `MATCH (f:Company {id: $id})`. Constraint: `Company.id UNIQUE` (not ServiceFirm.id). | Applied via `SET f:ServiceFirm` in graph-writer.ts |
 | `Expert` | `id` (composite: `firmId:name-slug`) | Individual professional. Properties: `fullName`, `headline`, `linkedinUrl`, `location`, `firmId`, `updatedAt` | Enrichment pipeline (graph-writer.ts) |
 | `SpecialistProfile` | `id` (generated) | AI-generated specialist niche profile for an expert. Properties: `title`, `firmId`, `expertId`, `updatedAt`. Only created for profiles with qualityScore >= 80. | expert-linkedin.ts |
-| `CaseStudy` | `id` (composite: `firmId:cs:index`) | Published case study. Properties: `title`, `description`, `sourceUrl`, `firmId`, `status` (pending/ingested), `outcomes[]`, `updatedAt` | graph-writer.ts, case-study-ingest.ts |
+| `CaseStudy` | `id` (composite: `firmId:cs:base64url-slice`) | Published case study. Properties: `title`, `description`, `sourceUrl`, `sourceType`, `firmId`, `organizationId`, `status`, `outcomes[]`, `previewImageUrl`, `evidenceStrength`, `confidence`, `updatedAt` | graph-writer.ts, firm-case-study-ingest.ts |
 | `Client` | `name` (unique) | Company served by firms. Platform-owned, not firm-owned. | graph-writer.ts |
 | `Service` | `name` (unique) | Named service offering extracted from firm websites. | graph-writer.ts (from Jina scrape) |
 
@@ -86,9 +86,12 @@ The Neo4j Aura knowledge graph maps the professional services landscape: firms, 
 | `HAS_SPECIALIST_PROFILE` | Expert | SpecialistProfile | Expert LinkedIn enrichment |
 | `HAS_EXPERTISE` | SpecialistProfile | Skill | Expert LinkedIn enrichment |
 | `SERVES_INDUSTRY` | SpecialistProfile | Industry | Expert LinkedIn enrichment |
-| `DEMONSTRATES_SKILL` | CaseStudy | Skill | Case study ingest |
-| `FOR_CLIENT` | CaseStudy | Client | Case study ingest |
-| `IN_INDUSTRY` | CaseStudy | Industry | Case study ingest |
+| `CREATED_BY` | CaseStudy | Company:ServiceFirm | Case study ingest — always set to the uploading workspace firm |
+| `FOR_CLIENT` | CaseStudy | Company or Client | Case study ingest — matched to ServiceFirm node if fuzzy confidence ≥ 0.75, else Client string node |
+| `DEMONSTRATES_SKILL` | CaseStudy | Skill | Case study ingest — all `skillsDemonstrated` from AI extraction |
+| `USES_SERVICE` | CaseStudy | Service | Case study ingest — all `servicesUsed` from AI extraction |
+| `IN_INDUSTRY` | CaseStudy | Industry | Case study ingest — all `industries` from AI extraction |
+| `IN_MARKET` | CaseStudy | Market | Case study ingest — from abstraction `taxonomyMapping.normalizedMarkets` |
 
 ### Taxonomy Edges (neo4j-seed.ts)
 

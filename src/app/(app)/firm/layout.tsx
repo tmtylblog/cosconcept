@@ -31,6 +31,7 @@ export default function FirmLayout({ children }: { children: React.ReactNode }) 
     : pathname === "/firm/experience" ? "experience"
     : pathname === "/firm/preferences" ? "preferences"
     : pathname.startsWith("/firm/case-studies") ? "experience"
+    : pathname.startsWith("/firm/experience/") ? "experience"
     : "overview";
 
   return (

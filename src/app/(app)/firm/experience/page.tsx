@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import {
   FileText,
   Loader2,
@@ -8,20 +9,23 @@ import {
   Globe,
   Eye,
   EyeOff,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
   AlertCircle,
   Plus,
-  Link as LinkIcon,
-  Upload,
-  Type,
-  X,
-  ImageIcon,
+  Youtube,
+  Video,
+  Layout,
 } from "lucide-react";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useCaseStudies, type CaseStudy } from "@/hooks/use-case-studies";
+import { CaseStudySubmissionDialog } from "@/components/firm/case-study-submission-dialog";
+import {
+  classifySourceUrl,
+  getSourceTypeLabel,
+  type CaseStudySourceType,
+} from "@/lib/enrichment/source-classifier";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 25;
@@ -37,14 +41,13 @@ export default function FirmExperiencePage() {
     isSubmitting,
     submitError,
     submitUrl,
-    submitText,
     submitPdf,
     toggleHidden,
   } = useCaseStudies(activeOrg?.id);
 
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [showHidden, setShowHidden] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
   // Split visible / hidden
   const visibleCaseStudies = caseStudies.filter((cs) => !cs.isHidden);
@@ -62,22 +65,31 @@ export default function FirmExperiencePage() {
   const hasMore = visibleCaseStudies.length > visibleCount;
 
   return (
-    <div className="cos-scrollbar mx-auto max-w-3xl space-y-4 overflow-y-auto p-6">
+    <div className="cos-scrollbar mx-auto max-w-3xl overflow-y-auto p-6">
       {/* Page header */}
-      <div>
-        <h2 className="font-heading text-lg font-semibold text-cos-midnight">
-          Experience & Case Studies
-        </h2>
-        <p className="mt-1 text-xs text-cos-slate-dim">
-          {total > 0
-            ? `${total} case ${total === 1 ? "study" : "studies"} from ${enrichmentResult?.domain ?? "your website"}. These demonstrate your ground truth capabilities.`
-            : "Your portfolio of client work and case studies. Auto-discovered from your website."}
-        </p>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="font-heading text-lg font-semibold text-cos-midnight">
+            Experience & Case Studies
+          </h2>
+          <p className="mt-1 text-xs text-cos-slate-dim">
+            {total > 0
+              ? `${total} case ${total === 1 ? "study" : "studies"} · ${enrichmentResult?.domain ?? "your website"}`
+              : "Your portfolio of client work and case studies. Auto-discovered from your website."}
+          </p>
+        </div>
+        <button
+          onClick={() => setShowAddDialog(true)}
+          className="flex shrink-0 items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-cos-electric-hover"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Case Study
+        </button>
       </div>
 
       {/* Processing progress bar */}
       {pendingCount > 0 && (
-        <div className="rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-4 py-3">
+        <div className="mb-4 rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-cos-electric" />
@@ -100,23 +112,12 @@ export default function FirmExperiencePage() {
 
       {/* Success banner (when all done) */}
       {total > 0 && pendingCount === 0 && !isLoading && (
-        <div className="flex items-center gap-2 rounded-cos-xl border border-cos-signal/20 bg-cos-signal/5 px-4 py-3">
+        <div className="mb-4 flex items-center gap-2 rounded-cos-xl border border-cos-signal/20 bg-cos-signal/5 px-4 py-3">
           <CheckCircle2 className="h-4 w-4 text-cos-signal" />
           <p className="text-sm font-medium text-cos-signal">
             {activeCount} case {activeCount === 1 ? "study" : "studies"} indexed
             {failedCount > 0 ? ` · ${failedCount} failed` : ""}
             {hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ""}
-          </p>
-        </div>
-      )}
-
-      {/* Source indicator */}
-      {enrichmentResult?.domain && total > 0 && (
-        <div className="flex items-center gap-2 rounded-cos-lg border border-cos-border/50 bg-white/60 px-3 py-2">
-          <Globe className="h-3.5 w-3.5 text-cos-slate-dim" />
-          <p className="text-[11px] text-cos-slate-dim">
-            Auto-discovered from{" "}
-            <span className="font-medium text-cos-midnight">{enrichmentResult.domain}</span>
           </p>
         </div>
       )}
@@ -128,40 +129,49 @@ export default function FirmExperiencePage() {
         </div>
       )}
 
-      {/* Case study cards */}
-      <div className="space-y-3">
-        {displayedCaseStudies.map((cs) => (
-          <CaseStudyCard
-            key={cs.id}
-            caseStudy={cs}
-            onToggleHidden={toggleHidden}
-          />
-        ))}
-      </div>
+      {/* Rich 2-column grid */}
+      {!isLoading && displayedCaseStudies.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {displayedCaseStudies.map((cs) => (
+            <CaseStudyCard
+              key={cs.id}
+              caseStudy={cs}
+              onToggleHidden={toggleHidden}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Show more button */}
       {hasMore && (
-        <button
-          onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
-          className="w-full rounded-cos-lg border border-cos-border/50 bg-white/60 px-4 py-2.5 text-xs font-medium text-cos-slate transition-colors hover:border-cos-electric/30 hover:bg-cos-electric/3 hover:text-cos-electric"
-        >
-          Show {Math.min(PAGE_SIZE, visibleCaseStudies.length - visibleCount)} more...
-        </button>
+        <div className="mt-4">
+          <button
+            onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
+            className="w-full rounded-cos-lg border border-cos-border/50 bg-white/60 px-4 py-2.5 text-xs font-medium text-cos-slate transition-colors hover:border-cos-electric/30 hover:bg-cos-electric/3 hover:text-cos-electric"
+          >
+            Show {Math.min(PAGE_SIZE, visibleCaseStudies.length - visibleCount)} more...
+          </button>
+        </div>
       )}
 
       {/* Hidden case studies section */}
       {hiddenCaseStudies.length > 0 && (
-        <div className="space-y-3 border-t border-cos-border/30 pt-4">
+        <div className="mt-6 space-y-3 border-t border-cos-border/30 pt-4">
           <button
             onClick={() => setShowHidden(!showHidden)}
             className="flex items-center gap-2 text-xs font-medium text-cos-slate-dim transition-colors hover:text-cos-midnight"
           >
-            {showHidden ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            {hiddenCaseStudies.length} hidden case {hiddenCaseStudies.length === 1 ? "study" : "studies"}
+            {showHidden ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+            {hiddenCaseStudies.length} hidden case{" "}
+            {hiddenCaseStudies.length === 1 ? "study" : "studies"}
           </button>
 
           {showHidden && (
-            <div className="space-y-3 opacity-60">
+            <div className="grid grid-cols-1 gap-4 opacity-60 sm:grid-cols-2">
               {hiddenCaseStudies.map((cs) => (
                 <CaseStudyCard
                   key={cs.id}
@@ -174,28 +184,6 @@ export default function FirmExperiencePage() {
         </div>
       )}
 
-      {/* Add case study manually — collapsible section */}
-      <div className="border-t border-cos-border/30 pt-4">
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="flex items-center gap-2 text-xs font-medium text-cos-slate-dim transition-colors hover:text-cos-midnight"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add case study manually
-        </button>
-
-        {showAddForm && (
-          <AddCaseStudyForm
-            isSubmitting={isSubmitting}
-            submitError={submitError}
-            onSubmitUrl={submitUrl}
-            onSubmitText={submitText}
-            onSubmitPdf={submitPdf}
-            onClose={() => setShowAddForm(false)}
-          />
-        )}
-      </div>
-
       {/* Empty state */}
       {total === 0 && !isLoading && enrichmentStatus !== "loading" && (
         <div className="rounded-cos-xl border border-dashed border-cos-border bg-cos-surface/50 px-6 py-8 text-center">
@@ -207,411 +195,248 @@ export default function FirmExperiencePage() {
             Case studies will be auto-discovered from your website after onboarding.
             They are the gold standard for partner matching.
           </p>
+          <button
+            onClick={() => setShowAddDialog(true)}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-cos-electric-hover"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add your first case study
+          </button>
         </div>
+      )}
+
+      {/* Submission dialog */}
+      {showAddDialog && (
+        <CaseStudySubmissionDialog
+          open={showAddDialog}
+          onClose={() => setShowAddDialog(false)}
+          onSubmitUrl={submitUrl}
+          onSubmitPdf={submitPdf}
+          organizationId={activeOrg?.id}
+        />
       )}
     </div>
   );
 }
 
-// ─── Case Study Card Component ───────────────────────────
+// ─── Rich Case Study Card ─────────────────────────────────
 
-function CaseStudyCard({
-  caseStudy,
-  onToggleHidden,
-}: {
+interface CaseStudyCardProps {
   caseStudy: CaseStudy;
   onToggleHidden: (id: string) => Promise<void>;
-}) {
-  const isPending = caseStudy.status === "pending" || caseStudy.status === "ingesting";
-  const isFailed = caseStudy.status === "failed";
+}
 
-  // Extract display URL (strip protocol and www.)
-  const displayUrl = caseStudy.sourceUrl
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .replace(/\/$/, "");
+function CaseStudyCard({ caseStudy: cs, onToggleHidden }: CaseStudyCardProps) {
+  const isPending = cs.status === "pending" || cs.status === "ingesting";
+  const isFailed = cs.status === "failed";
+  const isActive = cs.status === "active";
 
-  // Try to derive a title from URL slug if no title yet
-  const displayTitle = caseStudy.title || deriveSlugTitle(caseStudy.sourceUrl);
+  // Determine source type
+  const sourceType: CaseStudySourceType = (() => {
+    if (cs.sourceType === "pdf_upload" || cs.sourceType === "pdf" || cs.sourceType === "pdf_url") {
+      return "pdf_upload";
+    }
+    if (cs.sourceUrl.startsWith("uploaded:")) return "pdf_upload";
+    if (cs.sourceType === "youtube") return "youtube";
+    if (cs.sourceType === "vimeo") return "vimeo";
+    if (cs.sourceType === "google_slides") return "google_slides";
+    if (cs.sourceType === "powerpoint_online") return "powerpoint_online";
+    try {
+      return classifySourceUrl(cs.sourceUrl);
+    } catch {
+      return "url";
+    }
+  })();
+
+  const sourceLabel = getSourceTypeLabel(sourceType);
+
+  // Derive display title
+  const displayTitle = cs.title ?? deriveSlugTitle(cs.sourceUrl);
+
+  // Build all tags: skills first, then industries, max 3 total
+  const allTags: Array<{ label: string; type: "skill" | "industry" }> = [];
+  if (cs.autoTags) {
+    cs.autoTags.skills?.forEach((s) => allTags.push({ label: s, type: "skill" }));
+    cs.autoTags.industries?.forEach((i) => allTags.push({ label: i, type: "industry" }));
+  }
+  const displayedTags = allTags.slice(0, 3);
+  const overflowCount = allTags.length - displayedTags.length;
+
+  // Evidence strength from cosAnalysis
+  const confidence = cs.cosAnalysis?.confidence;
+  const evidenceLabel =
+    confidence === undefined
+      ? null
+      : confidence >= 0.8
+        ? { label: "Strong", color: "text-cos-signal" }
+        : confidence >= 0.5
+          ? { label: "Moderate", color: "text-cos-warm" }
+          : { label: "Weak", color: "text-cos-slate" };
+
+  // Preview image — prefer previewImageUrl (device mockup), fall back to thumbnailUrl
+  const previewUrl = cs.previewImageUrl ?? cs.thumbnailUrl;
 
   return (
-    <div className={`rounded-cos-xl border transition-all ${
-      isPending
-        ? "border-cos-electric/20 bg-cos-electric/3"
-        : isFailed
-          ? "border-cos-ember/20 bg-cos-ember/3"
-          : caseStudy.isHidden
-            ? "border-cos-border/30 bg-cos-surface-raised"
-            : "border-cos-border/60 bg-cos-surface-raised hover:border-cos-electric/20"
-    }`}>
-      <div className="flex gap-3 p-3">
-        {/* Thumbnail or placeholder */}
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-cos-md bg-cos-midnight/5">
-          {caseStudy.thumbnailUrl ? (
+    <div
+      className={cn(
+        "group relative overflow-hidden rounded-cos-xl border bg-white transition-all duration-200",
+        isFailed
+          ? "border-cos-ember/20 bg-cos-ember/5"
+          : "border-cos-border/60 hover:border-cos-electric/20 hover:shadow-md"
+      )}
+    >
+      {/* Clickable link wrapper — covers the whole card except the hide button */}
+      <Link href={`/firm/experience/${cs.id}`} className="block">
+        {/* Preview area — 16:9 */}
+        <div className="relative aspect-video overflow-hidden">
+          {previewUrl ? (
             <img
-              src={caseStudy.thumbnailUrl}
-              alt=""
+              src={previewUrl}
+              alt={displayTitle}
               className="h-full w-full object-cover"
               loading="lazy"
             />
           ) : isPending ? (
-            <Loader2 className="h-5 w-5 animate-spin text-cos-electric" />
-          ) : isFailed ? (
-            <AlertCircle className="h-5 w-5 text-cos-ember" />
+            <div className="flex h-full w-full animate-pulse items-center justify-center bg-gradient-to-r from-cos-cloud-dim via-cos-cloud to-cos-cloud-dim">
+              <Loader2 className="h-6 w-6 animate-spin text-cos-electric/60" />
+            </div>
           ) : (
-            <ImageIcon className="h-5 w-5 text-cos-slate-light" />
+            <SourcePlaceholderPreview sourceType={sourceType} />
           )}
+
+          {/* Source badge — top-left overlay */}
+          <div className="absolute left-2 top-2">
+            <span className="rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-medium text-cos-midnight backdrop-blur-sm">
+              {sourceLabel}
+            </span>
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="min-w-0 flex-1">
+        {/* Card body */}
+        <div className="px-3 pb-3 pt-2">
           {/* Title */}
-          <h3 className={`text-sm font-semibold leading-tight ${
-            isPending ? "text-cos-slate" : "text-cos-midnight"
-          }`}>
+          <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-cos-midnight">
             {displayTitle}
-            {isPending && (
-              <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-normal text-cos-electric">
-                <Loader2 className="h-3 w-3 animate-spin" /> Processing...
-              </span>
-            )}
           </h3>
 
-          {/* Failed message */}
-          {isFailed && caseStudy.statusMessage && (
-            <p className="mt-0.5 text-[10px] leading-snug text-cos-ember">
-              {caseStudy.statusMessage}
-            </p>
+          {/* Client name */}
+          {cs.autoTags?.clientName && (
+            <p className="mt-0.5 text-xs text-cos-warm">{cs.autoTags.clientName}</p>
           )}
 
-          {/* Auto-tags: skills, industries, markets, clients, languages */}
-          {caseStudy.autoTags && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {/* Client name */}
-              {caseStudy.autoTags.clientName && (
-                <span className="rounded-cos-pill bg-cos-warm/10 px-2 py-0.5 text-[10px] font-medium text-cos-warm">
-                  {caseStudy.autoTags.clientName}
-                </span>
-              )}
-              {/* Skills */}
-              {caseStudy.autoTags.skills?.slice(0, 3).map((skill) => (
-                <span
-                  key={skill}
-                  className="rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[10px] text-cos-electric"
-                >
-                  {skill}
-                </span>
-              ))}
-              {/* Industries */}
-              {caseStudy.autoTags.industries?.slice(0, 2).map((ind) => (
-                <span
-                  key={ind}
-                  className="rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] text-cos-signal"
-                >
-                  {ind}
-                </span>
-              ))}
-              {/* Markets */}
-              {caseStudy.autoTags.markets?.slice(0, 2).map((m) => (
-                <span
-                  key={m}
-                  className="rounded-cos-pill bg-cos-midnight/5 px-2 py-0.5 text-[10px] text-cos-slate"
-                >
-                  {m}
-                </span>
-              ))}
-              {/* Languages */}
-              {caseStudy.autoTags.languages?.slice(0, 2).map((l) => (
-                <span
-                  key={l}
-                  className="rounded-cos-pill bg-cos-midnight/5 px-2 py-0.5 text-[10px] text-cos-midnight/60"
-                >
-                  {l}
-                </span>
-              ))}
+          {/* Failed error */}
+          {isFailed && cs.statusMessage && (
+            <div className="mt-1 flex items-start gap-1">
+              <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-cos-ember" />
+              <p className="text-[10px] leading-snug text-cos-ember">{cs.statusMessage}</p>
             </div>
           )}
 
-          {/* Source link */}
-          {!caseStudy.sourceUrl.startsWith("manual:") && !caseStudy.sourceUrl.startsWith("uploaded:") && (
-            <a
-              href={caseStudy.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1.5 flex items-center gap-1 text-[10px] text-cos-electric transition-colors hover:underline"
-            >
-              <ExternalLink className="h-3 w-3" />
-              <span className="max-w-[250px] truncate">{displayUrl}</span>
-            </a>
+          {/* Tags */}
+          {!isFailed && displayedTags.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              {displayedTags.map((tag) => (
+                <span
+                  key={tag.label}
+                  className={cn(
+                    "rounded-cos-pill px-2 py-0.5 text-[10px]",
+                    tag.type === "skill"
+                      ? "bg-cos-electric/10 text-cos-electric"
+                      : "bg-cos-signal/10 text-cos-signal"
+                  )}
+                >
+                  {tag.label}
+                </span>
+              ))}
+              {overflowCount > 0 && (
+                <span className="text-[10px] text-cos-slate-dim">
+                  +{overflowCount} more
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Evidence strength */}
+          {isActive && evidenceLabel && (
+            <p className={cn("mt-1.5 text-[10px] font-medium", evidenceLabel.color)}>
+              ● {evidenceLabel.label}
+            </p>
           )}
         </div>
+      </Link>
 
-        {/* Actions */}
-        <div className="flex shrink-0 items-start">
-          <button
-            onClick={() => onToggleHidden(caseStudy.id)}
-            className={`flex h-7 w-7 items-center justify-center rounded-cos-md transition-colors ${
-              caseStudy.isHidden
-                ? "text-cos-warm hover:bg-cos-warm/10"
-                : "text-cos-slate-light hover:bg-cos-cloud-dim hover:text-cos-midnight"
-            }`}
-            title={caseStudy.isHidden ? "Show case study" : "Hide case study"}
-          >
-            {caseStudy.isHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Add Case Study Form ─────────────────────────────────
-
-function AddCaseStudyForm({
-  isSubmitting,
-  submitError,
-  onSubmitUrl,
-  onSubmitText,
-  onSubmitPdf,
-  onClose,
-}: {
-  isSubmitting: boolean;
-  submitError: string | null;
-  onSubmitUrl: (url: string, userNotes?: string) => Promise<void>;
-  onSubmitText: (text: string, userNotes?: string) => Promise<void>;
-  onSubmitPdf: (file: File, userNotes?: string) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [mode, setMode] = useState<"url" | "text" | "pdf">("url");
-  const [urlInput, setUrlInput] = useState("");
-  const [textInput, setTextInput] = useState("");
-  const [fileInput, setFileInput] = useState<File | null>(null);
-  const [showNotes, setShowNotes] = useState(false);
-  const [userNotes, setUserNotes] = useState("");
-  const [fileError, setFileError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
-  const canSubmit = (() => {
-    if (isSubmitting) return false;
-    switch (mode) {
-      case "url": return urlInput.trim().length > 0;
-      case "text": return textInput.trim().length >= 100;
-      case "pdf": return fileInput !== null;
-    }
-  })();
-
-  const handleSubmit = async () => {
-    const notes = userNotes.trim() || undefined;
-    if (mode === "url" && urlInput.trim()) {
-      await onSubmitUrl(urlInput.trim(), notes);
-      setUrlInput("");
-    } else if (mode === "text" && textInput.trim()) {
-      await onSubmitText(textInput.trim(), notes);
-      setTextInput("");
-    } else if (mode === "pdf" && fileInput) {
-      await onSubmitPdf(fileInput, notes);
-      setFileInput(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-    setUserNotes("");
-    setShowNotes(false);
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  return (
-    <div className="mt-3 rounded-cos-xl border border-cos-border/60 bg-cos-surface-raised p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex gap-1 rounded-cos-lg bg-cos-cloud-dim p-0.5">
-          {(["url", "text", "pdf"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => { setMode(m); setFileError(null); }}
-              className={cn(
-                "flex items-center gap-1 rounded-cos-md px-2.5 py-1 text-[10px] font-semibold transition-all",
-                mode === m
-                  ? "bg-white text-cos-midnight shadow-sm"
-                  : "text-cos-slate-dim hover:text-cos-midnight"
-              )}
-            >
-              {m === "url" && <LinkIcon className="h-3 w-3" />}
-              {m === "text" && <Type className="h-3 w-3" />}
-              {m === "pdf" && <Upload className="h-3 w-3" />}
-              {m === "url" ? "URL" : m === "text" ? "Text" : "PDF"}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={onClose}
-          className="flex h-6 w-6 items-center justify-center rounded-cos-md text-cos-slate-light transition-colors hover:bg-cos-cloud-dim hover:text-cos-midnight"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      <div className="mt-3">
-        {mode === "url" && (
-          <div>
-            <input
-              type="url"
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="https://yoursite.com/case-study/acme"
-              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
-              onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) handleSubmit(); }}
-            />
-            <p className="mt-1 text-[10px] text-cos-slate-light">
-              Works with website URLs, Google Docs, Google Slides, and other cloud links.
-            </p>
-          </div>
-        )}
-        {mode === "text" && (
-          <div className="space-y-1">
-            <textarea
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              placeholder="Paste case study text here (minimum 100 characters)..."
-              className="w-full resize-none rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-xs leading-relaxed text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
-              rows={5}
-            />
-            <p className={cn(
-              "text-[10px]",
-              textInput.length >= 100 ? "text-cos-signal" : "text-cos-slate-light"
-            )}>
-              {textInput.length}/100 min characters
-            </p>
-          </div>
-        )}
-        {mode === "pdf" && (
-          <div className="space-y-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                setFileError(null);
-                if (file) {
-                  const ext = file.name.split(".").pop()?.toLowerCase();
-                  const blocked = ["pptx", "ppt", "key", "keynote"];
-                  if (blocked.includes(ext ?? "")) {
-                    setFileError("PowerPoint and Keynote files aren't supported directly. Export to PDF first (File → Save As → PDF), then upload the PDF here.");
-                    e.target.value = "";
-                    setFileInput(null);
-                    return;
-                  }
-                  if (file.size > MAX_FILE_SIZE) {
-                    setFileError(`File is too large (${formatFileSize(file.size)}). Maximum size is 10 MB.`);
-                    e.target.value = "";
-                    setFileInput(null);
-                    return;
-                  }
-                  setFileInput(file);
-                }
-              }}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(
-                "flex w-full items-center justify-center gap-2 rounded-cos-lg border-2 border-dashed py-4 text-xs transition-colors",
-                fileInput
-                  ? "border-cos-signal bg-cos-signal/5 text-cos-signal"
-                  : "border-cos-border text-cos-slate-dim hover:border-cos-electric hover:text-cos-electric"
-              )}
-            >
-              <Upload className="h-4 w-4" />
-              {fileInput
-                ? `${fileInput.name} (${formatFileSize(fileInput.size)})`
-                : "Choose PDF file (max 10 MB)"}
-            </button>
-            {fileInput && (
-              <button
-                onClick={() => {
-                  setFileInput(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-                className="text-[10px] text-cos-slate-dim hover:text-cos-ember"
-              >
-                Remove file
-              </button>
-            )}
-            {fileError && (
-              <div className="flex items-start gap-2 rounded-cos-md bg-cos-ember/5 px-3 py-2">
-                <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-cos-ember" />
-                <p className="text-[11px] text-cos-ember">{fileError}</p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Optional notes */}
-      {showNotes ? (
-        <div className="mt-3 space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] font-medium text-cos-slate-dim">
-              Notes (optional)
-            </label>
-            <button
-              onClick={() => { setShowNotes(false); setUserNotes(""); }}
-              className="text-[10px] text-cos-slate-light hover:text-cos-slate-dim"
-            >
-              Hide
-            </button>
-          </div>
-          <input
-            type="text"
-            value={userNotes}
-            onChange={(e) => setUserNotes(e.target.value)}
-            placeholder="e.g., Focus on the AI/ML aspects..."
-            className="w-full rounded-cos-md border border-cos-border bg-white px-3 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
-          />
-        </div>
-      ) : (
-        <button
-          onClick={() => setShowNotes(true)}
-          className="mt-2 text-[10px] text-cos-slate-dim hover:text-cos-electric"
-        >
-          + Add notes
-        </button>
-      )}
-
-      {submitError && (
-        <div className="mt-2 flex items-start gap-2 rounded-cos-md bg-cos-ember/5 px-3 py-2">
-          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-cos-ember" />
-          <p className="text-[11px] text-cos-ember">{submitError}</p>
-        </div>
-      )}
-
+      {/* Hide button — absolute top-right, outside the Link */}
       <button
-        onClick={handleSubmit}
-        disabled={!canSubmit}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleHidden(cs.id);
+        }}
         className={cn(
-          "mt-3 flex w-full items-center justify-center gap-1.5 rounded-cos-md py-2 text-[10px] font-semibold transition-all",
-          canSubmit
-            ? "bg-cos-electric text-white hover:bg-cos-electric/90 active:scale-[0.98]"
-            : "bg-cos-cloud-dim text-cos-slate-light cursor-not-allowed"
+          "absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full transition-all",
+          "opacity-0 group-hover:opacity-100",
+          cs.isHidden
+            ? "bg-cos-warm/20 text-cos-warm"
+            : "bg-white/90 text-cos-slate-light backdrop-blur-sm hover:text-cos-midnight"
         )}
+        title={cs.isHidden ? "Show case study" : "Hide case study"}
       >
-        {isSubmitting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-        {isSubmitting ? "Submitting..." : "Add Case Study"}
+        {cs.isHidden ? (
+          <EyeOff className="h-3 w-3" />
+        ) : (
+          <Eye className="h-3 w-3" />
+        )}
       </button>
     </div>
   );
 }
 
-// ─── Helper ──────────────────────────────────────────────
+// ─── Source Placeholder Preview ───────────────────────────
 
-/** Derive a readable title from a URL slug (e.g., /work/acme-rebrand → "Acme Rebrand") */
+function SourcePlaceholderPreview({ sourceType }: { sourceType: CaseStudySourceType }) {
+  switch (sourceType) {
+    case "youtube":
+      return (
+        <div className="flex h-full w-full items-center justify-center bg-red-50">
+          <Youtube className="h-10 w-10 text-red-500" />
+        </div>
+      );
+    case "vimeo":
+      return (
+        <div className="flex h-full w-full items-center justify-center bg-blue-50">
+          <Video className="h-10 w-10 text-blue-500" />
+        </div>
+      );
+    case "google_slides":
+      return (
+        <div className="flex h-full w-full items-center justify-center bg-green-50">
+          <Layout className="h-10 w-10 text-green-500" />
+        </div>
+      );
+    case "powerpoint_online":
+      return (
+        <div className="flex h-full w-full items-center justify-center bg-orange-50">
+          <FileText className="h-10 w-10 text-orange-500" />
+        </div>
+      );
+    case "pdf_upload":
+      return (
+        <div className="flex h-full w-full items-center justify-center bg-cos-ember/10">
+          <FileText className="h-10 w-10 text-cos-ember" />
+        </div>
+      );
+    default:
+      return (
+        <div className="flex h-full w-full items-center justify-center bg-cos-midnight/5">
+          <Globe className="h-10 w-10 text-cos-slate-light" />
+        </div>
+      );
+  }
+}
+
+// ─── Helper ───────────────────────────────────────────────
+
 function deriveSlugTitle(url: string): string {
-  // Handle special prefixes
   if (url.startsWith("manual:")) return "Manual Entry";
   if (url.startsWith("uploaded:")) {
     const filename = url.replace("uploaded:", "").split("/").pop() ?? "Uploaded File";
