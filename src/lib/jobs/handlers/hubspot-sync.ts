@@ -22,6 +22,8 @@ function randomId() {
   return crypto.randomUUID();
 }
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export async function handleHubSpotSync(
   _payload: Record<string, unknown>
 ): Promise<unknown> {
@@ -217,6 +219,8 @@ export async function handleHubSpotSync(
         },
       });
     dealsUpserted++;
+    // Rate limit: 2 association calls per deal + upsert
+    if (dealsUpserted % 5 === 0) await delay(1000);
   }
 
   return { companiesUpserted, contactsUpserted, dealsUpserted };

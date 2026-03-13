@@ -17,9 +17,12 @@ async function req(method: string, path: string, body?: unknown) {
   return res.json();
 }
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function paginate(path: string): Promise<Record<string, unknown>[]> {
   const results: Record<string, unknown>[] = [];
   let after: string | undefined;
+  let page = 0;
   while (true) {
     const sep = path.includes("?") ? "&" : "?";
     const url = `${path}${sep}limit=100${after ? `&after=${after}` : ""}`;
@@ -27,6 +30,10 @@ async function paginate(path: string): Promise<Record<string, unknown>[]> {
     results.push(...data.results);
     after = data.paging?.next?.after;
     if (!after) break;
+    page++;
+    // Rate limit: HubSpot allows 100 requests per 10 seconds
+    if (page % 5 === 0) await delay(1500);
+    else await delay(300);
   }
   return results;
 }
