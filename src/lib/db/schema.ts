@@ -347,6 +347,21 @@ export const solutionPartners = pgTable("solution_partners", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ─── Admin roles ─────────────────────────────────────────
+
+export const adminRoles = pgTable("admin_roles", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  icon: text("icon"), // Lucide icon name
+  color: text("color"), // Tailwind color class fragment
+  permissions: jsonb("permissions").notNull().default([]),
+  isBuiltIn: boolean("is_built_in").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // ─── Chat tables ────────────────────────────────────────
 
 export const conversations = pgTable("conversations", {

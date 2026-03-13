@@ -13,6 +13,15 @@ import {
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/admin/pagination";
+
+interface CustomerUsersResponse {
+  users: CustomerUser[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
 
 /* ── Types ────────────────────────────────────────────────────────── */
 
@@ -68,8 +77,9 @@ export default function CustomersPage() {
   const [userPage, setUserPage] = useState(1);
   const [customerUsers, setCustomerUsers] = useState<CustomerUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
-  const [usersLoaded, setUsersLoaded] = useState(false);
   const [userSearch, setUserSearch] = useState("");
+  const [userTotal, setUserTotal] = useState(0);
+  const [userTotalPages, setUserTotalPages] = useState(0);
   const [impersonating, setImpersonating] = useState<string | null>(null);
 
   // Load all organizations
@@ -86,78 +96,27 @@ export default function CustomersPage() {
       });
   }, []);
 
-  // Load customer users when tab switches to "users"
+  // Load customer users with server-side pagination
   useEffect(() => {
-    if (activeTab !== "users" || usersLoaded) return;
+    if (activeTab !== "users") return;
     setUsersLoading(true);
 
-    authClient.admin
-      .listUsers({ query: { limit: 500 } })
-      .then(async (res) => {
-        if (!res.data?.users) return;
+    const params = new URLSearchParams({
+      page: String(userPage),
+      limit: String(PAGE_SIZE),
+    });
+    if (userSearch.trim()) params.set("search", userSearch.trim());
 
-        const regularUsers = res.data.users
-          .filter((u) => {
-            const role = (u as unknown as { role: string }).role ?? "user";
-            return role === "user";
-          })
-          .map((u) => ({
-            id: u.id,
-            name: u.name,
-            email: u.email,
-            role: (u as unknown as { role: string }).role ?? "user",
-            banned: (u as unknown as { banned: boolean }).banned ?? false,
-            createdAt: u.createdAt
-              ? new Date(u.createdAt).toLocaleDateString()
-              : "",
-          }));
-
-        // Build member-to-org mapping
-        const memberToOrg = new Map<string, { orgName: string; orgSlug: string; orgPlan: string }>();
-        try {
-          const detailsPromises = orgs.map(async (org) => {
-            try {
-              const r = await fetch(`/api/admin/organizations/${org.id}/details`);
-              if (r.ok) {
-                const data = await r.json();
-                return { orgId: org.id, members: data.members ?? [] };
-              }
-            } catch { /* skip */ }
-            return null;
-          });
-
-          const results = await Promise.all(detailsPromises);
-          const orgLookup = new Map(orgs.map((o) => [o.id, o]));
-          for (const result of results) {
-            if (!result) continue;
-            const org = orgLookup.get(result.orgId);
-            if (!org) continue;
-            for (const member of result.members) {
-              memberToOrg.set(member.userId, {
-                orgName: org.name,
-                orgSlug: org.slug,
-                orgPlan: org.plan,
-              });
-            }
-          }
-        } catch { /* skip enrichment */ }
-
-        const enriched: CustomerUser[] = regularUsers.map((user) => {
-          const orgInfo = memberToOrg.get(user.id);
-          return {
-            ...user,
-            orgName: orgInfo?.orgName,
-            orgSlug: orgInfo?.orgSlug,
-            orgPlan: orgInfo?.orgPlan,
-          };
-        });
-
-        setCustomerUsers(enriched);
-        setUsersLoaded(true);
+    fetch(`/api/admin/customers?${params}`)
+      .then((r) => r.json())
+      .then((data: CustomerUsersResponse) => {
+        setCustomerUsers(data.users ?? []);
+        setUserTotal(data.total ?? 0);
+        setUserTotalPages(data.totalPages ?? 0);
       })
       .catch(console.error)
       .finally(() => setUsersLoading(false));
-  }, [activeTab, usersLoaded, orgs]);
+  }, [activeTab, userPage, userSearch]);
 
   // Impersonate user
   async function handleImpersonate(userId: string) {
@@ -188,17 +147,8 @@ export default function CustomersPage() {
     return true;
   });
 
-  // Filter users
-  const filteredUsers = userSearch
-    ? customerUsers.filter((u) => {
-        const q = userSearch.toLowerCase();
-        return (
-          u.name.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q) ||
-          (u.orgName?.toLowerCase().includes(q) ?? false)
-        );
-      })
-    : customerUsers;
+  // Users are now server-side filtered/paginated
+  const filteredUsers = customerUsers;
 
   // Stats
   const stats = {
@@ -206,7 +156,7 @@ export default function CustomersPage() {
     free: orgs.filter((o) => o.plan === "free").length,
     pro: orgs.filter((o) => o.plan === "pro").length,
     enterprise: orgs.filter((o) => o.plan === "enterprise").length,
-    totalMembers: orgs.reduce((sum, o) => sum + o.members, 0),
+    totalMembers: userTotal || orgs.reduce((sum, o) => sum + o.members, 0),
   };
 
   // Pagination helpers
@@ -215,11 +165,8 @@ export default function CustomersPage() {
     (companyPage - 1) * PAGE_SIZE,
     companyPage * PAGE_SIZE
   );
-  const userTotalPages = Math.ceil(filteredUsers.length / PAGE_SIZE);
-  const userPaginated = filteredUsers.slice(
-    (userPage - 1) * PAGE_SIZE,
-    userPage * PAGE_SIZE
-  );
+  // Users are server-side paginated — no client-side slicing needed
+  const userPaginated = filteredUsers;
 
   if (loading) {
     return (
@@ -459,32 +406,13 @@ export default function CustomersPage() {
                 )}
               </tbody>
             </table>
-            {companyTotalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
-                <span className="text-xs text-cos-slate">
-                  Showing {(companyPage - 1) * PAGE_SIZE + 1}–{Math.min(companyPage * PAGE_SIZE, filtered.length)} of {filtered.length}
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setCompanyPage((p) => Math.max(1, p - 1))}
-                    disabled={companyPage === 1}
-                    className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
-                  >
-                    Previous
-                  </button>
-                  <span className="text-xs text-cos-slate">
-                    Page {companyPage} of {companyTotalPages}
-                  </span>
-                  <button
-                    onClick={() => setCompanyPage((p) => Math.min(companyTotalPages, p + 1))}
-                    disabled={companyPage === companyTotalPages}
-                    className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
+            <Pagination
+              page={companyPage}
+              totalPages={companyTotalPages}
+              totalItems={filtered.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setCompanyPage}
+            />
           </div>
         </>
       )}
@@ -497,14 +425,14 @@ export default function CustomersPage() {
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
             <input
               type="text"
-              placeholder="Search users by name, email, or company..."
+              placeholder="Search users by name or email..."
               value={userSearch}
               onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
               className="w-full rounded-cos-xl border border-cos-border bg-cos-surface py-3 pl-11 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light transition-colors focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
             />
             {userSearch && (
               <span className="absolute right-4 top-1/2 -translate-y-1/2 rounded-cos-pill bg-cos-electric/10 px-2.5 py-0.5 text-xs font-medium text-cos-electric">
-                {filteredUsers.length} result{filteredUsers.length !== 1 ? "s" : ""}
+                {userTotal} result{userTotal !== 1 ? "s" : ""}
               </span>
             )}
           </div>
@@ -656,32 +584,13 @@ export default function CustomersPage() {
                   )}
                 </tbody>
               </table>
-              {userTotalPages > 1 && (
-                <div className="flex items-center justify-between border-t border-cos-border px-5 py-3">
-                  <span className="text-xs text-cos-slate">
-                    Showing {(userPage - 1) * PAGE_SIZE + 1}–{Math.min(userPage * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setUserPage((p) => Math.max(1, p - 1))}
-                      disabled={userPage === 1}
-                      className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
-                    >
-                      Previous
-                    </button>
-                    <span className="text-xs text-cos-slate">
-                      Page {userPage} of {userTotalPages}
-                    </span>
-                    <button
-                      onClick={() => setUserPage((p) => Math.min(userTotalPages, p + 1))}
-                      disabled={userPage === userTotalPages}
-                      className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs font-medium text-cos-slate transition-colors hover:bg-cos-cloud disabled:opacity-40"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
+              <Pagination
+                page={userPage}
+                totalPages={userTotalPages}
+                totalItems={userTotal}
+                pageSize={PAGE_SIZE}
+                onPageChange={setUserPage}
+              />
             </div>
           )}
         </>

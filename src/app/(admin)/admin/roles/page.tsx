@@ -2,534 +2,566 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  Users,
-  Search,
-  Loader2,
   Shield,
-  UserPlus,
-  ChevronDown,
-  X,
-  CheckCircle,
-  AlertCircle,
-  Mail,
   Crown,
   TrendingUp,
   HeartPulse,
+  Plus,
+  Loader2,
+  X,
+  Pencil,
+  Trash2,
+  Users,
+  Check,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ADMIN_SECTIONS, type AdminSection } from "@/lib/admin/permissions";
 
 /* ── Types ────────────────────────────────────────────────────────── */
 
-interface StaffUser {
+interface AdminRole {
   id: string;
-  name: string | null;
-  email: string;
-  role: string | null;
-  banned: boolean | null;
-  jobTitle: string | null;
-  createdAt: string;
-  emailVerified: boolean | null;
+  slug: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  permissions: string[];
+  isBuiltIn: boolean;
+  memberCount: number;
 }
 
-const ROLES = [
-  {
-    value: "superadmin",
-    label: "Super Admin",
-    description: "Full platform access — all admin sections",
-    color: "bg-cos-ember/10 text-cos-ember border-cos-ember/20",
-    icon: <Crown className="h-3.5 w-3.5" />,
-  },
-  {
-    value: "growth_ops",
-    label: "Growth Ops",
-    description: "LinkedIn inbox, campaigns, target lists, attribution",
-    color: "bg-cos-electric/10 text-cos-electric border-cos-electric/20",
-    icon: <TrendingUp className="h-3.5 w-3.5" />,
-  },
-  {
-    value: "customer_success",
-    label: "Customer Success",
-    description: "CIO dashboard and customer health tracking",
-    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    icon: <HeartPulse className="h-3.5 w-3.5" />,
-  },
-  {
-    value: "user",
-    label: "User (no admin)",
-    description: "Standard platform user — no admin access",
-    color: "bg-cos-cloud text-cos-slate border-cos-border",
-    icon: <Users className="h-3.5 w-3.5" />,
-  },
+/* ── Icon map ─────────────────────────────────────────────────────── */
+
+const ICON_MAP: Record<string, React.ReactNode> = {
+  Crown: <Crown className="h-5 w-5" />,
+  Shield: <Shield className="h-5 w-5" />,
+  TrendingUp: <TrendingUp className="h-5 w-5" />,
+  HeartHandshake: <HeartPulse className="h-5 w-5" />,
+};
+
+const ICON_OPTIONS = ["Crown", "Shield", "TrendingUp", "HeartHandshake"];
+
+const COLOR_OPTIONS = [
+  { value: "cos-ember", label: "Ember", preview: "bg-cos-ember" },
+  { value: "cos-electric", label: "Electric", preview: "bg-cos-electric" },
+  { value: "cos-signal", label: "Signal", preview: "bg-cos-signal" },
+  { value: "cos-warm", label: "Warm", preview: "bg-cos-warm" },
+  { value: "cos-midnight", label: "Midnight", preview: "bg-cos-midnight" },
 ];
 
-function roleMeta(role: string | null) {
-  return ROLES.find((r) => r.value === role) ?? ROLES[ROLES.length - 1];
+/* ── Component ────────────────────────────────────────────────────── */
+
+export default function RoleManagementPage() {
+  const [roles, setRoles] = useState<AdminRole[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<AdminRole | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRoles = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/roles");
+      const data = await res.json();
+      setRoles(data.roles ?? []);
+    } catch (err) {
+      console.error("Failed to fetch roles:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRoles();
+  }, [fetchRoles]);
+
+  function openCreate() {
+    setEditingRole(null);
+    setEditorOpen(true);
+  }
+
+  function openEdit(role: AdminRole) {
+    setEditingRole(role);
+    setEditorOpen(true);
+  }
+
+  async function handleDelete(role: AdminRole) {
+    try {
+      const res = await fetch(`/api/admin/roles?id=${role.id}&reassignTo=user`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error ?? "Failed to delete role");
+        return;
+      }
+      setDeleteConfirm(null);
+      fetchRoles();
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  const sections = Object.entries(ADMIN_SECTIONS) as [AdminSection, { label: string; description: string }][];
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-xl font-bold text-cos-midnight">
+            Roles & Permissions
+          </h1>
+          <p className="mt-1 text-sm text-cos-slate">
+            Define admin roles and what each can access
+          </p>
+        </div>
+        <Button onClick={openCreate} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Create Role
+        </Button>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-cos-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <p>{error}</p>
+          <button onClick={() => setError(null)} className="ml-auto">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Role cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {roles.map((role) => (
+          <div
+            key={role.id}
+            className="rounded-cos-2xl border border-cos-border bg-cos-surface p-5 transition-colors hover:border-cos-electric/30"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-cos-lg bg-cos-surface-raised text-cos-midnight">
+                  {ICON_MAP[role.icon ?? "Shield"] ?? <Shield className="h-5 w-5" />}
+                </div>
+                <div>
+                  <h3 className="font-heading text-base font-semibold text-cos-midnight">
+                    {role.name}
+                  </h3>
+                  <div className="flex items-center gap-1.5 text-xs text-cos-slate">
+                    <Users className="h-3 w-3" />
+                    {role.memberCount} {role.memberCount === 1 ? "member" : "members"}
+                  </div>
+                </div>
+              </div>
+              {role.isBuiltIn && (
+                <span className="rounded-full bg-cos-cloud px-2 py-0.5 text-xs text-cos-slate">
+                  Built-in
+                </span>
+              )}
+            </div>
+
+            {role.description && (
+              <p className="mt-3 text-sm text-cos-slate">{role.description}</p>
+            )}
+
+            {/* Permission tags */}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {role.slug === "superadmin" ? (
+                <span className="rounded-full bg-cos-ember/10 px-2 py-0.5 text-xs font-medium text-cos-ember">
+                  All permissions
+                </span>
+              ) : (
+                (role.permissions as string[]).map((perm) => (
+                  <span
+                    key={perm}
+                    className="rounded-full bg-cos-electric/10 px-2 py-0.5 text-xs text-cos-electric"
+                  >
+                    {ADMIN_SECTIONS[perm as AdminSection]?.label ?? perm}
+                  </span>
+                ))
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openEdit(role)}
+                className="gap-1.5"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </Button>
+              {!role.isBuiltIn && (
+                <>
+                  {deleteConfirm === role.id ? (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDelete(role)}
+                        className="border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        Confirm Delete
+                      </Button>
+                      <button
+                        onClick={() => setDeleteConfirm(null)}
+                        className="text-xs text-cos-slate hover:text-cos-midnight"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDeleteConfirm(role.id)}
+                      className="gap-1.5 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Permission matrix */}
+      <div>
+        <h2 className="mb-3 font-heading text-base font-semibold text-cos-midnight">
+          Permission Matrix
+        </h2>
+        <div className="overflow-x-auto rounded-cos-xl border border-cos-border bg-cos-surface">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-cos-border bg-cos-surface-raised text-left text-xs font-medium uppercase tracking-wider text-cos-slate">
+                <th className="px-4 py-3">Section</th>
+                {roles.map((r) => (
+                  <th key={r.id} className="px-4 py-3 text-center">
+                    {r.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-cos-border">
+              {sections.map(([key, section]) => (
+                <tr key={key} className="hover:bg-cos-surface-raised/50">
+                  <td className="px-4 py-2.5">
+                    <p className="font-medium text-cos-midnight">{section.label}</p>
+                    <p className="text-xs text-cos-slate">{section.description}</p>
+                  </td>
+                  {roles.map((role) => {
+                    const hasAccess =
+                      role.slug === "superadmin" ||
+                      (role.permissions as string[]).includes(key);
+                    return (
+                      <td key={role.id} className="px-4 py-2.5 text-center">
+                        {hasAccess ? (
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                            <Check className="h-3 w-3" />
+                          </span>
+                        ) : (
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cos-cloud text-cos-slate-dim">
+                            <X className="h-3 w-3" />
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Editor drawer */}
+      {editorOpen && (
+        <RoleEditorDrawer
+          role={editingRole}
+          onClose={() => {
+            setEditorOpen(false);
+            setEditingRole(null);
+          }}
+          onSaved={() => {
+            fetchRoles();
+            setEditorOpen(false);
+            setEditingRole(null);
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
-/* ── Invite Modal ─────────────────────────────────────────────────── */
+/* ── Role editor drawer ─────────────────────────────────────────── */
 
-function InviteModal({
+function RoleEditorDrawer({
+  role,
   onClose,
-  onSuccess,
+  onSaved,
 }: {
+  role: AdminRole | null;
   onClose: () => void;
-  onSuccess: () => void;
+  onSaved: () => void;
 }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState("growth_ops");
-  const [saving, setSaving] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const isEdit = !!role;
+  const isSuperadmin = role?.slug === "superadmin";
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const [name, setName] = useState(role?.name ?? "");
+  const [slug, setSlug] = useState(role?.slug ?? "");
+  const [description, setDescription] = useState(role?.description ?? "");
+  const [icon, setIcon] = useState(role?.icon ?? "Shield");
+  const [color, setColor] = useState(role?.color ?? "cos-electric");
+  const [permissions, setPermissions] = useState<string[]>(
+    (role?.permissions as string[]) ?? []
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Auto-generate slug from name for new roles
+  function handleNameChange(val: string) {
+    setName(val);
+    if (!isEdit) {
+      setSlug(
+        val
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_|_$/g, "")
+      );
+    }
+  }
+
+  function togglePermission(section: string) {
+    if (isSuperadmin) return;
+    setPermissions((prev) =>
+      prev.includes(section) ? prev.filter((p) => p !== section) : [...prev, section]
+    );
+  }
+
+  async function handleSave() {
+    if (!name.trim() || !slug.trim()) return;
     setSaving(true);
-    setResult(null);
+    setError(null);
+
     try {
-      const res = await fetch("/api/admin/staff", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, role }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setResult({ ok: true, message: data.message });
-        onSuccess();
+      if (isEdit) {
+        const res = await fetch("/api/admin/roles", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: role.id,
+            name: name.trim(),
+            description: description.trim() || null,
+            icon,
+            color,
+            permissions: isSuperadmin ? undefined : permissions,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          setError(data.error ?? "Failed to update role");
+          return;
+        }
       } else {
-        setResult({ ok: false, message: data.error ?? "Invite failed" });
+        const res = await fetch("/api/admin/roles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            slug: slug.trim(),
+            description: description.trim() || null,
+            icon,
+            color,
+            permissions,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          setError(data.error ?? "Failed to create role");
+          return;
+        }
       }
-    } catch {
-      setResult({ ok: false, message: "Network error" });
+      onSaved();
+    } catch (err) {
+      setError(String(err));
     } finally {
       setSaving(false);
     }
   }
 
+  const sections = Object.entries(ADMIN_SECTIONS) as [AdminSection, { label: string; description: string }][];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-md rounded-cos-xl border border-cos-border bg-white shadow-xl">
+    <>
+      <div className="fixed inset-0 z-50 bg-black/40" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col bg-cos-surface shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-cos-border px-6 py-4">
-          <div className="flex items-center gap-2">
-            <UserPlus className="h-4 w-4 text-cos-electric" />
-            <h2 className="font-heading text-base font-bold text-cos-midnight">
-              Invite Staff Member
-            </h2>
-          </div>
-          <button onClick={onClose} className="text-cos-slate hover:text-cos-midnight">
-            <X className="h-4 w-4" />
+          <h2 className="font-heading text-lg font-semibold text-cos-midnight">
+            {isEdit ? `Edit ${role.name}` : "Create New Role"}
+          </h2>
+          <button onClick={onClose} className="rounded-md p-1.5 text-cos-slate hover:bg-cos-surface-raised hover:text-cos-midnight">
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-cos-slate uppercase tracking-wide">
-              Full Name
-            </label>
+        {/* Body */}
+        <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          {error && (
+            <div className="flex items-center gap-2 rounded-cos-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <p>{error}</p>
+            </div>
+          )}
+
+          {/* Name */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-cos-midnight">Name</label>
             <input
               type="text"
-              required
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Jane Smith"
-              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+              onChange={(e) => handleNameChange(e.target.value)}
+              placeholder="e.g. Marketing Ops"
+              className="w-full rounded-cos-lg border border-cos-border bg-cos-surface px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-cos-slate uppercase tracking-wide">
-              Work Email
-            </label>
+          {/* Slug */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-cos-midnight">Slug</label>
             <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="jane@company.com"
-              className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
+              type="text"
+              value={slug}
+              onChange={(e) => !isEdit && setSlug(e.target.value)}
+              disabled={isEdit}
+              className="w-full rounded-cos-lg border border-cos-border bg-cos-surface px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric disabled:bg-cos-cloud disabled:text-cos-slate"
+            />
+            <p className="mt-1 text-xs text-cos-slate">
+              {isEdit ? "Slug cannot be changed after creation" : "Auto-generated from name"}
+            </p>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-cos-midnight">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="What this role does..."
+              className="w-full rounded-cos-lg border border-cos-border bg-cos-surface px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-cos-slate uppercase tracking-wide">
-              Access Level
-            </label>
-            <div className="space-y-2">
-              {ROLES.filter((r) => r.value !== "user").map((r) => (
-                <label
-                  key={r.value}
-                  className={`flex cursor-pointer items-start gap-3 rounded-cos-lg border p-3 transition-all ${
-                    role === r.value
-                      ? "border-cos-electric bg-cos-electric/5"
-                      : "border-cos-border hover:border-cos-electric/40"
+          {/* Icon */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-cos-midnight">Icon</label>
+            <div className="flex gap-2">
+              {ICON_OPTIONS.map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => setIcon(opt)}
+                  className={`flex h-10 w-10 items-center justify-center rounded-cos-lg border transition-colors ${
+                    icon === opt
+                      ? "border-cos-electric bg-cos-electric/10 text-cos-electric"
+                      : "border-cos-border bg-cos-surface text-cos-slate hover:bg-cos-surface-raised"
                   }`}
                 >
-                  <input
-                    type="radio"
-                    name="role"
-                    value={r.value}
-                    checked={role === r.value}
-                    onChange={() => setRole(r.value)}
-                    className="mt-0.5 accent-cos-electric"
-                  />
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`inline-flex items-center gap-1 rounded-cos-pill border px-2 py-0.5 text-[10px] font-semibold ${r.color}`}>
-                        {r.icon}
-                        {r.label}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-xs text-cos-slate">{r.description}</p>
-                  </div>
-                </label>
+                  {ICON_MAP[opt]}
+                </button>
               ))}
             </div>
           </div>
 
-          {/* Result */}
-          {result && (
-            <div className={`flex items-start gap-2 rounded-cos-lg border p-3 text-sm ${
-              result.ok
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-cos-ember/20 bg-cos-ember/5 text-cos-ember"
-            }`}>
-              {result.ok ? (
-                <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              ) : (
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              )}
-              <span>{result.message}</span>
+          {/* Color */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-cos-midnight">Color</label>
+            <div className="flex gap-2">
+              {COLOR_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setColor(opt.value)}
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${
+                    color === opt.value ? "border-cos-midnight" : "border-transparent"
+                  }`}
+                  title={opt.label}
+                >
+                  <span className={`h-5 w-5 rounded-full ${opt.preview}`} />
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
-          {!result?.ok && (
-            <p className="text-[11px] text-cos-slate">
-              <Mail className="mr-1 inline h-3 w-3" />
-              They will receive an email to set their password and log in.
-            </p>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
-              {result?.ok ? "Done" : "Cancel"}
-            </Button>
-            {!result?.ok && (
-              <Button
-                type="submit"
-                size="sm"
-                disabled={saving}
-                className="bg-cos-electric hover:bg-cos-electric/90"
-              >
-                {saving ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                Send Invite
-              </Button>
+          {/* Permissions */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-cos-midnight">
+              Permissions
+            </label>
+            {isSuperadmin && (
+              <p className="mb-2 text-xs text-cos-slate">
+                Super Admin always has access to all sections.
+              </p>
             )}
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-/* ── Role Change Dropdown ─────────────────────────────────────────── */
-
-function RoleDropdown({
-  userId,
-  currentRole,
-  onChanged,
-}: {
-  userId: string;
-  currentRole: string | null;
-  onChanged: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const meta = roleMeta(currentRole);
-
-  async function changeRole(role: string) {
-    setOpen(false);
-    setSaving(true);
-    await fetch("/api/admin/staff", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, role }),
-    });
-    setSaving(false);
-    onChanged();
-  }
-
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        disabled={saving}
-        className={`inline-flex items-center gap-1 rounded-cos-pill border px-2.5 py-1 text-[11px] font-semibold transition-all hover:opacity-80 ${meta.color}`}
-      >
-        {saving ? (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        ) : (
-          meta.icon
-        )}
-        {meta.label}
-        <ChevronDown className="h-3 w-3 opacity-60" />
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-52 rounded-cos-lg border border-cos-border bg-white shadow-lg">
-            {ROLES.map((r) => (
-              <button
-                key={r.value}
-                onClick={() => changeRole(r.value)}
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors hover:bg-cos-cloud first:rounded-t-cos-lg last:rounded-b-cos-lg"
-              >
-                <span className={`inline-flex items-center gap-1 rounded-cos-pill border px-2 py-0.5 text-[10px] font-semibold ${r.color}`}>
-                  {r.icon}
-                  {r.label}
-                </span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-/* ── Main Page ────────────────────────────────────────────────────── */
-
-export default function StaffAccessPage() {
-  const [staff, setStaff] = useState<StaffUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [showInvite, setShowInvite] = useState(false);
-
-  const fetchStaff = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (search) params.set("search", search);
-      const res = await fetch(`/api/admin/staff?${params}`);
-      const data = await res.json();
-      setStaff(data.staff ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, [search]);
-
-  useEffect(() => {
-    fetchStaff();
-  }, [fetchStaff]);
-
-  async function revokeAccess(userId: string) {
-    if (!confirm("Remove admin access for this user?")) return;
-    await fetch(`/api/admin/staff?userId=${userId}`, { method: "DELETE" });
-    fetchStaff();
-  }
-
-  // Count by role for the summary bar
-  const roleCounts = ROLES.reduce<Record<string, number>>((acc, r) => {
-    acc[r.value] = staff.filter((u) => u.role === r.value).length;
-    return acc;
-  }, {});
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
-            Staff Access
-          </h1>
-          <p className="mt-1 text-sm text-cos-slate">
-            Invite team members and manage their admin access levels.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          onClick={() => setShowInvite(true)}
-          className="bg-cos-electric hover:bg-cos-electric/90"
-        >
-          <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-          Invite Staff
-        </Button>
-      </div>
-
-      {/* Role summary */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {ROLES.filter((r) => r.value !== "user").map((r) => (
-          <div key={r.value} className="rounded-cos-lg border border-cos-border bg-white px-4 py-3">
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`inline-flex items-center gap-1 rounded-cos-pill border px-2 py-0.5 text-[10px] font-semibold ${r.color}`}>
-                {r.icon}
-                {r.label}
-              </span>
-            </div>
-            <div className="text-2xl font-bold text-cos-midnight">{roleCounts[r.value] ?? 0}</div>
-            <div className="text-[10px] text-cos-slate mt-0.5">{r.description}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cos-slate-light" />
-        <input
-          type="text"
-          placeholder="Search by name or email..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-cos-lg border border-cos-border bg-white py-2 pl-9 pr-4 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
-        />
-      </div>
-
-      {/* Table */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
-        </div>
-      ) : staff.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-cos-lg border border-cos-border bg-white py-16">
-          <Shield className="h-10 w-10 text-cos-slate-light" />
-          <p className="mt-3 text-sm font-medium text-cos-midnight">
-            {search ? "No staff match your search" : "No staff users yet"}
-          </p>
-          {!search && (
-            <p className="mt-1 text-xs text-cos-slate">
-              Click &quot;Invite Staff&quot; to add team members.
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-cos-xl border border-cos-border bg-cos-surface">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-cos-border bg-cos-cloud/50">
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  Name
-                </th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  Email
-                </th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  Access Level
-                </th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  Status
-                </th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  Joined
-                </th>
-                <th className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-cos-border/60">
-              {staff.map((user) => {
-                const meta = roleMeta(user.role);
-                const initials = (user.name ?? user.email)
-                  .split(" ")
-                  .map((w) => w[0])
-                  .slice(0, 2)
-                  .join("")
-                  .toUpperCase();
-
+            <div className="space-y-2">
+              {sections.map(([key, section]) => {
+                const checked = isSuperadmin || permissions.includes(key);
                 return (
-                  <tr key={user.id} className="transition-colors hover:bg-cos-electric/[0.02]">
-                    {/* Name */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-electric/20 to-cos-signal/20 text-[10px] font-semibold text-cos-electric">
-                          {initials}
-                        </div>
-                        <div>
-                          <div className="font-medium text-cos-midnight text-sm">
-                            {user.name ?? "—"}
-                          </div>
-                          {user.jobTitle && (
-                            <div className="text-[10px] text-cos-slate">{user.jobTitle}</div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Email */}
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-cos-slate">{user.email}</span>
-                    </td>
-
-                    {/* Role */}
-                    <td className="px-4 py-3">
-                      <RoleDropdown
-                        userId={user.id}
-                        currentRole={user.role}
-                        onChanged={fetchStaff}
-                      />
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-4 py-3">
-                      {user.banned ? (
-                        <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-ember/10 px-2 py-0.5 text-[10px] font-medium text-cos-ember">
-                          Banned
-                        </span>
-                      ) : user.emailVerified ? (
-                        <span className="inline-flex items-center gap-1 rounded-cos-pill bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
-                          <CheckCircle className="h-2.5 w-2.5" />
-                          Active
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-warm/10 px-2 py-0.5 text-[10px] font-medium text-cos-warm">
-                          <Mail className="h-2.5 w-2.5" />
-                          Invite Pending
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Joined */}
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-cos-slate">
-                        {new Date(user.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </span>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-4 py-3">
-                      {user.role !== "superadmin" && (
-                        <button
-                          onClick={() => revokeAccess(user.id)}
-                          className="text-xs text-cos-slate hover:text-cos-ember transition-colors"
-                        >
-                          Revoke access
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+                  <label
+                    key={key}
+                    className={`flex cursor-pointer items-center gap-3 rounded-cos-lg border p-3 transition-colors ${
+                      checked
+                        ? "border-cos-electric/30 bg-cos-electric/5"
+                        : "border-cos-border bg-cos-surface hover:bg-cos-surface-raised"
+                    } ${isSuperadmin ? "cursor-not-allowed opacity-60" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => togglePermission(key)}
+                      disabled={isSuperadmin}
+                      className="rounded"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-cos-midnight">{section.label}</p>
+                      <p className="text-xs text-cos-slate">{section.description}</p>
+                    </div>
+                  </label>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </div>
         </div>
-      )}
 
-      {/* Invite modal */}
-      {showInvite && (
-        <InviteModal
-          onClose={() => setShowInvite(false)}
-          onSuccess={fetchStaff}
-        />
-      )}
-    </div>
+        {/* Footer */}
+        <div className="border-t border-cos-border px-6 py-4">
+          <Button
+            onClick={handleSave}
+            disabled={!name.trim() || !slug.trim() || saving}
+            className="w-full"
+          >
+            {saving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            {saving ? "Saving..." : isEdit ? "Save Changes" : "Create Role"}
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   MessageSquare, Send, Loader2, Search, X, PenSquare,
-  Zap, AlertCircle, Sparkles, Check, Copy, Pencil, ChevronRight,
+  Zap, AlertCircle, Sparkles, Check, Copy, Pencil, ChevronRight, RefreshCw,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -336,6 +336,7 @@ function LinkedInUniboxInner() {
   const [sendingSequence, setSendingSequence] = useState(false);
   const [sentCount, setSentCount] = useState(0);
   const [editingSuggestion, setEditingSuggestion] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const selectedConvo = conversations.find((c) => c.chatId === selectedChatId) ?? null;
@@ -632,6 +633,59 @@ function LinkedInUniboxInner() {
   // Account name for the current conversation (for thread header)
   const convoAccountName = selectedConvo?._accountName ?? "";
 
+  async function syncConversations() {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      if (isAllAccounts) {
+        // Sync all accounts
+        const syncs = accounts
+          .filter((a) => a.status === "OK")
+          .map((a) =>
+            fetch(`/api/admin/growth-ops/unipile?action=syncConversations&accountId=${a.unipileAccountId}`)
+              .then((r) => r.json())
+              .then((d) => {
+                const convos: Conversation[] = d.conversations ?? [];
+                return convos.map((c) => ({
+                  ...c,
+                  _accountId: a.unipileAccountId,
+                  _accountName: a.displayName || a.unipileAccountId,
+                }));
+              })
+              .catch(() => [] as Conversation[])
+          );
+        const results = await Promise.all(syncs);
+        const merged = results
+          .flat()
+          .sort((a, b) => {
+            const ta = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+            const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+            return tb - ta;
+          });
+        setConversations(merged);
+      } else {
+        const res = await fetch(
+          `/api/admin/growth-ops/unipile?action=syncConversations&accountId=${selectedAccountId}`
+        );
+        const data = await res.json();
+        if (data.conversations?.length) {
+          const acctName = accountNameMap.get(selectedAccountId) ?? selectedAccountId;
+          setConversations(
+            (data.conversations as Conversation[]).map((c) => ({
+              ...c,
+              _accountId: selectedAccountId,
+              _accountName: acctName,
+            }))
+          );
+        }
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   return (
     <>
       {showNewMessage && (
@@ -693,6 +747,17 @@ function LinkedInUniboxInner() {
             </select>
           )}
 
+          {/* Sync button */}
+          <button
+            onClick={syncConversations}
+            disabled={syncing}
+            title="Re-sync conversations from LinkedIn"
+            className="flex items-center gap-1.5 rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm font-medium text-cos-midnight hover:bg-cos-cloud disabled:opacity-40 transition-colors"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing\u2026" : "Sync"}
+          </button>
+
           {/* New message button */}
           <button
             onClick={() => setShowNewMessage(true)}
@@ -743,7 +808,7 @@ function LinkedInUniboxInner() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-medium text-cos-midnight truncate leading-tight flex-1">
-                    {convo.participantName || (convo.participantHeadline ? "Unknown" : `Chat ${convo.chatId.slice(0, 8)}\u2026`)}
+                    {convo.participantName || "LinkedIn Member"}
                   </p>
                   {convo.isInmailThread && (
                     <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 leading-none">
@@ -801,7 +866,7 @@ function LinkedInUniboxInner() {
                 />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm text-cos-midnight leading-tight">
-                    {selectedConvo.participantName || selectedConvo.chatId}
+                    {selectedConvo.participantName || "LinkedIn Member"}
                   </p>
                   {selectedConvo.participantHeadline && (
                     <p className="text-xs text-cos-slate leading-tight">{selectedConvo.participantHeadline}</p>
