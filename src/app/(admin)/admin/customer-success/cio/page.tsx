@@ -8,8 +8,10 @@ import {
   Eye,
   RefreshCw,
   Zap,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { StatCard } from "@/components/admin/stat-card";
 
 interface Campaign {
   id: number;
@@ -51,14 +53,17 @@ const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
 export default function CioDashboardPage() {
   const [data, setData] = useState<CioData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function fetchData() {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/admin/customer-success/cio");
-      if (res.ok) setData(await res.json());
-    } catch {
-      console.error("Failed to fetch CIO data");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setData(await res.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to fetch CIO data");
     } finally {
       setLoading(false);
     }
@@ -122,12 +127,20 @@ export default function CioDashboardPage() {
         </button>
       </div>
 
+      {/* Error banner */}
+      {error && (
+        <div className="flex items-center gap-2 rounded-cos-lg border border-cos-ember/30 bg-cos-ember/5 px-4 py-3 text-sm text-cos-ember">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
       {/* Summary stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon={Zap} label="Active Campaigns" value={activeCampaigns.length} color="text-cos-signal" bg="bg-cos-signal/10" sub="currently running" />
-        <StatCard icon={Mail} label="Emails Sent" value={sentMessages.length} color="text-cos-electric" bg="bg-cos-electric/10" sub="in last 50 fetched" />
-        <StatCard icon={Eye} label="Open Rate" value={`${openRate}%`} color="text-cos-warm" bg="bg-cos-warm/10" sub={`${openedCount} of ${sentMessages.length} opened`} />
-        <StatCard icon={Send} label="Not Opened" value={sentMessages.length - openedCount} color="text-cos-slate" bg="bg-cos-slate/10" />
+        <StatCard icon={<Zap className="h-4 w-4" />} label="Active Campaigns" value={activeCampaigns.length} iconColor="text-cos-signal" iconBg="bg-cos-signal/10" sub="currently running" />
+        <StatCard icon={<Mail className="h-4 w-4" />} label="Emails Sent" value={sentMessages.length} iconColor="text-cos-electric" iconBg="bg-cos-electric/10" sub="in last 50 fetched" />
+        <StatCard icon={<Eye className="h-4 w-4" />} label="Open Rate" value={`${openRate}%`} iconColor="text-cos-warm" iconBg="bg-cos-warm/10" sub={`${openedCount} of ${sentMessages.length} opened`} />
+        <StatCard icon={<Send className="h-4 w-4" />} label="Not Opened" value={sentMessages.length - openedCount} iconColor="text-cos-slate" iconBg="bg-cos-slate/10" />
       </div>
 
       {/* Active Campaigns */}
@@ -226,29 +239,3 @@ export default function CioDashboardPage() {
   );
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  color,
-  bg,
-  sub,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  color: string;
-  bg: string;
-  sub?: string;
-}) {
-  return (
-    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-5 transition-shadow hover:shadow-sm">
-      <div className={cn("inline-flex h-9 w-9 items-center justify-center rounded-cos-lg mb-3", bg, color)}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <p className="text-xs font-medium uppercase tracking-wider text-cos-slate">{label}</p>
-      <p className="mt-1 font-heading text-2xl font-bold tracking-tight text-cos-midnight">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-cos-slate-light">{sub}</p>}
-    </div>
-  );
-}

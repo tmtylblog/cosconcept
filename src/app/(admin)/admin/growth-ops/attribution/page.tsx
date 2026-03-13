@@ -4,8 +4,10 @@ import { useEffect, useState, useCallback } from "react";
 import {
   BarChart3, Loader2, RefreshCw, ChevronDown, ChevronRight,
   MessageCircle, Megaphone, AlertTriangle, Download, Users,
-  TrendingUp, Target, Zap, CreditCard, Building2, UserSearch, Linkedin,
+  TrendingUp, Target, Zap, CreditCard, Building2, UserSearch, Linkedin, AlertCircle,
 } from "lucide-react";
+import { Pagination, ADMIN_PAGE_SIZE } from "@/components/admin/pagination";
+import { StatusBadge } from "@/components/admin/status-badge";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -80,21 +82,21 @@ interface Funnel {
    ═══════════════════════════════════════════════════════════════════════ */
 
 const METHOD_STYLE: Record<string, { label: string; bg: string; text: string }> = {
-  email_exact:      { label: "Email exact",      bg: "bg-emerald-50",        text: "text-emerald-700" },
+  email_exact:      { label: "Email exact",      bg: "bg-cos-signal/8",      text: "text-cos-signal" },
   instantly:        { label: "Instantly",         bg: "bg-cos-signal/10",     text: "text-cos-signal" },
   linkedin_url:     { label: "LinkedIn URL",     bg: "bg-cos-electric/10",   text: "text-cos-electric" },
-  linkedin_pdl:     { label: "LinkedIn (PDL)",   bg: "bg-indigo-50",         text: "text-indigo-700" },
-  name_domain:      { label: "Name + domain",    bg: "bg-amber-50",          text: "text-amber-700" },
-  name_fuzzy:       { label: "Name match",       bg: "bg-orange-50",         text: "text-orange-700" },
-  company_linkedin: { label: "2nd Degree",       bg: "bg-violet-50",         text: "text-violet-700" },
+  linkedin_pdl:     { label: "LinkedIn (PDL)",   bg: "bg-cos-electric/8",    text: "text-cos-electric" },
+  name_domain:      { label: "Name + domain",    bg: "bg-cos-warm/8",        text: "text-cos-warm" },
+  name_fuzzy:       { label: "Name match",       bg: "bg-cos-warm/8",        text: "text-cos-warm" },
+  company_linkedin: { label: "2nd Degree",       bg: "bg-cos-electric/8",    text: "text-cos-electric" },
   none:             { label: "Unattributed",     bg: "bg-cos-cloud",         text: "text-cos-slate-dim" },
 };
 
 const JOURNEY_STAGES = [
   { key: "signed_up", label: "Signed Up", color: "bg-cos-slate" },
-  { key: "engaged", label: "Engaged", color: "bg-amber-400" },
+  { key: "engaged", label: "Engaged", color: "bg-cos-warm" },
   { key: "onboarded", label: "Onboarded", color: "bg-cos-electric" },
-  { key: "paying", label: "Paying", color: "bg-emerald-500" },
+  { key: "paying", label: "Paying", color: "bg-cos-signal" },
 ];
 
 type TabKey = "all" | "linkedin_organic" | "linkedin_campaign" | "company_match" | "instantly" | "unattributed" | "converted";
@@ -117,16 +119,23 @@ export default function AttributionPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const d = await fetch("/api/admin/growth-ops/attribution").then((r) => r.json());
+      const res = await fetch("/api/admin/growth-ops/attribution");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
       setRows(d.rows ?? []);
       setSummary(d.summary ?? null);
       setFunnel(d.funnel ?? null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load attribution data");
     } finally {
       setLoading(false);
     }
@@ -135,6 +144,8 @@ export default function AttributionPage() {
   useEffect(() => { load(); }, [load]);
 
   const filtered = filterRows(rows, tab);
+  const totalPages = Math.ceil(filtered.length / ADMIN_PAGE_SIZE);
+  const paginatedRows = filtered.slice((page - 1) * ADMIN_PAGE_SIZE, page * ADMIN_PAGE_SIZE);
 
   function exportCSV() {
     const header = "Name,Email,Org,Source,Campaign,LinkedIn Organic,LinkedIn Campaign,Journey,Plan,Engagement,Days to Convert,Signup Date\n";
@@ -175,6 +186,14 @@ export default function AttributionPage() {
         </div>
       </div>
 
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-2 rounded-cos-lg border border-cos-ember/30 bg-cos-ember/5 px-4 py-3 text-sm text-cos-ember">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
       {/* Summary Cards */}
       {summary && <SummaryCards summary={summary} />}
 
@@ -188,7 +207,7 @@ export default function AttributionPage() {
           return (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
+              onClick={() => { setTab(t.key); setPage(1); }}
               className={`shrink-0 px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
                 tab === t.key ? "border-cos-electric text-cos-electric" : "border-transparent text-cos-slate hover:text-cos-midnight"
               }`}
@@ -219,7 +238,7 @@ export default function AttributionPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {paginatedRows.map((r) => (
                 <AttributionTableRow
                   key={r.id}
                   row={r}
@@ -229,6 +248,12 @@ export default function AttributionPage() {
               ))}
             </tbody>
           </table>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            onPageChange={setPage}
+          />
         </div>
       )}
     </div>
@@ -245,10 +270,10 @@ function SummaryCards({ summary }: { summary: Summary }) {
     { label: "Attribution Rate", value: `${summary.matchRate}%`, icon: Target, color: "text-cos-electric" },
     { label: "Via Instantly", value: summary.byChannel.instantly, icon: Zap, color: "text-cos-signal" },
     { label: "Via LinkedIn Campaign", value: summary.byChannel.linkedinCampaign, icon: Megaphone, color: "text-cos-electric" },
-    { label: "Via LinkedIn Organic", value: summary.byChannel.linkedinOrganic, icon: MessageCircle, color: "text-blue-600" },
-    { label: "2nd Degree (Company)", value: summary.byChannel.companyLinkedin, icon: Building2, color: "text-violet-600" },
-    { label: "Avg Days to Convert", value: summary.avgTimeToConversion ?? "\u2014", icon: TrendingUp, color: "text-amber-600" },
-    { label: "Active Paying", value: summary.conversion.paying, icon: CreditCard, color: "text-emerald-600" },
+    { label: "Via LinkedIn Organic", value: summary.byChannel.linkedinOrganic, icon: MessageCircle, color: "text-cos-electric" },
+    { label: "2nd Degree (Company)", value: summary.byChannel.companyLinkedin, icon: Building2, color: "text-cos-electric" },
+    { label: "Avg Days to Convert", value: summary.avgTimeToConversion ?? "\u2014", icon: TrendingUp, color: "text-cos-warm" },
+    { label: "Active Paying", value: summary.conversion.paying, icon: CreditCard, color: "text-cos-signal" },
   ];
 
   return (
@@ -270,10 +295,10 @@ function FunnelChart({ funnel }: { funnel: Funnel }) {
   const stages = [
     { label: "Total Prospects", value: funnel.totalProspects, color: "bg-cos-slate/20" },
     { label: "Contacted", value: funnel.contacted, color: "bg-cos-slate/40" },
-    { label: "Engaged", value: funnel.engaged, color: "bg-amber-200" },
+    { label: "Engaged", value: funnel.engaged, color: "bg-cos-warm/30" },
     { label: "Signed Up", value: funnel.signedUp, color: "bg-cos-electric/40" },
     { label: "Onboarded", value: funnel.onboarded, color: "bg-cos-electric/70" },
-    { label: "Paying", value: funnel.paying, color: "bg-emerald-400" },
+    { label: "Paying", value: funnel.paying, color: "bg-cos-signal" },
   ];
 
   const max = Math.max(...stages.map((s) => s.value), 1);
@@ -327,7 +352,7 @@ function AttributionTableRow({ row, expanded, onToggle }: { row: AttributionRow;
         {/* User */}
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
-            {row.atRisk && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" title="At risk" />}
+            {row.atRisk && <AlertTriangle className="h-3.5 w-3.5 text-cos-warm shrink-0" title="At risk" />}
             <div>
               <p className="font-medium text-cos-midnight">{row.userName ?? "\u2014"}</p>
               <p className="text-xs text-cos-slate">{row.userEmail ?? row.userId}</p>
@@ -348,27 +373,27 @@ function AttributionTableRow({ row, expanded, onToggle }: { row: AttributionRow;
         <td className="px-4 py-3">
           <div className="flex items-center gap-1.5 flex-wrap">
             {organicCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/8 px-2 py-0.5 text-[10px] font-medium text-cos-electric">
                 <MessageCircle className="h-3 w-3" /> {organicCount}
               </span>
             )}
             {campaignCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-700">
+              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/8 px-2 py-0.5 text-[10px] font-medium text-cos-electric">
                 <Megaphone className="h-3 w-3" /> {campaignCount}
               </span>
             )}
             {row.hasCompanyLinkedinMatch && (
-              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700" title="2nd degree: company match">
+              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/8 px-2 py-0.5 text-[10px] font-medium text-cos-electric" title="2nd degree: company match">
                 <Building2 className="h-3 w-3" /> 2nd°
               </span>
             )}
             {row.hasNameFuzzyMatch && (
-              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700" title="Matched by name">
+              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-warm/8 px-2 py-0.5 text-[10px] font-medium text-cos-warm" title="Matched by name">
                 <UserSearch className="h-3 w-3" /> Name
               </span>
             )}
             {row.pdlLookupStatus === "found" && (
-              <span className="inline-flex items-center gap-0.5 rounded-cos-pill bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600" title="LinkedIn URL found via PDL">
+              <span className="inline-flex items-center gap-0.5 rounded-cos-pill bg-cos-electric/8 px-1.5 py-0.5 text-[10px] font-medium text-cos-electric" title="LinkedIn URL found via PDL">
                 <Linkedin className="h-2.5 w-2.5" />
               </span>
             )}
@@ -418,11 +443,9 @@ function JourneyDots({ stage }: { stage: string }) {
 }
 
 function EngagementBadge({ score }: { score: number }) {
-  const color = score >= 7 ? "bg-emerald-100 text-emerald-700" : score >= 4 ? "bg-amber-100 text-amber-700" : "bg-cos-cloud text-cos-slate-dim";
+  const variant = score >= 7 ? "success" as const : score >= 4 ? "warning" as const : "neutral" as const;
   return (
-    <span className={`inline-flex items-center rounded-cos-pill px-2 py-0.5 text-[10px] font-bold ${color}`}>
-      {score}/10
-    </span>
+    <StatusBadge label={`${score}/10`} variant={variant} showDot={false} />
   );
 }
 
@@ -431,8 +454,8 @@ function ExpandedRow({ row }: { row: AttributionRow }) {
   const events: { date: string; label: string; icon: string; color: string }[] = [];
 
   for (const ca of row.linkedinCampaignActivity) {
-    if (ca.sentAt) events.push({ date: ca.sentAt, label: `LinkedIn invite sent (${ca.campaignName})`, icon: "send", color: "text-purple-600" });
-    if (ca.acceptedAt) events.push({ date: ca.acceptedAt, label: `Invite accepted (${ca.campaignName})`, icon: "check", color: "text-emerald-600" });
+    if (ca.sentAt) events.push({ date: ca.sentAt, label: `LinkedIn invite sent (${ca.campaignName})`, icon: "send", color: "text-cos-electric" });
+    if (ca.acceptedAt) events.push({ date: ca.acceptedAt, label: `Invite accepted (${ca.campaignName})`, icon: "check", color: "text-cos-signal" });
   }
 
   for (const oc of row.linkedinOrganicConversations) {
@@ -440,7 +463,7 @@ function ExpandedRow({ row }: { row: AttributionRow }) {
       date: oc.lastMessageAt,
       label: `Organic conversation with ${oc.participantName} (${oc.messageCount} msgs)`,
       icon: "chat",
-      color: "text-blue-600",
+      color: "text-cos-electric",
     });
   }
 
@@ -455,7 +478,7 @@ function ExpandedRow({ row }: { row: AttributionRow }) {
         date: row.createdAt, // best we have
         label: `2nd degree: ${cm.participantName} (${cm.headline})`,
         icon: "building",
-        color: "text-violet-600",
+        color: "text-cos-electric",
       });
     }
   }
@@ -467,7 +490,7 @@ function ExpandedRow({ row }: { row: AttributionRow }) {
         date: row.createdAt,
         label: `Name match: ${nf.participantName} (${nf.headline})`,
         icon: "search",
-        color: "text-orange-600",
+        color: "text-cos-warm",
       });
     }
   }
@@ -475,11 +498,11 @@ function ExpandedRow({ row }: { row: AttributionRow }) {
   events.push({ date: row.createdAt, label: "Signed up on COS", icon: "user", color: "text-cos-electric" });
 
   if (row.onboardingComplete) {
-    events.push({ date: row.createdAt, label: "Onboarding complete", icon: "check", color: "text-emerald-600" });
+    events.push({ date: row.createdAt, label: "Onboarding complete", icon: "check", color: "text-cos-signal" });
   }
 
   if (row.subscriptionPlan && row.subscriptionPlan !== "free") {
-    events.push({ date: row.createdAt, label: `Upgraded to ${row.subscriptionPlan}`, icon: "star", color: "text-amber-600" });
+    events.push({ date: row.createdAt, label: `Upgraded to ${row.subscriptionPlan}`, icon: "star", color: "text-cos-warm" });
   }
 
   events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());

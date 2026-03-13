@@ -283,29 +283,29 @@ const PLAN_COLORS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  active: "bg-emerald-100 text-emerald-700",
-  trialing: "bg-blue-100 text-blue-700",
+  active: "bg-cos-signal/8 text-cos-signal",
+  trialing: "bg-cos-electric/8 text-cos-electric",
   past_due: "bg-cos-ember/10 text-cos-ember",
   canceled: "bg-cos-slate-light/10 text-cos-slate",
-  unpaid: "bg-red-100 text-red-700",
+  unpaid: "bg-cos-ember/8 text-cos-ember",
 };
 
 const PHASE_COLORS: Record<string, string> = {
   jina: "bg-cos-electric/10 text-cos-electric",
   classifier: "bg-cos-signal/10 text-cos-signal",
-  pdl: "bg-purple-100 text-purple-700",
-  linkedin: "bg-blue-100 text-blue-700",
+  pdl: "bg-cos-electric/8 text-cos-electric",
+  linkedin: "bg-cos-electric/8 text-cos-electric",
   case_study: "bg-cos-warm/10 text-cos-warm",
-  onboarding: "bg-emerald-100 text-emerald-700",
-  memory: "bg-pink-100 text-pink-700",
-  deep_crawl: "bg-orange-100 text-orange-700",
+  onboarding: "bg-cos-signal/8 text-cos-signal",
+  memory: "bg-cos-warm/8 text-cos-warm",
+  deep_crawl: "bg-cos-warm/8 text-cos-warm",
 };
 
 const EVENT_ICONS: Record<string, React.ReactNode> = {
   conversation: <MessageSquare className="h-3.5 w-3.5 text-cos-electric" />,
-  ai_usage: <Cpu className="h-3.5 w-3.5 text-purple-500" />,
+  ai_usage: <Cpu className="h-3.5 w-3.5 text-cos-electric" />,
   enrichment: <Sparkles className="h-3.5 w-3.5 text-cos-warm" />,
-  onboarding: <FileText className="h-3.5 w-3.5 text-emerald-500" />,
+  onboarding: <FileText className="h-3.5 w-3.5 text-cos-signal" />,
   email: <Mail className="h-3.5 w-3.5 text-cos-signal" />,
 };
 
@@ -421,6 +421,7 @@ export default function CustomerDetailPage() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingLoaded, setBillingLoaded] = useState(false);
   const [billingAction, setBillingAction] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
   const [giftMonths, setGiftMonths] = useState(1);
   const [giftPlan, setGiftPlan] = useState<"pro" | "enterprise">("pro");
   const [giftReturnPlan, setGiftReturnPlan] = useState<"free" | "pro">("free");
@@ -580,6 +581,7 @@ export default function CustomerDetailPage() {
   // Admin billing actions
   async function handleBillingAction(body: Record<string, unknown>) {
     setBillingAction(true);
+    setBillingError(null);
     try {
       const res = await fetch(`/api/admin/customers/${orgId}/billing`, {
         method: "PATCH",
@@ -588,13 +590,13 @@ export default function CustomerDetailPage() {
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.error ?? "Failed to update billing");
+        setBillingError(err.error ?? "Failed to update billing");
         return;
       }
       // Reload billing data
       fetchBilling();
     } catch {
-      alert("Network error");
+      setBillingError("Network error — please try again");
     } finally {
       setBillingAction(false);
     }
@@ -1047,7 +1049,7 @@ export default function CustomerDetailPage() {
             <StatPill
               label="AI Cost"
               value={formatCurrency(stats.aiCost)}
-              color="text-purple-600"
+              color="text-cos-electric"
             />
             <StatPill
               label="Messages"
@@ -1056,7 +1058,7 @@ export default function CustomerDetailPage() {
             />
             <StatPill label="Case Studies" value={stats.caseStudyCount} color="text-cos-warm" />
             <StatPill label="Members" value={members.length} color="text-cos-electric" />
-            <StatPill label="Partnerships" value={stats.partnershipCount} color="text-emerald-600" />
+            <StatPill label="Partnerships" value={stats.partnershipCount} color="text-cos-signal" />
           </div>
         </div>
 
@@ -1830,15 +1832,15 @@ export default function CustomerDetailPage() {
                   <div className="space-y-4">
                     {/* ── Experts Section ── */}
                     {tierExperts.length > 0 && (
-                      <div className="overflow-hidden rounded-cos-lg border border-emerald-200">
-                        <div className="flex items-center justify-between bg-emerald-50 px-4 py-2.5">
+                      <div className="overflow-hidden rounded-cos-lg border border-cos-signal/20">
+                        <div className="flex items-center justify-between bg-cos-signal/8 px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-emerald-700">Experts</span>
-                            <span className="rounded-cos-pill bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{tierExperts.length}</span>
+                            <span className="text-xs font-semibold text-cos-signal">Experts</span>
+                            <span className="rounded-cos-pill bg-cos-signal/15 px-2 py-0.5 text-[10px] font-bold text-cos-signal">{tierExperts.length}</span>
                           </div>
-                          <span className="text-[10px] text-emerald-600/70">Client-facing roles — enrichable</span>
+                          <span className="text-[10px] text-cos-signal/70">Client-facing roles — enrichable</span>
                         </div>
-                        <div className="divide-y divide-emerald-100">
+                        <div className="divide-y divide-cos-signal/10">
                           {tierExperts.map((ep) => renderExpertRow(ep, true))}
                         </div>
                       </div>
@@ -1846,15 +1848,15 @@ export default function CustomerDetailPage() {
 
                     {/* ── Potential Experts Section ── */}
                     {tierPotential.length > 0 && (
-                      <div className="overflow-hidden rounded-cos-lg border border-amber-200">
-                        <div className="flex items-center justify-between bg-amber-50 px-4 py-2.5">
+                      <div className="overflow-hidden rounded-cos-lg border border-cos-warm/20">
+                        <div className="flex items-center justify-between bg-cos-warm/8 px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-amber-700">Potential Experts</span>
-                            <span className="rounded-cos-pill bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">{tierPotential.length}</span>
+                            <span className="text-xs font-semibold text-cos-warm">Potential Experts</span>
+                            <span className="rounded-cos-pill bg-cos-warm/15 px-2 py-0.5 text-[10px] font-bold text-cos-warm">{tierPotential.length}</span>
                           </div>
-                          <span className="text-[10px] text-amber-600/70">Ambiguous roles — may be client-facing</span>
+                          <span className="text-[10px] text-cos-warm/70">Ambiguous roles — may be client-facing</span>
                         </div>
-                        <div className="divide-y divide-amber-100">
+                        <div className="divide-y divide-cos-warm/10">
                           {tierPotential.map((ep) => renderExpertRow(ep, true))}
                         </div>
                       </div>
@@ -2335,6 +2337,14 @@ export default function CustomerDetailPage() {
               </div>
             ) : billingData ? (
               <>
+                {/* Billing error banner */}
+                {billingError && (
+                  <div className="flex items-center gap-2 rounded-cos-lg border border-cos-ember/30 bg-cos-ember/5 px-4 py-3 text-sm text-cos-ember">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    {billingError}
+                    <button onClick={() => setBillingError(null)} className="ml-auto"><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                )}
                 {/* Current Plan */}
                 <Section title="Current Plan" icon={<CreditCard className="h-4 w-4 text-cos-electric" />}>
                   {billingData.subscription ? (
@@ -2356,7 +2366,7 @@ export default function CustomerDetailPage() {
                           </span>
                         )}
                         {billingData.subscription.giftExpiresAt && (
-                          <span className="rounded-cos-pill bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700">
+                          <span className="rounded-cos-pill bg-cos-electric/8 px-3 py-1 text-xs font-medium text-cos-electric">
                             Gift expires {formatDate(billingData.subscription.giftExpiresAt)}
                             {billingData.subscription.giftReturnPlan && (
                               <> &rarr; {billingData.subscription.giftReturnPlan}</>
@@ -2418,21 +2428,21 @@ export default function CustomerDetailPage() {
                 </Section>
 
                 {/* Admin: Gift Subscription (always visible) */}
-                <Section title="Gift Subscription" icon={<Sparkles className="h-4 w-4 text-purple-500" />}>
+                <Section title="Gift Subscription" icon={<Sparkles className="h-4 w-4 text-cos-electric" />}>
                     {billingData.subscription?.giftExpiresAt ? (
                       <div className="space-y-3">
-                        <div className="rounded-cos border border-purple-200 bg-purple-50 p-3 text-sm">
-                          <p className="font-medium text-purple-800">
+                        <div className="rounded-cos border border-cos-electric/20 bg-cos-electric/5 p-3 text-sm">
+                          <p className="font-medium text-cos-electric">
                             Active gift: {billingData.subscription.plan} until {formatDate(billingData.subscription.giftExpiresAt)}
                           </p>
-                          <p className="text-xs text-purple-600">
+                          <p className="text-xs text-cos-electric/70">
                             Returns to: {billingData.subscription.giftReturnPlan ?? "free"}
                           </p>
                         </div>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="text-red-600 hover:bg-red-50"
+                          className="text-cos-ember hover:bg-cos-ember/5"
                           disabled={billingAction}
                           onClick={() => handleBillingAction({ action: "revoke_gift" })}
                         >
@@ -2502,10 +2512,10 @@ export default function CustomerDetailPage() {
 
                 {/* Usage */}
                 {billingData.usage && (
-                <Section title="Usage Metrics" icon={<BarChart3 className="h-4 w-4 text-purple-500" />}>
+                <Section title="Usage Metrics" icon={<BarChart3 className="h-4 w-4 text-cos-electric" />}>
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <div className="rounded-cos bg-cos-cloud/50 p-3 text-center">
-                      <div className="text-lg font-bold text-purple-600">{formatCurrency(billingData.usage.aiCost ?? 0)}</div>
+                      <div className="text-lg font-bold text-cos-electric">{formatCurrency(billingData.usage.aiCost ?? 0)}</div>
                       <div className="text-[10px] font-medium uppercase text-cos-slate">AI Cost</div>
                     </div>
                     <div className="rounded-cos bg-cos-cloud/50 p-3 text-center">
@@ -2566,7 +2576,7 @@ export default function CustomerDetailPage() {
             ) : partnershipData ? (
               <>
                 {/* Partnerships */}
-                <Section title={`Partnerships (${partnershipData.partnerships.length})`} icon={<Handshake className="h-4 w-4 text-emerald-500" />}>
+                <Section title={`Partnerships (${partnershipData.partnerships.length})`} icon={<Handshake className="h-4 w-4 text-cos-signal" />}>
                   {partnershipData.partnerships.length === 0 ? (
                     <p className="text-xs text-cos-slate-light">No partnerships yet</p>
                   ) : (
@@ -2581,9 +2591,9 @@ export default function CustomerDetailPage() {
                           </div>
                           <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
                             p.status === "accepted"
-                              ? "bg-emerald-100 text-emerald-700"
+                              ? "bg-cos-signal/8 text-cos-signal"
                               : p.status === "requested"
-                              ? "bg-blue-100 text-blue-700"
+                              ? "bg-cos-electric/8 text-cos-electric"
                               : p.status === "suggested"
                               ? "bg-cos-warm/10 text-cos-warm"
                               : "bg-cos-cloud text-cos-slate"
@@ -2622,18 +2632,18 @@ export default function CustomerDetailPage() {
                           </div>
                           <span className={`rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
                             opp.priority === "high"
-                              ? "bg-red-100 text-red-700"
+                              ? "bg-cos-ember/8 text-cos-ember"
                               : opp.priority === "medium"
-                              ? "bg-amber-100 text-amber-700"
+                              ? "bg-cos-warm/8 text-cos-warm"
                               : "bg-cos-cloud text-cos-slate"
                           }`}>
                             {opp.priority}
                           </span>
                           <span className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
                             opp.status === "new"
-                              ? "bg-blue-100 text-blue-700"
+                              ? "bg-cos-electric/8 text-cos-electric"
                               : opp.status === "actioned"
-                              ? "bg-emerald-100 text-emerald-700"
+                              ? "bg-cos-signal/8 text-cos-signal"
                               : "bg-cos-cloud text-cos-slate"
                           }`}>
                             {opp.status}
@@ -2663,9 +2673,9 @@ export default function CustomerDetailPage() {
                           </div>
                           <span className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
                             lead.status === "open"
-                              ? "bg-emerald-100 text-emerald-700"
+                              ? "bg-cos-signal/8 text-cos-signal"
                               : lead.status === "claimed"
-                              ? "bg-blue-100 text-blue-700"
+                              ? "bg-cos-electric/8 text-cos-electric"
                               : "bg-cos-cloud text-cos-slate"
                           }`}>
                             {lead.status}
@@ -2756,16 +2766,18 @@ export default function CustomerDetailPage() {
               </p>
               <div className="flex flex-wrap gap-3">
                 <button
-                  className="rounded-cos border border-cos-ember/30 px-4 py-2 text-xs font-medium text-cos-ember hover:bg-cos-ember/5 transition-colors"
-                  onClick={() => alert("Reset enrichment — coming soon")}
+                  disabled
+                  className="rounded-cos border border-cos-ember/30 px-4 py-2 text-xs font-medium text-cos-ember/50 cursor-not-allowed transition-colors"
+                  title="Coming soon"
                 >
-                  Reset Enrichment
+                  Reset Enrichment <span className="ml-1 text-[9px] opacity-60">(coming soon)</span>
                 </button>
                 <button
-                  className="rounded-cos border border-cos-ember/30 px-4 py-2 text-xs font-medium text-cos-ember hover:bg-cos-ember/5 transition-colors"
-                  onClick={() => alert("Force re-sync to Neo4j — coming soon")}
+                  disabled
+                  className="rounded-cos border border-cos-ember/30 px-4 py-2 text-xs font-medium text-cos-ember/50 cursor-not-allowed transition-colors"
+                  title="Coming soon"
                 >
-                  Force Neo4j Re-sync
+                  Force Neo4j Re-sync <span className="ml-1 text-[9px] opacity-60">(coming soon)</span>
                 </button>
                 <button
                   className="flex items-center gap-2 rounded-cos border border-cos-ember/40 bg-cos-ember/5 px-4 py-2 text-xs font-medium text-cos-ember hover:bg-cos-ember/10 transition-colors"

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Mail, Loader2, RefreshCw, ChevronDown, ChevronRight, Users, Reply, MousePointer, Eye } from "lucide-react";
+import { Mail, Loader2, RefreshCw, ChevronDown, ChevronRight, Users, Reply, MousePointer, Eye, AlertCircle } from "lucide-react";
+import { StatusBadge, statusToVariant } from "@/components/admin/status-badge";
 
 interface Campaign {
   id: string;
@@ -25,8 +26,8 @@ interface CampaignStats {
 
 // Instantly v2 status codes
 const STATUS: Record<number, { label: string; dot: string; text: string; bg: string }> = {
-  0:  { label: "Active",    dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50" },
-  1:  { label: "Paused",    dot: "bg-amber-500",   text: "text-amber-700",   bg: "bg-amber-50" },
+  0:  { label: "Active",    dot: "bg-cos-signal", text: "text-cos-signal", bg: "bg-cos-signal/8" },
+  1:  { label: "Paused",    dot: "bg-cos-warm",   text: "text-cos-warm",   bg: "bg-cos-warm/8" },
   2:  { label: "Completed", dot: "bg-cos-slate",    text: "text-cos-slate-dim", bg: "bg-cos-cloud" },
   3:  { label: "Draft",     dot: "bg-cos-border",   text: "text-cos-slate",   bg: "bg-cos-cloud" },
   [-1]: { label: "Ended",   dot: "bg-cos-slate",    text: "text-cos-slate-dim", bg: "bg-cos-cloud" },
@@ -44,12 +45,18 @@ export default function InstantlyPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "active" | "paused" | "completed" | "draft">("all");
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const d = await fetch("/api/admin/growth-ops/instantly?action=listCampaigns").then(r => r.json());
+      const res = await fetch("/api/admin/growth-ops/instantly?action=listCampaigns");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
       setCampaigns(d.items ?? d.campaigns ?? d.data ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load campaigns");
     } finally {
       setLoading(false);
     }
@@ -126,8 +133,8 @@ export default function InstantlyPage() {
       {/* Summary stat cards */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Active", value: activeCount, dot: "bg-emerald-500", onClick: () => setFilter("active") },
-          { label: "Paused", value: pausedCount, dot: "bg-amber-500",   onClick: () => setFilter("paused") },
+          { label: "Active", value: activeCount, dot: "bg-cos-signal", onClick: () => setFilter("active") },
+          { label: "Paused", value: pausedCount, dot: "bg-cos-warm",   onClick: () => setFilter("paused") },
           { label: "Completed", value: doneCount,  dot: "bg-cos-slate",  onClick: () => setFilter("completed") },
           { label: "Draft",  value: draftCount,  dot: "bg-cos-border", onClick: () => setFilter("draft") },
         ].map(s => (
@@ -144,6 +151,14 @@ export default function InstantlyPage() {
           </button>
         ))}
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 flex items-center gap-2 rounded-cos-lg border border-cos-ember/30 bg-cos-ember/5 px-4 py-3 text-sm text-cos-ember">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
 
       {/* Filter tabs */}
       <div className="mb-4 flex gap-1 border-b border-cos-border">
@@ -188,7 +203,7 @@ export default function InstantlyPage() {
                   }
                   <span className={`h-2 w-2 shrink-0 rounded-full ${s.dot}`} />
                   <span className="flex-1 text-sm font-medium text-cos-midnight truncate">{c.name}</span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${s.bg} ${s.text}`}>{s.label}</span>
+                  <StatusBadge label={s.label} variant={statusToVariant(s.label)} className="shrink-0" />
                   {c.daily_limit && (
                     <span className="shrink-0 text-xs text-cos-slate hidden sm:inline">{c.daily_limit}/day</span>
                   )}

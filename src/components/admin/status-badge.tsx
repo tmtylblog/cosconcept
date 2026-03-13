@@ -83,6 +83,9 @@ export function statusToVariant(status: string): StatusVariant {
     case "approved":
     case "converted":
     case "expert":
+    case "matched":
+    case "intro_sent":
+    case "won":
       return "success";
     case "requested":
     case "pending":
@@ -90,6 +93,8 @@ export function statusToVariant(status: string): StatusVariant {
     case "paused":
     case "ambiguous":
     case "potential":
+    case "negotiation":
+    case "in_progress":
       return "warning";
     case "declined":
     case "error":
@@ -97,17 +102,21 @@ export function statusToVariant(status: string): StatusVariant {
     case "rejected":
     case "cancelled":
     case "lost":
+    case "past_due":
+    case "unpaid":
       return "error";
     case "suggested":
     case "inactive":
     case "draft":
     case "internal":
     case "not_expert":
+    case "canceled":
       return "neutral";
     case "new":
     case "open":
     case "pro":
     case "enterprise":
+    case "trialing":
       return "info";
     default:
       return "neutral";
