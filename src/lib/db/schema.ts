@@ -1963,8 +1963,27 @@ export const attributionEvents = pgTable("attribution_events", {
   instantlyCampaignName: text("instantly_campaign_name"),
   linkedinCampaignId: text("linkedin_campaign_id").references(() => growthOpsInviteCampaigns.id, { onDelete: "set null" }),
   linkedinInviteTargetId: text("linkedin_invite_target_id").references(() => growthOpsInviteTargets.id, { onDelete: "set null" }),
-  matchMethod: text("match_method").notNull().default("none"), // email_exact | linkedin_url | name_domain | none
+  matchMethod: text("match_method").notNull().default("none"), // email_exact | instantly | linkedin_url | name_domain | none
+  // Multi-touch flags (set by attribution-check step 6)
+  hasLinkedinOrganic: boolean("has_linkedin_organic").notNull().default(false),
+  hasLinkedinCampaign: boolean("has_linkedin_campaign").notNull().default(false),
+  linkedinConversationCount: integer("linkedin_conversation_count").notNull().default(0),
   matchedAt: timestamp("matched_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Attribution Touchpoints (multi-touch) ───────────────────────────────────
+// Records EVERY touchpoint per user across all channels, not just the first match.
+
+export const attributionTouchpoints = pgTable("attribution_touchpoints", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  channel: text("channel").notNull(), // "instantly_email" | "linkedin_campaign_invite" | "linkedin_organic_conversation" | "direct_signup"
+  sourceId: text("source_id"),        // campaign/conversation/queue entry ID
+  sourceName: text("source_name"),    // human-readable label
+  touchpointAt: timestamp("touchpoint_at").notNull(),
+  interactionType: text("interaction_type").notNull(), // "sent" | "opened" | "replied" | "accepted" | "conversation_started"
+  metadata: jsonb("metadata"),        // channel-specific extras
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

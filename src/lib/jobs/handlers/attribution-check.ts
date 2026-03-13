@@ -19,11 +19,15 @@
 import { db } from "@/lib/db";
 import {
   attributionEvents,
+  attributionTouchpoints,
   acqContacts,
   acqDeals,
   growthOpsInviteTargets,
   growthOpsInviteCampaigns,
   growthOpsInviteQueue,
+  growthOpsConversations,
+  growthOpsMessages,
+  users,
 } from "@/lib/db/schema";
 import { HubSpotClient } from "@/lib/growth-ops/HubSpotClient";
 import { InstantlyClient } from "@/lib/growth-ops/InstantlyClient";
@@ -272,6 +276,18 @@ export async function handleAttributionCheck(
     matchedAt: matchMethod !== "none" ? now : null,
   });
 
+  // ── Step 6: Record ALL touchpoints (multi-touch attribution) ──────────
+  // Scans for every interaction this user had across all channels,
+  // regardless of which was the primary match method.
+  try {
+    await recordTouchpoints(userId, normalizedEmail, linkedinUrl ?? null, {
+      instantlyCampaignId,
+      instantlyCampaignName,
+    });
+  } catch {
+    // Touchpoint recording failure is non-critical — never blocks attribution
+  }
+
   return {
     userId,
     matchMethod,
@@ -279,6 +295,159 @@ export async function handleAttributionCheck(
     instantlyCampaignId,
     linkedinCampaignId,
   };
+}
+
+/**
+ * Record all touchpoints for a user across LinkedIn organic, LinkedIn campaigns,
+ * and Instantly campaigns. Updates the boolean flags on attribution_events.
+ */
+async function recordTouchpoints(
+  userId: string,
+  email: string,
+  linkedinUrl: string | null,
+  instantly: { instantlyCampaignId: string | null; instantlyCampaignName: string | null }
+): Promise<void> {
+  const touchpoints: {
+    channel: string;
+    sourceId: string | null;
+    sourceName: string | null;
+    touchpointAt: Date;
+    interactionType: string;
+  }[] = [];
+
+  let hasLinkedinOrganic = false;
+  let hasLinkedinCampaign = false;
+  let linkedinConversationCount = 0;
+
+  // Resolve user LinkedIn URL if not provided in payload
+  let userLinkedinUrl = linkedinUrl;
+  if (!userLinkedinUrl) {
+    const [user] = await db
+      .select({ linkedinUrl: users.linkedinUrl })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    userLinkedinUrl = user?.linkedinUrl ?? null;
+  }
+
+  // ── LinkedIn organic conversations ───────────────────────────────────
+  if (userLinkedinUrl) {
+    const normalizedLinkedin = userLinkedinUrl.toLowerCase().trim().replace(/\/$/, "");
+
+    const convos = await db
+      .select({
+        id: growthOpsConversations.id,
+        participantName: growthOpsConversations.participantName,
+        lastMessageAt: growthOpsConversations.lastMessageAt,
+        chatId: growthOpsConversations.chatId,
+      })
+      .from(growthOpsConversations)
+      .where(sql`LOWER(RTRIM(${growthOpsConversations.participantProfileUrl}, '/')) = ${normalizedLinkedin}`);
+
+    if (convos.length > 0) {
+      hasLinkedinOrganic = true;
+      linkedinConversationCount = convos.length;
+
+      for (const convo of convos) {
+        // Count messages in this conversation
+        const [msgCount] = await db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(growthOpsMessages)
+          .where(eq(growthOpsMessages.chatId, convo.chatId));
+
+        touchpoints.push({
+          channel: "linkedin_organic_conversation",
+          sourceId: convo.id,
+          sourceName: convo.participantName,
+          touchpointAt: convo.lastMessageAt ?? new Date(),
+          interactionType: (msgCount?.count ?? 0) > 1 ? "replied" : "conversation_started",
+        });
+      }
+    }
+
+    // ── LinkedIn campaign invites ────────────────────────────────────────
+    const targets = await db
+      .select({ id: growthOpsInviteTargets.id })
+      .from(growthOpsInviteTargets)
+      .where(sql`LOWER(RTRIM(${growthOpsInviteTargets.linkedinUrl}, '/')) = ${normalizedLinkedin}`);
+
+    for (const target of targets) {
+      const queueRows = await db
+        .select({
+          campaignId: growthOpsInviteQueue.campaignId,
+          status: growthOpsInviteQueue.status,
+          sentAt: growthOpsInviteQueue.sentAt,
+          acceptedAt: growthOpsInviteQueue.acceptedAt,
+        })
+        .from(growthOpsInviteQueue)
+        .where(eq(growthOpsInviteQueue.targetId, target.id));
+
+      for (const q of queueRows) {
+        hasLinkedinCampaign = true;
+
+        const [campaign] = await db
+          .select({ name: growthOpsInviteCampaigns.name })
+          .from(growthOpsInviteCampaigns)
+          .where(eq(growthOpsInviteCampaigns.id, q.campaignId))
+          .limit(1);
+
+        if (q.sentAt) {
+          touchpoints.push({
+            channel: "linkedin_campaign_invite",
+            sourceId: q.campaignId,
+            sourceName: campaign?.name ?? null,
+            touchpointAt: q.sentAt,
+            interactionType: "sent",
+          });
+        }
+        if (q.acceptedAt) {
+          touchpoints.push({
+            channel: "linkedin_campaign_invite",
+            sourceId: q.campaignId,
+            sourceName: campaign?.name ?? null,
+            touchpointAt: q.acceptedAt,
+            interactionType: "accepted",
+          });
+        }
+      }
+    }
+  }
+
+  // ── Instantly campaign touchpoint ──────────────────────────────────────
+  if (instantly.instantlyCampaignId) {
+    touchpoints.push({
+      channel: "instantly_email",
+      sourceId: instantly.instantlyCampaignId,
+      sourceName: instantly.instantlyCampaignName,
+      touchpointAt: new Date(),
+      interactionType: "sent",
+    });
+  }
+
+  // ── Write touchpoints ─────────────────────────────────────────────────
+  if (touchpoints.length > 0) {
+    await db.insert(attributionTouchpoints).values(
+      touchpoints.map((tp) => ({
+        id: randomId(),
+        userId,
+        channel: tp.channel,
+        sourceId: tp.sourceId,
+        sourceName: tp.sourceName,
+        touchpointAt: tp.touchpointAt,
+        interactionType: tp.interactionType,
+      }))
+    );
+  }
+
+  // ── Update attribution_events with multi-touch flags ──────────────────
+  await db
+    .update(attributionEvents)
+    .set({
+      hasLinkedinOrganic,
+      hasLinkedinCampaign,
+      linkedinConversationCount,
+    })
+    .where(eq(attributionEvents.userId, userId));
 }
 
 /**
