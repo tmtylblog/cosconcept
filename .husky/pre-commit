@@ -1,1 +1,6 @@
+# Ensure Node.js is on PATH (Windows Git Bash hooks don't inherit user PATH)
+for p in "/c/Program Files/nodejs" "$HOME/AppData/Roaming/nvm/current" "$NVM_DIR/current/bin"; do
+  [ -d "$p" ] && export PATH="$p:$PATH"
+done
+
 npx lint-staged
