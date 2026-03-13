@@ -86,15 +86,22 @@ export async function GET(req: Request) {
 
   const result = experts
     .map((ep) => {
-      // Compute tier and enrichment status from pdlData
+      // Compute tier from pdlData classification, or auto-classify from evidence
       const pdl = ep.pdlData as Record<string, unknown> | null;
-      const expertTier = (pdl?.classifiedAs as string) ?? null;
+      const pdlClassification = (pdl?.classifiedAs as string) ?? null;
       const hasExperience = Array.isArray(pdl?.experience) && (pdl.experience as unknown[]).length > 0;
       const isFullyEnriched = !!(ep.pdlEnrichedAt && hasExperience);
 
       const sps = (spByExpert[ep.id] ?? []).sort(
         (a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0)
       );
+      const hasSpecialistProfiles = sps.length > 0;
+
+      // Auto-classify: PDL classification wins, else specialist profiles or
+      // work history presence → "expert", else null (unclassified)
+      const expertTier = pdlClassification
+        ?? (hasSpecialistProfiles || hasExperience ? "expert" : null);
+
       const bestSp = sps[0];
       const strongCount = sps.filter((s) => s.qualityStatus === "strong").length;
       const partialCount = sps.filter((s) => s.qualityStatus === "partial").length;

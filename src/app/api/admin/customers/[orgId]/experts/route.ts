@@ -108,9 +108,14 @@ export async function GET(
       }
 
       // Extract tier and enrichment status from pdlData
+      // Auto-classify: PDL classification wins, else specialist profiles or
+      // work history presence → "expert", else null (unclassified)
       const pdlData = ep.pdlData as Record<string, unknown> | null;
-      const expertTier = (pdlData?.classifiedAs as string) ?? null;
+      const pdlClassification = (pdlData?.classifiedAs as string) ?? null;
       const hasExperience = Array.isArray(pdlData?.experience) && (pdlData.experience as unknown[]).length > 0;
+      const hasSpecialistProfiles = (sp?.total ?? 0) > 0;
+      const expertTier = pdlClassification
+        ?? (hasSpecialistProfiles || hasExperience ? "expert" : null);
       const isFullyEnriched = !!ep.pdlEnrichedAt && hasExperience;
 
       return {
