@@ -193,6 +193,45 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 11. Check enrichment_data for team members (PDL data may be stored here)
+    const enrichmentTeamData = await db.execute(sql`
+      SELECT
+        COUNT(*)::int AS total_enrichment_rows,
+        COUNT(CASE WHEN extracted->>'teamMembers' IS NOT NULL AND extracted->>'teamMembers' != '[]' AND extracted->>'teamMembers' != 'null' THEN 1 END)::int AS rows_with_team,
+        COUNT(CASE WHEN extracted->'teamMembers' IS NOT NULL THEN 1 END)::int AS rows_with_team_key
+      FROM enrichment_data
+    `);
+
+    // Check a sample of team member data
+    const sampleTeamData = await db.execute(sql`
+      SELECT
+        firm_id,
+        jsonb_array_length(COALESCE(extracted->'teamMembers', '[]'::jsonb)) AS team_count
+      FROM enrichment_data
+      WHERE extracted->'teamMembers' IS NOT NULL
+        AND jsonb_array_length(COALESCE(extracted->'teamMembers', '[]'::jsonb)) > 0
+      ORDER BY jsonb_array_length(extracted->'teamMembers') DESC
+      LIMIT 10
+    `);
+
+    // Total team members across all enrichment_data
+    const totalTeamMembers = await db.execute(sql`
+      SELECT SUM(jsonb_array_length(COALESCE(extracted->'teamMembers', '[]'::jsonb)))::int AS total
+      FROM enrichment_data
+      WHERE extracted->'teamMembers' IS NOT NULL
+        AND jsonb_array_length(COALESCE(extracted->'teamMembers', '[]'::jsonb)) > 0
+    `);
+
+    // Check background_jobs detail for team-ingest
+    const allTeamJobs = await db.execute(sql`
+      SELECT id, status, payload->>'firmId' AS firm_id, payload->>'domain' AS domain,
+             created_at, completed_at, last_error
+      FROM background_jobs
+      WHERE type = 'team-ingest'
+      ORDER BY created_at DESC
+      LIMIT 20
+    `);
+
     return NextResponse.json({
       summary: {
         totalExperts: totalResult.rows[0],
@@ -202,11 +241,17 @@ export async function GET(req: NextRequest) {
       jobs: {
         teamIngestStatus: jobStats.rows,
         recentFailures: failedJobs.rows,
+        allTeamJobs: allTeamJobs.rows,
       },
       coverage: {
         firmCoverage: firmCoverage.rows[0],
         orgLinkage: orgLinkage.rows[0],
         adminPagePath: adminPath.rows[0],
+      },
+      enrichmentData: {
+        stats: enrichmentTeamData.rows[0],
+        totalTeamMembers: totalTeamMembers.rows[0]?.total ?? 0,
+        topFirmsByTeamSize: sampleTeamData.rows,
       },
       topFirms: topFirms.rows,
       specificCheck,
