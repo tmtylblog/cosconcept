@@ -250,16 +250,16 @@ async function seedStagesFromHubSpot() {
     results: { id: string; label: string; stages: { id: string; label: string; displayOrder: number }[] }[];
   };
 
-  // Use the first pipeline (or the "Self Sign Up" one if found)
+  if (!pipelines.results?.length) return { error: "No pipelines found in HubSpot" };
+
+  // Use the "Self Sign Up" pipeline — the primary one
   const pipeline =
-    pipelines.results?.find(
+    pipelines.results.find(
       (p) =>
         p.label?.toLowerCase().includes("self") ||
         p.label?.toLowerCase().includes("sign up") ||
         p.label?.toLowerCase().includes("signup")
-    ) ?? pipelines.results?.[0];
-
-  if (!pipeline) return { error: "No pipeline found in HubSpot" };
+    ) ?? pipelines.results[0];
 
   const colors = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4", "#10b981", "#22c55e", "#ef4444"];
   let seeded = 0;
