@@ -10,6 +10,26 @@ import { enqueue } from "./jobs/queue";
 import { isPersonalEmail, CORPORATE_EMAIL_ERROR } from "./email-validation";
 import { sendEmail } from "./email/email-client";
 
+// Resolve the canonical base URL for Better Auth.
+// On Vercel, VERCEL_PROJECT_PRODUCTION_URL is the stable production domain
+// (e.g. "cos-concept.vercel.app"). BETTER_AUTH_URL is the user-configured
+// override (e.g. custom domain). Fallback chain ensures OAuth callbacks
+// always point to the right host — never localhost in production.
+function resolveBaseURL(): string {
+  if (process.env.BETTER_AUTH_URL && !process.env.BETTER_AUTH_URL.includes("localhost")) {
+    return process.env.BETTER_AUTH_URL;
+  }
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  return process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+}
+
+const AUTH_BASE_URL = resolveBaseURL();
+
 // Define access control with admin-level statements
 const ac = createAccessControl({
   user: ["create", "list", "set-role", "ban", "impersonate", "delete", "set-password", "get", "update"],
@@ -30,10 +50,16 @@ export const auth = betterAuth({
     },
   }),
 
-  baseURL: process.env.BETTER_AUTH_URL,
+  baseURL: AUTH_BASE_URL,
 
   trustedOrigins: [
-    process.env.BETTER_AUTH_URL!,
+    AUTH_BASE_URL,
+    // Also trust the explicit env var if it differs from resolved URL
+    ...(process.env.BETTER_AUTH_URL && process.env.BETTER_AUTH_URL !== AUTH_BASE_URL
+      ? [process.env.BETTER_AUTH_URL] : []),
+    // Allow Vercel preview/deployment URLs alongside custom domain
+    ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+    ...(process.env.VERCEL_PROJECT_PRODUCTION_URL ? [`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`] : []),
   ],
 
   // Rate limiting disabled — Better Auth's built-in rate limiter corrupts JSON

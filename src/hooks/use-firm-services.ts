@@ -77,12 +77,36 @@ export function useFirmServices(
     fetch(`/api/firm/services?${params}`)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
-      .then((data) => {
+      .then(async (data) => {
         if (cancelled) return;
         setServices(data?.services ?? []);
         setTotal(data?.total ?? 0);
         setHiddenCount(data?.hiddenCount ?? 0);
         setIsLoading(false);
+
+        // Retry polling if initial fetch returns 0 services (enrichment may still be running)
+        if ((data?.services ?? []).length === 0) {
+          const retryDelays = [2000, 5000, 10000];
+          for (const delay of retryDelays) {
+            if (cancelled) break;
+            await new Promise((r) => setTimeout(r, delay));
+            if (cancelled) break;
+            try {
+              const retryRes = await fetch(`/api/firm/services?${params}`);
+              if (!retryRes.ok || cancelled) continue;
+              const retryData = await retryRes.json();
+              if (cancelled) break;
+              if ((retryData?.services ?? []).length > 0) {
+                setServices(retryData.services);
+                setTotal(retryData.total ?? 0);
+                setHiddenCount(retryData.hiddenCount ?? 0);
+                break;
+              }
+            } catch {
+              // silent
+            }
+          }
+        }
       });
 
     return () => {

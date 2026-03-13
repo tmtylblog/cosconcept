@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { subscriptions, subscriptionEvents } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import type { PlanId } from "@/lib/billing/plan-limits";
+import { grantProCredits, grantBoostPack } from "@/lib/billing/enrichment-credits";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,19 @@ export async function POST(req: NextRequest) {
         const orgId = session.metadata?.organizationId;
         const plan = (session.metadata?.plan ?? "pro") as PlanId;
 
+        // Handle Boost Pack one-time purchases
+        if (session.metadata?.type === "boost_pack" && orgId) {
+          const paymentIntent = typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : session.payment_intent?.id;
+          if (paymentIntent) {
+            await grantBoostPack(orgId, paymentIntent);
+            console.log(`[Stripe] Boost Pack granted for org ${orgId}`);
+          }
+          break;
+        }
+
+        // Handle subscription purchases
         if (orgId && session.subscription) {
           const stripe = getStripe();
           const sub = await stripe.subscriptions.retrieve(
@@ -105,6 +119,13 @@ export async function POST(req: NextRequest) {
                 updatedAt: new Date(),
               },
             });
+
+          // Grant 100 enrichment credits on Pro/Enterprise upgrade (idempotent)
+          if (plan === "pro" || plan === "enterprise") {
+            await grantProCredits(orgId).catch((err) =>
+              console.error(`[Stripe] Failed to grant Pro credits for ${orgId}:`, err)
+            );
+          }
         }
         break;
       }

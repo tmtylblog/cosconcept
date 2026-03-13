@@ -113,6 +113,8 @@ function AppLayoutInner({
     }
   }, [session?.user, sessionPending, router, pathname]);
 
+  // NOTE: Post-onboarding redirect moved below useOnboardingStatus() declaration
+
   const isDevMode = process.env.NODE_ENV === "development";
 
   // ─── Auto-provision org + firm for authenticated users with no org ────
@@ -223,6 +225,17 @@ function AppLayoutInner({
     missingFields,
     isBrandWaitlist,
   } = useOnboardingStatus(activeOrg?.id, !!session?.user);
+
+  // ─── Post-onboarding redirect: /dashboard → /discover ──────────────────────
+  // Overview is hidden from nav after onboarding, so redirect authenticated
+  // users who land on /dashboard (e.g. from login redirect or bookmarks).
+  useEffect(() => {
+    if (!session?.user || sessionPending || !onboardingComplete) return;
+    if (session.user.email?.endsWith("@joincollectiveos.com")) return; // internal team handled above
+    if (pathname === "/dashboard") {
+      router.replace("/discover");
+    }
+  }, [session?.user, sessionPending, onboardingComplete, pathname, router]);
 
   // Track onboarding completion — distinguish initial page load from in-session transition.
   // On page reload of an already-complete account, skip celebration and go straight to app.
@@ -877,6 +890,7 @@ function AppLayoutInner({
               collapsed={navCollapsed}
               onToggle={() => setNavCollapsed(!navCollapsed)}
               isGuest={false}
+              hideOverview={true}
               onRequestLogin={handleRequestLogin}
               onSimulateNewUser={handleSimulateNewUser}
             />

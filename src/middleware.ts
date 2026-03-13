@@ -23,6 +23,8 @@ const PUBLIC_EXCEPTIONS = [
   "/api/admin/neo4j/migrate",  // legacy migration (protected by ADMIN_SECRET header)
   "/api/admin/import",         // n8n import endpoints (protected by ADMIN_SECRET header)
   "/api/admin/enrich",         // enrichment backfill endpoints (protected by session OR ADMIN_SECRET)
+  "/api/admin/promote-user",   // bootstrap admin role (protected by ADMIN_SECRET header)
+  "/api/admin/experts/diagnostic",  // expert data diagnostic (protected by session OR ADMIN_SECRET)
 ];
 
 function isProtectedPath(pathname: string): boolean {
@@ -41,12 +43,17 @@ export async function middleware(req: NextRequest) {
 
   // Rewrite root URL to /dashboard (URL stays as /, content from /dashboard)
   if (pathname === "/") {
-    return NextResponse.rewrite(new URL("/dashboard", req.url));
+    const response = NextResponse.rewrite(new URL("/dashboard", req.url));
+    response.headers.set("x-pathname", pathname);
+    return response;
   }
 
   // Only protect specific API routes
   if (!isProtectedPath(pathname)) {
-    return NextResponse.next();
+    // Pass the pathname to server components via custom header
+    const response = NextResponse.next();
+    response.headers.set("x-pathname", pathname);
+    return response;
   }
 
   // Check for session cookie — just existence, no API call
@@ -61,7 +68,9 @@ export async function middleware(req: NextRequest) {
     );
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+  response.headers.set("x-pathname", pathname);
+  return response;
 }
 
 export const config = {

@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { serviceFirms, organizations, enrichmentCache } from "@/lib/db/schema";
 import { enqueue } from "@/lib/jobs/queue";
+import { getOrCreateCreditBalance } from "@/lib/billing/enrichment-credits";
 
 export const dynamic = "force-dynamic";
 
@@ -193,6 +194,19 @@ export async function POST(req: Request) {
 
       await enqueue("firm-abstraction", { firmId, organizationId });
 
+      // Initialize enrichment credits + auto-trigger team roster pull
+      await getOrCreateCreditBalance(organizationId).catch(() => {});
+      const teamDomain = websiteUrl.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
+      if (teamDomain) {
+        await enqueue("team-ingest", {
+          firmId,
+          domain: teamDomain,
+          limit: 500,
+          autoEnrichLimit: 5,
+          companyName: firmName,
+        }).catch((err) => console.error(`[EnsureOrg] Failed to queue team-ingest: ${err}`));
+      }
+
       console.log(`[EnsureOrg] Created + hydrated firm ${firmId} from cache for ${resolvedDomain}`);
     } else {
       // No cache hit — create stub with website so enrichment can be triggered from UI
@@ -203,6 +217,18 @@ export async function POST(req: Request) {
         website: emailDomain ? `https://${emailDomain}` : null,
         enrichmentStatus: "pending",
       });
+
+      // Initialize enrichment credits + auto-trigger team roster pull if we have a domain
+      await getOrCreateCreditBalance(organizationId).catch(() => {});
+      if (emailDomain) {
+        await enqueue("team-ingest", {
+          firmId,
+          domain: emailDomain,
+          limit: 500,
+          autoEnrichLimit: 5,
+          companyName: org?.name || undefined,
+        }).catch((err) => console.error(`[EnsureOrg] Failed to queue team-ingest: ${err}`));
+      }
 
       console.log(
         `[EnsureOrg] Created stub firm ${firmId} for org ${organizationId}` +

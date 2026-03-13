@@ -110,6 +110,7 @@ export async function GET(req: Request) {
         ...ep,
         expertTier,
         isFullyEnriched,
+        enrichmentStatus: ep.enrichmentStatus ?? (isFullyEnriched ? "enriched" : "roster"),
         specialistProfiles: sps,
         bestSpecialistTitle: bestSp?.qualityStatus === "strong" ? bestSp.title : null,
         qualitySummary:

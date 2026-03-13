@@ -42,6 +42,12 @@ export interface PlanLimits {
   caseStudyDisplayLimit: number;
   /** Max client logos/names shown on public profile (-1 = all) */
   clientDisplayLimit: number;
+
+  // ── Enrichment credits ─────────────────────────────────────────
+  /** Credits included with this plan (5 free auto, 100 pro, unlimited enterprise) */
+  enrichmentCreditsIncluded: number;
+  /** Can purchase Boost Packs (50 credits for $100) */
+  canPurchaseBoostPacks: boolean;
 }
 
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
@@ -58,9 +64,11 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     canAccessCallIntelligence: false,
     canAccessEmailAgent: false,
     canExportData: false,
-    expertRosterLimit: 5,       // teaser: 5 people to show the feature
+    expertRosterLimit: -1,      // full roster pulled for all plans
     caseStudyDisplayLimit: 5,   // show 5 case studies on profile
     clientDisplayLimit: 20,     // show up to 20 client names/logos
+    enrichmentCreditsIncluded: 5,    // 5 auto-enriched on signup
+    canPurchaseBoostPacks: false,    // must upgrade to Pro first
   },
   pro: {
     members: 3,
@@ -78,6 +86,8 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     expertRosterLimit: -1,      // full roster (capped at 500 per firm in handler)
     caseStudyDisplayLimit: -1,  // all case studies
     clientDisplayLimit: -1,     // all clients
+    enrichmentCreditsIncluded: 100,  // 100 enrichment credits on upgrade
+    canPurchaseBoostPacks: true,     // can buy 50-credit Boost Packs ($100)
   },
   enterprise: {
     members: Infinity,
@@ -95,6 +105,8 @@ export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
     expertRosterLimit: -1,
     caseStudyDisplayLimit: -1,
     clientDisplayLimit: -1,
+    enrichmentCreditsIncluded: -1,   // unlimited enrichments
+    canPurchaseBoostPacks: true,
   },
 };
 

@@ -23,7 +23,8 @@ async function resolveRedirect(domain: string): Promise<string | null> {
   } catch { return null; }
 }
 import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob } from "@/lib/jobs/runner";
+import { runNextJob, drainQueue } from "@/lib/jobs/runner";
+import { recordManualCorrection } from "@/lib/enrichment/extraction-learner";
 
 // ─── Seed from enrichment data (silent, first-load only) ─
 // Also re-queues any URLs stuck in pending/failed for over 48 hours.
@@ -109,7 +110,7 @@ async function seedCaseStudiesIfEmpty(firmId: string, organizationId: string, us
     });
     queued++;
   }
-  if (queued > 0) after(runNextJob().catch(() => {}));
+  if (queued > 0) after(drainQueue(Math.min(queued, 5)).catch(() => {}));
 }
 
 export const dynamic = "force-dynamic";
@@ -408,7 +409,14 @@ export async function POST(req: NextRequest) {
     rawText,
     filename,
   });
-  after(runNextJob().catch(() => {}));
+  after(drainQueue(1).catch(() => {}));
+
+  // Track manual case study submission for self-learning (Change 9c)
+  await recordManualCorrection({
+    firmId: firm.id,
+    extractionType: "case_studies",
+    item: sourceUrl,
+  });
 
   return Response.json(
     { caseStudy: { id, status: "pending" }, message: "Queued for ingestion" },

@@ -85,6 +85,7 @@ export const users = pgTable("users", {
   jobTitle: text("job_title"),
   phone: text("phone"),       // E.164 format e.g. +14155552671 (for future WhatsApp)
   linkedinUrl: text("linkedin_url"),
+  pdlLinkedinLookedUp: boolean("pdl_linkedin_looked_up").notNull().default(false),
   // Admin plugin fields
   role: text("role").default("user"), // user | admin | superadmin
   banned: boolean("banned").default(false),
@@ -1394,6 +1395,9 @@ export const expertProfiles = pgTable("expert_profiles", {
   // Track A: canonical Person node link
   personNodeId: text("person_node_id"), // Neo4j Person node ID
 
+  // Enrichment status: roster = basic PDL search data, enriched = full work history
+  enrichmentStatus: text("enrichment_status").notNull().default("roster"),
+
   // Meta
   isPublic: boolean("is_public").notNull().default(true),
   profileCompleteness: real("profile_completeness").default(0),
@@ -1764,6 +1768,10 @@ export const growthOpsLinkedInAccounts = pgTable("growth_ops_linkedin_accounts",
   linkedinUsername: text("linkedin_username"),
   accountType: text("account_type").notNull().default("basic"), // basic | premium | sales_navigator | recruiter
   status: text("status").notNull().default("CONNECTING"), // CONNECTING | OK | CREDENTIALS | ERROR
+  syncStatus: text("sync_status").notNull().default("idle"), // idle | syncing | done | error
+  syncProgress: text("sync_progress"), // JSON string: { seeded, enriching, pages, error? }
+  syncStartedAt: timestamp("sync_started_at"),
+  syncCompletedAt: timestamp("sync_completed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -1931,19 +1939,126 @@ export const acqContacts = pgTable("acq_contacts", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const acqPipelineStages = pgTable("acq_pipeline_stages", {
+  id: text("id").primaryKey(),
+  pipelineId: text("pipeline_id").notNull().default("default"),
+  label: text("label").notNull(),
+  displayOrder: integer("display_order").notNull().default(0),
+  isClosedWon: boolean("is_closed_won").notNull().default(false),
+  isClosedLost: boolean("is_closed_lost").notNull().default(false),
+  hubspotStageId: text("hubspot_stage_id"), // maps to HubSpot stage for sync
+  color: text("color").notNull().default("#6366f1"), // stage color for UI
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const acqDeals = pgTable("acq_deals", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   contactId: text("contact_id").references(() => acqContacts.id, { onDelete: "set null" }),
   companyId: text("company_id").references(() => acqCompanies.id, { onDelete: "set null" }),
+  stageId: text("stage_id").references(() => acqPipelineStages.id, { onDelete: "set null" }),
   hubspotDealId: text("hubspot_deal_id").unique(),
   hubspotPipelineId: text("hubspot_pipeline_id"),
   hubspotStageId: text("hubspot_stage_id"),
   stageLabel: text("stage_label").notNull().default(""),
   dealValue: text("deal_value"),
   status: text("status").notNull().default("open"), // open | won | lost
+  source: text("source").notNull().default("hubspot_sync"), // hubspot_sync | instantly_auto | linkedin_auto | manual
+  sourceChannel: text("source_channel"), // instantly | linkedin | hubspot | null
+  sourceCampaignId: text("source_campaign_id"),
+  sourceCampaignName: text("source_campaign_name"),
+  sourceMessageId: text("source_message_id"),
+  notes: text("notes"),
+  customFields: jsonb("custom_fields"),
+  priority: text("priority").notNull().default("normal"), // low | normal | high | urgent
+  lastActivityAt: timestamp("last_activity_at"),
+  sentimentScore: real("sentiment_score"), // 0.0–1.0
   closedAt: timestamp("closed_at"),
   hubspotSyncedAt: timestamp("hubspot_synced_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const acqDealActivities = pgTable("acq_deal_activities", {
+  id: text("id").primaryKey(),
+  dealId: text("deal_id").notNull().references(() => acqDeals.id, { onDelete: "cascade" }),
+  activityType: text("activity_type").notNull(), // stage_change | note_added | email_replied | linkedin_message | hubspot_sync | auto_created | sentiment_analyzed
+  description: text("description"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const acqDealQueue = pgTable("acq_deal_queue", {
+  id: text("id").primaryKey(),
+  contactEmail: text("contact_email"),
+  contactName: text("contact_name"),
+  contactLinkedinUrl: text("contact_linkedin_url"),
+  companyName: text("company_name"),
+  companyDomain: text("company_domain"),
+  source: text("source").notNull(), // instantly_auto | linkedin_auto
+  sourceChannel: text("source_channel").notNull(), // instantly | linkedin
+  sourceCampaignId: text("source_campaign_id"),
+  sourceCampaignName: text("source_campaign_name"),
+  sourceMessageId: text("source_message_id"),
+  messageText: text("message_text"),
+  sentiment: text("sentiment"), // positive | negative | neutral | unsubscribe
+  sentimentScore: real("sentiment_score"),
+  status: text("status").notNull().default("pending"), // pending | approved | rejected
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: text("reviewed_by"),
+  createdDealId: text("created_deal_id").references(() => acqDeals.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const acqDealSources = pgTable("acq_deal_sources", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(), // slug: 'hubspot_sync', 'instantly_auto', etc.
+  label: text("label").notNull(), // display name: 'HubSpot Sync', 'Instantly Auto', etc.
+  color: text("color").notNull().default("#6366f1"),
+  icon: text("icon").notNull().default("globe"), // lucide icon name
+  isSystem: boolean("is_system").notNull().default(false), // true = cannot delete (hubspot_sync, manual, etc.)
+  displayOrder: integer("display_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ─── Reply Knowledge Base (AI context for auto-reply generation) ─────────────
+
+export const replyKnowledgeBase = pgTable("reply_knowledge_base", {
+  id: text("id").primaryKey(),
+  category: text("category").notNull(), // product_info | objection_handling | pricing | tone_guide | company_info | custom
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  displayOrder: integer("display_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const acqInstantlyReplyWatermarks = pgTable("acq_instantly_reply_watermarks", {
+  id: text("id").primaryKey(),
+  campaignId: text("campaign_id").notNull(),
+  leadEmail: text("lead_email").notNull(),
+  lastReplyCount: integer("last_reply_count").notNull().default(0),
+  checkedAt: timestamp("checked_at").notNull().defaultNow(),
+});
+
+// ─── Extraction Outcomes (self-learning feedback loop) ────
+// Tracks extraction success/failure per domain for self-learning.
+
+export const extractionOutcomes = pgTable("extraction_outcomes", {
+  id: text("id").primaryKey(),
+  domain: text("domain").notNull(),
+  firmId: text("firm_id"),
+  extractionType: text("extraction_type").notNull(), // "services" | "case_studies"
+  autoExtractedCount: integer("auto_extracted_count").notNull().default(0),
+  manuallyAddedCount: integer("manually_added_count").notNull().default(0),
+  manuallyAddedItems: jsonb("manually_added_items"), // what the user added that we missed
+  failureReason: text("failure_reason"), // "no_services_page" | "regex_filtered" | "ai_empty" | "blocked" | "no_case_study_urls"
+  retryCount: integer("retry_count").notNull().default(0),
+  lastRetryAt: timestamp("last_retry_at"),
+  resolved: boolean("resolved").notNull().default(false), // true once user has data (auto or manual)
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -1956,7 +2071,79 @@ export const attributionEvents = pgTable("attribution_events", {
   instantlyCampaignName: text("instantly_campaign_name"),
   linkedinCampaignId: text("linkedin_campaign_id").references(() => growthOpsInviteCampaigns.id, { onDelete: "set null" }),
   linkedinInviteTargetId: text("linkedin_invite_target_id").references(() => growthOpsInviteTargets.id, { onDelete: "set null" }),
-  matchMethod: text("match_method").notNull().default("none"), // email_exact | linkedin_url | name_domain | none
+  matchMethod: text("match_method").notNull().default("none"), // email_exact | instantly | linkedin_url | linkedin_pdl | name_domain | name_fuzzy | company_linkedin | none
+  // Multi-touch flags (set by attribution-check step 6)
+  hasLinkedinOrganic: boolean("has_linkedin_organic").notNull().default(false),
+  hasLinkedinCampaign: boolean("has_linkedin_campaign").notNull().default(false),
+  linkedinConversationCount: integer("linkedin_conversation_count").notNull().default(0),
+  // Company/2nd-degree + name fuzzy matching
+  hasCompanyLinkedinMatch: boolean("has_company_linkedin_match").notNull().default(false),
+  companyLinkedinDetails: jsonb("company_linkedin_details"),
+  hasNameFuzzyMatch: boolean("has_name_fuzzy_match").notNull().default(false),
+  nameFuzzyDetails: jsonb("name_fuzzy_details"),
+  pdlLookupStatus: text("pdl_lookup_status"), // "found" | "not_found" | "error" | null
   matchedAt: timestamp("matched_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Attribution Touchpoints (multi-touch) ───────────────────────────────────
+// Records EVERY touchpoint per user across all channels, not just the first match.
+
+export const attributionTouchpoints = pgTable("attribution_touchpoints", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  channel: text("channel").notNull(), // "instantly_email" | "linkedin_campaign_invite" | "linkedin_organic_conversation" | "direct_signup"
+  sourceId: text("source_id"),        // campaign/conversation/queue entry ID
+  sourceName: text("source_name"),    // human-readable label
+  touchpointAt: timestamp("touchpoint_at").notNull(),
+  interactionType: text("interaction_type").notNull(), // "sent" | "opened" | "replied" | "accepted" | "conversation_started"
+  metadata: jsonb("metadata"),        // channel-specific extras
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Enrichment Credits ──────────────────────────────────────────────────────
+
+export const creditTransactionTypeEnum = pgEnum("credit_transaction_type", [
+  "free_auto",       // 5 free auto-enrichments on signup
+  "pro_grant",       // 100 credits granted on Pro upgrade
+  "boost_pack",      // 50 credits purchased for $100
+  "manual_grant",    // Admin-granted credits
+  "enrichment_use",  // Credit consumed for expert enrichment
+]);
+
+/**
+ * enrichmentCredits — per-org credit balance for expert enrichment.
+ * Free tier gets 5 auto-enrichments. Pro gets 100 credits. Boost Packs add 50.
+ */
+export const enrichmentCredits = pgTable("enrichment_credits", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .unique()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  totalCredits: integer("total_credits").notNull().default(5), // lifetime granted
+  usedCredits: integer("used_credits").notNull().default(0),   // lifetime consumed
+  freeAutoUsed: integer("free_auto_used").notNull().default(0), // of the 5 free auto-enrichments
+  proCreditsGranted: boolean("pro_credits_granted").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * enrichmentCreditTransactions — audit trail for every credit change.
+ * Positive amount = credits added, negative = credits consumed.
+ */
+export const enrichmentCreditTransactions = pgTable("enrichment_credit_transactions", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  type: creditTransactionTypeEnum("type").notNull(),
+  amount: integer("amount").notNull(), // +N granted, -1 consumed
+  balanceBefore: integer("balance_before").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  expertProfileId: text("expert_profile_id"), // which expert was enriched
+  stripePaymentIntentId: text("stripe_payment_intent_id"), // for boost packs
+  note: text("note"), // admin notes for manual grants
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

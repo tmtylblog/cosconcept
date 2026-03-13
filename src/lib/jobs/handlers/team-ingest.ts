@@ -1,18 +1,19 @@
 /**
  * Handler: team-ingest
  *
- * Pulls current employees for a firm from PDL Person Search and upserts
- * them into expert_profiles. Classifies each person into one of three tiers:
+ * Pulls the ENTIRE employee roster for a firm from PDL Person Search
+ * and upserts them into expert_profiles. Every signup gets this automatically.
  *
+ * Classification tiers:
  *   - expert: Client-facing roles (marketing, engineering, consulting, etc.)
  *   - potential_expert: Ambiguous roles (management, communications, etc.)
  *   - not_expert: Internal ops roles (HR, finance, legal, etc.)
  *
- * After classification, optionally queues enrichment jobs for high-confidence
- * experts (via the expert-linkedin handler).
+ * After classification:
+ *   1. ALL roster members are written to Neo4j as Person stubs
+ *   2. Top 5 expert-tier people are auto-enriched (free tier benefit)
  *
- * Cost: 1 PDL credit per person returned (search).
- *       1 PDL credit per person enriched (selective, only experts).
+ * Cost: 1 PDL credit per person returned (search). ~$0.35-$2 per firm.
  */
 
 import { eq, and, gte } from "drizzle-orm";
@@ -20,6 +21,7 @@ import { db } from "@/lib/db";
 import { expertProfiles } from "@/lib/db/schema";
 import { searchPeopleAtCompany } from "@/lib/enrichment/pdl";
 import { classifyTitle } from "@/lib/enrichment/expert-classifier";
+import { writeRosterStubsToGraph } from "@/lib/enrichment/graph-writer";
 import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
 import { enqueue } from "@/lib/jobs/queue";
 
@@ -105,11 +107,11 @@ interface Payload {
   firmId: string;
   /** Bare domain, e.g. "agency.com" — no protocol */
   domain: string;
-  /** Max people to pull. -1 or 500 = full roster. */
+  /** Max people to pull. -1 or 500 = full roster. Default: 500 (full roster). */
   limit: number;
   /**
    * How many "expert" tier people to auto-enrich after search.
-   * -1 = all experts (pro), 5 = first 5 (free), 0 = none (default).
+   * 5 = free tier default, -1 = all experts (pro), 0 = none.
    */
   autoEnrichLimit?: number;
   /** Company name for PDL person enrich matching */
@@ -126,8 +128,8 @@ export async function handleTeamIngest(
   const {
     firmId,
     domain,
-    limit,
-    autoEnrichLimit = 0,
+    limit = 500,
+    autoEnrichLimit = 5, // Default: auto-enrich 5 experts (free tier)
     companyName,
     force = false,
   } = payload as unknown as Payload;
@@ -156,11 +158,12 @@ export async function handleTeamIngest(
     }
   }
 
-  console.log(`[TeamIngest] Fetching up to ${limit} employees at ${domain}...`);
-
-  // PDL caps at 100 per request — paginate if limit > 100
+  // ── Pull FULL roster from PDL ────────────────────────────────────────────
+  // Every signup gets the entire roster (up to 500 people).
   const MAX_PER_PAGE = 100;
   const effectiveLimit = Math.min(limit < 0 ? 500 : limit, 500);
+
+  console.log(`[TeamIngest] Fetching up to ${effectiveLimit} employees at ${domain}...`);
 
   let allPeople: Awaited<ReturnType<typeof searchPeopleAtCompany>>["people"] = [];
   let total = 0;
@@ -186,7 +189,7 @@ export async function handleTeamIngest(
 
   console.log(`[TeamIngest] PDL returned ${allPeople.length} of ${total} total at ${domain}`);
 
-  // Classify and upsert each person into expert_profiles
+  // ── Classify and upsert each person into expert_profiles ─────────────────
   let upserted = 0;
   let skippedCount = 0;
   const tierCounts = { expert: 0, potential_expert: 0, not_expert: 0 };
@@ -233,6 +236,7 @@ export async function handleTeamIngest(
           pdlData: pdlPayload as any,
           pdlEnrichedAt: new Date(),
           topSkills: person.skills.slice(0, 10),
+          enrichmentStatus: "roster", // Basic data only — not yet fully enriched
           // Only expert tier is public by default
           isPublic: tier === "expert",
           profileCompleteness: completeness,
@@ -269,7 +273,37 @@ export async function handleTeamIngest(
     }
   }
 
-  // ── Auto-enrich expert-tier people ──────────────────────────────────────
+  // ── Write ALL roster members to Neo4j as Person stubs ────────────────────
+  // This makes the knowledge graph denser from day one — even unenriched people
+  // create Person nodes with CURRENTLY_AT edges to their firm.
+  let graphStubsWritten = 0;
+  try {
+    const stubPeople = allPeople
+      .filter((p) => p.id && p.fullName)
+      .map((p) => ({
+        id: p.id,
+        fullName: p.fullName,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        jobTitle: p.jobTitle,
+        headline: p.headline,
+        linkedinUrl: p.linkedinUrl,
+        location: p.location,
+      }));
+
+    const graphResult = await writeRosterStubsToGraph(firmId, stubPeople);
+    graphStubsWritten = graphResult.written;
+    if (graphResult.errors.length > 0) {
+      console.warn(`[TeamIngest] Graph stub errors: ${graphResult.errors.join("; ")}`);
+    }
+  } catch (err) {
+    // Non-fatal — graph stubs are valuable but not critical
+    console.error(`[TeamIngest] Failed to write graph stubs: ${err}`);
+  }
+
+  // ── Auto-enrich top expert-tier people ───────────────────────────────────
+  // Free tier: auto-enrich 5 experts. Pro: can use credits for more.
+  // Sort by completeness (best data first) to maximize enrichment quality.
   let autoEnrichQueued = 0;
   if (autoEnrichLimit !== 0 && expertIdsForEnrich.length > 0) {
     const toEnrich = autoEnrichLimit === -1
@@ -310,13 +344,14 @@ export async function handleTeamIngest(
     potentialExperts: tierCounts.potential_expert,
     notExperts: tierCounts.not_expert,
     autoEnrichQueued,
+    graphStubsWritten,
   };
 
   await logEnrichmentStep({
     firmId,
     phase: "team-ingest",
     source: "api.peopledatalabs.com",
-    rawInput: `domain=${domain}, limit=${limit}, autoEnrichLimit=${autoEnrichLimit}`,
+    rawInput: `domain=${domain}, limit=${effectiveLimit}, autoEnrichLimit=${autoEnrichLimit}`,
     extractedData: summary,
     status: "success",
   });
@@ -324,7 +359,7 @@ export async function handleTeamIngest(
   console.log(
     `[TeamIngest] Done: ${upserted} upserted — ${tierCounts.expert} experts, ` +
     `${tierCounts.potential_expert} potential, ${tierCounts.not_expert} not expert — ` +
-    `${autoEnrichQueued} enrichment jobs queued`
+    `${autoEnrichQueued} enrichment jobs queued, ${graphStubsWritten} graph stubs`
   );
 
   return summary;

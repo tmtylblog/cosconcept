@@ -1,10 +1,6 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { adminRoles } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { ALL_SECTIONS, type AdminSection } from "@/lib/admin/permissions";
 import {
   LayoutDashboard,
   Users,
@@ -28,9 +24,9 @@ import {
   Mail,
   BarChart3,
   Send,
-  Target,
   HeartPulse,
   BarChart2,
+  Settings,
 } from "lucide-react";
 
 /**
@@ -43,8 +39,8 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   let session;
+  const headersList = await headers();
   try {
-    const headersList = await headers();
     session = await auth.api.getSession({
       headers: headersList,
     });
@@ -57,41 +53,36 @@ export default async function AdminLayout({
     redirect("/login");
   }
 
-  const roleSlug = session.user.role ?? "";
-
-  // Look up role permissions from DB (fallback to hardcoded check for backwards compat)
-  let permissions: string[] = [];
-  try {
-    const roleRow = await db
-      .select({ permissions: adminRoles.permissions, slug: adminRoles.slug })
-      .from(adminRoles)
-      .where(eq(adminRoles.slug, roleSlug))
-      .limit(1);
-    if (roleRow.length > 0) {
-      permissions = roleRow[0].slug === "superadmin"
-        ? (ALL_SECTIONS as unknown as string[])
-        : (roleRow[0].permissions as string[]);
-    }
-  } catch {
-    // DB might not have admin_roles table yet — fall back to hardcoded
+  const ALLOWED_ROLES = ["superadmin", "admin", "growth_ops", "customer_success"];
+  if (!ALLOWED_ROLES.includes(session.user.role ?? "")) {
+    redirect("/dashboard");
   }
 
-  // Fallback: if no DB role found, use legacy hardcoded check
-  if (permissions.length === 0) {
-    const ALLOWED_ROLES = ["superadmin", "admin", "growth_ops", "customer_success"];
-    if (!ALLOWED_ROLES.includes(roleSlug)) {
-      redirect("/dashboard");
-    }
-    if (roleSlug === "superadmin") permissions = ALL_SECTIONS as unknown as string[];
-    else if (roleSlug === "admin") permissions = ["overview", "platform", "operations", "matching"];
-    else if (roleSlug === "growth_ops") permissions = ["overview", "growth_ops"];
-    else if (roleSlug === "customer_success") permissions = ["overview", "customer_success"];
-  }
+  const role = session.user.role ?? "";
+  const isSuperadmin = role === "superadmin" || role === "admin";
+  const canSeeGrowthOps = isSuperadmin || role === "growth_ops";
+  const canSeeCustomerSuccess = isSuperadmin || role === "customer_success";
+  const isSpecializedRole = role === "growth_ops" || role === "customer_success";
 
-  const canSee = (section: AdminSection) => permissions.includes(section);
-  const isSuperadmin = roleSlug === "superadmin";
-  const canSeeGrowthOps = canSee("growth_ops");
-  const canSeeCustomerSuccess = canSee("customer_success");
+  // Route-level protection: specialized roles can only access their sections
+  if (isSpecializedRole) {
+    const pathname =
+      headersList.get("x-pathname") ??
+      headersList.get("x-invoke-path") ??
+      "";
+
+    const allowedPrefixes: string[] = [];
+    if (role === "growth_ops") allowedPrefixes.push("/admin/growth-ops");
+    if (role === "customer_success") allowedPrefixes.push("/admin/customer-success");
+
+    const isAllowed =
+      allowedPrefixes.some((prefix) => pathname.startsWith(prefix));
+
+    if (pathname && !isAllowed) {
+      // Redirect to the first allowed section
+      redirect(allowedPrefixes[0] ?? "/dashboard");
+    }
+  }
 
   return (
     <div className="flex min-h-screen bg-cos-cloud">
@@ -118,7 +109,9 @@ export default async function AdminLayout({
 
         {/* Main nav */}
         <nav className="flex-1 px-3 pt-4 space-y-0.5 overflow-y-auto">
-          <AdminNavLink href="/admin" icon={<LayoutDashboard className="h-4 w-4" />} label="Overview" />
+          {isSuperadmin && (
+            <AdminNavLink href="/admin" icon={<LayoutDashboard className="h-4 w-4" />} label="Overview" />
+          )}
 
           {isSuperadmin && (
             <>
@@ -132,8 +125,8 @@ export default async function AdminLayout({
 
               <SectionHeader label="Platform" />
               <AdminNavLink href="/admin/customers" icon={<Building2 className="h-4 w-4" />} label="Customers" />
-              <AdminNavLink href="/admin/staff" icon={<Users className="h-4 w-4" />} label="Staff" />
-              <AdminNavLink href="/admin/roles" icon={<Shield className="h-4 w-4" />} label="Roles & Permissions" />
+              <AdminNavLink href="/admin/users" icon={<Users className="h-4 w-4" />} label="Staff" />
+              <AdminNavLink href="/admin/roles" icon={<Shield className="h-4 w-4" />} label="Staff Access" />
 
               <SectionHeader label="Operations" />
               <AdminNavLink href="/admin/subscriptions" icon={<CreditCard className="h-4 w-4" />} label="Subscriptions" />
@@ -152,14 +145,12 @@ export default async function AdminLayout({
           {canSeeGrowthOps && (
             <>
               <SectionHeader label="Growth Ops" />
-              <AdminNavLink href="/admin/growth-ops" icon={<TrendingUp className="h-4 w-4" />} label="Overview" />
+              <AdminNavLink href="/admin/growth-ops/pipeline" icon={<Share2 className="h-4 w-4" />} label="Pipeline" />
               <AdminNavLink href="/admin/growth-ops/linkedin" icon={<Linkedin className="h-4 w-4" />} label="LinkedIn Inbox" />
-              <AdminNavLink href="/admin/growth-ops/linkedin/accounts" icon={<Users className="h-4 w-4" />} label="LinkedIn Accounts" />
-              <AdminNavLink href="/admin/growth-ops/linkedin/campaigns" icon={<Send className="h-4 w-4" />} label="Invite Campaigns" />
-              <AdminNavLink href="/admin/growth-ops/linkedin/targets" icon={<Target className="h-4 w-4" />} label="Target Lists" />
+              <AdminNavLink href="/admin/growth-ops/linkedin/campaigns" icon={<Send className="h-4 w-4" />} label="Campaigns &amp; Targets" />
               <AdminNavLink href="/admin/growth-ops/instantly" icon={<Mail className="h-4 w-4" />} label="Instantly" />
-              <AdminNavLink href="/admin/growth-ops/hubspot" icon={<Share2 className="h-4 w-4" />} label="HubSpot" />
               <AdminNavLink href="/admin/growth-ops/attribution" icon={<BarChart3 className="h-4 w-4" />} label="Attribution" />
+              <AdminNavLink href="/admin/growth-ops/settings" icon={<Settings className="h-4 w-4" />} label="Settings" />
             </>
           )}
 
@@ -193,7 +184,7 @@ export default async function AdminLayout({
             <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
             Back to App
           </a>
-          <span className="text-[10px] text-cos-slate/40 select-none">v1.0</span>
+          <span className="text-[10px] text-cos-slate/40 select-none">v0.1</span>
         </div>
       </aside>
 

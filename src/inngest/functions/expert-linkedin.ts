@@ -164,6 +164,7 @@ export const expertLinkedIn = inngest.createFunction(
           topSkills: analysis.topSkills.slice(0, 15),
           topIndustries: analysis.industries.slice(0, 10),
           division: analysis.division,
+          enrichmentStatus: "enriched",
           isPublic: true,
           profileCompleteness: pdlPerson.experience.length > 0 ? 0.6 : 0.3,
         });
@@ -202,6 +203,7 @@ export const expertLinkedIn = inngest.createFunction(
             topSkills: analysis.topSkills.slice(0, 15),
             topIndustries: analysis.industries.slice(0, 10),
             division: analysis.division,
+            enrichmentStatus: "enriched",
             updatedAt: new Date(),
           })
           .where(eq(expertProfiles.id, expertId));

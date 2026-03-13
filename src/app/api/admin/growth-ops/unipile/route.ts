@@ -30,12 +30,6 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Names that LinkedIn/Unipile returns for thread types — not real participant names */
-const GENERIC_CHAT_NAMES = new Set([
-  "referrals", "referral", "inmail", "sponsored", "linkedin member",
-  "linkedin user", "unknown",
-]);
-
 // ── Background: persist messages to local cache ──────────────────────────────
 
 async function persistMessages(
@@ -99,6 +93,143 @@ async function enrichConversations(
   }
 }
 
+// ── Background: full conversation sync (12 months, paginated, rate-limited) ──
+
+const GENERIC_NAME_RE = /^(referral\??|inmail|sponsored|hi|hey|hello|\s*)$/i;
+const TWELVE_MONTHS_MS = 365 * 24 * 60 * 60 * 1000;
+const PAGE_DELAY_MS = 1500; // rate-limit delay between Unipile pages
+const PAGE_SIZE = 100;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function updateSyncProgress(
+  acctId: string,
+  status: "idle" | "syncing" | "done" | "error",
+  progress: Record<string, unknown>,
+) {
+  await db
+    .update(growthOpsLinkedInAccounts)
+    .set({
+      syncStatus: status,
+      syncProgress: JSON.stringify(progress),
+      ...(status === "syncing" && !progress.continued ? { syncStartedAt: new Date() } : {}),
+      ...(status === "done" || status === "error" ? { syncCompletedAt: new Date() } : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(growthOpsLinkedInAccounts.id, acctId));
+}
+
+async function runFullConversationSync(
+  acctDbId: string,
+  unipileAccountId: string,
+) {
+  const cutoff = Date.now() - TWELVE_MONTHS_MS;
+  let cursor: string | undefined;
+  let totalSeeded = 0;
+  let pages = 0;
+  let stopped = false;
+
+  try {
+    // Clear existing cached conversations
+    await db
+      .delete(growthOpsConversations)
+      .where(eq(growthOpsConversations.linkedinAccountId, acctDbId));
+
+    await updateSyncProgress(acctDbId, "syncing", { seeded: 0, pages: 0, phase: "fetching" });
+
+    while (!stopped) {
+      const page = await UnipileClient.listChats(unipileAccountId, { limit: PAGE_SIZE, cursor });
+      const pageItems = page.items ?? [];
+      pages++;
+
+      for (const chat of pageItems) {
+        // Check if conversation is older than 12 months
+        const chatTime = chat.timestamp ? new Date(chat.timestamp).getTime() : 0;
+        if (chatTime > 0 && chatTime < cutoff) {
+          stopped = true;
+          break;
+        }
+
+        const other = chat.attendees?.find((a) => !a.is_self);
+        const participantProviderId =
+          other?.attendee_provider_id ?? chat.attendee_provider_id ?? "";
+        const rawChatName = chat.name ?? "";
+        const chatNameIsGeneric = GENERIC_NAME_RE.test(rawChatName.trim());
+        const participantName = other?.attendee_name || (!chatNameIsGeneric ? rawChatName : "") || "";
+        const isInmail = chat.content_type === "inmail";
+        const lastText = chat.last_message?.text ?? null;
+        const lastAt = chat.timestamp ? new Date(chat.timestamp) : null;
+
+        await db
+          .insert(growthOpsConversations)
+          .values({
+            id: randomId(),
+            linkedinAccountId: acctDbId,
+            chatId: chat.id,
+            participantProviderId,
+            participantName,
+            lastMessageAt: lastAt,
+            lastMessagePreview: lastText,
+            isInmailThread: isInmail,
+          })
+          .onConflictDoNothing();
+        totalSeeded++;
+      }
+
+      // Update progress after each page
+      await updateSyncProgress(acctDbId, "syncing", {
+        seeded: totalSeeded,
+        pages,
+        phase: "fetching",
+      });
+
+      cursor = page.cursor;
+      if (!cursor || pageItems.length === 0) break;
+
+      // Rate limit
+      await sleep(PAGE_DELAY_MS);
+    }
+
+    // Phase 2: Enrich missing names/avatars
+    await updateSyncProgress(acctDbId, "syncing", {
+      seeded: totalSeeded,
+      pages,
+      phase: "enriching",
+    });
+
+    const convos = await db
+      .select()
+      .from(growthOpsConversations)
+      .where(eq(growthOpsConversations.linkedinAccountId, acctDbId));
+    const toEnrich = convos
+      .filter((c) => (!c.participantAvatarUrl || !c.participantName) && c.participantProviderId)
+      .map((c) => ({ id: c.id, participantProviderId: c.participantProviderId }));
+
+    if (toEnrich.length > 0) {
+      await enrichConversations(toEnrich, unipileAccountId);
+    }
+
+    await updateSyncProgress(acctDbId, "done", {
+      seeded: totalSeeded,
+      enriched: toEnrich.length,
+      pages,
+      phase: "complete",
+    });
+
+    console.log(`[Unipile] Full sync done for ${unipileAccountId}: ${totalSeeded} conversations, ${pages} pages, ${toEnrich.length} enriched`);
+  } catch (err) {
+    console.error(`[Unipile] Full sync failed for ${unipileAccountId}:`, err);
+    await updateSyncProgress(acctDbId, "error", {
+      seeded: totalSeeded,
+      pages,
+      phase: "error",
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 // ── GET ──────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -133,15 +264,18 @@ export async function GET(req: NextRequest) {
 
       // If empty, seed from Unipile live
       if (convos.length === 0) {
-        const live = await UnipileClient.listChats(accountId, { limit: 50 });
+        const live = await UnipileClient.listChats(accountId, { limit: 100 });
         const items = live.items ?? [];
 
         for (const chat of items) {
           const other = chat.attendees?.find((a) => !a.is_self);
           const participantProviderId =
             other?.attendee_provider_id ?? chat.attendee_provider_id ?? "";
-          const rawName = other?.attendee_name ?? chat.name ?? "";
-          const participantName = GENERIC_CHAT_NAMES.has(rawName.toLowerCase().trim()) ? "" : rawName;
+          // Use attendee name if available; fall back to chat.name only if it
+          // doesn't look like a generic subject (e.g. "Referral?", "InMail").
+          const rawChatName = chat.name ?? "";
+          const chatNameIsGeneric = GENERIC_NAME_RE.test(rawChatName.trim());
+          const participantName = other?.attendee_name || (!chatNameIsGeneric ? rawChatName : "") || "";
           const isInmail = chat.content_type === "inmail";
           const lastText = chat.last_message?.text ?? null;
           const lastAt = chat.timestamp ? new Date(chat.timestamp) : null;
@@ -168,9 +302,9 @@ export async function GET(req: NextRequest) {
           .orderBy(desc(growthOpsConversations.lastMessageAt))
           .limit(50);
 
-        // Kick off background enrichment for missing avatars/names
+        // Kick off background enrichment for missing avatars/names or empty names
         const toEnrich = convos
-          .filter((c) => !c.participantAvatarUrl && c.participantProviderId)
+          .filter((c) => (!c.participantAvatarUrl || !c.participantName) && c.participantProviderId)
           .map((c) => ({ id: c.id, participantProviderId: c.participantProviderId }));
         if (toEnrich.length > 0) {
           enrichConversations(toEnrich, accountId).catch(() => {});
@@ -200,7 +334,7 @@ export async function GET(req: NextRequest) {
         const participantProviderId =
           other?.attendee_provider_id ?? chat.attendee_provider_id ?? "";
         const rawName = other?.attendee_name ?? chat.name ?? "";
-        const participantName = GENERIC_CHAT_NAMES.has(rawName.toLowerCase().trim()) ? "" : rawName;
+        const participantName = GENERIC_NAME_RE.test(rawName.trim()) ? "" : rawName;
         const isInmail = chat.content_type === "inmail";
         const lastText = chat.last_message?.text ?? null;
         const lastAt = chat.timestamp ? new Date(chat.timestamp) : null;
@@ -271,7 +405,7 @@ export async function GET(req: NextRequest) {
           if (!c.participantProviderId) return false;
           const name = c.participantName ?? "";
           const nameIsBad = !name
-            || GENERIC_CHAT_NAMES.has(name.toLowerCase().trim())
+            || GENERIC_NAME_RE.test(name.trim())
             || /^[a-zA-Z0-9_-]{15,}$/.test(name);
           return nameIsBad || !c.participantAvatarUrl;
         })
@@ -443,6 +577,26 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // ── getSyncStatus — poll sync progress for an account ──────────────────
+    if (action === "getSyncStatus") {
+      const accountId = req.nextUrl.searchParams.get("accountId") ?? "";
+      const accountRow = await db
+        .select()
+        .from(growthOpsLinkedInAccounts)
+        .where(eq(growthOpsLinkedInAccounts.unipileAccountId, accountId))
+        .limit(1);
+      if (!accountRow.length) return NextResponse.json({ error: "Account not found" }, { status: 404 });
+      const acct = accountRow[0];
+      let progress = null;
+      try { progress = acct.syncProgress ? JSON.parse(acct.syncProgress) : null; } catch { /* ignore */ }
+      return NextResponse.json({
+        syncStatus: acct.syncStatus,
+        progress,
+        syncStartedAt: acct.syncStartedAt,
+        syncCompletedAt: acct.syncCompletedAt,
+      });
+    }
+
     // ── legacy: listChats (kept for backward compat) ───────────────────────
     if (action === "listChats") {
       const accountId = req.nextUrl.searchParams.get("accountId") ?? "";
@@ -472,6 +626,32 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as { action: string; [key: string]: unknown };
 
   try {
+    // ── resyncConversations — full 12-month sync, runs in background ─────
+    if (body.action === "resyncConversations") {
+      const accountId = body.accountId as string;
+      if (!accountId) return NextResponse.json({ error: "accountId required" }, { status: 400 });
+
+      const accountRow = await db
+        .select()
+        .from(growthOpsLinkedInAccounts)
+        .where(eq(growthOpsLinkedInAccounts.unipileAccountId, accountId))
+        .limit(1);
+      if (!accountRow.length) return NextResponse.json({ error: "Account not found" }, { status: 404 });
+      const acct = accountRow[0];
+
+      // Don't start another sync if one is already running
+      if (acct.syncStatus === "syncing") {
+        let progress = null;
+        try { progress = acct.syncProgress ? JSON.parse(acct.syncProgress) : null; } catch { /* ignore */ }
+        return NextResponse.json({ ok: true, alreadySyncing: true, progress });
+      }
+
+      // Fire off the full sync in the background (not awaited)
+      runFullConversationSync(acct.id, accountId).catch(() => {});
+
+      return NextResponse.json({ ok: true, started: true });
+    }
+
     if (body.action === "generateAuthLink") {
       const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.BETTER_AUTH_URL ?? "").replace(/\/$/, "");
       const successUrl = `${appUrl}/linkedin-connected`;

@@ -11,7 +11,9 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "seed:neo4j": "tsx scripts/seed-neo4j.ts"
+    "seed:neo4j": "tsx scripts/seed-neo4j.ts",
+    "verify": "bash scripts/verify-build.sh",
+    "prepare": "husky"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.118",
@@ -45,8 +47,15 @@
     "drizzle-kit": "^0.31.9",
     "eslint": "^9.25.0",
     "eslint-config-next": "^15.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.3",
     "tailwindcss": "^4.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5.8.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix --no-warn-ignored"
+    ]
   }
 }

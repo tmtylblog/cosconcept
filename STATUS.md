@@ -4,6 +4,39 @@
 > **Production:** https://cos-concept.vercel.app — LIVE and HEALTHY ✅
 > **Last successful deploy:** commit `f5cc17b` (fix: trim Stripe env vars)
 
+---
+
+## 🚀 Starting a New Agent
+
+Every agent runs in its own worktree. Copy-paste the command for your area:
+
+```bash
+# Agent A — experts & team import
+AGENT_AREA=agent-a claude --worktree
+
+# Agent B — discover, search/matching, chat
+AGENT_AREA=agent-b claude --worktree
+
+# Agent C — firm pages
+AGENT_AREA=agent-c claude --worktree
+
+# Agent D — billing, settings, partnerships, network
+AGENT_AREA=agent-d claude --worktree
+
+# Agent E — scripts & data
+AGENT_AREA=agent-e claude --worktree
+```
+
+Each agent gets an isolated copy of the repo. Hooks in `.claude/hooks/` will warn if you edit outside your area. See `CLAUDE.md` → "Worktree Workflow" for full details.
+
+### Automated Guardrails (active)
+- **Husky pre-commit** — ESLint runs on staged files, blocks commits with `react/no-unescaped-entities` errors
+- **GitHub Actions CI** — lint + build on every push/PR to main
+- **PR template** — checklist auto-populates on every PR
+- **`npm run verify`** — run before pushing to lint + build in one command
+
+---
+
 ## ⚠️ CRITICAL: READ BEFORE PUSHING
 
 ### Vercel Build is STRICTER than local `next build`

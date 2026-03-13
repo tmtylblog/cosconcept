@@ -69,6 +69,12 @@ const TARGET_PAGES: {
       /\/work\b/i,
       /\/portfolio/i,
       /\/projects/i,
+      /\/showcase/i,
+      /\/stories/i,
+      /\/client-work/i,
+      /\/client-results/i,
+      /\/impact/i,
+      /\/campaigns/i,
     ],
     priority: 1,
   },
@@ -286,7 +292,7 @@ export async function scrapeFirmWebsite(
         const linkUrl = new URL(link, actualUrl);
         if (
           linkUrl.hostname === homeDomain &&
-          /case|stud|project|work|portfolio/i.test(linkUrl.pathname) &&
+          /case|stud|project|work|portfolio|showcase|stories|client|impact|campaigns/i.test(linkUrl.pathname) &&
           !caseStudyUrls.includes(linkUrl.href)
         ) {
           caseStudyUrls.push(linkUrl.href);
@@ -400,9 +406,9 @@ function extractListItems(content: string): string[] {
         !item.match(
           /^(Home|Menu|Contact|About|Blog|Login|Sign|Back|Next|Previous|Footer|Header|Navigation|Skip|Search|Close|Chapter|Slide|Read|Learn|View|See|Get|Our|The|Click|Download)/i
         ) &&
-        // Filter out generic nav/web/business terms
-        !item.match(
-          /^(Solutions?|Products?|Industries?|Resources?|Company|Insights?|Platform|Overview|Pricing|Careers?|News|Events?|Partners?|Support|Documentation|FAQ|Help|Legal|Privacy|Terms|Sitemap|Copyright|Descriptions?|Brand|Marketing|Experience|Commerce|Sales|Technology|Digital|Strategy|Creative|Design|Analytics|Consulting|Advisory|Management|Operations|Engineering|Data|Media|Content|Growth|Innovation|Transformation|Performance|Leadership|Culture|Talent|People|Finance|Sustainability)\s*$/i
+        // Filter out single-word generic nav/business terms (multi-word like "Brand Strategy" pass through)
+        !(item.split(/\s+/).length === 1 &&
+          /^(Solutions?|Products?|Industries?|Resources?|Company|Insights?|Platform|Overview|Pricing|Careers?|News|Events?|Partners?|Support|Documentation|FAQ|Help|Legal|Privacy|Terms|Sitemap|Copyright|Descriptions?|Brand|Marketing|Experience|Commerce|Sales|Technology|Digital|Strategy|Creative|Design|Analytics|Consulting|Advisory|Management|Operations|Engineering|Data|Media|Content|Growth|Innovation|Transformation|Performance|Leadership|Culture|Talent|People|Finance|Sustainability)\s*$/i.test(item)
         ) &&
         // Filter out image references
         !item.match(/^Image\b/i)

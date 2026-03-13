@@ -7,7 +7,8 @@ import { serviceFirms, firmCaseStudies, firmServices } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { writeFirmToGraph } from "@/lib/enrichment/graph-writer";
 import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob } from "@/lib/jobs/runner";
+import { runNextJob, drainQueue } from "@/lib/jobs/runner";
+import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
 
 export const dynamic = "force-dynamic";
 
@@ -152,36 +153,63 @@ export async function POST(req: Request) {
     console.log(`[Enrich/Persist] Saved enrichment for org ${organizationId} (entityType: ${entityType})`);
 
     // ─── Auto-seed firmServices from discovered services ────
-    // Only seed if no firmServices rows exist yet for this firm (first-time enrichment)
+    // Re-seed if no services exist OR new discovery found more than existing auto-discovered count
     const discoveredServices = (extracted?.services as string[] | undefined) ?? [];
+    const servicesDetailed = (extracted?.servicesDetailed as { name: string; description?: string; subServices: string[] }[] | undefined) ?? [];
     if (discoveredServices.length > 0 && !isBrand) {
-      const [existingService] = await db
-        .select({ id: firmServices.id })
+      const existingRows = await db
+        .select({ id: firmServices.id, sourceUrl: firmServices.sourceUrl })
         .from(firmServices)
-        .where(eq(firmServices.firmId, firmId))
-        .limit(1);
+        .where(eq(firmServices.firmId, firmId));
 
-      if (!existingService) {
+      // Count auto-discovered vs manually-added
+      const autoDiscoveredCount = existingRows.filter(r => r.sourceUrl !== null).length;
+      const manuallyAdded = existingRows.filter(r => r.sourceUrl === null);
+
+      // Re-seed if: no services exist OR new discovery found strictly more than existing auto-discovered
+      if (existingRows.length === 0 || (discoveredServices.length > autoDiscoveredCount && autoDiscoveredCount > 0)) {
+        // Delete old auto-discovered services (preserve manually-added ones)
+        if (autoDiscoveredCount > 0) {
+          const autoIds = existingRows.filter(r => r.sourceUrl !== null).map(r => r.id);
+          for (const autoId of autoIds) {
+            await db.delete(firmServices).where(eq(firmServices.id, autoId));
+          }
+        }
+
         const now = new Date();
         await db.insert(firmServices).values(
-          discoveredServices.map((name, i) => ({
-            id: `svc_${Date.now().toString(36)}_${i.toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-            firmId,
-            organizationId,
-            name: name.trim(),
-            description: null,
-            sourceUrl: url || null,
-            sourcePageTitle: domain ? `${domain} — auto-discovered` : "Auto-discovered",
-            subServices: [] as string[],
-            isHidden: false,
-            displayOrder: i,
-            createdAt: now,
-            updatedAt: now,
-          }))
+          discoveredServices.map((name, i) => {
+            // Try to find matching detailed info from AI extractor
+            const detailed = servicesDetailed.find(d => d.name === name);
+            return {
+              id: `svc_${Date.now().toString(36)}_${i.toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+              firmId,
+              organizationId,
+              name: name.trim(),
+              description: detailed?.description ?? null,
+              sourceUrl: url || null,
+              sourcePageTitle: domain ? `${domain} — auto-discovered` : "Auto-discovered",
+              subServices: (detailed?.subServices ?? []) as string[],
+              isHidden: false,
+              displayOrder: manuallyAdded.length + i, // place after manually-added
+              createdAt: now,
+              updatedAt: now,
+            };
+          })
         ).onConflictDoNothing();
-        console.log(`[Enrich/Persist] Seeded ${discoveredServices.length} services for firm ${firmId}`);
+        console.log(`[Enrich/Persist] Seeded ${discoveredServices.length} services for firm ${firmId} (replaced ${autoDiscoveredCount} auto-discovered, preserved ${manuallyAdded.length} manual)`);
       }
     }
+
+    // ─── Audit: service seeding outcome (Change 8) ─────────
+    await logEnrichmentStep({
+      firmId,
+      phase: "jina",
+      source: "service-seed",
+      extractedData: { servicesSeeded: discoveredServices.length, hadExisting: !!(await db.select({ id: firmServices.id }).from(firmServices).where(eq(firmServices.firmId, firmId)).limit(1))[0] },
+      status: discoveredServices.length > 0 ? "success" : "skipped",
+      errorMessage: discoveredServices.length === 0 ? `No services to seed for firm ${firmId} (domain: ${domain})` : undefined,
+    });
 
     // ─── Auto-queue case study ingestion for discovered URLs ─
     const discoveredCsUrls = (extracted?.caseStudyUrls as string[] | undefined) ?? [];
@@ -224,9 +252,19 @@ export async function POST(req: Request) {
         }
       }
       if (queued > 0) {
-        after(runNextJob().catch(() => {}));
+        after(drainQueue(Math.min(queued, 5)).catch(() => {}));
         console.log(`[Enrich/Persist] Queued ${queued} case studies for ingestion (firm ${firmId})`);
       }
+
+      // ─── Audit: case study seeding outcome (Change 8) ──────
+      await logEnrichmentStep({
+        firmId,
+        phase: "case_study",
+        source: "case-study-seed",
+        extractedData: { urlsFound: discoveredCsUrls.length, queued },
+        status: discoveredCsUrls.length > 0 ? "success" : "skipped",
+        errorMessage: discoveredCsUrls.length === 0 ? `No case study URLs found for firm ${firmId} (domain: ${domain})` : undefined,
+      });
     }
 
     // ─── Write to Neo4j Knowledge Graph (best-effort) ───

@@ -17,8 +17,11 @@ import {
   growthOpsMessages,
   growthOpsInviteQueue,
   growthOpsInviteCampaigns,
+  growthOpsInviteTargets,
 } from "@/lib/db/schema";
 import { validateUnipileWebhook, resolveMessageDirection } from "@/lib/growth-ops/UnipileClient";
+import { classifyResponseSentiment } from "@/lib/growth-ops/sentiment";
+import { queueDealFromResponse } from "@/lib/growth-ops/auto-deal";
 import { eq, and, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -168,6 +171,70 @@ export async function POST(req: NextRequest) {
               eq(growthOpsConversations.chatId, chatId),
             ),
           );
+
+        // ── Auto-deal detection: inbound messages from campaign targets ──
+        if (!isOutbound && text.trim().length > 0) {
+          try {
+            // Check if the participant is an invite target (campaign prospect)
+            const convo = await db
+              .select({
+                participantName: growthOpsConversations.participantName,
+                participantLinkedinUrl: growthOpsConversations.participantLinkedinUrl,
+                participantProviderId: growthOpsConversations.participantProviderId,
+              })
+              .from(growthOpsConversations)
+              .where(
+                and(
+                  eq(growthOpsConversations.linkedinAccountId, acctDbId),
+                  eq(growthOpsConversations.chatId, chatId),
+                ),
+              )
+              .limit(1);
+
+            const linkedinUrl = convo[0]?.participantLinkedinUrl;
+            const providerId = convo[0]?.participantProviderId;
+
+            // Check if this person is in any invite campaign
+            let target: { campaignId: string; linkedinUrl: string | null; firstName: string | null; lastName: string | null } | null = null;
+            if (linkedinUrl) {
+              const [t] = await db
+                .select({ campaignId: growthOpsInviteTargets.campaignId, linkedinUrl: growthOpsInviteTargets.linkedinUrl, firstName: growthOpsInviteTargets.firstName, lastName: growthOpsInviteTargets.lastName })
+                .from(growthOpsInviteTargets)
+                .where(eq(growthOpsInviteTargets.linkedinUrl, linkedinUrl))
+                .limit(1);
+              target = t ?? null;
+            }
+
+            // If they're a campaign target, classify sentiment and queue
+            if (target) {
+              const sentiment = classifyResponseSentiment(text);
+              if (sentiment.sentiment === "positive" || sentiment.confidence < 0.6) {
+                // Queue for review — positive or uncertain responses
+                const campaignRows = target.campaignId
+                  ? await db.select({ name: growthOpsInviteCampaigns.name }).from(growthOpsInviteCampaigns).where(eq(growthOpsInviteCampaigns.id, target.campaignId)).limit(1)
+                  : [];
+
+                await queueDealFromResponse({
+                  contact: {
+                    firstName: target.firstName ?? convo[0]?.participantName?.split(" ")[0] ?? undefined,
+                    lastName: target.lastName ?? convo[0]?.participantName?.split(" ").slice(1).join(" ") ?? undefined,
+                    linkedinUrl: linkedinUrl ?? undefined,
+                  },
+                  source: "linkedin_auto",
+                  campaignId: target.campaignId,
+                  campaignName: campaignRows[0]?.name ?? undefined,
+                  messageId: messageId,
+                  messageText: text.slice(0, 500),
+                  sentiment: sentiment.sentiment,
+                  sentimentScore: sentiment.confidence,
+                });
+              }
+            }
+          } catch (e) {
+            console.error("[unipile-webhook] auto-deal detection error:", e);
+            // Non-critical — don't fail the webhook
+          }
+        }
       }
 
       return NextResponse.json({ ok: true });

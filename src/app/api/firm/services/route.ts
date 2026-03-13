@@ -10,6 +10,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { firmServices, serviceFirms, members, enrichmentCache } from "@/lib/db/schema";
 import { randomBytes } from "crypto";
+import { recordManualCorrection } from "@/lib/enrichment/extraction-learner";
 
 /** Resolve redirect domain (e.g. chameleon.co → chameleoncollective.com) — best-effort, 3s timeout */
 async function resolveRedirect(domain: string): Promise<string | null> {
@@ -254,6 +255,13 @@ export async function POST(req: NextRequest) {
     createdAt: now,
     updatedAt: now,
   }).returning();
+
+  // Track manual service add for self-learning (Change 9c)
+  await recordManualCorrection({
+    firmId: firm.id,
+    extractionType: "services",
+    item: name.trim(),
+  });
 
   return Response.json({ service });
 }
