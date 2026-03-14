@@ -49,7 +49,6 @@ export default function FirmExpertsPage() {
         const { data: orgs } = await authClient.organization.list();
         const orgList = (orgs as { id: string }[]) ?? [];
         if (orgList.length > 0) {
-          console.log("[Experts] No active org — auto-activating", orgList[0].id);
           await authClient.organization.setActive({ organizationId: orgList[0].id });
           setResolvedOrgId(orgList[0].id);
         }

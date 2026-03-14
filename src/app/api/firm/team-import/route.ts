@@ -6,13 +6,14 @@
  * Auto-enriches top 5 experts after roster import.
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { headers } from "next/headers";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serviceFirms, backgroundJobs, members } from "@/lib/db/schema";
 import { enqueue } from "@/lib/jobs/queue";
+import { runNextJob } from "@/lib/jobs/runner";
 
 export const dynamic = "force-dynamic";
 
@@ -124,17 +125,8 @@ export async function POST(req: Request) {
       { priority: 5 }
     );
 
-    // Trigger worker immediately — must await so Vercel doesn't kill the function
-    const baseUrl = process.env.BETTER_AUTH_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-    try {
-      await fetch(`${baseUrl}/api/jobs/worker`, {
-        method: "POST",
-        headers: { "x-jobs-secret": (process.env.JOBS_SECRET || "").trim() },
-      });
-    } catch (err) {
-      console.error("[TeamImport] Failed to trigger worker:", err);
-    }
+    // Run the job after the response is sent (proven pattern used by calls, case-studies, etc.)
+    after(runNextJob().catch(() => {}));
 
     return NextResponse.json({
       jobId,
