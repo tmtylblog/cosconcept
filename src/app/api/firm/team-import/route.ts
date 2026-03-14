@@ -124,12 +124,17 @@ export async function POST(req: Request) {
       { priority: 5 }
     );
 
-    // Fire-and-forget worker trigger
-    const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
-    fetch(`${baseUrl}/api/jobs/worker`, {
-      method: "POST",
-      headers: { "x-jobs-secret": (process.env.JOBS_SECRET || "").trim() },
-    }).catch((err) => console.error("[TeamImport] Failed to trigger worker:", err));
+    // Trigger worker immediately — must await so Vercel doesn't kill the function
+    const baseUrl = process.env.BETTER_AUTH_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+    try {
+      await fetch(`${baseUrl}/api/jobs/worker`, {
+        method: "POST",
+        headers: { "x-jobs-secret": (process.env.JOBS_SECRET || "").trim() },
+      });
+    } catch (err) {
+      console.error("[TeamImport] Failed to trigger worker:", err);
+    }
 
     return NextResponse.json({
       jobId,
