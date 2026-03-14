@@ -38,7 +38,7 @@ export default function FirmExpertsPage() {
   // Self-healing: useActiveOrganization() often doesn't re-render after
   // setActive(), so resolve the orgId ourselves (same pattern as billing page)
   const [resolvedOrgId, setResolvedOrgId] = useState<string>("");
-  const orgId = orgId || resolvedOrgId;
+  const orgId = activeOrg?.id || resolvedOrgId;
   const orgActivationAttempted = useRef(false);
 
   useEffect(() => {
