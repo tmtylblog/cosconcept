@@ -83,14 +83,15 @@ export function useTeamDiscovery(
     enrichProgress?: EnrichProgress | null;
     jobError?: string | null;
   } | null> => {
+    if (!organizationId) return null;
     try {
-      const res = await fetch("/api/firm/team-import/status");
+      const res = await fetch(`/api/firm/team-import/status?organizationId=${encodeURIComponent(organizationId)}`);
       if (!res.ok) return null;
       return await res.json();
     } catch {
       return null;
     }
-  }, []);
+  }, [organizationId]);
 
   const startPolling = useCallback(() => {
     if (pollInterval.current) return; // already polling
@@ -134,7 +135,11 @@ export function useTeamDiscovery(
 
   const triggerImport = useCallback(async () => {
     try {
-      const res = await fetch("/api/firm/team-import", { method: "POST" });
+      const res = await fetch("/api/firm/team-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId }),
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         // No website = can't discover, skip silently
@@ -160,7 +165,7 @@ export function useTeamDiscovery(
       setPhase("error");
       setErrorMessage("Network error triggering team import");
     }
-  }, [startPolling]);
+  }, [startPolling, organizationId]);
 
   const retry = useCallback(() => {
     setPhase("checking");

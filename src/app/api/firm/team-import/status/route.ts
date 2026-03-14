@@ -14,7 +14,7 @@ import { serviceFirms, backgroundJobs, expertProfiles, members } from "@/lib/db/
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   // Auth: session + verify user is member of org
   let session;
   try {
@@ -27,7 +27,9 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const orgId = session.session.activeOrganizationId;
+  // Accept organizationId from query param, fall back to session
+  const { searchParams } = new URL(req.url);
+  const orgId = searchParams.get("organizationId") || session.session.activeOrganizationId;
   if (!orgId) {
     return NextResponse.json({ error: "No active organization" }, { status: 400 });
   }

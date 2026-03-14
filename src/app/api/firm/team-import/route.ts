@@ -24,7 +24,7 @@ function extractDomain(website: string): string {
     .toLowerCase();
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   // Auth: session + verify user is member of org
   let session;
   try {
@@ -37,7 +37,9 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const orgId = session.session.activeOrganizationId;
+  // Accept organizationId from body, fall back to session
+  const body = await req.json().catch(() => ({}));
+  const orgId = body.organizationId || session.session.activeOrganizationId;
   if (!orgId) {
     return NextResponse.json({ error: "No active organization" }, { status: 400 });
   }
