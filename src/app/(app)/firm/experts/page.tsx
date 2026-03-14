@@ -25,7 +25,9 @@ import { useEnrichment } from "@/hooks/use-enrichment";
 import { useDbExperts } from "@/hooks/use-db-experts";
 import { useEnrichmentCredits } from "@/hooks/use-enrichment-credits";
 import { usePlan } from "@/hooks/use-plan";
+import { useTeamDiscovery } from "@/hooks/use-team-discovery";
 import { Button } from "@/components/ui/button";
+import { TeamDiscoveryProgress } from "@/components/firm/team-discovery-progress";
 import type { Expert } from "@/types/cos-data";
 
 const MAX_POLL_ATTEMPTS = 20; // 60 seconds at 3s intervals
@@ -48,6 +50,17 @@ export default function FirmExpertsPage() {
     isLoading: creditsLoading,
     refetch: refetchCredits,
   } = useEnrichmentCredits();
+
+  // Team discovery: auto-trigger when 0 experts
+  const discovery = useTeamDiscovery(activeOrg?.id, dbTotalExperts, !dbLoading);
+
+  // Refetch when discovery completes
+  useEffect(() => {
+    if (discovery.phase === "done") {
+      refetchExperts();
+      refetchCredits();
+    }
+  }, [discovery.phase, refetchExperts, refetchCredits]);
 
   // Group experts by tier
   const { tierExperts, tierPotential, tierOther } = useMemo(() => {
@@ -564,6 +577,18 @@ export default function FirmExpertsPage() {
         </p>
       </div>
 
+      {/* Team Discovery Progress — replaces everything below when active */}
+      {discovery.isActive ? (
+        <TeamDiscoveryProgress
+          phase={discovery.phase as "checking" | "queued" | "searching" | "enriching" | "error"}
+          domain={discovery.domain}
+          searchResults={discovery.searchResults}
+          enrichProgress={discovery.enrichProgress}
+          errorMessage={discovery.errorMessage}
+          onRetry={discovery.retry}
+        />
+      ) : (
+      <>
       {/* Credit bar */}
       {!planLoading && !creditsLoading && credits && (
         <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4">
@@ -849,6 +874,8 @@ export default function FirmExpertsPage() {
             Add Your First Expert
           </Button>
         </div>
+      )}
+      </>
       )}
     </div>
   );
