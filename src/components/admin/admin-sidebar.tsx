@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronsLeft, ChevronsRight, ChevronDown, ArrowLeft, LayoutDashboard } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, ChevronDown, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ADMIN_NAV_SECTIONS, ADMIN_TOP_LINKS } from "./sidebar-config";
 
@@ -87,9 +88,13 @@ export default function AdminSidebar({ permissions }: AdminSidebarProps) {
       {/* Brand header */}
       <div className={cn("pt-5 pb-3", collapsed ? "px-2" : "px-5")}>
         <Link href="/admin" className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-cos-lg bg-cos-electric">
-            <LayoutDashboard className="h-4 w-4 text-white" />
-          </div>
+          <Image
+            src="/cos-logo.png"
+            alt="Collective OS"
+            width={32}
+            height={32}
+            className="h-8 w-8 shrink-0 rounded-cos-lg"
+          />
           {!collapsed && (
             <div className="overflow-hidden">
               <p className="font-heading text-sm font-bold text-cos-midnight tracking-tight whitespace-nowrap">
