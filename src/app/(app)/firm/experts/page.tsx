@@ -569,6 +569,7 @@ export default function FirmExpertsPage() {
     <div className="cos-scrollbar mx-auto max-w-3xl space-y-5 overflow-y-auto p-6">
       {/* Page header */}
       <div>
+        <p className="text-[9px] text-cos-slate-dim">v7 | phase: {discovery.phase} | org: {activeOrg?.id ?? "none"}</p>
         <h2 className="font-heading text-lg font-semibold text-cos-midnight">
           Team &amp; Experts
         </h2>
