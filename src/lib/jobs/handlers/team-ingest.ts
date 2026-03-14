@@ -24,6 +24,7 @@ import { classifyTitle } from "@/lib/enrichment/expert-classifier";
 import { writeRosterStubsToGraph } from "@/lib/enrichment/graph-writer";
 import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
 import { enqueue } from "@/lib/jobs/queue";
+import { normalizeLinkedInUrl } from "@/lib/utils";
 
 // ── Three-tier expert classification ─────────────────────────────────────────
 
@@ -232,7 +233,7 @@ export async function handleTeamIngest(
           fullName: person.fullName || null,
           title: person.jobTitle || null,
           headline: person.headline || null,
-          linkedinUrl: person.linkedinUrl || null,
+          linkedinUrl: normalizeLinkedInUrl(person.linkedinUrl),
           location: person.location || null,
           photoUrl: person.photoUrl || null,
           pdlId: person.id,
@@ -252,7 +253,7 @@ export async function handleTeamIngest(
           set: {
             title: person.jobTitle || null,
             headline: person.headline || null,
-            linkedinUrl: person.linkedinUrl || null,
+            linkedinUrl: normalizeLinkedInUrl(person.linkedinUrl),
             photoUrl: person.photoUrl || null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             pdlData: pdlPayload as any,

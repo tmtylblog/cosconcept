@@ -19,6 +19,7 @@ import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
 import { db } from "@/lib/db";
 import { expertProfiles, specialistProfiles, specialistProfileExamples } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { normalizeLinkedInUrl } from "@/lib/utils";
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -232,7 +233,7 @@ export async function handleExpertLinkedIn(
       email: null,
       title: pdlPerson.jobTitle ?? null,
       headline: pdlPerson.headline ?? null,
-      linkedinUrl: pdlPerson.linkedinUrl ?? linkedinUrl ?? null,
+      linkedinUrl: normalizeLinkedInUrl(pdlPerson.linkedinUrl ?? linkedinUrl),
       location: pdlPerson.location?.name ?? null,
       bio: pdlPerson.summary ?? null,
       pdlId: pdlPerson.id ?? null,

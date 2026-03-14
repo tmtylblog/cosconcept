@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Expert, ExpertSpecialistProfile } from "@/types/cos-data";
 import { getDivisionColor } from "@/types/cos-data";
+import { normalizeLinkedInUrl } from "@/lib/utils";
 
 type ExpertDivision = Expert["division"];
 
@@ -20,6 +21,8 @@ interface UseDbExpertsReturn {
   experts: Expert[];
   total: number;
   isLoading: boolean;
+  /** Re-fetch the expert list from the server */
+  refetch: () => void;
 }
 
 /**
@@ -32,6 +35,11 @@ export function useDbExperts(
   const [experts, setExperts] = useState<Expert[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchTrigger, setFetchTrigger] = useState(0);
+
+  const refetch = useCallback(() => {
+    setFetchTrigger((prev) => prev + 1);
+  }, []);
 
   useEffect(() => {
     if (!organizationId) {
@@ -130,11 +138,11 @@ export function useDbExperts(
               availability: "Available",
               division,
               divisionColor: getDivisionColor(division),
-              linkedinUrl: ep.linkedinUrl ?? undefined,
+              linkedinUrl: normalizeLinkedInUrl(ep.linkedinUrl) ?? undefined,
               photoUrl: ep.photoUrl ?? undefined,
               bio: ep.bio ?? undefined,
               location: ep.location ?? undefined,
-              profileUrl: `/experts/${ep.id}/edit`,
+              profileUrl: `/experts/${ep.id}`,
               expertTier: (ep.expertTier as Expert["expertTier"]) ?? null,
               isFullyEnriched: ep.isFullyEnriched ?? false,
               enrichmentStatus: (ep.enrichmentStatus as Expert["enrichmentStatus"]) ?? "roster",
@@ -152,7 +160,7 @@ export function useDbExperts(
     return () => {
       cancelled = true;
     };
-  }, [organizationId]);
+  }, [organizationId, fetchTrigger]);
 
-  return { experts, total, isLoading };
+  return { experts, total, isLoading, refetch };
 }

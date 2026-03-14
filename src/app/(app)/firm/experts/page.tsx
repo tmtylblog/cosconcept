@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import Link from "next/link";
 import {
   Users,
   Loader2,
@@ -10,11 +11,14 @@ import {
   Copy,
   Check,
   ArrowUpRight,
-  Sparkles,
   Star,
   Zap,
   ShieldCheck,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Briefcase,
+  ExternalLink,
 } from "lucide-react";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
@@ -23,6 +27,8 @@ import { useEnrichmentCredits } from "@/hooks/use-enrichment-credits";
 import { usePlan } from "@/hooks/use-plan";
 import { Button } from "@/components/ui/button";
 import type { Expert } from "@/types/cos-data";
+
+const MAX_POLL_ATTEMPTS = 20; // 60 seconds at 3s intervals
 
 export default function FirmExpertsPage() {
   const { data: activeOrg } = useActiveOrganization();
@@ -34,6 +40,7 @@ export default function FirmExpertsPage() {
     experts: dbExperts,
     total: dbTotalExperts,
     isLoading: dbLoading,
+    refetch: refetchExperts,
   } = useDbExperts(activeOrg?.id);
 
   const {
@@ -76,9 +83,69 @@ export default function FirmExpertsPage() {
   const [invitingExpert, setInvitingExpert] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [expandedExpert, setExpandedExpert] = useState<string | null>(null);
-  const [enrichingExpert, setEnrichingExpert] = useState<string | null>(null);
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [batchEnriching, setBatchEnriching] = useState(false);
+
+  // ── Enrichment polling state ───────────────────────────────────────────────
+  const [enrichingExperts, setEnrichingExperts] = useState<Set<string>>(new Set());
+  const pollIntervals = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const pollCounts = useRef<Map<string, number>>(new Map());
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    const intervals = pollIntervals.current;
+    return () => {
+      for (const interval of intervals.values()) {
+        clearInterval(interval);
+      }
+      intervals.clear();
+    };
+  }, []);
+
+  function startPolling(expertId: string) {
+    // Don't double-poll
+    if (pollIntervals.current.has(expertId)) return;
+    pollCounts.current.set(expertId, 0);
+
+    const interval = setInterval(async () => {
+      const attempts = (pollCounts.current.get(expertId) ?? 0) + 1;
+      pollCounts.current.set(expertId, attempts);
+
+      if (attempts > MAX_POLL_ATTEMPTS) {
+        // Give up — stop polling, keep enriching state but let user know
+        clearInterval(interval);
+        pollIntervals.current.delete(expertId);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/experts/${expertId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const expert = data.expert ?? data;
+        const isNowEnriched = expert.enrichmentStatus === "enriched" ||
+          (expert.pdlEnrichedAt && expert.pdlData?.experience?.length > 0);
+
+        if (isNowEnriched) {
+          // Done! Stop polling and refresh the list
+          clearInterval(interval);
+          pollIntervals.current.delete(expertId);
+          pollCounts.current.delete(expertId);
+          setEnrichingExperts((prev) => {
+            const next = new Set(prev);
+            next.delete(expertId);
+            return next;
+          });
+          refetchExperts();
+          refetchCredits();
+        }
+      } catch {
+        // Ignore fetch errors during polling
+      }
+    }, 3000);
+
+    pollIntervals.current.set(expertId, interval);
+  }
 
   // Add expert handler
   async function handleAddExpert() {
@@ -93,7 +160,7 @@ export default function FirmExpertsPage() {
       if (res.ok) {
         setShowAddExpert(false);
         setAddForm({ firstName: "", lastName: "", email: "", title: "", linkedinUrl: "" });
-        window.location.reload();
+        refetchExperts();
       }
     } catch (err) {
       console.error("Failed to add expert:", err);
@@ -129,10 +196,13 @@ export default function FirmExpertsPage() {
     }
   }
 
-  // Enrich a single expert
+  // ── Enrich a single expert (with polling) ──────────────────────────────────
   async function handleEnrich(expertId: string) {
     if (availableCredits <= 0) return;
-    setEnrichingExpert(expertId);
+
+    // Immediately mark as enriching
+    setEnrichingExperts((prev) => new Set(prev).add(expertId));
+
     try {
       const res = await fetch("/api/experts/enrich", {
         method: "POST",
@@ -141,21 +211,40 @@ export default function FirmExpertsPage() {
       });
       if (res.ok) {
         refetchCredits();
+        // Start polling for completion
+        startPolling(expertId);
       } else {
         const data = await res.json();
         console.error("Enrich failed:", data.error);
+        // Remove from enriching on failure
+        setEnrichingExperts((prev) => {
+          const next = new Set(prev);
+          next.delete(expertId);
+          return next;
+        });
       }
     } catch (err) {
       console.error("Failed to enrich:", err);
-    } finally {
-      setEnrichingExpert(null);
+      setEnrichingExperts((prev) => {
+        const next = new Set(prev);
+        next.delete(expertId);
+        return next;
+      });
     }
   }
 
-  // Batch enrich selected experts
+  // ── Batch enrich selected experts (with polling) ───────────────────────────
   async function handleBatchEnrich() {
     if (selectedForBatch.size === 0 || availableCredits < selectedForBatch.size) return;
     setBatchEnriching(true);
+
+    // Mark all selected as enriching
+    setEnrichingExperts((prev) => {
+      const next = new Set(prev);
+      for (const id of selectedForBatch) next.add(id);
+      return next;
+    });
+
     try {
       const res = await fetch("/api/experts/enrich-batch", {
         method: "POST",
@@ -163,6 +252,10 @@ export default function FirmExpertsPage() {
         body: JSON.stringify({ expertProfileIds: Array.from(selectedForBatch) }),
       });
       if (res.ok) {
+        // Start polling for each
+        for (const id of selectedForBatch) {
+          startPolling(id);
+        }
         setSelectedForBatch(new Set());
         refetchCredits();
       }
@@ -183,20 +276,30 @@ export default function FirmExpertsPage() {
     });
   }, []);
 
-  // Render a single expert row inside a tier section
+  // ── Render a single expert row ─────────────────────────────────────────────
   function renderExpertRow(expert: Expert) {
     const isEnriched = expert.enrichmentStatus === "enriched" || expert.isFullyEnriched;
-    const isRoster = !isEnriched;
+    const isCurrentlyEnriching = enrichingExperts.has(expert.id);
+    const isRoster = !isEnriched && !isCurrentlyEnriching;
     const sps = expert.specialistProfiles ?? [];
     const strongCount = sps.filter((s) => s.qualityStatus === "strong").length;
     const partialCount = sps.filter((s) => s.qualityStatus === "partial").length;
     const primarySp = sps.find((sp) => sp.isPrimary) ?? sps.find((sp) => sp.qualityStatus === "strong");
     const isExpanded = expandedExpert === expert.id;
-    const isEnriching = enrichingExpert === expert.id;
     const isSelected = selectedForBatch.has(expert.id);
 
+    // Left border color based on state
+    const borderColor = isCurrentlyEnriching
+      ? "border-l-cos-electric"
+      : isEnriched
+        ? "border-l-cos-signal"
+        : "border-l-cos-border";
+
     return (
-      <div key={expert.id}>
+      <div
+        key={expert.id}
+        className={`border-l-2 ${borderColor} ${isCurrentlyEnriching ? "bg-cos-electric/[0.02]" : ""}`}
+      >
         <div className="flex w-full items-center gap-3 px-4 py-3">
           {/* Batch select checkbox (only for enrichable roster experts) */}
           {isRoster && (
@@ -208,72 +311,82 @@ export default function FirmExpertsPage() {
             />
           )}
 
-          {/* Clickable area for expand */}
-          <button
-            onClick={() => setExpandedExpert(isExpanded ? null : expert.id)}
-            className="flex flex-1 items-center gap-3 text-left transition-colors hover:bg-cos-electric/[0.02] rounded-cos-md -mx-1 px-1"
-          >
-            {/* Avatar */}
-            {expert.photoUrl ? (
-              <img src={expert.photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
-            ) : (
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-xs font-semibold text-cos-signal">
-                {expert.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-              </div>
-            )}
+          {/* Avatar */}
+          {expert.photoUrl ? (
+            <img src={expert.photoUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+          ) : (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-xs font-semibold text-cos-signal">
+              {expert.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+            </div>
+          )}
 
-            {/* Name + Title + Status */}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-medium text-cos-midnight">
-                  {expert.name}
+          {/* Name + Title + Status — clickable to profile */}
+          <Link
+            href={`/experts/${expert.id}`}
+            className="min-w-0 flex-1 group"
+          >
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-medium text-cos-midnight group-hover:text-cos-electric transition-colors">
+                {expert.name}
+              </span>
+              {isEnriched && (
+                <span className="inline-flex items-center gap-0.5 rounded-cos-pill bg-emerald-50 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600">
+                  <CheckCircle2 className="h-2.5 w-2.5" />
+                  Enriched
                 </span>
-                {isEnriched && (
-                  <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Fully enriched with work history" />
-                )}
-                {isRoster && (
-                  <span className="inline-flex items-center gap-0.5 rounded-cos-pill bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-600">
-                    Roster
-                  </span>
-                )}
-              </div>
-              <p className="truncate text-xs text-cos-slate">
-                {primarySp?.qualityStatus === "strong" ? primarySp.title : expert.role}
-              </p>
-              {sps.length > 0 && (strongCount > 0 || partialCount > 0) && (
-                <p className="mt-0.5 flex items-center gap-1 text-[10px] text-cos-signal">
-                  <Star className="h-2.5 w-2.5" />
-                  {[
-                    strongCount > 0 ? `${strongCount} Strong` : null,
-                    partialCount > 0 ? `${partialCount} Partial` : null,
-                  ].filter(Boolean).join(" · ")}
-                  {" profile"}{sps.length === 1 ? "" : "s"}
-                </p>
               )}
-              {sps.length === 0 && isEnriched && (
-                <p className="mt-0.5 text-[10px] italic text-cos-slate-light">
-                  No specialist profiles yet
-                </p>
+              {isCurrentlyEnriching && (
+                <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-1.5 py-0.5 text-[9px] font-medium text-cos-electric animate-pulse">
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                  Enriching...
+                </span>
+              )}
+              {isRoster && (
+                <span className="inline-flex items-center gap-0.5 rounded-cos-pill bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-600">
+                  Roster
+                </span>
               )}
             </div>
+            <p className="truncate text-xs text-cos-slate">
+              {primarySp?.qualityStatus === "strong" ? primarySp.title : expert.role}
+            </p>
+            {/* Specialist profile summary for enriched experts */}
+            {sps.length > 0 && (strongCount > 0 || partialCount > 0) && (
+              <p className="mt-0.5 flex items-center gap-1 text-[10px] text-cos-signal">
+                <Star className="h-2.5 w-2.5" />
+                {[
+                  strongCount > 0 ? `${strongCount} Strong` : null,
+                  partialCount > 0 ? `${partialCount} Partial` : null,
+                ].filter(Boolean).join(" \u00B7 ")}
+                {" profile"}{sps.length === 1 ? "" : "s"}
+              </p>
+            )}
+            {/* Hint for roster experts */}
+            {isRoster && (
+              <p className="mt-0.5 text-[10px] text-cos-slate-light">
+                Enrich to unlock work history &amp; specialist profiles
+              </p>
+            )}
+          </Link>
+
+          {/* Expand chevron */}
+          <button
+            onClick={() => setExpandedExpert(isExpanded ? null : expert.id)}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
+          >
+            {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
 
           {/* Actions */}
-          <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <div className="flex shrink-0 items-center gap-1">
             {/* Enrich button for roster experts */}
             {isRoster && (
               availableCredits > 0 ? (
                 <button
                   onClick={() => handleEnrich(expert.id)}
-                  disabled={isEnriching}
-                  className="flex h-7 items-center gap-1 rounded-cos-pill bg-cos-electric px-2.5 text-[10px] font-medium text-white transition-colors hover:bg-cos-electric/90 disabled:opacity-50"
-                  title="Enrich this expert (uses 1 credit)"
+                  className="flex h-7 items-center gap-1 rounded-cos-pill bg-cos-electric px-2.5 text-[10px] font-medium text-white transition-colors hover:bg-cos-electric/90"
                 >
-                  {isEnriching ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Zap className="h-3 w-3" />
-                  )}
+                  <Zap className="h-3 w-3" />
                   Enrich
                 </button>
               ) : !isPro ? (
@@ -294,11 +407,22 @@ export default function FirmExpertsPage() {
                 </a>
               )
             )}
-            {isEnriched && (
-              <span className="flex h-7 items-center gap-1 rounded-cos-pill bg-emerald-50 px-2 text-[10px] font-medium text-emerald-600">
-                <CheckCircle2 className="h-3 w-3" />
-                Enriched
+            {/* Enriching spinner replaces enrich button */}
+            {isCurrentlyEnriching && (
+              <span className="flex h-7 items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2.5 text-[10px] font-medium text-cos-electric">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Working...
               </span>
+            )}
+            {/* Enriched badge (only when not currently enriching) */}
+            {isEnriched && !isCurrentlyEnriching && (
+              <Link
+                href={`/experts/${expert.id}`}
+                className="flex h-7 items-center gap-1 rounded-cos-pill bg-emerald-50 px-2 text-[10px] font-medium text-emerald-600 hover:bg-emerald-100 transition-colors"
+              >
+                <ExternalLink className="h-3 w-3" />
+                View Profile
+              </Link>
             )}
             {expert.linkedinUrl && (
               <a
@@ -306,7 +430,6 @@ export default function FirmExpertsPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex h-7 w-7 items-center justify-center rounded text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
-                title="View LinkedIn"
               >
                 <Linkedin className="h-3.5 w-3.5" />
               </a>
@@ -316,7 +439,6 @@ export default function FirmExpertsPage() {
                 onClick={() => handleSendInvite(expert.id)}
                 disabled={invitingExpert === expert.id}
                 className="flex h-7 items-center gap-1 rounded px-2 text-[10px] font-medium text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
-                title="Send invite email"
               >
                 {invitingExpert === expert.id ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -330,7 +452,6 @@ export default function FirmExpertsPage() {
               <button
                 onClick={() => handleCopyLink(expert.id)}
                 className="flex h-7 items-center gap-1 rounded px-2 text-[10px] font-medium text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
-                title="Copy claim link"
               >
                 {copiedLink === expert.id ? (
                   <Check className="h-3 w-3 text-emerald-500" />
@@ -350,7 +471,9 @@ export default function FirmExpertsPage() {
               <p className="text-xs leading-relaxed text-cos-slate-dim">{expert.bio}</p>
             )}
             {expert.location && (
-              <p className="text-[11px] text-cos-slate-dim">📍 {expert.location}</p>
+              <p className="text-[11px] text-cos-slate-dim flex items-center gap-1">
+                <Briefcase className="h-3 w-3" /> {expert.location}
+              </p>
             )}
             {expert.skills.length > 0 && (
               <div>
@@ -409,14 +532,20 @@ export default function FirmExpertsPage() {
                 </div>
               </div>
             )}
-            {expert.profileUrl && (
-              <a
-                href={expert.profileUrl}
+            <div className="flex items-center gap-2 pt-1">
+              <Link
+                href={`/experts/${expert.id}`}
                 className="inline-flex items-center gap-1 rounded-cos-md border border-cos-border px-3 py-1.5 text-[11px] font-medium text-cos-slate-dim hover:border-cos-electric/40 hover:text-cos-electric transition-colors"
               >
-                Edit Profile →
-              </a>
-            )}
+                View Full Profile <ExternalLink className="h-3 w-3" />
+              </Link>
+              <Link
+                href={`/experts/${expert.id}/edit`}
+                className="inline-flex items-center gap-1 rounded-cos-md border border-cos-border px-3 py-1.5 text-[11px] font-medium text-cos-slate-dim hover:border-cos-electric/40 hover:text-cos-electric transition-colors"
+              >
+                Edit Profile &rarr;
+              </Link>
+            </div>
           </div>
         )}
       </div>
@@ -493,7 +622,7 @@ export default function FirmExpertsPage() {
               <div className="mt-1 flex items-center justify-between text-[10px] text-cos-slate-dim">
                 <span>{usedCredits} credits used</span>
                 <span>
-                  {enrichedCount} enriched · {rosterCount} roster
+                  {enrichedCount} enriched &middot; {rosterCount} roster
                 </span>
               </div>
             </div>
@@ -509,6 +638,12 @@ export default function FirmExpertsPage() {
               <Users className="h-3 w-3" />
               {rosterCount} Roster
             </span>
+            {enrichingExperts.size > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2 py-1 text-[10px] font-medium text-cos-electric animate-pulse">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {enrichingExperts.size} Enriching
+              </span>
+            )}
             <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-cloud px-2 py-1 text-[10px] font-medium text-cos-slate">
               <ShieldCheck className="h-3 w-3" />
               {totalExperts} Total
@@ -554,7 +689,7 @@ export default function FirmExpertsPage() {
             )}
             Enrich Selected ({selectedForBatch.size})
             {availableCredits < selectedForBatch.size && (
-              <span className="text-white/60 ml-1">— not enough credits</span>
+              <span className="text-white/60 ml-1">&mdash; not enough credits</span>
             )}
           </Button>
         )}
@@ -685,7 +820,7 @@ export default function FirmExpertsPage() {
       ) : extracted?.teamMembers?.length ? (
         <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4">
           <p className="mb-2 text-[10px] uppercase tracking-wider text-cos-slate-dim">
-            Detected from website — add as experts to manage them
+            Detected from website &mdash; add as experts to manage them
           </p>
           <div className="flex flex-wrap gap-1.5">
             {extracted.teamMembers.map((name) => (

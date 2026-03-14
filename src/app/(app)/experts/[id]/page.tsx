@@ -15,7 +15,7 @@ import {
   GraduationCap,
   Briefcase,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, normalizeLinkedInUrl } from "@/lib/utils";
 import { SpecialistProfileCard } from "@/components/experts/specialist-profile-card";
 
 interface PdlExperience {
@@ -188,7 +188,7 @@ export default function ExpertProfilePage() {
               )}
               {expert.linkedinUrl && (
                 <a
-                  href={expert.linkedinUrl}
+                  href={normalizeLinkedInUrl(expert.linkedinUrl) ?? "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 hover:text-cos-electric transition-colors"
