@@ -142,7 +142,6 @@ export function useTeamDiscovery(
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        console.log("[TeamDiscovery] trigger failed:", res.status, err);
         // No website = can't discover, skip silently
         if (res.status === 400) {
           setPhase("skipped");
@@ -154,7 +153,6 @@ export function useTeamDiscovery(
       }
 
       const data = await res.json();
-      console.log("[TeamDiscovery] trigger response:", data);
       if (data.alreadyRunning) {
         // Job exists — start polling to track it
         setPhase("queued");
@@ -198,7 +196,6 @@ export function useTeamDiscovery(
   // Main effect: auto-trigger when experts page loads with 0 experts
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    console.log("[TeamDiscovery] effect:", { organizationId, expertsLoaded, expertCount, triggered: triggered.current });
     if (!organizationId || !expertsLoaded) return;
 
     // If experts already exist, skip
@@ -215,7 +212,6 @@ export function useTeamDiscovery(
     // Check status first
     (async () => {
       const data = await fetchStatus();
-      console.log("[TeamDiscovery] status response:", data);
       if (!mounted.current) return;
 
       if (!data) {
