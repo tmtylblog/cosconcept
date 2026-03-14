@@ -52,7 +52,7 @@ export default function FirmExpertsPage() {
   } = useEnrichmentCredits();
 
   // Team discovery: auto-trigger when 0 experts
-  const discovery = useTeamDiscovery(activeOrg?.id, dbTotalExperts, !dbLoading);
+  const discovery = useTeamDiscovery(activeOrg?.id, dbTotalExperts, !dbLoading && !!activeOrg?.id);
 
   // Refetch when discovery completes
   useEffect(() => {
