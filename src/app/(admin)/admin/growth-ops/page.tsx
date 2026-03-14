@@ -534,6 +534,10 @@ function GrowthOpsInboxInner() {
     fetch(`/api/admin/growth-ops/conversation-context?${qp.toString()}`)
       .then((r) => r.json())
       .then((d) => {
+        if (d.error || !d.activities) {
+          setContextData(null);
+          return;
+        }
         setContextData(d as ConversationContext);
         // Use stages from context if available and we don&apos;t have them yet
         if (d.stages?.length && stages.length === 0) {

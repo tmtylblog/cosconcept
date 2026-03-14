@@ -94,7 +94,8 @@ export function ContextPanel({
     );
   }
 
-  const { contact, deal, company, activities, outreach } = context;
+  const { contact, deal, company, outreach } = context;
+  const activities: Activity[] = context.activities ?? [];
 
   return (
     <div className="w-80 shrink-0 border-l border-cos-border bg-cos-surface-raised overflow-y-auto cos-scrollbar">
