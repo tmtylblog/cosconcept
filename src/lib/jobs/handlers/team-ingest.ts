@@ -238,7 +238,9 @@ export async function handleTeamIngest(
           pdlId: person.id,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           pdlData: pdlPayload as any,
-          pdlEnrichedAt: new Date(),
+          // pdlEnrichedAt intentionally NOT set here — search data is NOT full enrichment.
+          // Setting it would cause expert-linkedin to skip enrichment (6-month guard).
+          // pdlEnrichedAt: new Date(),
           topSkills: person.skills.slice(0, 10),
           enrichmentStatus: "roster", // Basic data only — not yet fully enriched
           // Only expert tier is public by default
@@ -254,7 +256,9 @@ export async function handleTeamIngest(
             photoUrl: person.photoUrl || null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             pdlData: pdlPayload as any,
-            pdlEnrichedAt: new Date(),
+            // pdlEnrichedAt intentionally NOT set here — search data is NOT full enrichment.
+          // Setting it would cause expert-linkedin to skip enrichment (6-month guard).
+          // pdlEnrichedAt: new Date(),
             topSkills: person.skills.slice(0, 10),
             isPublic: tier === "expert",
             profileCompleteness: completeness,
