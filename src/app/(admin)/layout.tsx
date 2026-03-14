@@ -145,11 +145,9 @@ export default async function AdminLayout({
           {canSeeGrowthOps && (
             <>
               <SectionHeader label="Growth Ops" />
-              <AdminNavLink href="/admin/growth-ops/pipeline" icon={<Share2 className="h-4 w-4" />} label="Pipeline" />
-              <AdminNavLink href="/admin/growth-ops/linkedin" icon={<Linkedin className="h-4 w-4" />} label="LinkedIn Inbox" />
-              <AdminNavLink href="/admin/growth-ops/linkedin/campaigns" icon={<Send className="h-4 w-4" />} label="Campaigns &amp; Targets" />
-              <AdminNavLink href="/admin/growth-ops/instantly" icon={<Mail className="h-4 w-4" />} label="Instantly" />
-              <AdminNavLink href="/admin/growth-ops/attribution" icon={<BarChart3 className="h-4 w-4" />} label="Attribution" />
+              <AdminNavLink href="/admin/growth-ops" icon={<Mail className="h-4 w-4" />} label="Inbox" />
+              <AdminNavLink href="/admin/growth-ops/campaigns" icon={<Send className="h-4 w-4" />} label="Campaigns" />
+              <AdminNavLink href="/admin/growth-ops/dashboard" icon={<BarChart3 className="h-4 w-4" />} label="Dashboard" />
               <AdminNavLink href="/admin/growth-ops/settings" icon={<Settings className="h-4 w-4" />} label="Settings" />
             </>
           )}

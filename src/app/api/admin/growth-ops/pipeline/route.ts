@@ -201,6 +201,7 @@ export async function POST(req: NextRequest) {
       if (fields.dealValue !== undefined) updateData.dealValue = fields.dealValue;
       if (fields.priority !== undefined) updateData.priority = fields.priority;
       if (fields.notes !== undefined) updateData.notes = fields.notes;
+      if (fields.customFields !== undefined) updateData.customFields = fields.customFields;
       if (fields.source !== undefined) updateData.source = fields.source;
       if (fields.sourceChannel !== undefined) updateData.sourceChannel = fields.sourceChannel;
       if (fields.status !== undefined) updateData.status = fields.status;
