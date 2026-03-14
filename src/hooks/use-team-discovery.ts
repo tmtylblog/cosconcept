@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 interface SearchResults {
   total: number;
+  pdlTotal: number | null;
   experts: number;
   potentialExperts: number;
   notExperts: number;

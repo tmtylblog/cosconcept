@@ -1,10 +1,12 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { Search, CheckCircle2, Loader2, Circle, Zap, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface SearchResults {
   total: number;
+  pdlTotal: number | null;
   experts: number;
   potentialExperts: number;
   notExperts: number;
@@ -26,6 +28,37 @@ interface TeamDiscoveryProgressProps {
   enrichProgress: EnrichProgress | null;
   errorMessage?: string | null;
   onRetry?: () => void;
+}
+
+/** Animated number that counts up smoothly */
+function AnimatedCount({ value, duration = 600 }: { value: number; duration?: number }) {
+  const [display, setDisplay] = useState(0);
+  const prev = useRef(0);
+  const raf = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (value === prev.current) return;
+    const from = prev.current;
+    const to = value;
+    prev.current = value;
+    const start = performance.now();
+
+    function tick(now: number) {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease-out
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(from + (to - from) * eased));
+      if (progress < 1) {
+        raf.current = requestAnimationFrame(tick);
+      }
+    }
+
+    raf.current = requestAnimationFrame(tick);
+    return () => { if (raf.current) cancelAnimationFrame(raf.current); };
+  }, [value, duration]);
+
+  return <>{display}</>;
 }
 
 function StepIndicator({ status }: { status: "done" | "active" | "pending" }) {
@@ -58,6 +91,9 @@ export function TeamDiscoveryProgress({
   errorMessage,
   onRetry,
 }: TeamDiscoveryProgressProps) {
+  const found = searchResults?.total ?? 0;
+  const pdlTotal = searchResults?.pdlTotal ?? null;
+
   // Error state
   if (phase === "error") {
     return (
@@ -112,9 +148,21 @@ export function TeamDiscoveryProgress({
             <p className="text-sm font-medium text-cos-midnight">Searching team roster</p>
             <p className="text-[10px] text-cos-slate-dim">Finding people at {domain || "your company"}</p>
           </div>
-          {searchResults && (
-            <span className="text-xs font-medium text-cos-signal">{searchResults.total} found</span>
-          )}
+          <span className="text-xs font-medium text-cos-signal tabular-nums">
+            {found > 0 || pdlTotal ? (
+              pdlTotal && found < pdlTotal ? (
+                <><AnimatedCount value={found} /> of {pdlTotal} found</>
+              ) : (
+                <><AnimatedCount value={found} /> found</>
+              )
+            ) : (
+              phase === "queued" || phase === "checking" ? (
+                <span className="text-cos-slate-dim">waiting&hellip;</span>
+              ) : (
+                <span className="text-cos-slate-dim">searching&hellip;</span>
+              )
+            )}
+          </span>
         </div>
 
         <div className="flex items-center gap-3">
@@ -124,7 +172,9 @@ export function TeamDiscoveryProgress({
             <p className="text-[10px] text-cos-slate-dim">Identifying client-facing specialists</p>
           </div>
           {searchResults && searchResults.experts > 0 && (
-            <span className="text-xs font-medium text-cos-signal">{searchResults.experts} experts</span>
+            <span className="text-xs font-medium text-cos-signal tabular-nums">
+              <AnimatedCount value={searchResults.experts} /> experts
+            </span>
           )}
         </div>
 
@@ -135,26 +185,38 @@ export function TeamDiscoveryProgress({
             <p className="text-[10px] text-cos-slate-dim">Pulling work history &amp; specialist profiles</p>
           </div>
           {enrichProgress && enrichProgress.total > 0 && (
-            <span className="text-xs font-medium text-cos-electric">
-              {enrichProgress.completed} / {enrichProgress.total}
+            <span className="text-xs font-medium text-cos-electric tabular-nums">
+              <AnimatedCount value={enrichProgress.completed} /> / {enrichProgress.total}
             </span>
           )}
         </div>
       </div>
 
+      {/* Search progress bar (during searching phase) */}
+      {pdlTotal && found > 0 && found < pdlTotal && (phase === "searching" || phase === "queued") && (
+        <div className="mx-auto mt-4 max-w-sm">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-cos-cloud">
+            <div
+              className="h-full rounded-full bg-cos-signal transition-all duration-700 ease-out"
+              style={{ width: `${Math.round((found / pdlTotal) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Search results stat cards */}
-      {searchResults && searchResults.total > 0 && (
+      {searchResults && searchResults.total > 0 && (searchResults.experts > 0 || searchResults.potentialExperts > 0) && (
         <div className="mx-auto mt-6 flex max-w-sm gap-3">
           <div className="flex-1 rounded-cos-lg border border-emerald-200 bg-emerald-50 p-3 text-center">
-            <p className="text-lg font-bold text-emerald-700">{searchResults.experts}</p>
+            <p className="text-lg font-bold text-emerald-700 tabular-nums"><AnimatedCount value={searchResults.experts} /></p>
             <p className="text-[10px] font-medium text-emerald-600">Experts</p>
           </div>
           <div className="flex-1 rounded-cos-lg border border-amber-200 bg-amber-50 p-3 text-center">
-            <p className="text-lg font-bold text-amber-700">{searchResults.potentialExperts}</p>
+            <p className="text-lg font-bold text-amber-700 tabular-nums"><AnimatedCount value={searchResults.potentialExperts} /></p>
             <p className="text-[10px] font-medium text-amber-600">Potential</p>
           </div>
           <div className="flex-1 rounded-cos-lg border border-cos-border bg-cos-cloud p-3 text-center">
-            <p className="text-lg font-bold text-cos-slate">{searchResults.notExperts}</p>
+            <p className="text-lg font-bold text-cos-slate tabular-nums"><AnimatedCount value={searchResults.notExperts} /></p>
             <p className="text-[10px] font-medium text-cos-slate-dim">Internal</p>
           </div>
         </div>
@@ -172,7 +234,7 @@ export function TeamDiscoveryProgress({
           </div>
           <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-cos-cloud">
             <div
-              className="h-full rounded-full bg-cos-electric transition-all"
+              className="h-full rounded-full bg-cos-electric transition-all duration-700 ease-out"
               style={{ width: `${Math.round((enrichProgress.completed / enrichProgress.total) * 100)}%` }}
             />
           </div>

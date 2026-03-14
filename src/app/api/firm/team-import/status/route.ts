@@ -187,12 +187,17 @@ export async function GET(req: Request) {
       phase = "enriching";
     }
 
+    // Extract pdlTotal from job result (set by worker after PDL search)
+    const jobResult = teamJob.result as Record<string, unknown> | null;
+    const pdlTotal = (jobResult?.pdlTotal as number) ?? null;
+
     return NextResponse.json({
       phase,
       domain,
       jobError: teamJob.lastError,
       searchResults: {
         total: experts.length,
+        pdlTotal,
         experts: expertCount,
         potentialExperts: potentialCount,
         notExperts: notExpertCount,
