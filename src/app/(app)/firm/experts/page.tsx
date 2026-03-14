@@ -20,7 +20,7 @@ import {
   Briefcase,
   ExternalLink,
 } from "lucide-react";
-import { useActiveOrganization } from "@/lib/auth-client";
+import { authClient, useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useDbExperts } from "@/hooks/use-db-experts";
 import { useEnrichmentCredits } from "@/hooks/use-enrichment-credits";
@@ -34,6 +34,30 @@ const MAX_POLL_ATTEMPTS = 20; // 60 seconds at 3s intervals
 
 export default function FirmExpertsPage() {
   const { data: activeOrg } = useActiveOrganization();
+
+  // Self-healing: useActiveOrganization() often doesn't re-render after
+  // setActive(), so resolve the orgId ourselves (same pattern as billing page)
+  const [resolvedOrgId, setResolvedOrgId] = useState<string>("");
+  const orgId = orgId || resolvedOrgId;
+  const orgActivationAttempted = useRef(false);
+
+  useEffect(() => {
+    if (orgId || orgActivationAttempted.current) return;
+    orgActivationAttempted.current = true;
+    (async () => {
+      try {
+        const { data: orgs } = await authClient.organization.list();
+        const orgList = (orgs as { id: string }[]) ?? [];
+        if (orgList.length > 0) {
+          console.log("[Experts] No active org — auto-activating", orgList[0].id);
+          await authClient.organization.setActive({ organizationId: orgList[0].id });
+          setResolvedOrgId(orgList[0].id);
+        }
+      } catch (err) {
+        console.error("[Experts] Failed to auto-activate org:", err);
+      }
+    })();
+  }, [orgId]);
   const { status, result } = useEnrichment();
   const extracted = result?.extracted;
   const { plan, isLoading: planLoading } = usePlan();
@@ -43,7 +67,7 @@ export default function FirmExpertsPage() {
     total: dbTotalExperts,
     isLoading: dbLoading,
     refetch: refetchExperts,
-  } = useDbExperts(activeOrg?.id);
+  } = useDbExperts(orgId);
 
   const {
     credits,
@@ -52,7 +76,7 @@ export default function FirmExpertsPage() {
   } = useEnrichmentCredits();
 
   // Team discovery: auto-trigger when 0 experts
-  const discovery = useTeamDiscovery(activeOrg?.id, dbTotalExperts, !dbLoading && !!activeOrg?.id);
+  const discovery = useTeamDiscovery(orgId, dbTotalExperts, !dbLoading && !!orgId);
 
   // Refetch when discovery completes
   useEffect(() => {
@@ -168,7 +192,7 @@ export default function FirmExpertsPage() {
       const res = await fetch("/api/experts/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...addForm, organizationId: activeOrg?.id }),
+        body: JSON.stringify({ ...addForm, organizationId: orgId }),
       });
       if (res.ok) {
         setShowAddExpert(false);
@@ -569,7 +593,7 @@ export default function FirmExpertsPage() {
     <div className="cos-scrollbar mx-auto max-w-3xl space-y-5 overflow-y-auto p-6">
       {/* Page header */}
       <div>
-        <p className="text-[9px] text-cos-slate-dim">v7 | phase: {discovery.phase} | org: {activeOrg?.id ?? "none"}</p>
+        <p className="text-[9px] text-cos-slate-dim">v8 | phase: {discovery.phase} | org: {orgId || "none"}</p>
         <h2 className="font-heading text-lg font-semibold text-cos-midnight">
           Team &amp; Experts
         </h2>
