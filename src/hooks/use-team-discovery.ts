@@ -171,10 +171,30 @@ export function useTeamDiscovery(
     setPhase("checking");
     setErrorMessage(null);
     triggered.current = false;
-    // Will re-trigger via the effect below
-  }, []);
+    // Manually re-trigger since effect deps won't change
+    (async () => {
+      const data = await fetchStatus();
+      if (!mounted.current) return;
+      triggered.current = true;
+      if (!data) {
+        await triggerImport();
+        return;
+      }
+      if (data.domain) setDomain(data.domain);
+      const p = data.phase;
+      if (p === "idle" || p === "error") {
+        await triggerImport();
+      } else if (p === "queued" || p === "searching" || p === "enriching") {
+        setPhase(p as Phase);
+        startPolling();
+      } else if (p === "discovered" || p === "done") {
+        setPhase("done");
+      }
+    })();
+  }, [fetchStatus, triggerImport, startPolling]);
 
   // Main effect: auto-trigger when experts page loads with 0 experts
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!organizationId || !expertsLoaded) return;
 
@@ -185,8 +205,7 @@ export function useTeamDiscovery(
     }
 
     // Already triggered in this mount
-    if (triggered.current && phase !== "checking") return;
-
+    if (triggered.current) return;
     triggered.current = true;
     setPhase("checking");
 
@@ -221,7 +240,7 @@ export function useTeamDiscovery(
         await triggerImport();
       }
     })();
-  }, [organizationId, expertsLoaded, expertCount, fetchStatus, triggerImport, startPolling, phase]);
+  }, [organizationId, expertsLoaded, expertCount]);
 
   const isActive = phase !== "idle" && phase !== "skipped" && phase !== "done";
 
