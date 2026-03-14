@@ -169,21 +169,25 @@ export async function handleTeamIngest(
   let total = 0;
   let scrollToken: string | null = null;
 
+  let page = 0;
   while (allPeople.length < effectiveLimit) {
     const batchSize = Math.min(MAX_PER_PAGE, effectiveLimit - allPeople.length);
     const result = await searchPeopleAtCompany({
       domain,
       limit: batchSize,
-      scrollToken: scrollToken ?? undefined,
+      // Only pass scrollToken on pages after the first
+      scrollToken: page > 0 ? (scrollToken ?? undefined) : undefined,
     });
 
     total = result.total;
     if (result.people.length === 0) break;
     allPeople = allPeople.concat(result.people);
     scrollToken = result.scrollToken;
+    page++;
 
-    if (result.people.length < batchSize) break; // no more results
-    if (!scrollToken) break; // no more pages available
+    // Stop conditions:
+    if (result.people.length < batchSize) break; // partial page = no more results
+    if (!result.scrollToken) break;              // PDL says no more pages
     if (allPeople.length >= effectiveLimit) break;
   }
 
