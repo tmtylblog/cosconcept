@@ -19,6 +19,7 @@ import {
   ChevronUp,
   Briefcase,
   ExternalLink,
+  AlertCircle,
 } from "lucide-react";
 import { authClient, useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
@@ -612,6 +613,28 @@ export default function FirmExpertsPage() {
         />
       ) : (
       <>
+      {/* No results banner — shown when discovery completed but found 0 people */}
+      {discovery.phase === "done" && discovery.searchResults?.total === 0 && dbTotalExperts === 0 && (
+        <div className="rounded-cos-xl border border-amber-200 bg-amber-50 px-6 py-8 text-center">
+          <AlertCircle className="mx-auto h-10 w-10 text-amber-500" />
+          <h3 className="mt-3 font-heading text-base font-semibold text-amber-800">
+            No team members found{discovery.domain ? ` at ${discovery.domain}` : ""}
+          </h3>
+          <p className="mt-1 text-xs text-amber-600 max-w-md mx-auto">
+            PDL didn&apos;t return any employees for this domain. This usually means the domain
+            isn&apos;t indexed, or team members are listed under a different domain (e.g. a parent company).
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={discovery.retry}
+            className="mt-4 h-8 gap-1.5 text-xs border-amber-300 text-amber-700 hover:bg-amber-100"
+          >
+            Try Again
+          </Button>
+        </div>
+      )}
+
       {/* Credit bar */}
       {!planLoading && !creditsLoading && credits && (
         <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4">

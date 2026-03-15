@@ -1629,18 +1629,23 @@ export default function CustomerDetailPage() {
                     </h4>
                     <div className="flex items-center gap-2">
                       <span className={`inline-flex items-center gap-1.5 rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
-                        importStatus?.phase === "done" ? "bg-emerald-50 text-emerald-600" :
-                        importStatus?.phase === "error" ? "bg-cos-ember/10 text-cos-ember" :
-                        importStatus?.phase === "discovered" ? "bg-purple-50 text-purple-600" :
-                        "bg-cos-electric/10 text-cos-electric"
+                        importStatus?.phase === "done" && importStatus?.searchResults?.total === 0
+                          ? "bg-amber-50 text-amber-600"
+                          : importStatus?.phase === "done" ? "bg-emerald-50 text-emerald-600"
+                          : importStatus?.phase === "error" ? "bg-cos-ember/10 text-cos-ember"
+                          : importStatus?.phase === "discovered" ? "bg-purple-50 text-purple-600"
+                          : "bg-cos-electric/10 text-cos-electric"
                       }`}>
                         {importPolling && <Loader2 className="h-3 w-3 animate-spin" />}
-                        {importStatus?.phase === "done" ? "Complete" :
-                         importStatus?.phase === "error" ? "Error" :
-                         importStatus?.phase === "discovered" ? "Team Discovered via PDL" :
-                         importStatus?.phase === "enriching" ? "Enriching..." :
-                         importStatus?.phase === "searching" ? "Searching..." :
-                         importStatus?.phase === "queued" ? "Queued..." : importStatus?.phase}
+                        {importStatus?.phase === "done"
+                          ? (importStatus?.searchResults?.total === 0 ? "No Results" :
+                             (importStatus.jobResult as Record<string, unknown> | null)?.skipped ? "Skipped" : "Complete")
+                          : importStatus?.phase === "error" ? "Error"
+                          : importStatus?.phase === "discovered" ? "Team Discovered via PDL"
+                          : importStatus?.phase === "enriching" ? "Enriching..."
+                          : importStatus?.phase === "searching" ? "Searching PDL..."
+                          : importStatus?.phase === "queued" ? "Queued in Inngest..."
+                          : importStatus?.phase}
                       </span>
                       {/* Retry button for stuck/failed jobs */}
                       {(importStatus?.phase === "error" || importStatus?.phase === "queued") && !importLoading && (
@@ -1680,21 +1685,50 @@ export default function CustomerDetailPage() {
                     </div>
                   </div>
 
-                  {/* Debug info for queued/error states */}
+                  {/* Queued state */}
                   {importStatus?.phase === "queued" && (
                     <div className="mb-2 flex items-start gap-2 rounded bg-amber-50 p-2">
                       <Clock className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
                       <div className="text-[10px] text-amber-700">
-                        <p>Job is waiting to be processed.</p>
-                        {importStatus.jobStatus && (
+                        <p>Job is queued in Inngest &mdash; should start within seconds.</p>
+                        {importStatus.startedAt && (
                           <p className="text-amber-600/70 mt-0.5">
-                            DB status: {importStatus.jobStatus}
-                            {importStatus.startedAt && <> | Last started: {new Date(importStatus.startedAt).toLocaleTimeString()}</>}
+                            Waiting since {new Date(importStatus.startedAt).toLocaleTimeString()}
                           </p>
                         )}
                         {importStatus.jobError && (
                           <p className="text-cos-ember mt-0.5">Last error: {importStatus.jobError}</p>
                         )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Done with 0 results — PDL had no data for this domain */}
+                  {importStatus?.phase === "done" && importStatus?.searchResults && importStatus.searchResults.total === 0 && (
+                    <div className="mb-2 flex items-start gap-2 rounded bg-amber-50 p-2">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                      <div className="text-[10px] text-amber-700">
+                        <p className="font-medium">No employees found for this domain.</p>
+                        <p className="mt-0.5 text-amber-600/70">
+                          PDL returned 0 results. This usually means the domain isn&apos;t in PDL&apos;s database,
+                          or employees are indexed under a different domain (e.g. a parent company or domain alias).
+                        </p>
+                        {importStatus.jobResult && (importStatus.jobResult as Record<string, unknown>).domain && (
+                          <p className="mt-0.5 font-mono text-amber-600/70">
+                            Searched: {String((importStatus.jobResult as Record<string, unknown>).domain)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Done but was skipped (recently ingested) */}
+                  {importStatus?.phase === "done" && importStatus.jobResult && (importStatus.jobResult as Record<string, unknown>).skipped === true && (
+                    <div className="mb-2 flex items-start gap-2 rounded bg-blue-50 p-2">
+                      <Clock className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
+                      <div className="text-[10px] text-blue-700">
+                        <p className="font-medium">Import skipped &mdash; already ingested within the last 30 days.</p>
+                        <p className="mt-0.5 text-blue-500">Use &quot;Force&quot; to re-import if needed.</p>
                       </div>
                     </div>
                   )}
