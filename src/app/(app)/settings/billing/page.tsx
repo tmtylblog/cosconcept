@@ -14,6 +14,7 @@ import {
 } from "@/lib/billing/plan-limits";
 import { cn } from "@/lib/utils";
 import { CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react";
+import { CheckoutModal } from "@/components/checkout-modal";
 
 const plans: PlanId[] = ["free", "pro", "enterprise"];
 
@@ -26,6 +27,11 @@ export default function BillingPage() {
     message: string;
   } | null>(null);
   const searchParams = useSearchParams();
+
+  // Embedded checkout modal state
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<"pro" | "enterprise">("pro");
+  const [checkoutInterval, setCheckoutInterval] = useState<"monthly" | "yearly">("monthly");
 
   // Local orgId state — useActiveOrganization() often doesn't re-render after
   // setActive(), so we track the resolved orgId ourselves to guarantee the
@@ -120,39 +126,23 @@ export default function BillingPage() {
       return;
     }
 
-    setLoading(plan);
+    // Open embedded checkout modal instead of redirecting to Stripe
     setNotice(null);
-    try {
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organizationId: effectiveOrgId,
-          plan,
-          interval: "monthly",
-        }),
-      });
-      const data = await res.json();
+    setCheckoutPlan(plan);
+    setCheckoutInterval("monthly");
+    setShowCheckout(true);
+  }
 
-      if (res.status === 503 || data.code === "stripe_not_configured") {
-        setNotice({
-          type: "info",
-          message: "Billing is not yet active — check back soon.",
-        });
-        return;
-      }
+  function handleCheckoutSuccess() {
+    setShowCheckout(false);
+    setNotice({ type: "success", message: "Syncing your subscription..." });
+    syncFromStripe().then(() => {
+      setNotice({ type: "success", message: "Your plan has been upgraded. Welcome aboard!" });
+    });
+  }
 
-      if (!res.ok) {
-        setNotice({ type: "error", message: data.error ?? "Something went wrong." });
-        return;
-      }
-
-      if (data.url) window.location.href = data.url;
-    } catch {
-      setNotice({ type: "error", message: "Network error — please try again." });
-    } finally {
-      setLoading(null);
-    }
+  function handleCheckoutCancel() {
+    setShowCheckout(false);
   }
 
   async function handleManageBilling() {
@@ -392,6 +382,17 @@ export default function BillingPage() {
           );
         })}
       </div>
+
+      {/* Embedded Stripe checkout modal */}
+      {showCheckout && orgId && (
+        <CheckoutModal
+          plan={checkoutPlan}
+          interval={checkoutInterval}
+          organizationId={orgId}
+          onSuccess={handleCheckoutSuccess}
+          onCancel={handleCheckoutCancel}
+        />
+      )}
     </div>
   );
 }
