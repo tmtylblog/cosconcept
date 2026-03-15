@@ -14,7 +14,7 @@ import {
 } from "@/lib/billing/plan-limits";
 import { cn } from "@/lib/utils";
 import { CheckCircle, XCircle, AlertCircle, Loader2 } from "lucide-react";
-import { CheckoutModal } from "@/components/checkout-modal";
+import CheckoutModal from "@/components/checkout-modal";
 
 const plans: PlanId[] = ["free", "pro", "enterprise"];
 

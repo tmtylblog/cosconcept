@@ -9,9 +9,9 @@ import {
 import { X } from "lucide-react";
 import { PLAN_DISPLAY_NAMES, PLAN_PRICES } from "@/lib/billing/plan-limits";
 
-const stripePromise = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
-);
+const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+  : null;
 
 interface CheckoutModalProps {
   plan: "pro" | "enterprise";
