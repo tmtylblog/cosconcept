@@ -96,6 +96,7 @@ async function enrichConversations(
 // ── Background: full conversation sync (12 months, paginated, rate-limited) ──
 
 const GENERIC_NAME_RE = /^(referral\??|inmail|sponsored|hi|hey|hello|\s*)$/i;
+const GENERIC_CHAT_NAMES = new Set(["referral?", "referral", "inmail", "sponsored", "hi", "hey", "hello", ""]);
 const TWELVE_MONTHS_MS = 365 * 24 * 60 * 60 * 1000;
 const PAGE_DELAY_MS = 1500; // rate-limit delay between Unipile pages
 const PAGE_SIZE = 100;
