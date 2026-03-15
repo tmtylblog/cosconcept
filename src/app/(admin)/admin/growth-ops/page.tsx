@@ -868,7 +868,7 @@ function GrowthOpsInboxInner() {
         ? stages.reduce((a, b) => (a.displayOrder ?? 0) < (b.displayOrder ?? 0) ? a : b)
         : null;
 
-      await fetch("/api/admin/growth-ops/pipeline", {
+      const res = await fetch("/api/admin/growth-ops/pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -879,8 +879,12 @@ function GrowthOpsInboxInner() {
           sourceChannel: "linkedin",
         }),
       });
-      // Reload context to show the new deal in the panel
-      refreshContext(selectedConvo);
+      if (!res.ok) { console.error("Create deal failed:", res.status); return; }
+      const d = await res.json();
+      if (d.dealId) {
+        // Navigate to the deal page with context to return to inbox
+        router.push(`/admin/growth-ops/pipeline/${d.dealId}?from=inbox`);
+      }
     } catch (err) {
       console.error("Failed to create deal:", err);
     }

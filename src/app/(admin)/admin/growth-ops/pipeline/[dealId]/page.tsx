@@ -97,6 +97,7 @@ function activityIcon(type: string) {
 export default function DealDetailPage({ params }: { params: Promise<{ dealId: string }> }) {
   const { dealId } = use(params);
   const router = useRouter();
+  const [fromInbox, setFromInbox] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deal, setDeal] = useState<Deal | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
@@ -107,6 +108,14 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+
+  // Check if navigated from inbox
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setFromInbox(params.get("from") === "inbox");
+    }
+  }, []);
 
   // Edit mode
   const [editing, setEditing] = useState(false);
@@ -243,7 +252,9 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
     return (
       <div className="rounded-cos-xl border border-red-200 bg-red-50 p-6 text-center">
         <p className="text-sm text-red-700">{error || "Deal not found"}</p>
-        <Link href="/admin/growth-ops/pipeline" className="text-xs text-cos-electric mt-2 inline-block hover:underline">&larr; Back to pipeline</Link>
+        <Link href={fromInbox ? "/admin/growth-ops" : "/admin/growth-ops/pipeline"} className="text-xs text-cos-electric mt-2 inline-block hover:underline">
+          &larr; {fromInbox ? "Back to Inbox" : "Back to pipeline"}
+        </Link>
       </div>
     );
   }
@@ -260,8 +271,8 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
     <div>
       {/* Header */}
       <div className="mb-6">
-        <Link href="/admin/growth-ops/pipeline" className="text-xs text-cos-electric hover:underline flex items-center gap-1 mb-3">
-          <ArrowLeft className="h-3 w-3" /> Back to Pipeline
+        <Link href={fromInbox ? "/admin/growth-ops" : "/admin/growth-ops/pipeline"} className="text-xs text-cos-electric hover:underline flex items-center gap-1 mb-3">
+          <ArrowLeft className="h-3 w-3" /> {fromInbox ? "Back to LinkedIn Inbox" : "Back to Pipeline"}
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div>

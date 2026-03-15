@@ -100,7 +100,7 @@ export function ConversationList({
   const pendingItems = queueItems.filter((q) => q.status === "pending");
 
   return (
-    <div className="w-80 shrink-0 border-r border-cos-border flex flex-col bg-white">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header: account selector + new message */}
       <div className="border-b border-cos-border px-3 py-3 space-y-2.5">
         {/* Account dropdown */}
