@@ -44,6 +44,11 @@ import {
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import {
+  ExpertProfileCard,
+  type ExpertProfileData,
+  type SpecialistProfileData,
+} from "@/components/experts/expert-profile-card";
 
 /* ── Types ────────────────────────────────────────────────────────── */
 
@@ -465,6 +470,12 @@ export default function CustomerDetailPage() {
   const [addingExpert, setAddingExpert] = useState(false);
   const [invitingExpert, setInvitingExpert] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  // Expert profile drawer
+  const [drawerExpertId, setDrawerExpertId] = useState<string | null>(null);
+  const [drawerExpert, setDrawerExpert] = useState<ExpertProfileData | null>(null);
+  const [drawerSPs, setDrawerSPs] = useState<SpecialistProfileData[]>([]);
+  const [drawerLoading, setDrawerLoading] = useState(false);
   const [linkingUser, setLinkingUser] = useState<string | null>(null);
 
   // Team import state
@@ -825,6 +836,24 @@ export default function CustomerDetailPage() {
       setEnrichingAll(false);
     }
   }
+
+  // Fetch expert profile for drawer
+  useEffect(() => {
+    if (!drawerExpertId) {
+      setDrawerExpert(null);
+      setDrawerSPs([]);
+      return;
+    }
+    setDrawerLoading(true);
+    fetch(`/api/experts/${drawerExpertId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setDrawerExpert(data.expert ?? null);
+        setDrawerSPs(data.specialistProfiles ?? []);
+      })
+      .catch(console.error)
+      .finally(() => setDrawerLoading(false));
+  }, [drawerExpertId]);
 
   // Load conversation thread
   const loadThread = useCallback(
@@ -1754,7 +1783,7 @@ export default function CustomerDetailPage() {
                 const tierOther = experts.filter((ep) => !ep.expertTier || !["expert", "potential_expert", "not_expert"].includes(ep.expertTier));
 
                 const renderExpertRow = (ep: AdminExpert, showEnrich: boolean) => (
-                  <div key={ep.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-cos-electric/[0.02]">
+                  <div key={ep.id} onClick={() => setDrawerExpertId(ep.id)} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-cos-electric/[0.02] cursor-pointer">
                     {/* Avatar */}
                     {ep.photoUrl ? (
                       <img src={ep.photoUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
@@ -2872,6 +2901,37 @@ export default function CustomerDetailPage() {
           </div>
         </div>
       </div>
+    )}
+    {/* ── Expert Profile Drawer ── */}
+    {drawerExpertId && (
+      <>
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
+          onClick={() => setDrawerExpertId(null)}
+        />
+        {/* Drawer */}
+        <div className="fixed right-0 top-0 z-50 h-full w-full max-w-lg overflow-y-auto border-l border-cos-border bg-cos-surface shadow-xl">
+          <div className="p-6">
+            {drawerLoading ? (
+              <div className="flex h-64 items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+              </div>
+            ) : drawerExpert ? (
+              <ExpertProfileCard
+                expert={drawerExpert}
+                specialistProfiles={drawerSPs}
+                isAdmin
+                onClose={() => setDrawerExpertId(null)}
+              />
+            ) : (
+              <div className="flex h-64 items-center justify-center">
+                <p className="text-sm text-cos-slate-dim">Expert not found</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </>
     )}
     </>
   );
