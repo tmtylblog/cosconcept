@@ -6,19 +6,20 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   Trash2,
   RefreshCw,
   ExternalLink,
   Loader2,
+  Zap,
+  Timer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-interface JobStats {
-  pending: number;
-  running: number;
-  done: number;
-  failed: number;
+interface InngestFunction {
+  id: string;
+  name: string;
+  trigger: string;
+  type: "event" | "cron";
 }
 
 interface RecentJob {
@@ -29,34 +30,22 @@ interface RecentJob {
   startedAt: string | null;
   completedAt: string | null;
   attempts: number;
-  maxAttempts: number;
   lastError: string | null;
-  payload: Record<string, unknown>;
 }
 
 interface FailedJob {
   id: string;
   type: string;
   lastError: string | null;
-  attempts: number;
-  maxAttempts: number;
-  createdAt: string;
-  completedAt: string | null;
-}
-
-interface StaleJob {
-  id: string;
-  type: string;
   createdAt: string;
 }
 
 interface JobsData {
-  stats: JobStats;
-  typeSummary: Record<string, Record<string, number>>;
+  functions: InngestFunction[];
   recentJobs: RecentJob[];
   failedJobs: FailedJob[];
-  staleCount: number;
-  staleJobs: StaleJob[];
+  stats: Record<string, number>;
+  totalJobs: number;
 }
 
 const STATUS_STYLES: Record<string, { bg: string; icon: typeof Activity }> = {
@@ -105,9 +94,7 @@ export default function AdminJobsPage() {
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/jobs");
-      if (res.ok) {
-        setData(await res.json());
-      }
+      if (res.ok) setData(await res.json());
     } catch {
       // ignore
     } finally {
@@ -117,22 +104,22 @@ export default function AdminJobsPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 10000); // Refresh every 10s
+    const interval = setInterval(fetchData, 15000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  async function handleCleanup(opts: { stalePending?: boolean; oldCompleted?: boolean }) {
+  async function handleCleanup() {
     setCleaning(true);
     setCleanResult(null);
     try {
       const res = await fetch("/api/admin/jobs/cleanup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(opts),
+        body: JSON.stringify({ stalePending: true, oldCompleted: true }),
       });
       if (res.ok) {
         const result = await res.json();
-        setCleanResult(`Deleted ${result.total} jobs (${result.staleDeleted} stale, ${result.oldDeleted} old)`);
+        setCleanResult(`Deleted ${result.total} jobs`);
         await fetchData();
       }
     } catch {
@@ -154,7 +141,8 @@ export default function AdminJobsPage() {
     return <div className="p-6 text-red-500">Failed to load job data</div>;
   }
 
-  const totalJobs = data.stats.pending + data.stats.running + data.stats.done + data.stats.failed;
+  const eventFns = data.functions.filter((f) => f.type === "event");
+  const cronFns = data.functions.filter((f) => f.type === "cron");
 
   return (
     <div className="space-y-6 p-6">
@@ -163,7 +151,7 @@ export default function AdminJobsPage() {
         <div>
           <h1 className="text-2xl font-bold text-cos-text">Background Jobs</h1>
           <p className="text-sm text-cos-text-secondary mt-1">
-            Monitor and manage Inngest functions and legacy queue jobs
+            All jobs run via Inngest &mdash; {data.functions.length} functions registered
           </p>
         </div>
         <div className="flex gap-2">
@@ -171,12 +159,8 @@ export default function AdminJobsPage() {
             <RefreshCw className="h-4 w-4 mr-1" />
             Refresh
           </Button>
-          <a
-            href="https://app.inngest.com"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button variant="outline" size="sm">
+          <a href="https://app.inngest.com" target="_blank" rel="noopener noreferrer">
+            <Button size="sm" className="bg-cos-electric hover:bg-cos-electric/90 text-white">
               <ExternalLink className="h-4 w-4 mr-1" />
               Inngest Dashboard
             </Button>
@@ -184,105 +168,75 @@ export default function AdminJobsPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Pending" value={data.stats.pending} color="yellow" />
-        <StatCard label="Running" value={data.stats.running} color="blue" />
-        <StatCard label="Completed" value={data.stats.done} color="green" />
-        <StatCard label="Failed" value={data.stats.failed} color="red" />
+      {/* Inngest Functions — Event-triggered */}
+      <div className="rounded-lg border border-cos-border bg-cos-surface">
+        <div className="border-b border-cos-border px-4 py-3 flex items-center gap-2">
+          <Zap className="h-4 w-4 text-cos-electric" />
+          <h2 className="text-sm font-semibold text-cos-text">Event-Triggered Functions ({eventFns.length})</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-cos-border">
+          {eventFns.map((fn) => (
+            <div key={fn.id} className="bg-cos-surface px-4 py-3">
+              <p className="text-sm font-medium text-cos-text">{fn.name}</p>
+              <code className="text-xs text-cos-text-secondary">{fn.trigger}</code>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Stale Jobs Warning */}
-      {data.staleCount > 0 && (
-        <div className="flex items-center justify-between rounded-lg border border-yellow-300 bg-yellow-50 p-4">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-600" />
-            <span className="text-sm font-medium text-yellow-800">
-              {data.staleCount} stale pending job{data.staleCount > 1 ? "s" : ""} (older than 1 hour)
-            </span>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={cleaning}
-            onClick={() => handleCleanup({ stalePending: true })}
-          >
-            {cleaning ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
-            Clean Up
-          </Button>
-        </div>
-      )}
-
-      {cleanResult && (
-        <p className="text-sm text-cos-text-secondary">{cleanResult}</p>
-      )}
-
-      {/* Per-Type Summary */}
+      {/* Inngest Functions — Cron */}
       <div className="rounded-lg border border-cos-border bg-cos-surface">
-        <div className="border-b border-cos-border px-4 py-3">
-          <h2 className="text-sm font-semibold text-cos-text">Jobs by Type</h2>
+        <div className="border-b border-cos-border px-4 py-3 flex items-center gap-2">
+          <Timer className="h-4 w-4 text-cos-warm" />
+          <h2 className="text-sm font-semibold text-cos-text">Cron Functions ({cronFns.length})</h2>
         </div>
         <div className="divide-y divide-cos-border">
-          {Object.entries(data.typeSummary)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([type, statuses]) => {
-              const total = Object.values(statuses).reduce((a, b) => a + b, 0);
-              return (
-                <div key={type} className="flex items-center justify-between px-4 py-2.5">
-                  <code className="text-sm font-mono text-cos-text">{type}</code>
-                  <div className="flex items-center gap-3 text-xs">
-                    {statuses.done && <span className="text-green-600">{statuses.done} done</span>}
-                    {statuses.running && <span className="text-blue-600">{statuses.running} running</span>}
-                    {statuses.pending && <span className="text-yellow-600">{statuses.pending} pending</span>}
-                    {statuses.failed && <span className="text-red-600">{statuses.failed} failed</span>}
-                    <span className="text-cos-text-secondary font-medium">{total} total</span>
-                  </div>
-                </div>
-              );
-            })}
-          {Object.keys(data.typeSummary).length === 0 && (
-            <p className="px-4 py-3 text-sm text-cos-text-secondary">No jobs in queue</p>
-          )}
+          {cronFns.map((fn) => (
+            <div key={fn.id} className="flex items-center justify-between px-4 py-3">
+              <p className="text-sm font-medium text-cos-text">{fn.name}</p>
+              <code className="text-xs bg-cos-bg px-2 py-1 rounded text-cos-text-secondary">{fn.trigger}</code>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Recent Jobs */}
-      <div className="rounded-lg border border-cos-border bg-cos-surface">
-        <div className="border-b border-cos-border px-4 py-3">
-          <h2 className="text-sm font-semibold text-cos-text">Recent Jobs ({data.recentJobs.length})</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-cos-border text-left text-xs text-cos-text-secondary">
-                <th className="px-4 py-2">Type</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2">Created</th>
-                <th className="px-4 py-2">Duration</th>
-                <th className="px-4 py-2">Attempts</th>
-                <th className="px-4 py-2">Error</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-cos-border">
-              {data.recentJobs.map((job) => (
-                <tr key={job.id} className="hover:bg-cos-bg">
-                  <td className="px-4 py-2 font-mono text-xs">{job.type}</td>
-                  <td className="px-4 py-2"><StatusBadge status={job.status} /></td>
-                  <td className="px-4 py-2 text-cos-text-secondary text-xs">{timeAgo(job.createdAt)}</td>
-                  <td className="px-4 py-2 text-cos-text-secondary text-xs">{duration(job.startedAt, job.completedAt)}</td>
-                  <td className="px-4 py-2 text-cos-text-secondary text-xs">{job.attempts}/{job.maxAttempts}</td>
-                  <td className="px-4 py-2 text-xs text-red-500 max-w-[300px] truncate">{job.lastError || "-"}</td>
+      {/* Job Tracking Log (backgroundJobs table — used for status polling) */}
+      {data.recentJobs.length > 0 && (
+        <div className="rounded-lg border border-cos-border bg-cos-surface">
+          <div className="border-b border-cos-border px-4 py-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-cos-text">Job Tracking Log ({data.totalJobs} total)</h2>
+            <Button variant="outline" size="sm" disabled={cleaning} onClick={handleCleanup}>
+              {cleaning ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
+              Purge Old
+            </Button>
+          </div>
+          {cleanResult && <p className="px-4 py-2 text-xs text-cos-text-secondary">{cleanResult}</p>}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-cos-border text-left text-xs text-cos-text-secondary">
+                  <th className="px-4 py-2">Type</th>
+                  <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2">Created</th>
+                  <th className="px-4 py-2">Duration</th>
+                  <th className="px-4 py-2">Error</th>
                 </tr>
-              ))}
-              {data.recentJobs.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-3 text-center text-cos-text-secondary">No recent jobs</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-cos-border">
+                {data.recentJobs.map((job) => (
+                  <tr key={job.id} className="hover:bg-cos-bg">
+                    <td className="px-4 py-2 font-mono text-xs">{job.type}</td>
+                    <td className="px-4 py-2"><StatusBadge status={job.status} /></td>
+                    <td className="px-4 py-2 text-cos-text-secondary text-xs">{timeAgo(job.createdAt)}</td>
+                    <td className="px-4 py-2 text-cos-text-secondary text-xs">{duration(job.startedAt, job.completedAt)}</td>
+                    <td className="px-4 py-2 text-xs text-red-500 max-w-[300px] truncate">{job.lastError || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Failed Jobs */}
       {data.failedJobs.length > 0 && (
@@ -295,7 +249,7 @@ export default function AdminJobsPage() {
               <div key={job.id} className="px-4 py-3">
                 <div className="flex items-center justify-between">
                   <code className="text-xs font-mono text-red-700">{job.type}</code>
-                  <span className="text-xs text-red-500">{timeAgo(job.createdAt)} | {job.attempts}/{job.maxAttempts} attempts</span>
+                  <span className="text-xs text-red-500">{timeAgo(job.createdAt)}</span>
                 </div>
                 {job.lastError && (
                   <p className="mt-1 text-xs text-red-600 font-mono whitespace-pre-wrap break-all">
@@ -307,37 +261,6 @@ export default function AdminJobsPage() {
           </div>
         </div>
       )}
-
-      {/* Cleanup Actions */}
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={cleaning}
-          onClick={() => handleCleanup({ oldCompleted: true })}
-        >
-          <Trash2 className="h-4 w-4 mr-1" />
-          Purge Old Jobs (7d+)
-        </Button>
-        <span className="text-xs text-cos-text-secondary self-center">
-          {totalJobs} total jobs in database
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
-  const colors: Record<string, string> = {
-    yellow: "border-yellow-200 bg-yellow-50 text-yellow-800",
-    blue: "border-blue-200 bg-blue-50 text-blue-800",
-    green: "border-green-200 bg-green-50 text-green-800",
-    red: "border-red-200 bg-red-50 text-red-800",
-  };
-  return (
-    <div className={`rounded-lg border p-4 ${colors[color]}`}>
-      <p className="text-xs font-medium opacity-70">{label}</p>
-      <p className="text-2xl font-bold">{value}</p>
     </div>
   );
 }

@@ -1,8 +1,7 @@
 /**
  * GET /api/admin/jobs
  *
- * Returns job queue stats from both Inngest and the legacy Postgres queue.
- * Used by the admin jobs dashboard.
+ * Returns Inngest function list + backgroundJobs audit data.
  */
 
 import { NextResponse } from "next/server";
@@ -11,9 +10,32 @@ import { desc, sql, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { backgroundJobs } from "@/lib/db/schema";
-import { jobQueueStats } from "@/lib/jobs/queue";
 
 export const dynamic = "force-dynamic";
+
+/** Inngest functions registered in our serve endpoint */
+const INNGEST_FUNCTIONS = [
+  { id: "enrich-deep-crawl", name: "Deep Website Crawl", trigger: "enrich/deep-crawl", type: "event" },
+  { id: "graph-sync-firm", name: "Sync Firm to Graph", trigger: "graph/sync-firm", type: "event" },
+  { id: "enrich-case-study-ingest", name: "Case Study Ingestion", trigger: "enrich/case-study-ingest", type: "event" },
+  { id: "enrich-expert-linkedin", name: "Expert LinkedIn Enrichment", trigger: "enrich/expert-linkedin", type: "event" },
+  { id: "enrich-team-ingest", name: "Team Roster Import", trigger: "enrich/team-ingest", type: "event" },
+  { id: "enrich-firm-abstraction", name: "Firm Abstraction Profile", trigger: "enrich/firm-abstraction", type: "event" },
+  { id: "enrich-firm-case-study-ingest", name: "Firm Case Study Pipeline", trigger: "enrich/firm-case-study-ingest", type: "event" },
+  { id: "memory-extract", name: "Extract Conversation Memories", trigger: "memory/extract", type: "event" },
+  { id: "calls-analyze", name: "Post-Call Analysis", trigger: "calls/analyze", type: "event" },
+  { id: "calls-join-meeting", name: "Join Meeting (Recall.ai)", trigger: "calls/join-meeting", type: "event" },
+  { id: "email-process-inbound", name: "Process Inbound Email", trigger: "email/process-inbound", type: "event" },
+  { id: "email-schedule-follow-up", name: "Schedule Follow-Up", trigger: "email/schedule-follow-up", type: "event" },
+  { id: "email-send-now", name: "Send Approved Email", trigger: "email/send-now", type: "event" },
+  { id: "network-scan", name: "Network Relationship Scan", trigger: "network/scan", type: "event" },
+  { id: "growth-attribution-check", name: "Attribution Check", trigger: "growth/attribution-check", type: "event" },
+  { id: "cron-weekly-recrawl", name: "Weekly Website Recrawl", trigger: "0 2 * * 0", type: "cron" },
+  { id: "cron-weekly-digest", name: "Weekly Partnership Digest", trigger: "0 8 * * 1", type: "cron" },
+  { id: "cron-check-stale-partnerships", name: "Check Stale Partnerships", trigger: "0 9 * * *", type: "cron" },
+  { id: "cron-hubspot-sync", name: "HubSpot CRM Sync", trigger: "0 0 * * *", type: "cron" },
+  { id: "cron-linkedin-invite-scheduler", name: "LinkedIn Invite Scheduler", trigger: "0 * * * 1-6", type: "cron" },
+];
 
 export async function GET() {
   try {
@@ -27,10 +49,7 @@ export async function GET() {
   }
 
   try {
-    // Get aggregate stats
-    const stats = await jobQueueStats();
-
-    // Get recent jobs (last 50)
+    // Recent backgroundJobs entries (audit log for status-tracked jobs like team-import)
     const recentJobs = await db
       .select({
         id: backgroundJobs.id,
@@ -40,67 +59,43 @@ export async function GET() {
         startedAt: backgroundJobs.startedAt,
         completedAt: backgroundJobs.completedAt,
         attempts: backgroundJobs.attempts,
-        maxAttempts: backgroundJobs.maxAttempts,
         lastError: backgroundJobs.lastError,
-        payload: backgroundJobs.payload,
       })
       .from(backgroundJobs)
       .orderBy(desc(backgroundJobs.createdAt))
-      .limit(50);
+      .limit(30);
 
-    // Get per-type stats
-    const typeStats = await db
+    // Count by status
+    const statusCounts = await db
       .select({
-        type: backgroundJobs.type,
         status: backgroundJobs.status,
         count: sql<number>`count(*)::int`,
       })
       .from(backgroundJobs)
-      .groupBy(backgroundJobs.type, backgroundJobs.status);
+      .groupBy(backgroundJobs.status);
 
-    // Get stale jobs (pending for > 1 hour)
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const staleJobs = await db
-      .select({
-        id: backgroundJobs.id,
-        type: backgroundJobs.type,
-        createdAt: backgroundJobs.createdAt,
-      })
-      .from(backgroundJobs)
-      .where(
-        sql`${backgroundJobs.status} = 'pending' AND ${backgroundJobs.createdAt} < ${oneHourAgo.toISOString()}`
-      );
+    const stats: Record<string, number> = {};
+    for (const row of statusCounts) stats[row.status] = row.count;
 
-    // Build per-type summary
-    const typeSummary: Record<string, Record<string, number>> = {};
-    for (const row of typeStats) {
-      if (!typeSummary[row.type]) typeSummary[row.type] = {};
-      typeSummary[row.type][row.status] = row.count;
-    }
-
-    // Get failed jobs (last 20)
+    // Failed jobs
     const failedJobs = await db
       .select({
         id: backgroundJobs.id,
         type: backgroundJobs.type,
         lastError: backgroundJobs.lastError,
-        attempts: backgroundJobs.attempts,
-        maxAttempts: backgroundJobs.maxAttempts,
         createdAt: backgroundJobs.createdAt,
-        completedAt: backgroundJobs.completedAt,
       })
       .from(backgroundJobs)
       .where(eq(backgroundJobs.status, "failed"))
       .orderBy(desc(backgroundJobs.createdAt))
-      .limit(20);
+      .limit(10);
 
     return NextResponse.json({
-      stats,
-      typeSummary,
+      functions: INNGEST_FUNCTIONS,
       recentJobs,
       failedJobs,
-      staleCount: staleJobs.length,
-      staleJobs,
+      stats,
+      totalJobs: Object.values(stats).reduce((a, b) => a + b, 0),
     });
   } catch (error) {
     console.error("[AdminJobs] Error:", error);
