@@ -227,12 +227,13 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
     if (!confirm(`Delete "${deal.name}"? This cannot be undone.`)) return;
     setDeleting(true);
     try {
-      await fetch("/api/admin/growth-ops/pipeline", {
+      const res = await fetch("/api/admin/growth-ops/pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "deleteDeal", dealId: deal.id }),
       });
-      router.push("/admin/growth-ops/pipeline");
+      if (!res.ok) { setError("Failed to delete deal"); setDeleting(false); return; }
+      router.push(fromInbox ? "/admin/growth-ops" : "/admin/growth-ops/pipeline");
     } catch (e) {
       setError(String(e));
       setDeleting(false);

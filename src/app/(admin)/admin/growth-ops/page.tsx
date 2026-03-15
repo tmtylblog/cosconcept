@@ -888,8 +888,15 @@ function GrowthOpsInboxInner() {
           sourceChannel: "linkedin",
         }),
       });
-      if (!res.ok) { console.error("Create deal failed:", res.status); return; }
       const d = await res.json();
+      if (res.status === 409 && d.existingDealId) {
+        // Deal already exists — offer to view it
+        if (confirm(`A deal for "${selectedConvo.participantName}" already exists. View it?`)) {
+          router.push(`/admin/growth-ops/pipeline/${d.existingDealId}?from=inbox`);
+        }
+        return;
+      }
+      if (!res.ok) { console.error("Create deal failed:", res.status, d.error); return; }
       if (d.dealId) {
         router.push(`/admin/growth-ops/pipeline/${d.dealId}?from=inbox`);
       }

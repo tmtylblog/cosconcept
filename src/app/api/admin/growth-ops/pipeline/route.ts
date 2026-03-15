@@ -164,6 +164,21 @@ export async function POST(req: NextRequest) {
     if (body.action === "createDeal") {
       const { name, contactId, companyId, stageId, dealValue, priority, notes, source } = body;
 
+      // Check for existing deal with same name (prevent duplicates from inbox)
+      if (name) {
+        const [existingDeal] = await db
+          .select({ id: acqDeals.id, name: acqDeals.name })
+          .from(acqDeals)
+          .where(eq(acqDeals.name, name))
+          .limit(1);
+        if (existingDeal) {
+          return NextResponse.json(
+            { error: `A deal named "${name}" already exists`, existingDealId: existingDeal.id },
+            { status: 409 }
+          );
+        }
+      }
+
       const [stage] = stageId
         ? await db.select().from(acqPipelineStages).where(eq(acqPipelineStages.id, stageId)).limit(1)
         : [null];
@@ -188,7 +203,7 @@ export async function POST(req: NextRequest) {
         id: randomId(),
         dealId,
         activityType: "auto_created",
-        description: "Deal created manually",
+        description: `Deal created from ${source || "manual"}`,
       });
 
       return NextResponse.json({ dealId });
