@@ -206,7 +206,7 @@ export default function TeamSettingsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-heading text-lg font-semibold text-cos-midnight">Team</h2>
+          <h2 className="font-heading text-lg font-semibold text-cos-midnight">Team Management</h2>
           <p className="mt-1 text-sm text-cos-slate">
             Manage members of {activeOrg?.name ?? "your organization"}.
           </p>
