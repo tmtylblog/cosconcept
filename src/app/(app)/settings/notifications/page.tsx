@@ -55,7 +55,7 @@ export default function NotificationsSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <div className="w-full space-y-6 p-6">
       <div>
         <h2 className="font-heading text-lg font-semibold text-cos-midnight">Notifications</h2>
         <p className="mt-1 text-sm text-cos-slate">Control how and when you receive notifications.</p>
