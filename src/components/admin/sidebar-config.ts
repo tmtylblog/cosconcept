@@ -86,7 +86,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     icon: Mail,
     items: [
       { href: "/admin/growth-ops", label: "Inbox", icon: Mail },
-      { href: "/admin/growth-ops/campaigns", label: "Campaigns", icon: Send },
+      { href: "/admin/growth-ops/pipeline", label: "Pipeline", icon: Share2 },
       { href: "/admin/growth-ops/dashboard", label: "Dashboard", icon: BarChart3 },
       { href: "/admin/growth-ops/settings", label: "Settings", icon: Settings },
     ],
