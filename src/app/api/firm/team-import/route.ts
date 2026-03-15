@@ -4,16 +4,17 @@
  * Firm-user-accessible endpoint to trigger team discovery.
  * Any org member can trigger this (not admin-only).
  * Auto-enriches top 5 experts after roster import.
+ *
+ * Sends an Inngest event — job runs durably in background.
  */
 
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serviceFirms, backgroundJobs, members } from "@/lib/db/schema";
-import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob } from "@/lib/jobs/runner";
+import { inngest } from "@/inngest/client";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,10 @@ function extractDomain(website: string): string {
     .replace(/^www\./, "")
     .split("/")[0]
     .toLowerCase();
+}
+
+function uid(): string {
+  return `job_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
 }
 
 export async function POST(req: Request) {
@@ -112,21 +117,28 @@ export async function POST(req: Request) {
       });
     }
 
-    // Queue team-ingest job with autoEnrichLimit: 5
-    const jobId = await enqueue(
-      "team-ingest",
-      {
+    // Create tracking row in backgroundJobs for the status endpoint
+    const jobId = uid();
+    await db.insert(backgroundJobs).values({
+      id: jobId,
+      type: "team-ingest",
+      payload: { firmId: firm.id, domain, limit: 500, autoEnrichLimit: 5, force: false },
+      priority: 5,
+      status: "pending",
+    });
+
+    // Send Inngest event — job runs durably in background
+    await inngest.send({
+      name: "enrich/team-ingest",
+      data: {
         firmId: firm.id,
         domain,
         limit: 500,
         autoEnrichLimit: 5,
         force: false,
+        jobId,
       },
-      { priority: 5 }
-    );
-
-    // Run the job after the response is sent (proven pattern used by calls, case-studies, etc.)
-    after(runNextJob().catch(() => {}));
+    });
 
     return NextResponse.json({
       jobId,

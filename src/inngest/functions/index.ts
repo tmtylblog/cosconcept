@@ -18,6 +18,7 @@ export { weeklyDigest } from "./weekly-digest";
 export { sendApprovedEmail } from "./send-approved-email";
 export { joinMeeting } from "./join-meeting";
 export { firmCaseStudyIngest } from "./firm-case-study-ingest";
+export { teamIngest } from "./team-ingest";
 
 // ── Track A: Schema Migration & Background Jobs ──────────
 export { migrateClientNodesToCompany } from "./migrate-client-nodes-to-company";

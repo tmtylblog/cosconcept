@@ -135,37 +135,17 @@ export function useTeamDiscovery(
   }, [fetchStatus, stopPolling]);
 
   const triggerImport = useCallback(async () => {
-    try {
-      const res = await fetch("/api/firm/team-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organizationId }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        // No website = can't discover, skip silently
-        if (res.status === 400) {
-          setPhase("skipped");
-          return;
-        }
-        setPhase("error");
-        setErrorMessage(err.error || "Failed to trigger team import");
-        return;
-      }
-
-      const data = await res.json();
-      if (data.alreadyRunning) {
-        // Job exists — start polling to track it
-        setPhase("queued");
-      } else {
-        setPhase("queued");
-        if (data.domain) setDomain(data.domain);
-      }
-      startPolling();
-    } catch {
-      setPhase("error");
-      setErrorMessage("Network error triggering team import");
-    }
+    // Fire the POST without awaiting — the server runs the job inline (~1-3 min)
+    // We start polling immediately so the UI shows progress
+    fetch("/api/firm/team-import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organizationId }),
+    }).catch(() => {
+      // POST failed — polling will detect if job never started
+    });
+    setPhase("queued");
+    startPolling();
   }, [startPolling, organizationId]);
 
   const retry = useCallback(() => {

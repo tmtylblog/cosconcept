@@ -140,6 +140,21 @@ export type JoinMeetingEvent = {
   data: { scheduledCallId: string };
 };
 
+/** Team roster import via PDL search + classification */
+export type TeamIngestEvent = {
+  name: "enrich/team-ingest";
+  data: {
+    firmId: string;
+    domain: string;
+    limit: number;
+    autoEnrichLimit: number;
+    force: boolean;
+    /** ID of the backgroundJobs row for status tracking */
+    jobId: string;
+    companyName?: string;
+  };
+};
+
 /** User-managed case study ingestion + analysis pipeline */
 export type FirmCaseStudyIngestEvent = {
   name: "enrich/firm-case-study-ingest";
@@ -168,4 +183,5 @@ export type CosEvent =
   | ScheduleFollowUpEvent
   | SendApprovedEmailEvent
   | JoinMeetingEvent
-  | FirmCaseStudyIngestEvent;
+  | FirmCaseStudyIngestEvent
+  | TeamIngestEvent;

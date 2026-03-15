@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { serviceFirms, backgroundJobs, expertProfiles, members } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300; // 5 minutes — allow time if status check overlaps with long job
 
 export async function GET(req: Request) {
   // Auth: session + verify user is member of org

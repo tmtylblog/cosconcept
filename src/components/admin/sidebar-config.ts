@@ -105,6 +105,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     label: "Dev Tools",
     icon: Database,
     items: [
+      { href: "/admin/jobs", label: "Jobs", icon: Activity },
       { href: "/admin/neo4j", label: "Neo4j", icon: Database },
       { href: "/admin/apis", label: "APIs", icon: Globe },
       { href: "/admin/migration", label: "Data Import", icon: FileUp },

@@ -3,26 +3,26 @@
  *
  * Triggers PDL team import for a specific org's firm.
  * Two tiers:
- * - "free": Search all → classify → auto-enrich first 5 experts
- * - "pro":  Search all → classify → auto-enrich ALL experts
+ * - "free": Search all -> classify -> auto-enrich first 5 experts
+ * - "pro":  Search all -> classify -> auto-enrich ALL experts
  *
  * Body:
  *   tier: "free" | "pro"
- *   force?: boolean    — re-run even if recently imported
- *   limit?: number     — max people to search (default 500)
+ *   force?: boolean    -- re-run even if recently imported
+ *   limit?: number     -- max people to search (default 500)
+ *
+ * Sends an Inngest event -- job runs durably in background.
  */
 
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { serviceFirms } from "@/lib/db/schema";
-import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob } from "@/lib/jobs/runner";
+import { serviceFirms, backgroundJobs } from "@/lib/db/schema";
+import { inngest } from "@/inngest/client";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // 5 minutes — team-ingest can be slow
 
 function extractDomain(website: string): string {
   return website
@@ -30,6 +30,10 @@ function extractDomain(website: string): string {
     .replace(/^www\./, "")
     .split("/")[0]
     .toLowerCase();
+}
+
+function uid(): string {
+  return `job_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
 }
 
 export async function POST(
@@ -83,21 +87,28 @@ export async function POST(
     // Set auto-enrich limit based on tier
     const autoEnrichLimit = tier === "pro" ? -1 : 5; // -1 = all experts
 
-    // Queue team-ingest job
-    const jobId = await enqueue(
-      "team-ingest",
-      {
+    // Create tracking row in backgroundJobs for the status endpoint
+    const jobId = uid();
+    await db.insert(backgroundJobs).values({
+      id: jobId,
+      type: "team-ingest",
+      payload: { firmId: firm.id, domain, limit, autoEnrichLimit, force },
+      priority: 5,
+      status: "pending",
+    });
+
+    // Send Inngest event — job runs durably in background
+    await inngest.send({
+      name: "enrich/team-ingest",
+      data: {
         firmId: firm.id,
         domain,
         limit,
         autoEnrichLimit,
         force,
+        jobId,
       },
-      { priority: 5 } // Higher priority than batch jobs
-    );
-
-    // Run the job after the response is sent (proven pattern used by calls, case-studies, etc.)
-    after(runNextJob().catch(() => {}));
+    });
 
     return NextResponse.json({
       jobId,

@@ -15,6 +15,7 @@ import {
   sendApprovedEmail,
   joinMeeting,
   firmCaseStudyIngest,
+  teamIngest,
 } from "@/inngest/functions";
 
 /**
@@ -38,5 +39,6 @@ export const { GET, POST, PUT } = serve({
     sendApprovedEmail,
     joinMeeting,
     firmCaseStudyIngest,
+    teamIngest,
   ],
 });
