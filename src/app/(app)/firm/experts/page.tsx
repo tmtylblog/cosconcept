@@ -123,6 +123,12 @@ export default function FirmExpertsPage() {
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [batchEnriching, setBatchEnriching] = useState(false);
 
+  // Per-section pagination
+  const SECTION_PAGE_SIZE = 25;
+  const [expertPage, setExpertPage] = useState(1);
+  const [potentialPage, setPotentialPage] = useState(1);
+  const [otherPage, setOtherPage] = useState(1);
+
   // ── Enrichment polling state ───────────────────────────────────────────────
   const [enrichingExperts, setEnrichingExperts] = useState<Set<string>>(new Set());
   const pollIntervals = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -828,58 +834,97 @@ export default function FirmExpertsPage() {
       ) : dbExperts.length > 0 ? (
         <div className="space-y-4">
           {/* Experts section */}
-          {tierExperts.length > 0 && (
-            <div className="overflow-hidden rounded-cos-lg border border-emerald-200">
-              <div className="flex items-center justify-between bg-emerald-50 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-emerald-700">Experts</span>
-                  <span className="rounded-cos-pill bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                    {tierExperts.length}
-                  </span>
+          {tierExperts.length > 0 && (() => {
+            const totalPages = Math.ceil(tierExperts.length / SECTION_PAGE_SIZE);
+            const paginated = tierExperts.slice((expertPage - 1) * SECTION_PAGE_SIZE, expertPage * SECTION_PAGE_SIZE);
+            return (
+              <div className="overflow-hidden rounded-cos-lg border border-emerald-200">
+                <div className="flex items-center justify-between bg-emerald-50 px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-emerald-700">Experts</span>
+                    <span className="rounded-cos-pill bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                      {tierExperts.length}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-emerald-600/70">Client-facing specialists</span>
                 </div>
-                <span className="text-[10px] text-emerald-600/70">Client-facing specialists</span>
+                <div className="divide-y divide-emerald-100">
+                  {paginated.map((expert) => renderExpertRow(expert))}
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-emerald-100 px-4 py-2">
+                    <span className="text-[10px] text-emerald-600/70">{(expertPage - 1) * SECTION_PAGE_SIZE + 1}&ndash;{Math.min(expertPage * SECTION_PAGE_SIZE, tierExperts.length)} of {tierExperts.length}</span>
+                    <div className="flex gap-1">
+                      <button disabled={expertPage <= 1} onClick={() => setExpertPage(p => p - 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">Prev</button>
+                      <button disabled={expertPage >= totalPages} onClick={() => setExpertPage(p => p + 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">Next</button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="divide-y divide-emerald-100">
-                {tierExperts.map((expert) => renderExpertRow(expert))}
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Potential Experts section */}
-          {tierPotential.length > 0 && (
-            <div className="overflow-hidden rounded-cos-lg border border-amber-200">
-              <div className="flex items-center justify-between bg-amber-50 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-amber-700">Potential Experts</span>
-                  <span className="rounded-cos-pill bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-                    {tierPotential.length}
-                  </span>
+          {tierPotential.length > 0 && (() => {
+            const totalPages = Math.ceil(tierPotential.length / SECTION_PAGE_SIZE);
+            const paginated = tierPotential.slice((potentialPage - 1) * SECTION_PAGE_SIZE, potentialPage * SECTION_PAGE_SIZE);
+            return (
+              <div className="overflow-hidden rounded-cos-lg border border-amber-200">
+                <div className="flex items-center justify-between bg-amber-50 px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-amber-700">Potential Experts</span>
+                    <span className="rounded-cos-pill bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                      {tierPotential.length}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-amber-600/70">May be client-facing</span>
                 </div>
-                <span className="text-[10px] text-amber-600/70">May be client-facing</span>
+                <div className="divide-y divide-amber-100">
+                  {paginated.map((expert) => renderExpertRow(expert))}
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-amber-100 px-4 py-2">
+                    <span className="text-[10px] text-amber-600/70">{(potentialPage - 1) * SECTION_PAGE_SIZE + 1}&ndash;{Math.min(potentialPage * SECTION_PAGE_SIZE, tierPotential.length)} of {tierPotential.length}</span>
+                    <div className="flex gap-1">
+                      <button disabled={potentialPage <= 1} onClick={() => setPotentialPage(p => p - 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-40">Prev</button>
+                      <button disabled={potentialPage >= totalPages} onClick={() => setPotentialPage(p => p + 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-40">Next</button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="divide-y divide-amber-100">
-                {tierPotential.map((expert) => renderExpertRow(expert))}
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Unclassified / manually added section */}
-          {tierOther.length > 0 && (
-            <div className="overflow-hidden rounded-cos-lg border border-cos-border/60">
-              <div className="flex items-center justify-between bg-cos-cloud/50 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-cos-slate">Team Members</span>
-                  <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-bold text-cos-slate">
-                    {tierOther.length}
-                  </span>
+          {tierOther.length > 0 && (() => {
+            const totalPages = Math.ceil(tierOther.length / SECTION_PAGE_SIZE);
+            const paginated = tierOther.slice((otherPage - 1) * SECTION_PAGE_SIZE, otherPage * SECTION_PAGE_SIZE);
+            return (
+              <div className="overflow-hidden rounded-cos-lg border border-cos-border/60">
+                <div className="flex items-center justify-between bg-cos-cloud/50 px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-cos-slate">Team Members</span>
+                    <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-bold text-cos-slate">
+                      {tierOther.length}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-cos-slate/70">Manually added or unclassified</span>
                 </div>
-                <span className="text-[10px] text-cos-slate/70">Manually added or unclassified</span>
+                <div className="divide-y divide-cos-border/30">
+                  {paginated.map((expert) => renderExpertRow(expert))}
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-cos-border/30 px-4 py-2">
+                    <span className="text-[10px] text-cos-slate/70">{(otherPage - 1) * SECTION_PAGE_SIZE + 1}&ndash;{Math.min(otherPage * SECTION_PAGE_SIZE, tierOther.length)} of {tierOther.length}</span>
+                    <div className="flex gap-1">
+                      <button disabled={otherPage <= 1} onClick={() => setOtherPage(p => p - 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-cos-slate hover:bg-cos-cloud disabled:opacity-40">Prev</button>
+                      <button disabled={otherPage >= totalPages} onClick={() => setOtherPage(p => p + 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-cos-slate hover:bg-cos-cloud disabled:opacity-40">Next</button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="divide-y divide-cos-border/30">
-                {tierOther.map((expert) => renderExpertRow(expert))}
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Show nothing-classified note when all are unclassified */}
           {tierExperts.length === 0 && tierPotential.length === 0 && tierOther.length > 0 && (

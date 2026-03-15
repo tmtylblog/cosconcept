@@ -223,7 +223,8 @@ export function useTeamDiscovery(
     })();
   }, [organizationId, expertsLoaded, expertCount]);
 
-  const isActive = phase !== "idle" && phase !== "skipped" && phase !== "done";
+  // Don't show discovery UI during "checking" — wait until we know actual state
+  const isActive = phase !== "idle" && phase !== "skipped" && phase !== "done" && phase !== "checking";
 
   return {
     phase,
