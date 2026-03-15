@@ -11,8 +11,6 @@ import {
   acqDealSources,
 } from "@/lib/db/schema";
 import { eq, desc, asc } from "drizzle-orm";
-import { HubSpotClient } from "@/lib/growth-ops/HubSpotClient";
-
 export const dynamic = "force-dynamic";
 
 async function checkAdmin() {
@@ -93,12 +91,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ sources });
     }
 
-    if (action === "seedStages") {
-      // Fetch HubSpot pipeline stages and seed into COS
-      const result = await seedStagesFromHubSpot();
-      return NextResponse.json(result);
-    }
-
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
@@ -148,15 +140,6 @@ export async function POST(req: NextRequest) {
         description: `Moved from "${deal.stageLabel}" to "${stage.label}"`,
         metadata: { fromStage: deal.stageId, toStage: stageId, fromLabel: deal.stageLabel, toLabel: stage.label },
       });
-
-      // Push to HubSpot if deal has hubspot_deal_id and stage has hubspot_stage_id
-      if (deal.hubspotDealId && stage.hubspotStageId && process.env.HUBSPOT_ACCESS_TOKEN) {
-        try {
-          await HubSpotClient.updateDealStage(deal.hubspotDealId, stage.hubspotStageId);
-        } catch (e) {
-          console.error("Failed to push stage change to HubSpot:", e);
-        }
-      }
 
       return NextResponse.json({ ok: true });
     }
@@ -247,11 +230,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    if (body.action === "seedStages") {
-      const result = await seedStagesFromHubSpot();
-      return NextResponse.json(result);
-    }
-
     if (body.action === "configureStages") {
       const { stages } = body as { stages: { id?: string; label: string; displayOrder: number; color: string; isClosedWon?: boolean; isClosedLost?: boolean }[] };
 
@@ -276,157 +254,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    if (body.action === "syncFromHubSpot") {
-      const { handleHubSpotSync } = await import("@/lib/jobs/handlers/hubspot-sync");
-      const result = await handleHubSpotSync({});
-      // After sync, backfill stage_id on deals
-      await backfillStageIds();
-      return NextResponse.json(result);
-    }
-
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }
 
-/** Fetch HubSpot pipeline stages and seed into acq_pipeline_stages */
-async function seedStagesFromHubSpot() {
-  if (!process.env.HUBSPOT_ACCESS_TOKEN) {
-    return { error: "HUBSPOT_ACCESS_TOKEN not set" };
-  }
-
-  const pipelines = (await HubSpotClient.listPipelines()) as {
-    results: { id: string; label: string; stages: { id: string; label: string; displayOrder: number }[] }[];
-  };
-
-  if (!pipelines.results?.length) return { error: "No pipelines found in HubSpot" };
-
-  // Use the "Self Sign Up" pipeline — the primary one
-  const pipeline =
-    pipelines.results.find(
-      (p) =>
-        p.label?.toLowerCase().includes("self") ||
-        p.label?.toLowerCase().includes("sign up") ||
-        p.label?.toLowerCase().includes("signup")
-    ) ?? pipelines.results[0];
-
-  const colors = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4", "#10b981", "#22c55e", "#ef4444"];
-  let seeded = 0;
-
-  for (const stage of pipeline.stages ?? []) {
-    const isWon = stage.id?.includes("closedwon") || stage.label?.toLowerCase().includes("customer");
-    const isLost = stage.id?.includes("closedlost") || stage.label?.toLowerCase().includes("lost");
-
-    // Upsert by hubspot_stage_id
-    const existing = await db
-      .select({ id: acqPipelineStages.id })
-      .from(acqPipelineStages)
-      .where(eq(acqPipelineStages.hubspotStageId, stage.id))
-      .limit(1);
-
-    if (existing.length > 0) {
-      await db
-        .update(acqPipelineStages)
-        .set({
-          label: stage.label,
-          displayOrder: stage.displayOrder,
-          isClosedWon: isWon,
-          isClosedLost: isLost,
-          updatedAt: new Date(),
-        })
-        .where(eq(acqPipelineStages.id, existing[0].id));
-    } else {
-      await db.insert(acqPipelineStages).values({
-        id: randomId(),
-        pipelineId: "default",
-        label: stage.label,
-        displayOrder: stage.displayOrder,
-        hubspotStageId: stage.id,
-        isClosedWon: isWon,
-        isClosedLost: isLost,
-        color: colors[seeded % colors.length],
-      });
-    }
-    seeded++;
-  }
-
-  // Build alias map for old pipeline stages → closest Self Sign Up stage
-  const seededStages = await db.select().from(acqPipelineStages).where(eq(acqPipelineStages.pipelineId, "default"));
-  const aliasMap = new Map<string, string>(); // old hubspot_stage_id → COS stage id
-
-  for (const otherPipeline of pipelines.results) {
-    if (otherPipeline.id === pipeline.id) continue; // skip the primary pipeline
-    for (const oldStage of otherPipeline.stages ?? []) {
-      const match = findClosestStage(oldStage.label, seededStages);
-      if (match) aliasMap.set(oldStage.id, match.id);
-    }
-  }
-
-  // Backfill stage_id on existing deals
-  await backfillStageIds(aliasMap);
-
-  return { seeded, pipeline: pipeline.label, aliases: aliasMap.size };
-}
-
-/** Find the closest COS stage for an old pipeline stage label */
-function findClosestStage(
-  oldLabel: string,
-  cosStages: { id: string; label: string; displayOrder: number; isClosedWon: boolean; isClosedLost: boolean }[]
-) {
-  const norm = oldLabel.toLowerCase().trim();
-
-  // Direct label match
-  const exact = cosStages.find((s) => s.label.toLowerCase().trim() === norm);
-  if (exact) return exact;
-
-  // Keyword mapping: common stage names → logical equivalent
-  const keywords: [RegExp, string[]][] = [
-    [/prospect|lead|new|awareness/i, ["prospect", "lead"]],
-    [/contact|outreach|connect|approach/i, ["contacted", "outreach"]],
-    [/qualif|discovery|evaluate/i, ["qualified", "discovery"]],
-    [/demo|present|meeting|call/i, ["demo", "presentation", "meeting"]],
-    [/proposal|negotiat|quote|offer/i, ["proposal", "negotiation"]],
-    [/customer|closed.?won|won|deal.?won|convert/i, ["customer", "closed won"]],
-    [/lost|closed.?lost|dead|reject/i, ["lost", "closed lost"]],
-  ];
-
-  for (const [pattern, matchLabels] of keywords) {
-    if (pattern.test(norm)) {
-      const found = cosStages.find((s) =>
-        matchLabels.some((ml) => s.label.toLowerCase().includes(ml))
-      );
-      if (found) return found;
-    }
-  }
-
-  // Fallback: closed stages map to closed, everything else → first open stage
-  if (/close|won|lost|dead/i.test(norm)) {
-    return cosStages.find((s) => s.isClosedWon || s.isClosedLost) ?? cosStages[0];
-  }
-
-  // Default to first stage (Prospect)
-  const sorted = [...cosStages].sort((a, b) => a.displayOrder - b.displayOrder);
-  return sorted[0] ?? null;
-}
-
-/** Backfill stage_id on acq_deals that have hubspot_stage_id but no stage_id */
-async function backfillStageIds(aliasMap?: Map<string, string>) {
-  const stages = await db.select().from(acqPipelineStages);
-  // Direct hubspot_stage_id → COS stage id
-  const stageMap = new Map(stages.filter((s) => s.hubspotStageId).map((s) => [s.hubspotStageId!, s.id]));
-
-  const deals = await db.select({ id: acqDeals.id, hubspotStageId: acqDeals.hubspotStageId }).from(acqDeals);
-
-  for (const deal of deals) {
-    if (!deal.hubspotStageId) continue;
-    // Try direct match first, then alias
-    const cosStageId = stageMap.get(deal.hubspotStageId) ?? aliasMap?.get(deal.hubspotStageId);
-    if (cosStageId) {
-      await db
-        .update(acqDeals)
-        .set({ stageId: cosStageId })
-        .where(eq(acqDeals.id, deal.id));
-    }
-  }
-}

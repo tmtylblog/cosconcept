@@ -196,12 +196,6 @@ export type AttributionCheckEvent = {
   };
 };
 
-/** HubSpot CRM sync */
-export type HubSpotSyncEvent = {
-  name: "cron/hubspot-sync";
-  data: Record<string, never>;
-};
-
 /** LinkedIn invite scheduler */
 export type LinkedInInviteSchedulerEvent = {
   name: "cron/linkedin-invite-scheduler";
@@ -226,5 +220,4 @@ export type CosEvent =
   | TeamIngestEvent
   | NetworkScanEvent
   | AttributionCheckEvent
-  | HubSpotSyncEvent
   | LinkedInInviteSchedulerEvent;

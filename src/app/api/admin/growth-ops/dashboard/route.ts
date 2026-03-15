@@ -108,49 +108,33 @@ export async function GET(req: NextRequest) {
       .where(gte(attributionEvents.createdAt, since))
       .groupBy(attributionEvents.matchMethod);
 
+    // ── Build stage order map ──────────────────────────────
+    const stageOrder = new Map<string, number>();
+    for (const s of stages) stageOrder.set(s.id, s.displayOrder);
+
     // ── Compute metrics ─────────────────────────────────────
     const activeDeals = allDeals.filter((d) => d.status === "open").length;
-    const dealsWon = periodDeals.filter((d) => d.status === "won").length;
-    const totalPeriodDeals = periodDeals.length;
+    const dealsWon = allDeals.filter((d) => d.status === "won").length;
+    const dealsWonInPeriod = periodDeals.filter((d) => d.status === "won").length;
 
     // Pipeline value (sum of open deal values)
     const pipelineValue = allDeals
       .filter((d) => d.status === "open" && d.dealValue)
       .reduce((sum, d) => sum + (parseFloat(d.dealValue!) || 0), 0);
 
-    // Response rate: deals with email_replied activities / total deals contacted
-    const repliedDealIds = new Set(
-      periodActivities
-        .filter((a) => a.activityType === "email_replied" || a.activityType === "linkedin_message")
-        .map((a) => a.dealId),
-    );
-    const contacted = periodDeals.length;
-    const responseRate = contacted > 0 ? repliedDealIds.size / contacted : 0;
+    // Response rate: deals at "Replied" stage or later / total deals
+    const totalDeals = allDeals.length;
+    const repliedOrLater = allDeals.filter((d) => {
+      const order = d.stageId ? stageOrder.get(d.stageId) ?? -1 : -1;
+      return order >= 1; // Replied = displayOrder 1
+    }).length;
+    const responseRate = totalDeals > 0 ? repliedOrLater / totalDeals : 0;
 
-    // Avg time to reply (deals with reply activity)
-    const replyActivities = periodActivities.filter(
-      (a) => a.activityType === "email_replied",
-    );
-    let avgTimeToReply = 0;
-    if (replyActivities.length > 0) {
-      const replyDelays: number[] = [];
-      for (const ra of replyActivities) {
-        const deal = periodDeals.find((d) => d.id === ra.dealId);
-        if (deal?.createdAt && ra.createdAt) {
-          const delay =
-            new Date(ra.createdAt).getTime() - new Date(deal.createdAt).getTime();
-          if (delay > 0) replyDelays.push(delay / (1000 * 60 * 60)); // hours
-        }
-      }
-      if (replyDelays.length > 0) {
-        avgTimeToReply =
-          replyDelays.reduce((s, d) => s + d, 0) / replyDelays.length;
-      }
-    }
+    // Avg time to reply: not computable from current data, show 0
+    const avgTimeToReply = 0;
 
-    // Conversion rate: won / total in period
-    const conversionRate =
-      totalPeriodDeals > 0 ? dealsWon / totalPeriodDeals : 0;
+    // Conversion rate: won / total
+    const conversionRate = totalDeals > 0 ? dealsWon / totalDeals : 0;
 
     const metrics = {
       responseRate: Math.round(responseRate * 100),
@@ -158,40 +142,26 @@ export async function GET(req: NextRequest) {
       pipelineValue,
       conversionRate: Math.round(conversionRate * 100),
       activeDeals,
-      dealsWon,
+      dealsWon: dealsWonInPeriod,
     };
 
-    // ── Funnel ──────────────────────────────────────────────
-    // Build funnel from deal stages + attribution
-    const contacted_count = periodDeals.length;
-    const replied_count = repliedDealIds.size;
-    const bookedCall = periodActivities.filter(
-      (a) =>
-        a.activityType === "stage_change" &&
-        (a.description?.toLowerCase().includes("demo") ||
-          a.description?.toLowerCase().includes("call") ||
-          a.description?.toLowerCase().includes("meeting")),
-    ).length;
-
-    // Attribution-based: signups with matchMethod != "none"
-    const totalAttributed = attributionRows.reduce(
-      (s, r) => s + Number(r.cnt),
-      0,
-    );
-    const directSignups = attributionRows
-      .filter((r) => r.matchMethod === "none")
-      .reduce((s, r) => s + Number(r.cnt), 0);
-    const signedUp = totalAttributed;
-    const onboarded = Math.round(signedUp * 0.7); // estimate
-    const paying = dealsWon;
+    // ── Funnel (based on deal stage positions) ──────────────
+    // Count deals that have reached each stage or beyond
+    function dealsAtOrBeyond(minOrder: number): number {
+      return allDeals.filter((d) => {
+        if (d.status === "won") return true; // won deals passed all stages
+        const order = d.stageId ? stageOrder.get(d.stageId) ?? -1 : -1;
+        return order >= minOrder;
+      }).length;
+    }
 
     const funnel = [
-      { label: "Contacted", value: contacted_count },
-      { label: "Replied", value: replied_count },
-      { label: "Booked Call", value: bookedCall || Math.round(replied_count * 0.3) },
-      { label: "Signed Up", value: signedUp },
-      { label: "Onboarded", value: onboarded },
-      { label: "Paying", value: paying },
+      { label: "Contacted", value: dealsAtOrBeyond(0) },
+      { label: "Replied", value: dealsAtOrBeyond(1) },
+      { label: "Booked Call", value: dealsAtOrBeyond(2) },
+      { label: "Signed Up", value: dealsAtOrBeyond(3) },
+      { label: "Onboarded", value: dealsAtOrBeyond(4) },
+      { label: "Paying", value: dealsAtOrBeyond(5) },
     ];
 
     // ── By Source ────────────────────────────────────────────

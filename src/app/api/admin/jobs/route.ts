@@ -33,7 +33,6 @@ const INNGEST_FUNCTIONS = [
   { id: "cron-weekly-recrawl", name: "Weekly Website Recrawl", trigger: "0 2 * * 0", type: "cron" },
   { id: "cron-weekly-digest", name: "Weekly Partnership Digest", trigger: "0 8 * * 1", type: "cron" },
   { id: "cron-check-stale-partnerships", name: "Check Stale Partnerships", trigger: "0 9 * * *", type: "cron" },
-  { id: "cron-hubspot-sync", name: "HubSpot CRM Sync", trigger: "0 0 * * *", type: "cron" },
   { id: "cron-linkedin-invite-scheduler", name: "LinkedIn Invite Scheduler", trigger: "0 * * * 1-6", type: "cron" },
 ];
 

@@ -215,7 +215,10 @@ export function ContextPanel({
         )}
 
         {/* ── Outreach Context ───────────────────────────────────────── */}
-        {outreach && (
+        {outreach &&
+          (outreach.instantly.length > 0 ||
+            outreach.linkedinCampaigns.length > 0 ||
+            outreach.attributionMethod) && (
           <div className="rounded-cos-xl border border-cos-border bg-white p-4">
             <div className="flex items-center gap-2 mb-3">
               <MessageSquare className="h-3.5 w-3.5 text-cos-slate" />
@@ -223,32 +226,57 @@ export function ContextPanel({
                 Outreach
               </p>
             </div>
-            <div className="space-y-1.5">
-              {outreach.channel && (
-                <p className="text-xs text-cos-slate">
-                  <span className="text-cos-slate-dim">Channel:</span>{" "}
-                  <span className="font-medium text-cos-midnight">
-                    {outreach.channel}
+            <div className="space-y-3">
+              {/* Instantly campaigns */}
+              {outreach.instantly.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-medium text-cos-slate-dim uppercase tracking-wider">
+                    Instantly
+                  </p>
+                  {outreach.instantly.map((c, i) => (
+                    <div key={c.campaignId ?? i} className="flex items-center gap-1.5 text-xs text-cos-slate">
+                      <Mail className="h-3 w-3 shrink-0" />
+                      <span className="truncate">
+                        {c.campaignName ?? "Unknown campaign"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* LinkedIn campaigns */}
+              {outreach.linkedinCampaigns.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-medium text-cos-slate-dim uppercase tracking-wider">
+                    LinkedIn
+                  </p>
+                  {outreach.linkedinCampaigns.map((c) => (
+                    <div key={c.campaignId} className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-xs text-cos-slate">
+                        <Linkedin className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{c.campaignName}</span>
+                        <span className="ml-auto shrink-0 rounded-full bg-cos-cloud px-1.5 py-0.5 text-[10px] font-medium text-cos-midnight">
+                          {c.status}
+                        </span>
+                      </div>
+                      {c.sentAt && (
+                        <p className="text-[10px] text-cos-slate-dim pl-[18px]">
+                          Sent {formatDate(c.sentAt)}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Attribution method */}
+              {outreach.attributionMethod && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-cos-slate-dim">Attribution:</span>
+                  <span className="rounded-full bg-cos-electric/10 px-1.5 py-0.5 text-[10px] font-medium text-cos-electric">
+                    {outreach.attributionMethod}
                   </span>
-                </p>
-              )}
-              {outreach.campaignName && (
-                <p className="text-xs text-cos-slate">
-                  <span className="text-cos-slate-dim">Campaign:</span>{" "}
-                  {outreach.campaignName}
-                </p>
-              )}
-              {outreach.firstTouchAt && (
-                <p className="text-xs text-cos-slate">
-                  <span className="text-cos-slate-dim">First touch:</span>{" "}
-                  {formatDate(outreach.firstTouchAt)}
-                </p>
-              )}
-              {outreach.responseAt && (
-                <p className="text-xs text-cos-slate">
-                  <span className="text-cos-slate-dim">Responded:</span>{" "}
-                  {formatDate(outreach.responseAt)}
-                </p>
+                </div>
               )}
             </div>
           </div>

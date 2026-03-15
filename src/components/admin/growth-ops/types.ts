@@ -144,9 +144,8 @@ export interface ConversationContext {
   stages: Stage[];
   activities: Activity[];
   outreach: {
-    channel: string | null;
-    campaignName: string | null;
-    firstTouchAt: string | null;
-    responseAt: string | null;
-  } | null;
+    instantly: { campaignId: string | null; campaignName: string | null }[];
+    linkedinCampaigns: { campaignId: string; campaignName: string; status: string; sentAt: string | null }[];
+    attributionMethod: string | null;
+  };
 }

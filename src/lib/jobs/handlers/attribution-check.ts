@@ -16,8 +16,6 @@
  *   5. Record attribution event
  *   6. Record ALL touchpoints (multi-touch)
  *
- * After matching, pushes cos_user_id back to HubSpot if a contact is found.
- *
  * See docs/context/crm-acquisition.md for full context.
  */
 
@@ -27,7 +25,6 @@ import {
   attributionTouchpoints,
   acqContacts,
   acqCompanies,
-  acqDeals,
   growthOpsInviteTargets,
   growthOpsInviteCampaigns,
   growthOpsInviteQueue,
@@ -35,7 +32,6 @@ import {
   growthOpsMessages,
   users,
 } from "@/lib/db/schema";
-import { HubSpotClient } from "@/lib/growth-ops/HubSpotClient";
 import { InstantlyClient } from "@/lib/growth-ops/InstantlyClient";
 import { enrichPerson } from "@/lib/enrichment/pdl";
 import { eq, and, ilike, sql } from "drizzle-orm";
@@ -161,23 +157,6 @@ export async function handleAttributionCheck(
       .update(acqContacts)
       .set({ cosUserId: userId, updatedAt: now })
       .where(eq(acqContacts.id, contactId));
-
-    // Push cos_user_id back to HubSpot if we have the HubSpot contact ID
-    const hsContactId = contactRows[0].hubspotContactId;
-    if (hsContactId && process.env.HUBSPOT_ACCESS_TOKEN) {
-      try {
-        await HubSpotClient.updateContact(hsContactId, {
-          cos_user_id: userId,
-          cos_signup_date: now.toISOString().split("T")[0],
-          cos_attribution_source: "direct",
-        });
-
-        // Also move the associated deal to "Customer" stage if it exists
-        await markDealAsWon(contactId, hsContactId);
-      } catch {
-        // HubSpot push failure is non-critical
-      }
-    }
   }
 
   // ── Step 2: Instantly lead match ─────────────────────────────────────────
@@ -207,24 +186,6 @@ export async function handleAttributionCheck(
             instantlyCampaignId = campaign.id;
             instantlyCampaignName = campaign.name;
             if (matchMethod === "none") matchMethod = "instantly";
-
-            // Update HubSpot with attribution source
-            if (contactRows[0]?.hubspotContactId && process.env.HUBSPOT_ACCESS_TOKEN) {
-              try {
-                await HubSpotClient.updateContact(contactRows[0].hubspotContactId, {
-                  cos_attribution_source: "instantly",
-                  cos_attribution_campaign: campaign.name,
-                });
-                if (contactId) {
-                  await HubSpotClient.createNote(
-                    `COS Attribution: Signed up from Instantly campaign "${campaign.name}"`,
-                    contactRows[0].hubspotContactId
-                  );
-                }
-              } catch {
-                // non-critical
-              }
-            }
             break;
           }
         } catch {
@@ -264,31 +225,6 @@ export async function handleAttributionCheck(
 
       if (queueRow.length > 0) {
         linkedinCampaignId = queueRow[0].campaignId;
-
-        // Add HubSpot note if we have a contact
-        if (contactRows[0]?.hubspotContactId && process.env.HUBSPOT_ACCESS_TOKEN) {
-          try {
-            const [campaign] = await db
-              .select({ name: growthOpsInviteCampaigns.name })
-              .from(growthOpsInviteCampaigns)
-              .where(eq(growthOpsInviteCampaigns.id, linkedinCampaignId))
-              .limit(1);
-
-            await HubSpotClient.updateContact(contactRows[0].hubspotContactId, {
-              cos_attribution_source: "linkedin",
-              cos_attribution_campaign: campaign?.name ?? linkedinCampaignId,
-            });
-
-            if (contactId) {
-              await HubSpotClient.createNote(
-                `COS Attribution: Signed up from LinkedIn campaign "${campaign?.name ?? linkedinCampaignId}"`,
-                contactRows[0].hubspotContactId
-              );
-            }
-          } catch {
-            // non-critical
-          }
-        }
       }
     }
   }
@@ -316,19 +252,6 @@ export async function handleAttributionCheck(
           .update(acqContacts)
           .set({ cosUserId: userId, updatedAt: now })
           .where(eq(acqContacts.id, contactId));
-
-        if (fallbackRows[0].hubspotContactId && process.env.HUBSPOT_ACCESS_TOKEN) {
-          try {
-            await HubSpotClient.updateContact(fallbackRows[0].hubspotContactId, {
-              cos_user_id: userId,
-              cos_signup_date: now.toISOString().split("T")[0],
-              cos_attribution_source: "direct",
-            });
-            await markDealAsWon(contactId, fallbackRows[0].hubspotContactId);
-          } catch {
-            // non-critical
-          }
-        }
       }
     }
   }
@@ -633,40 +556,3 @@ async function recordTouchpoints(
     .where(eq(attributionEvents.userId, userId));
 }
 
-/**
- * Find the open deal linked to a contact and mark it as won in both
- * COS (acq_deals) and HubSpot.
- */
-async function markDealAsWon(
-  cosContactId: string,
-  hsContactId: string
-): Promise<void> {
-  const now = new Date();
-
-  // Mark COS deal as won
-  await db
-    .update(acqDeals)
-    .set({ status: "won", closedAt: now, updatedAt: now })
-    .where(
-      and(
-        eq(acqDeals.contactId, cosContactId),
-        eq(acqDeals.status, "open")
-      )
-    );
-
-  // Find HubSpot deal to move to customer stage
-  try {
-    const assoc = (await HubSpotClient.getContactDeals(hsContactId)) as {
-      results: { id: string }[];
-    };
-    const dealId = assoc.results?.[0]?.id;
-    if (dealId) {
-      await HubSpotClient.updateDeal(dealId, {
-        dealstage: "closedwon",
-        cos_customer: "true",
-      });
-    }
-  } catch {
-    // non-critical
-  }
-}
