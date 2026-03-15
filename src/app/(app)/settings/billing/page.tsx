@@ -256,7 +256,32 @@ export default function BillingPage() {
         )}
       </div>
 
-      {/* Plan comparison */}
+      {/* Inline Stripe Checkout (replaces plan cards when active) */}
+      {showCheckout && orgId ? (
+        <div className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="font-heading text-lg font-semibold text-cos-midnight">
+                Upgrade to {PLAN_DISPLAY_NAMES[checkoutPlan]}
+              </h3>
+              <p className="text-sm text-cos-slate">
+                ${PLAN_PRICES[checkoutPlan].monthly}/mo &mdash; enter your payment details below
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleCheckoutCancel}>
+              Back
+            </Button>
+          </div>
+          <CheckoutModal
+            plan={checkoutPlan}
+            interval={checkoutInterval}
+            organizationId={orgId}
+            onSuccess={handleCheckoutSuccess}
+            onCancel={handleCheckoutCancel}
+          />
+        </div>
+      ) : (
+      /* Plan comparison */
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {plans.map((plan) => {
           const limits = PLAN_LIMITS[plan];
@@ -382,16 +407,6 @@ export default function BillingPage() {
           );
         })}
       </div>
-
-      {/* Embedded Stripe checkout modal */}
-      {showCheckout && orgId && (
-        <CheckoutModal
-          plan={checkoutPlan}
-          interval={checkoutInterval}
-          organizationId={orgId}
-          onSuccess={handleCheckoutSuccess}
-          onCancel={handleCheckoutCancel}
-        />
       )}
     </div>
   );
