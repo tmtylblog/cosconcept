@@ -862,11 +862,20 @@ function GrowthOpsInboxInner() {
   // ── Create deal from context ────────────────────────────────────────────
   async function handleCreateDeal() {
     if (!selectedConvo) return;
+
+    // Confirmation dialog
+    const name = selectedConvo.participantName || "this contact";
+    if (!confirm(`Create deal for ${name}?`)) return;
+
     try {
-      // Get the first stage (Contacted) to assign by default
-      const firstStage = stages.length > 0
-        ? stages.reduce((a, b) => (a.displayOrder ?? 0) < (b.displayOrder ?? 0) ? a : b)
-        : null;
+      // If the person has replied (unread messages), start at "Replied" stage.
+      // Otherwise default to "Contacted".
+      const hasReplied = selectedConvo.unreadCount > 0 || messages.some((m) => !m.is_sender);
+      const targetStageLabel = hasReplied ? "Replied" : "Contacted";
+      const targetStage = stages.find((s) => s.label === targetStageLabel)
+        ?? (stages.length > 0
+          ? stages.reduce((a, b) => (a.displayOrder ?? 0) < (b.displayOrder ?? 0) ? a : b)
+          : null);
 
       const res = await fetch("/api/admin/growth-ops/pipeline", {
         method: "POST",
@@ -874,7 +883,7 @@ function GrowthOpsInboxInner() {
         body: JSON.stringify({
           action: "createDeal",
           name: selectedConvo.participantName || "New Deal",
-          stageId: firstStage?.id ?? null,
+          stageId: targetStage?.id ?? null,
           source: "linkedin_auto",
           sourceChannel: "linkedin",
         }),
@@ -882,7 +891,6 @@ function GrowthOpsInboxInner() {
       if (!res.ok) { console.error("Create deal failed:", res.status); return; }
       const d = await res.json();
       if (d.dealId) {
-        // Navigate to the deal page with context to return to inbox
         router.push(`/admin/growth-ops/pipeline/${d.dealId}?from=inbox`);
       }
     } catch (err) {
