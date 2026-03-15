@@ -85,38 +85,45 @@ export async function POST(req: NextRequest) {
     }
 
     step = "create_subscription";
-    // Create a subscription with incomplete status so we get a PaymentIntent
-    // client secret to confirm on the client with Stripe Elements
+    // Create a subscription with incomplete status so we can confirm payment
+    // on the client with Stripe Elements
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: priceId }],
       payment_behavior: "default_incomplete",
       payment_settings: { save_default_payment_method: "on_subscription" },
       metadata: { organizationId, plan },
-      expand: ["latest_invoice.payment_intent"],
+      expand: ["latest_invoice"],
     });
 
-    // Extract the client secret from the expanded PaymentIntent.
-    // The expand param causes latest_invoice to be a full Invoice object
-    // with payment_intent expanded as a PaymentIntent object.
-    const invoice = subscription.latest_invoice as Stripe.Invoice & {
-      payment_intent?: Stripe.PaymentIntent | string | null;
-    };
-    if (!invoice || typeof invoice === "string") {
+    step = "resolve_client_secret";
+    // Get the invoice (expanded above)
+    const invoice = subscription.latest_invoice as Stripe.Invoice | string | null;
+    const invoiceId = typeof invoice === "string" ? invoice : invoice?.id;
+    if (!invoiceId) {
       return NextResponse.json(
-        { error: "Failed to expand invoice on subscription" },
+        { error: "No invoice on subscription" },
         { status: 500 }
       );
     }
 
-    const paymentIntent = invoice.payment_intent;
-    if (!paymentIntent || typeof paymentIntent === "string") {
+    // Get the payment intent ID from the invoice
+    const invoiceObj = typeof invoice === "string"
+      ? await stripe.invoices.retrieve(invoice)
+      : invoice;
+    const paymentIntentId = typeof invoiceObj.payment_intent === "string"
+      ? invoiceObj.payment_intent
+      : invoiceObj.payment_intent?.id;
+
+    if (!paymentIntentId) {
       return NextResponse.json(
-        { error: "Failed to expand payment_intent on invoice" },
+        { error: "No payment_intent on invoice" },
         { status: 500 }
       );
     }
 
+    // Retrieve the PaymentIntent directly to get the client_secret
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
     const clientSecret = paymentIntent.client_secret;
     if (!clientSecret) {
       return NextResponse.json(
