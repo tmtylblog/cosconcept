@@ -21,7 +21,9 @@ import {
   ChevronDown,
   Briefcase,
   FileText,
+  Sparkles,
 } from "lucide-react";
+import { usePlan } from "@/hooks/use-plan";
 import { cn } from "@/lib/utils";
 import { signOut, useActiveOrganization } from "@/lib/auth-client";
 
@@ -83,13 +85,21 @@ export function NavBar({
 
   const showLabels = !collapsed || hovering;
 
+  const { plan } = usePlan();
+  const isFree = plan === "free";
+
   // In guest mode, only show Overview and a sign-in prompt.
   // Post-onboarding, hide Overview since its content lives in other sections.
-  const visibleItems = isGuest
+  const baseItems = isGuest
     ? navItems.filter((item) => item.href === "/dashboard")
     : hideOverview
       ? navItems.filter((item) => item.href !== "/dashboard")
       : navItems;
+
+  // Add "Upgrade" link after Settings if user is on free plan
+  const visibleItems = isFree && !isGuest
+    ? [...baseItems, { icon: Sparkles, label: "Upgrade", href: "/settings/billing" } as NavItem]
+    : baseItems;
 
   const toggleMenu = (href: string) => {
     setExpandedMenus((prev) => {
@@ -179,9 +189,11 @@ export function NavBar({
                   href={item.href}
                   className={cn(
                     "flex flex-1 items-center gap-3 rounded-cos-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-white/15 text-white"
-                      : "text-white/60 hover:bg-white/10 hover:text-white"
+                    item.label === "Upgrade"
+                      ? "text-cos-electric hover:bg-cos-electric/15 hover:text-cos-electric"
+                      : isActive
+                        ? "bg-white/15 text-white"
+                        : "text-white/60 hover:bg-white/10 hover:text-white"
                   )}
                   title={collapsed && !hovering ? item.label : undefined}
                 >

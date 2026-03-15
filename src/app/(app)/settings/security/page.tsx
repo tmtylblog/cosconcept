@@ -265,7 +265,7 @@ function SessionsSection() {
 
 export default function SecuritySettingsPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div className="mx-auto max-w-5xl space-y-6 p-6">
       <div>
         <h2 className="font-heading text-lg font-semibold text-cos-midnight">Security</h2>
         <p className="mt-1 text-sm text-cos-slate">Password, authentication, and access management.</p>

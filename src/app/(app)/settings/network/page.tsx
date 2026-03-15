@@ -320,7 +320,7 @@ export default function NetworkScanPage() {
   const toInvite = relationships.filter(r => !r.firmId).length;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div className="mx-auto max-w-5xl space-y-6 p-6">
       {/* Header */}
       <div>
         <div className="flex items-center gap-2">
