@@ -14,7 +14,7 @@ import {
   serviceFirms,
   migrationBatches,
 } from "@/lib/db/schema";
-import { eq, and, ilike, sql } from "drizzle-orm";
+import { eq, and, gt, ilike, sql, asc } from "drizzle-orm";
 import { authenticatePartner } from "../lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -278,6 +278,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const type = url.searchParams.get("type");
   const partnerId = url.searchParams.get("partnerId");
+  const cursor = url.searchParams.get("cursor") ?? null;
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "1000"), 5000);
 
   if (!type || !ALLOWED_TYPES.has(type)) {
@@ -296,24 +297,58 @@ export async function GET(req: Request) {
 
   try {
     let entities: { type: string; id: string; data: Record<string, unknown>; source: string }[] = [];
+    let nextCursor: string | null = null;
+    let total: number | null = null;
 
     switch (type) {
       case "Company": {
+        // Cursor-based pagination using the id column (text PK, ordered)
+        // CORE sends limit=1000 and processes up to 50 pages per sync run.
+        const conditions = cursor
+          ? gt(importedCompanies.id, cursor)
+          : undefined;
+
         const rows = await db
           .select({
-            sourceId: importedCompanies.sourceId,
+            id: importedCompanies.id,
             name: importedCompanies.name,
             domain: importedCompanies.domain,
+            websiteUrl: importedCompanies.websiteUrl,
+            description: importedCompanies.description,
+            employeeCountExact: importedCompanies.employeeCountExact,
           })
           .from(importedCompanies)
-          .where(eq(importedCompanies.source, partnerId))
-          .limit(limit);
+          .where(conditions)
+          .orderBy(asc(importedCompanies.id))
+          .limit(limit + 1); // fetch one extra to detect if there are more pages
 
-        entities = rows.map((r) => ({
+        // If we got limit+1 rows, there are more pages
+        const hasMore = rows.length > limit;
+        const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+        if (hasMore && pageRows.length > 0) {
+          nextCursor = pageRows[pageRows.length - 1].id;
+        }
+
+        // Get total count (only on first page to avoid repeated counting)
+        if (!cursor) {
+          const [countResult] = await db
+            .select({ count: sql<number>`COUNT(*)::int` })
+            .from(importedCompanies);
+          total = countResult?.count ?? 0;
+        }
+
+        entities = pageRows.map((r) => ({
           type: "Company",
-          id: r.sourceId?.replace(`${partnerId}:`, "") ?? "",
-          data: { name: r.name, domain: r.domain },
-          source: partnerId,
+          id: r.id,
+          data: {
+            name: r.name,
+            domain: r.domain,
+            website: r.websiteUrl,
+            description: r.description,
+            employeeCount: r.employeeCountExact,
+          },
+          source: "cos",
         }));
         break;
       }
@@ -403,7 +438,12 @@ export async function GET(req: Request) {
       }
     }
 
-    return NextResponse.json({ entities, count: entities.length });
+    return NextResponse.json({
+      entities,
+      nextCursor,
+      ...(total !== null ? { total } : {}),
+      count: entities.length,
+    });
   } catch (err) {
     console.error("[Partner Sync] GET entities failed:", err);
     return NextResponse.json(
