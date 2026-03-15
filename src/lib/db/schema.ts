@@ -1398,6 +1398,9 @@ export const expertProfiles = pgTable("expert_profiles", {
   // Enrichment status: roster = basic PDL search data, enriched = full work history
   enrichmentStatus: text("enrichment_status").notNull().default("roster"),
 
+  // Roster management: active | prior | incorrect
+  rosterStatus: text("roster_status").notNull().default("active"),
+
   // Meta
   isPublic: boolean("is_public").notNull().default(true),
   profileCompleteness: real("profile_completeness").default(0),

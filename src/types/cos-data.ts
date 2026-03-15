@@ -123,6 +123,12 @@ export interface Expert {
   isFullyEnriched?: boolean;
   /** Enrichment status: roster (basic PDL data) | enriched (full work history) */
   enrichmentStatus?: "roster" | "enriched";
+  /** Roster status: active | prior | incorrect */
+  rosterStatus?: "active" | "prior" | "incorrect";
+  /** User ID if expert has claimed their profile */
+  userId?: string | null;
+  /** Last updated timestamp */
+  updatedAt?: string | null;
   /** Specialist sub-profiles — focused expertise combos */
   specialistProfiles?: ExpertSpecialistProfile[];
 }

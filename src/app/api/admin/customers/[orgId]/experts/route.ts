@@ -154,6 +154,7 @@ export async function GET(
         createdAt: ep.createdAt,
         updatedAt: ep.updatedAt,
         enrichmentStatus: ep.enrichmentStatus,
+        rosterStatus: ep.rosterStatus ?? "active",
         // Team import tier + enrichment status
         expertTier,
         isFullyEnriched,

@@ -90,7 +90,7 @@ export async function GET(req: Request) {
       const pdl = ep.pdlData as Record<string, unknown> | null;
       const pdlClassification = (pdl?.classifiedAs as string) ?? null;
       const hasExperience = Array.isArray(pdl?.experience) && (pdl.experience as unknown[]).length > 0;
-      const isFullyEnriched = !!(ep.pdlEnrichedAt && hasExperience);
+      const isFullyEnriched = hasExperience || ep.enrichmentStatus === "enriched";
 
       const sps = (spByExpert[ep.id] ?? []).sort(
         (a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0)

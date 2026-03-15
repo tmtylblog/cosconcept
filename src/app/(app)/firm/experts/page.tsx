@@ -86,18 +86,25 @@ export default function FirmExpertsPage() {
     }
   }, [discovery.phase, refetchExperts, refetchCredits]);
 
-  // Group experts by tier
-  const { tierExperts, tierPotential, tierOther } = useMemo(() => {
+  // Group experts by roster status, then by tier
+  const { tierExperts, tierPotential, tierOther, deactivated, incorrect } = useMemo(() => {
     const te: Expert[] = [];
     const tp: Expert[] = [];
     const to: Expert[] = [];
+    const deact: Expert[] = [];
+    const incor: Expert[] = [];
     for (const e of dbExperts) {
+      if (e.rosterStatus === "prior") { deact.push(e); continue; }
+      if (e.rosterStatus === "incorrect") { incor.push(e); continue; }
       if (e.expertTier === "expert") te.push(e);
       else if (e.expertTier === "potential_expert") tp.push(e);
       else to.push(e);
     }
-    return { tierExperts: te, tierPotential: tp, tierOther: to };
+    return { tierExperts: te, tierPotential: tp, tierOther: to, deactivated: deact, incorrect: incor };
   }, [dbExperts]);
+
+  const [showIncorrect, setShowIncorrect] = useState(false);
+  const [showDeactivated, setShowDeactivated] = useState(false);
 
   const totalExperts = dbTotalExperts;
   const expertsLoading = dbLoading;
@@ -365,7 +372,7 @@ export default function FirmExpertsPage() {
 
           {/* Name + Title + Status — clickable to profile */}
           <Link
-            href={`/experts/${expert.id}`}
+            href={`/firm/experts/${expert.id}`}
             className="min-w-0 flex-1 group"
           >
             <div className="flex items-center gap-2">
@@ -460,7 +467,7 @@ export default function FirmExpertsPage() {
             {/* Enriched badge (only when not currently enriching) */}
             {isEnriched && !isCurrentlyEnriching && (
               <Link
-                href={`/experts/${expert.id}`}
+                href={`/firm/experts/${expert.id}`}
                 className="flex h-7 items-center gap-1 rounded-cos-pill bg-emerald-50 px-2 text-[10px] font-medium text-emerald-600 hover:bg-emerald-100 transition-colors"
               >
                 <ExternalLink className="h-3 w-3" />
@@ -577,7 +584,7 @@ export default function FirmExpertsPage() {
             )}
             <div className="flex items-center gap-2 pt-1">
               <Link
-                href={`/experts/${expert.id}`}
+                href={`/firm/experts/${expert.id}`}
                 className="inline-flex items-center gap-1 rounded-cos-md border border-cos-border px-3 py-1.5 text-[11px] font-medium text-cos-slate-dim hover:border-cos-electric/40 hover:text-cos-electric transition-colors"
               >
                 View Full Profile <ExternalLink className="h-3 w-3" />
@@ -931,6 +938,51 @@ export default function FirmExpertsPage() {
             <p className="text-center text-[11px] text-cos-slate-dim">
               Your team hasn&apos;t been classified yet. Ask Ossy to discover and classify your team.
             </p>
+          )}
+
+          {/* Deactivated Experts (prior team) */}
+          {deactivated.length > 0 && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowDeactivated(!showDeactivated)}
+                className="flex items-center gap-2 text-xs font-semibold text-cos-slate hover:text-cos-midnight transition-colors"
+              >
+                <span>{showDeactivated ? "Hide" : "Show"} Deactivated Experts ({deactivated.length})</span>
+              </button>
+              {showDeactivated && (
+                <div className="mt-2 overflow-hidden rounded-cos-lg border border-cos-border/40 opacity-70">
+                  <div className="flex items-center justify-between bg-cos-cloud/30 px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-cos-slate">Prior Team Members</span>
+                      <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-bold text-cos-slate">{deactivated.length}</span>
+                    </div>
+                    <span className="text-[10px] text-cos-slate/70">Former team members</span>
+                  </div>
+                  <div className="divide-y divide-cos-border/30">
+                    {deactivated.map((expert) => renderExpertRow(expert))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Incorrect Data — text link only */}
+          {incorrect.length > 0 && (
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => setShowIncorrect(!showIncorrect)}
+                className="text-[11px] text-cos-slate/50 hover:text-cos-slate transition-colors underline"
+              >
+                {incorrect.length} entr{incorrect.length === 1 ? "y" : "ies"} flagged as incorrect data
+              </button>
+              {showIncorrect && (
+                <div className="mt-2 overflow-hidden rounded-cos-lg border border-red-200/40 opacity-60">
+                  <div className="divide-y divide-red-100/30">
+                    {incorrect.map((expert) => renderExpertRow(expert))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       ) : extracted?.teamMembers?.length ? (
