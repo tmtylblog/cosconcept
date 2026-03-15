@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import {
   Search,
-  Eye,
   Loader2,
   Shield,
   ShieldOff,
@@ -78,7 +77,6 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [impersonating, setImpersonating] = useState<string | null>(null);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [expertProfiles, setExpertProfiles] = useState<
     Record<string, { loading: boolean; profile: ExpertProfile | null }>
@@ -135,17 +133,6 @@ export default function AdminUsersPage() {
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, role } : u))
     );
-  }
-
-  async function handleImpersonate(userId: string) {
-    setImpersonating(userId);
-    try {
-      await authClient.admin.impersonateUser({ userId });
-      window.location.href = "/dashboard";
-    } catch (err) {
-      console.error("Impersonation failed:", err);
-      setImpersonating(null);
-    }
   }
 
   async function handleExpandUser(userId: string) {
@@ -262,22 +249,22 @@ export default function AdminUsersPage() {
           <thead>
             <tr className="border-b border-cos-border bg-cos-cloud/50">
               <th className="w-8 px-2 py-3.5" />
-              <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+              <th className="w-[30%] px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                 Staff Member
               </th>
-              <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+              <th className="w-[22%] px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                 Email
               </th>
-              <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+              <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                 Role
               </th>
-              <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+              <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                 Status
               </th>
-              <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+              <th className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                 Joined
               </th>
-              <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
+              <th className="w-24 px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-cos-slate">
                 Actions
               </th>
             </tr>
@@ -314,50 +301,52 @@ export default function AdminUsersPage() {
 
                       {/* User */}
                       <div
-                        className="flex-1 px-5 py-3.5 cursor-pointer"
+                        className="w-[30%] px-4 py-3.5 cursor-pointer"
                         onClick={() => router.push(`/admin/users/${user.id}`)}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`flex h-8 w-8 items-center justify-center rounded-cos-full text-xs font-semibold ${roleColor.bg} ${roleColor.text}`}>
+                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-cos-full text-xs font-semibold ${roleColor.bg} ${roleColor.text}`}>
                             {user.name?.charAt(0)?.toUpperCase() || "?"}
                           </div>
-                          <span className="font-medium text-cos-midnight hover:text-cos-electric hover:underline">
+                          <span className="truncate font-medium text-cos-midnight hover:text-cos-electric hover:underline">
                             {user.name}
                           </span>
                         </div>
                       </div>
 
                       {/* Email */}
-                      <div className="px-5 py-3.5 font-mono text-xs text-cos-slate">
-                        {user.email}
+                      <div className="w-[22%] px-4 py-3.5">
+                        <span className="block truncate font-mono text-xs text-cos-slate" title={user.email}>
+                          {user.email}
+                        </span>
                       </div>
 
                       {/* Role */}
-                      <div className="px-5 py-3.5">
+                      <div className="px-4 py-3.5">
                         <select
                           value={user.role}
                           onChange={(e) =>
                             handleSetRole(user.id, e.target.value)
                           }
                           onClick={(e) => e.stopPropagation()}
-                          className="rounded-cos-md border border-cos-border bg-cos-cloud px-2.5 py-1 text-xs font-medium text-cos-midnight transition-colors focus:border-cos-electric focus:outline-none"
+                          className="rounded-cos-md border border-cos-border bg-cos-cloud px-2 py-1 text-xs font-medium text-cos-midnight transition-colors focus:border-cos-electric focus:outline-none"
                         >
                           <option value="admin">Admin</option>
                           <option value="superadmin">Superadmin</option>
                           <option value="growth_ops">Growth Ops</option>
-                          <option value="customer_success">Customer Success</option>
+                          <option value="customer_success">CS</option>
                         </select>
                       </div>
 
                       {/* Status */}
-                      <div className="px-5 py-3.5">
+                      <div className="px-4 py-3.5">
                         {user.banned ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-ember/8 px-2.5 py-1 text-xs font-medium text-cos-ember">
+                          <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-ember/8 px-2 py-0.5 text-[10px] font-medium text-cos-ember">
                             <span className="h-1.5 w-1.5 rounded-full bg-cos-ember" />
                             Banned
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-cos-pill bg-cos-signal/8 px-2.5 py-1 text-xs font-medium text-cos-signal">
+                          <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-signal/8 px-2 py-0.5 text-[10px] font-medium text-cos-signal">
                             <span className="h-1.5 w-1.5 rounded-full bg-cos-signal" />
                             Active
                           </span>
@@ -365,60 +354,46 @@ export default function AdminUsersPage() {
                       </div>
 
                       {/* Joined */}
-                      <div className="px-5 py-3.5 text-xs text-cos-slate">
+                      <div className="px-4 py-3.5 text-xs text-cos-slate">
                         {user.createdAt}
                       </div>
 
                       {/* Actions */}
-                      <div className="px-5 py-3.5">
+                      <div className="w-24 px-4 py-3.5">
                         <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/admin/users/${user.id}`);
+                            }}
+                            title="View user details"
+                            className="flex h-7 w-7 items-center justify-center rounded text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </button>
                           {user.banned ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleUnban(user.id);
                               }}
-                              className="h-7 gap-1.5 text-xs"
+                              title="Unban user"
+                              className="flex h-7 w-7 items-center justify-center rounded text-cos-ember hover:bg-cos-ember/5 transition-colors"
                             >
-                              <ShieldOff className="h-3 w-3" />
-                              Unban
-                            </Button>
+                              <ShieldOff className="h-3.5 w-3.5" />
+                            </button>
                           ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleBan(user.id);
                               }}
-                              className="h-7 gap-1.5 text-xs"
+                              title="Ban user"
+                              className="flex h-7 w-7 items-center justify-center rounded text-cos-slate hover:text-cos-ember hover:bg-cos-ember/5 transition-colors"
                             >
-                              <Shield className="h-3 w-3" />
-                              Ban
-                            </Button>
+                              <Shield className="h-3.5 w-3.5" />
+                            </button>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleImpersonate(user.id);
-                            }}
-                            disabled={
-                              impersonating === user.id ||
-                              user.role === "superadmin"
-                            }
-                            title="Impersonate this user"
-                            className="h-7 w-7 p-0 text-cos-slate hover:text-cos-electric"
-                          >
-                            {impersonating === user.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Eye className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
                         </div>
                       </div>
                     </div>
