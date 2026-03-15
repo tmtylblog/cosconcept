@@ -517,12 +517,7 @@ function GrowthOpsInboxInner() {
   }, [selectedChatId, loadMessages]);
 
   // ── Load conversation context when chat changes ─────────────────────────
-  useEffect(() => {
-    if (!selectedChatId) {
-      setContextData(null);
-      return;
-    }
-    const convo = conversations.find((c) => c.chatId === selectedChatId);
+  const refreshContext = useCallback((convo: Conversation | null) => {
     if (!convo) {
       setContextData(null);
       return;
@@ -539,13 +534,22 @@ function GrowthOpsInboxInner() {
           return;
         }
         setContextData(d as ConversationContext);
-        // Use stages from context if available and we don&apos;t have them yet
         if (d.stages?.length && stages.length === 0) {
           setStages(d.stages);
         }
       })
       .catch(() => setContextData(null))
       .finally(() => setContextLoading(false));
+   
+  }, [stages.length]);
+
+  useEffect(() => {
+    if (!selectedChatId) {
+      setContextData(null);
+      return;
+    }
+    const convo = conversations.find((c) => c.chatId === selectedChatId);
+    refreshContext(convo ?? null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChatId, conversations]);
 
@@ -859,24 +863,26 @@ function GrowthOpsInboxInner() {
   async function handleCreateDeal() {
     if (!selectedConvo) return;
     try {
-      const res = await fetch("/api/admin/growth-ops/pipeline", {
+      // Get the first stage (Contacted) to assign by default
+      const firstStage = stages.length > 0
+        ? stages.reduce((a, b) => (a.displayOrder ?? 0) < (b.displayOrder ?? 0) ? a : b)
+        : null;
+
+      await fetch("/api/admin/growth-ops/pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "createDeal",
           name: selectedConvo.participantName || "New Deal",
-          source: "linkedin",
-          sourceChannel: "linkedin_message",
-          linkedinUrl: selectedConvo.participantProfileUrl ?? undefined,
-          participantName: selectedConvo.participantName,
+          stageId: firstStage?.id ?? null,
+          source: "linkedin_auto",
+          sourceChannel: "linkedin",
         }),
       });
-      const d = await res.json();
-      if (d.deal) {
-        setContextData((prev) => prev ? { ...prev, deal: d.deal } : prev);
-      }
-    } catch {
-      // silently fail
+      // Reload context to show the new deal in the panel
+      refreshContext(selectedConvo);
+    } catch (err) {
+      console.error("Failed to create deal:", err);
     }
   }
 
