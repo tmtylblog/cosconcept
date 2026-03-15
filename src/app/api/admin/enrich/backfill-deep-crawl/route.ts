@@ -15,7 +15,7 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { serviceFirms, enrichmentAuditLog } from "@/lib/db/schema";
 import { eq, isNotNull } from "drizzle-orm";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 
 async function requireAdmin(req: NextRequest) {
   // Allow ADMIN_SECRET header for CLI/script access
@@ -71,16 +71,15 @@ export async function POST(req: NextRequest) {
   // Enqueue with stagger to avoid hammering Jina
   let queued = 0;
   for (const firm of firmsToProcess) {
-    await enqueue(
-      "deep-crawl",
-      {
+    await inngest.send({
+      name: "enrich/deep-crawl",
+      data: {
         firmId: firm.id,
         organizationId: firm.organizationId,
         website: firm.website!,
         firmName: firm.name,
       },
-      { delayMs: queued * 30_000 } // 30s between crawls — Jina rate limit friendly
-    );
+    });
     queued++;
   }
 

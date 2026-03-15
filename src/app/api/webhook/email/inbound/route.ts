@@ -19,9 +19,7 @@ import crypto from "crypto";
 import { db } from "@/lib/db";
 import { emailThreads, emailMessages, scheduledCalls, serviceFirms } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { after } from "next/server";
-import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob } from "@/lib/jobs/runner";
+import { inngest } from "@/inngest/client";
 
 // Resend signs inbound webhooks with HMAC-SHA256 using the signing secret
 const WEBHOOK_SECRET = process.env.RESEND_WEBHOOK_SECRET ?? "";
@@ -250,12 +248,10 @@ export async function POST(req: NextRequest) {
         // Schedule job to join the meeting 2 minutes before
         const joinAt = new Date(parsed.startTime.getTime() - 2 * 60 * 1000);
         if (joinAt > new Date()) {
-          const delayMs = joinAt.getTime() - Date.now();
-          await enqueue(
-            "calls-join-meeting",
-            { scheduledCallId: scheduledCallRow[0].id },
-            { delayMs }
-          );
+          await inngest.send({
+            name: "calls/join-meeting",
+            data: { scheduledCallId: scheduledCallRow[0].id },
+          });
         }
       }
     }
@@ -263,15 +259,14 @@ export async function POST(req: NextRequest) {
 
   // Queue email processing (classify + extract + respond)
   if (threadId && dbMessageId) {
-    await enqueue("email-process-inbound", {
+    await inngest.send({ name: "email/process-inbound", data: {
       messageId: dbMessageId,
       threadId,
       firmId,
       from,
       subject,
       bodyText: textBody,
-    });
-    after(runNextJob().catch(() => {}));
+    } });
   }
 
   return NextResponse.json({ ok: true });

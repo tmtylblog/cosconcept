@@ -6,7 +6,7 @@ import { db } from "./db";
 import * as schema from "./db/schema";
 import { PLAN_LIMITS } from "./billing/plan-limits";
 import { createFreeSubscription } from "./billing/create-free-subscription";
-import { enqueue } from "./jobs/queue";
+import { inngest } from "@/inngest/client";
 import { isPersonalEmail, CORPORATE_EMAIL_ERROR } from "./email-validation";
 import { sendEmail } from "./email/email-client";
 
@@ -151,13 +151,13 @@ export const auth = betterAuth({
 
           // Enqueue attribution check — runs async, non-blocking
           const nameParts = (user.name ?? "").split(" ");
-          await enqueue("attribution-check", {
+          await inngest.send({ name: "growth/attribution-check", data: {
             userId: user.id,
             email: user.email ?? "",
             firstName: nameParts[0] ?? null,
             lastName: nameParts.slice(1).join(" ") || null,
             linkedinUrl: null,
-          }).catch(() => {
+          } }).catch(() => {
             // Non-fatal — attribution failure must never block signup
           });
         },

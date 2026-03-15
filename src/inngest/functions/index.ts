@@ -19,6 +19,11 @@ export { sendApprovedEmail } from "./send-approved-email";
 export { joinMeeting } from "./join-meeting";
 export { firmCaseStudyIngest } from "./firm-case-study-ingest";
 export { teamIngest } from "./team-ingest";
+export { networkScan } from "./network-scan";
+export { firmAbstraction } from "./firm-abstraction";
+export { hubspotSync } from "./hubspot-sync";
+export { attributionCheck } from "./attribution-check";
+export { linkedinInviteScheduler } from "./linkedin-invite-scheduler";
 
 // ── Track A: Schema Migration & Background Jobs ──────────
 export { migrateClientNodesToCompany } from "./migrate-client-nodes-to-company";

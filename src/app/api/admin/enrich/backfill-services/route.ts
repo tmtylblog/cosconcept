@@ -12,9 +12,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serviceFirms, firmServices, firmCaseStudies } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { enqueue } from "@/lib/jobs/queue";
-import { after } from "next/server";
-import { runNextJob } from "@/lib/jobs/runner";
+import { inngest } from "@/inngest/client";
 
 export const dynamic = "force-dynamic";
 
@@ -119,12 +117,15 @@ export async function POST(req: NextRequest) {
           sourceType: "url",
           status: "pending",
         });
-        await enqueue("firm-case-study-ingest", {
-          caseStudyId: csId,
-          firmId: firm.id,
-          organizationId: firm.organizationId,
-          sourceUrl: csUrl,
-          sourceType: "url",
+        await inngest.send({
+          name: "enrich/firm-case-study-ingest",
+          data: {
+            caseStudyId: csId,
+            firmId: firm.id,
+            organizationId: firm.organizationId,
+            sourceUrl: csUrl,
+            sourceType: "url",
+          },
         });
       }
       csQueued++;
@@ -132,10 +133,6 @@ export async function POST(req: NextRequest) {
     }
 
     results.push({ firmId: firm.id, name: firm.name, servicesSeeded, caseStudiesQueued: csQueued });
-  }
-
-  if (!dryRun && totalCsQueued > 0) {
-    after(runNextJob().catch(() => {}));
   }
 
   return NextResponse.json({

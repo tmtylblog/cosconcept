@@ -14,7 +14,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { expertProfiles, serviceFirms } from "@/lib/db/schema";
 import { consumeCredit, getAvailableCredits } from "@/lib/billing/enrichment-credits";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 
 export const dynamic = "force-dynamic";
 
@@ -89,9 +89,9 @@ export async function POST(req: NextRequest) {
       : undefined;
 
     // Queue enrichment job
-    const jobId = await enqueue(
-      "expert-linkedin",
-      {
+    await inngest.send({
+      name: "enrich/expert-linkedin",
+      data: {
         expertId: expertProfileId,
         firmId: expert.firmId,
         fullName: expert.fullName,
@@ -99,18 +99,9 @@ export async function POST(req: NextRequest) {
         companyName: firm.name,
         companyWebsite: domain,
       },
-      { priority: 5 }
-    );
-
-    // Trigger worker
-    const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
-    fetch(`${baseUrl}/api/jobs/worker`, {
-      method: "POST",
-      headers: { "x-jobs-secret": (process.env.JOBS_SECRET || "").trim() },
-    }).catch(() => {});
+    });
 
     return NextResponse.json({
-      jobId,
       expertProfileId,
       availableCredits,
       message: `Enrichment queued for ${expert.fullName}`,

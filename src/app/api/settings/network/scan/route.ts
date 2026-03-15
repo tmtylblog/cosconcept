@@ -11,7 +11,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { networkConnections, members } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 
 export const dynamic = "force-dynamic";
 
@@ -52,12 +52,13 @@ export async function POST(req: NextRequest) {
     .where(eq(members.userId, session.user.id))
     .limit(1);
 
-  const jobId = await enqueue("network-scan", {
+  const jobId = `netscan_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  await inngest.send({ name: "network/scan", data: {
     userId: session.user.id,
     organizationId: member?.organizationId ?? connection.organizationId,
     provider,
     connectionId: connection.id,
-  });
+  } });
 
   // Immediately mark as scanning so the UI updates
   await db

@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { serviceFirms, organizations, enrichmentCache } from "@/lib/db/schema";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 import { getOrCreateCreditBalance } from "@/lib/billing/enrichment-credits";
 
 export const dynamic = "force-dynamic";
@@ -131,7 +131,7 @@ export async function POST(req: Request) {
             updatedAt: new Date(),
           }).where(eq(serviceFirms.id, existingFirm.id));
 
-          await enqueue("firm-abstraction", { firmId: existingFirm.id, organizationId }).catch(() => {});
+          await inngest.send({ name: "enrich/firm-abstraction", data: { firmId: existingFirm.id, organizationId } }).catch(() => {});
           console.log(`[EnsureOrg] Hydrated existing stub ${existingFirm.id} from cache for ${resolvedDomain}`);
         } else if (!existingFirm.website && emailDomain) {
           // At minimum, set the website so the offering page can trigger enrichment
@@ -192,19 +192,21 @@ export async function POST(req: Request) {
         profileCompleteness: calcCompleteness(enrichmentData),
       });
 
-      await enqueue("firm-abstraction", { firmId, organizationId });
+      await inngest.send({ name: "enrich/firm-abstraction", data: { firmId, organizationId } });
 
       // Initialize enrichment credits + auto-trigger team roster pull
       await getOrCreateCreditBalance(organizationId).catch(() => {});
       const teamDomain = websiteUrl.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
       if (teamDomain) {
-        await enqueue("team-ingest", {
+        await inngest.send({ name: "enrich/team-ingest", data: {
           firmId,
           domain: teamDomain,
           limit: 500,
           autoEnrichLimit: 5,
           companyName: firmName,
-        }).catch((err) => console.error(`[EnsureOrg] Failed to queue team-ingest: ${err}`));
+          force: false,
+          jobId: "onboard-" + crypto.randomUUID().slice(0, 8),
+        } }).catch((err: unknown) => console.error(`[EnsureOrg] Failed to queue team-ingest: ${err}`));
       }
 
       console.log(`[EnsureOrg] Created + hydrated firm ${firmId} from cache for ${resolvedDomain}`);
@@ -221,13 +223,15 @@ export async function POST(req: Request) {
       // Initialize enrichment credits + auto-trigger team roster pull if we have a domain
       await getOrCreateCreditBalance(organizationId).catch(() => {});
       if (emailDomain) {
-        await enqueue("team-ingest", {
+        await inngest.send({ name: "enrich/team-ingest", data: {
           firmId,
           domain: emailDomain,
           limit: 500,
           autoEnrichLimit: 5,
           companyName: org?.name || undefined,
-        }).catch((err) => console.error(`[EnsureOrg] Failed to queue team-ingest: ${err}`));
+          force: false,
+          jobId: "onboard-" + crypto.randomUUID().slice(0, 8),
+        } }).catch((err: unknown) => console.error(`[EnsureOrg] Failed to queue team-ingest: ${err}`));
       }
 
       console.log(

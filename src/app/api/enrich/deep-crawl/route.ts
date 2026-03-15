@@ -14,10 +14,8 @@
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { after } from "next/server";
 import { auth } from "@/lib/auth";
-import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob } from "@/lib/jobs/runner";
+import { inngest } from "@/inngest/client";
 import { db } from "@/lib/db";
 import { serviceFirms } from "@/lib/db/schema";
 
@@ -73,13 +71,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Queue the deep crawl
-    await enqueue("deep-crawl", {
-      firmId,
-      organizationId: organizationId ?? firmId,
-      website,
-      firmName,
+    await inngest.send({
+      name: "enrich/deep-crawl",
+      data: {
+        firmId,
+        organizationId: organizationId ?? firmId,
+        website,
+        firmName,
+      },
     });
-    after(runNextJob().catch(() => {}));
 
     return NextResponse.json({
       status: "queued",

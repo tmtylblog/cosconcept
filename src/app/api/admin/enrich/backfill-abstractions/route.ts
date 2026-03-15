@@ -14,7 +14,7 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { serviceFirms, abstractionProfiles } from "@/lib/db/schema";
 import { eq, notInArray } from "drizzle-orm";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 
 async function requireAdmin() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -52,11 +52,9 @@ export async function POST(req: NextRequest) {
   // Enqueue with staggered delays to avoid overloading the queue
   let queued = 0;
   for (const firm of firmsToProcess) {
-    await enqueue(
-      "firm-abstraction",
-      { firmId: firm.id, organizationId: firm.organizationId },
-      { delayMs: queued * 15_000 } // 15s between each to spread load
-    );
+    await inngest.send({ name: "enrich/firm-abstraction", data: {
+      firmId: firm.id, organizationId: firm.organizationId,
+    } });
     queued++;
   }
 

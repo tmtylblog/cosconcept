@@ -25,7 +25,7 @@ import {
   organizations,
 } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 import { writeFirmToGraph } from "@/lib/enrichment/graph-writer";
 import type { FirmClassification } from "@/lib/enrichment/ai-classifier";
 import type { FirmGroundTruth } from "@/lib/enrichment/jina-scraper";
@@ -180,12 +180,11 @@ export async function POST(req: NextRequest) {
           })
           .where(eq(serviceFirms.id, customer.firmId));
 
-        // Queue abstraction profile (staggered 10s apart)
-        await enqueue(
-          "firm-abstraction",
-          { firmId: customer.firmId, organizationId: customer.organizationId },
-          { delayMs: results.fixed * 10_000 }
-        );
+        // Queue abstraction profile
+        await inngest.send({
+          name: "enrich/firm-abstraction",
+          data: { firmId: customer.firmId, organizationId: customer.organizationId },
+        });
 
         // Write to Neo4j knowledge graph (best-effort)
         try {

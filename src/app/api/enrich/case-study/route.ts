@@ -7,10 +7,8 @@
 
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { after } from "next/server";
 import { extractTextFromPdf } from "@/lib/enrichment/case-study-ingestor";
-import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob } from "@/lib/jobs/runner";
+import { inngest } from "@/inngest/client";
 import { auth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -45,13 +43,15 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      await enqueue("case-study-ingest", {
-        firmId,
-        sourceType: "pdf",
-        rawText,
-        filename: file.name,
+      await inngest.send({
+        name: "enrich/case-study-ingest",
+        data: {
+          firmId,
+          sourceType: "pdf",
+          rawText,
+          filename: file.name,
+        },
       });
-      after(runNextJob().catch(() => {}));
 
       return NextResponse.json({
         status: "queued",
@@ -78,13 +78,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await enqueue("case-study-ingest", {
-      firmId,
-      caseStudyUrl: url,
-      sourceType: sourceType ?? (url ? "url" : "text"),
-      rawText,
+    await inngest.send({
+      name: "enrich/case-study-ingest",
+      data: {
+        firmId,
+        caseStudyUrl: url,
+        sourceType: sourceType ?? (url ? "url" : "text"),
+        rawText,
+      },
     });
-    after(runNextJob().catch(() => {}));
 
     return NextResponse.json({
       status: "queued",

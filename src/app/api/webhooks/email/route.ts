@@ -11,9 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { emailThreads, emailMessages, serviceFirms } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { after } from "next/server";
-import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob } from "@/lib/jobs/runner";
+import { inngest } from "@/inngest/client";
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -151,15 +149,14 @@ export async function POST(req: NextRequest) {
   });
 
   // Trigger AI processing
-  await enqueue("email-process-inbound", {
+  await inngest.send({ name: "email/process-inbound", data: {
     messageId,
     threadId: finalThreadId,
     firmId,
     from,
     subject: normalizedSubject,
     bodyText: text ?? "",
-  });
-  after(runNextJob().catch(() => {}));
+  } });
 
   return NextResponse.json({ threadId: finalThreadId, messageId });
 }

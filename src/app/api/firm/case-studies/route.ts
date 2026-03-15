@@ -6,7 +6,6 @@
 import { headers } from "next/headers";
 import { NextRequest } from "next/server";
 import { eq, ne, and, desc } from "drizzle-orm";
-import { after } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { firmCaseStudies, serviceFirms, members, enrichmentCache } from "@/lib/db/schema";
@@ -22,8 +21,7 @@ async function resolveRedirect(domain: string): Promise<string | null> {
     return finalHost !== domain.toLowerCase() ? finalHost : null;
   } catch { return null; }
 }
-import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob, drainQueue } from "@/lib/jobs/runner";
+import { inngest } from "@/inngest/client";
 import { recordManualCorrection } from "@/lib/enrichment/extraction-learner";
 
 // ─── Seed from enrichment data (silent, first-load only) ─
@@ -92,9 +90,9 @@ async function seedCaseStudiesIfEmpty(firmId: string, organizationId: string, us
         await db.update(firmCaseStudies)
           .set({ status: "pending", statusMessage: "Retrying — previous attempt may have timed out", updatedAt: new Date() })
           .where(eq(firmCaseStudies.id, existing.id));
-        await enqueue("firm-case-study-ingest", {
+        await inngest.send({ name: "enrich/firm-case-study-ingest", data: {
           caseStudyId: existing.id, firmId, organizationId, sourceUrl: csUrl, sourceType: "url",
-        });
+        } });
         queued++;
       }
       continue;
@@ -105,12 +103,12 @@ async function seedCaseStudiesIfEmpty(firmId: string, organizationId: string, us
     await db.insert(firmCaseStudies).values({
       id: csId, firmId, organizationId, sourceUrl: csUrl, sourceType: "url", status: "pending",
     });
-    await enqueue("firm-case-study-ingest", {
+    await inngest.send({ name: "enrich/firm-case-study-ingest", data: {
       caseStudyId: csId, firmId, organizationId, sourceUrl: csUrl, sourceType: "url",
-    });
+    } });
     queued++;
   }
-  if (queued > 0) after(drainQueue(Math.min(queued, 5)).catch(() => {}));
+  // Inngest handles scheduling automatically
 }
 
 export const dynamic = "force-dynamic";
@@ -400,7 +398,7 @@ export async function POST(req: NextRequest) {
   });
 
   // ── Queue background job ─────────────────────────────────
-  await enqueue("firm-case-study-ingest", {
+  await inngest.send({ name: "enrich/firm-case-study-ingest", data: {
     caseStudyId: id,
     firmId: firm.id,
     organizationId,
@@ -408,8 +406,7 @@ export async function POST(req: NextRequest) {
     sourceType: sourceType === "pdf" ? "pdf_url" : sourceType,
     rawText,
     filename,
-  });
-  after(drainQueue(1).catch(() => {}));
+  } });
 
   // Track manual case study submission for self-learning (Change 9c)
   await recordManualCorrection({

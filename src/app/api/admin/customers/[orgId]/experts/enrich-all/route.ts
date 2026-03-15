@@ -13,7 +13,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { expertProfiles, serviceFirms } from "@/lib/db/schema";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 
 export const dynamic = "force-dynamic";
 
@@ -81,9 +81,9 @@ export async function POST(
         continue;
       }
 
-      await enqueue(
-        "expert-linkedin",
-        {
+      await inngest.send({
+        name: "enrich/expert-linkedin",
+        data: {
           expertId: ep.id,
           firmId: firm.id,
           fullName,
@@ -91,18 +91,8 @@ export async function POST(
           companyName: firm.name,
           companyWebsite,
         },
-        { delayMs: queued * 3000 } // 3s stagger to avoid PDL rate limits
-      );
+      });
       queued++;
-    }
-
-    // Fire-and-forget: trigger worker
-    if (queued > 0) {
-      const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
-      fetch(`${baseUrl}/api/jobs/worker`, {
-        method: "POST",
-        headers: { "x-jobs-secret": (process.env.JOBS_SECRET || "").trim() },
-      }).catch((err) => console.error("[EnrichAll] Failed to trigger worker:", err));
     }
 
     return NextResponse.json({

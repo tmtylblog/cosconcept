@@ -47,6 +47,7 @@ export type ExpertLinkedInEvent = {
     firmId: string;
     fullName: string;
     linkedinUrl?: string;
+    email?: string;
     companyName?: string;
     companyWebsite?: string;
   };
@@ -94,12 +95,15 @@ export type PostCallAnalysisEvent = {
   data: {
     callId: string;
     firmId: string;
-    userId: string;
+    userId?: string;
     transcript: string;
     callType: string;
     platform?: string;
     participants?: string[];
-    duration?: number;
+    duration?: number | null;
+    partnershipId?: string;
+    scheduledCallId?: string;
+    transcriptId?: string;
   };
 };
 
@@ -169,6 +173,41 @@ export type FirmCaseStudyIngestEvent = {
   };
 };
 
+/** Network relationship scan for an email connection */
+export type NetworkScanEvent = {
+  name: "network/scan";
+  data: {
+    userId: string;
+    organizationId: string;
+    provider: string;
+    connectionId: string;
+  };
+};
+
+/** Attribution check for a new user signup */
+export type AttributionCheckEvent = {
+  name: "growth/attribution-check";
+  data: {
+    userId: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    linkedinUrl: string | null;
+  };
+};
+
+/** HubSpot CRM sync */
+export type HubSpotSyncEvent = {
+  name: "cron/hubspot-sync";
+  data: Record<string, never>;
+};
+
+/** LinkedIn invite scheduler */
+export type LinkedInInviteSchedulerEvent = {
+  name: "cron/linkedin-invite-scheduler";
+  data: Record<string, never>;
+};
+
 // Union type for all events
 export type CosEvent =
   | DeepCrawlEvent
@@ -184,4 +223,8 @@ export type CosEvent =
   | SendApprovedEmailEvent
   | JoinMeetingEvent
   | FirmCaseStudyIngestEvent
-  | TeamIngestEvent;
+  | TeamIngestEvent
+  | NetworkScanEvent
+  | AttributionCheckEvent
+  | HubSpotSyncEvent
+  | LinkedInInviteSchedulerEvent;

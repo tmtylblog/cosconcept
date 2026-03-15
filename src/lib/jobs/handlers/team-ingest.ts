@@ -23,7 +23,7 @@ import { searchPeopleAtCompany } from "@/lib/enrichment/pdl";
 import { classifyTitle } from "@/lib/enrichment/expert-classifier";
 import { writeRosterStubsToGraph } from "@/lib/enrichment/graph-writer";
 import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 import { normalizeLinkedInUrl } from "@/lib/utils";
 
 // ── Three-tier expert classification ─────────────────────────────────────────
@@ -324,9 +324,9 @@ export async function handleTeamIngest(
     for (let i = 0; i < toEnrich.length; i++) {
       const { expertId, fullName, linkedinUrl } = toEnrich[i];
       try {
-        await enqueue(
-          "expert-linkedin",
-          {
+        await inngest.send({
+          name: "enrich/expert-linkedin",
+          data: {
             expertId,
             firmId,
             fullName,
@@ -334,8 +334,7 @@ export async function handleTeamIngest(
             companyName: companyName || undefined,
             companyWebsite: domain,
           },
-          { delayMs: i * 3000 } // stagger 3s apart to avoid PDL rate limiting
-        );
+        });
         autoEnrichQueued++;
       } catch (err) {
         console.error(`[TeamIngest] Failed to queue enrich for ${fullName}: ${err}`);

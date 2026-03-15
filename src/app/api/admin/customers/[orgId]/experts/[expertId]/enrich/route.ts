@@ -13,7 +13,7 @@ import { eq, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { expertProfiles, serviceFirms } from "@/lib/db/schema";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes — PDL enrichment can be slow
@@ -87,9 +87,9 @@ export async function POST(
       : undefined;
 
     // Queue expert-linkedin job
-    const jobId = await enqueue(
-      "expert-linkedin",
-      {
+    await inngest.send({
+      name: "enrich/expert-linkedin",
+      data: {
         expertId: expert.id,
         firmId: firm.id,
         fullName: expert.fullName ?? `${expert.firstName ?? ""} ${expert.lastName ?? ""}`.trim(),
@@ -97,18 +97,9 @@ export async function POST(
         companyName: firm.name,
         companyWebsite,
       },
-      { priority: 10 } // High priority for manual enrichment
-    );
-
-    // Fire-and-forget: trigger worker as a separate serverless function
-    const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
-    fetch(`${baseUrl}/api/jobs/worker`, {
-      method: "POST",
-      headers: { "x-jobs-secret": (process.env.JOBS_SECRET || "").trim() },
-    }).catch((err) => console.error("[ExpertEnrich] Failed to trigger worker:", err));
+    });
 
     return NextResponse.json({
-      jobId,
       expertId: expert.id,
       fullName: expert.fullName,
       message: `Enrichment queued for ${expert.fullName ?? expertId}`,

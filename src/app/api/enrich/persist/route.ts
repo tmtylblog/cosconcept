@@ -1,13 +1,11 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { after } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serviceFirms, firmCaseStudies, firmServices } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { writeFirmToGraph } from "@/lib/enrichment/graph-writer";
-import { enqueue } from "@/lib/jobs/queue";
-import { runNextJob, drainQueue } from "@/lib/jobs/runner";
+import { inngest } from "@/inngest/client";
 import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
 
 export const dynamic = "force-dynamic";
@@ -239,12 +237,15 @@ export async function POST(req: Request) {
             sourceType: "url",
             status: "pending",
           });
-          await enqueue("firm-case-study-ingest", {
-            caseStudyId: csId,
-            firmId,
-            organizationId,
-            sourceUrl: csUrl,
-            sourceType: "url",
+          await inngest.send({
+            name: "enrich/firm-case-study-ingest",
+            data: {
+              caseStudyId: csId,
+              firmId,
+              organizationId,
+              sourceUrl: csUrl,
+              sourceType: "url",
+            },
           });
           queued++;
         } catch (err) {
@@ -252,7 +253,6 @@ export async function POST(req: Request) {
         }
       }
       if (queued > 0) {
-        after(drainQueue(Math.min(queued, 5)).catch(() => {}));
         console.log(`[Enrich/Persist] Queued ${queued} case studies for ingestion (firm ${firmId})`);
       }
 

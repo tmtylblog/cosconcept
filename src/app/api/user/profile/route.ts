@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users, attributionEvents, attributionTouchpoints } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 
 export const dynamic = "force-dynamic";
 
@@ -70,13 +70,13 @@ export async function PATCH(req: NextRequest) {
 
       // Enqueue fresh attribution check with the new LinkedIn URL
       const nameParts = (session.user.name ?? "").split(" ");
-      await enqueue("attribution-check", {
+      await inngest.send({ name: "growth/attribution-check", data: {
         userId: session.user.id,
         email: session.user.email ?? "",
         firstName: nameParts[0] ?? null,
         lastName: nameParts.slice(1).join(" ") || null,
         linkedinUrl: updates.linkedinUrl,
-      });
+      } });
     } catch {
       // Re-attribution failure is non-critical — profile update still succeeds
     }

@@ -12,7 +12,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { expertProfiles, serviceFirms } from "@/lib/db/schema";
 import { consumeCredit, getAvailableCredits } from "@/lib/billing/enrichment-credits";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     : undefined;
 
   // Consume credits and queue jobs
-  const results: { expertId: string; jobId: string }[] = [];
+  const results: { expertId: string }[] = [];
   const errors: string[] = [];
 
   for (let i = 0; i < toEnrich.length; i++) {
@@ -99,9 +99,9 @@ export async function POST(req: NextRequest) {
     try {
       await consumeCredit(orgId, expert.id);
 
-      const jobId = await enqueue(
-        "expert-linkedin",
-        {
+      await inngest.send({
+        name: "enrich/expert-linkedin",
+        data: {
           expertId: expert.id,
           firmId: expert.firmId,
           fullName: expert.fullName,
@@ -109,21 +109,13 @@ export async function POST(req: NextRequest) {
           companyName: firm.name,
           companyWebsite: domain,
         },
-        { delayMs: i * 3000 } // stagger 3s apart
-      );
+      });
 
-      results.push({ expertId: expert.id, jobId });
+      results.push({ expertId: expert.id });
     } catch (err) {
       errors.push(`${expert.fullName}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-
-  // Trigger worker
-  const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:3000";
-  fetch(`${baseUrl}/api/jobs/worker`, {
-    method: "POST",
-    headers: { "x-jobs-secret": (process.env.JOBS_SECRET || "").trim() },
-  }).catch(() => {});
 
   const finalBalance = await getAvailableCredits(orgId);
 

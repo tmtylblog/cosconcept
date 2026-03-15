@@ -16,6 +16,11 @@ import {
   joinMeeting,
   firmCaseStudyIngest,
   teamIngest,
+  networkScan,
+  firmAbstraction,
+  hubspotSync,
+  attributionCheck,
+  linkedinInviteScheduler,
 } from "@/inngest/functions";
 
 /**
@@ -40,5 +45,10 @@ export const { GET, POST, PUT } = serve({
     joinMeeting,
     firmCaseStudyIngest,
     teamIngest,
+    networkScan,
+    firmAbstraction,
+    hubspotSync,
+    attributionCheck,
+    linkedinInviteScheduler,
   ],
 });

@@ -19,7 +19,7 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { serviceFirms, enrichmentAuditLog } from "@/lib/db/schema";
 import { eq, isNotNull, inArray } from "drizzle-orm";
-import { enqueue } from "@/lib/jobs/queue";
+import { inngest } from "@/inngest/client";
 
 async function requireAdmin(req: NextRequest) {
   // Allow ADMIN_SECRET header for CLI/script access
@@ -94,11 +94,11 @@ export async function POST(req: NextRequest) {
     if (!domain) continue;
 
     try {
-      await enqueue(
-        "team-ingest",
-        { firmId: firm.id, domain, limit },
-        { delayMs: i * STAGGER_MS }
-      );
+      await inngest.send({ name: "enrich/team-ingest", data: {
+        firmId: firm.id, domain, limit,
+        force,
+        jobId: "batch-" + crypto.randomUUID().slice(0, 8),
+      } });
       queued++;
     } catch (err) {
       errors.push(`${firm.id}: ${err}`);
