@@ -107,6 +107,7 @@ export async function POST(
         autoEnrichLimit,
         force,
         jobId,
+        companyName: firm.name ?? undefined,
       },
     });
 

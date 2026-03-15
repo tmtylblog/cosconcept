@@ -137,6 +137,7 @@ export async function POST(req: Request) {
         autoEnrichLimit: 5,
         force: false,
         jobId,
+        companyName: firm.name ?? undefined,
       },
     });
 
