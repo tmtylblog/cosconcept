@@ -13,7 +13,7 @@ export const extractMemories = inngest.createFunction(
     id: "memory-extract",
     name: "Extract Conversation Memories",
     retries: 1,
-    concurrency: [{ limit: 10 }],
+    concurrency: [{ limit: 5 }],
   },
   { event: "memory/extract" },
   async ({ event, step }) => {
