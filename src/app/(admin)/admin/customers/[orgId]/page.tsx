@@ -222,6 +222,8 @@ interface AdminExpert {
   partialProfiles: number;
   profileCompleteness: number | null;
   createdAt: string;
+  updatedAt: string | null;
+  enrichmentStatus: string | null;
   // Team import fields
   expertTier: "expert" | "potential_expert" | "not_expert" | null;
   isFullyEnriched: boolean;
@@ -465,6 +467,9 @@ export default function CustomerDetailPage() {
   const [experts, setExperts] = useState<AdminExpert[]>([]);
   const [expertsLoading, setExpertsLoading] = useState(false);
   const [expertsLoaded, setExpertsLoaded] = useState(false);
+  const [expertsPage, setExpertsPage] = useState(1);
+  const [expertsTotalPages, setExpertsTotalPages] = useState(1);
+  const [expertsTotalCount, setExpertsTotalCount] = useState(0);
   const [showAddExpert, setShowAddExpert] = useState(false);
   const [addExpertForm, setAddExpertForm] = useState({ firstName: "", lastName: "", email: "", title: "", linkedinUrl: "" });
   const [addingExpert, setAddingExpert] = useState(false);
@@ -626,12 +631,15 @@ export default function CustomerDetailPage() {
   }, [activeTab, commsLoaded, orgId]);
 
   // Lazy load experts when Users & Team tab is active
-  const loadExperts = useCallback(() => {
+  const loadExperts = useCallback((page = 1) => {
     setExpertsLoading(true);
-    fetch(`/api/admin/customers/${orgId}/experts`)
+    fetch(`/api/admin/customers/${orgId}/experts?page=${page}&limit=50`)
       .then((r) => r.json())
       .then((d) => {
         setExperts(d.experts ?? []);
+        setExpertsTotalPages(d.totalPages ?? 1);
+        setExpertsTotalCount(d.total ?? 0);
+        setExpertsPage(page);
         setExpertsLoaded(true);
       })
       .catch(console.error)
@@ -1842,17 +1850,24 @@ export default function CustomerDetailPage() {
                       </div>
                     )}
 
-                    {/* Name + Title */}
+                    {/* Name + Title + Updated */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="truncate text-sm font-medium text-cos-midnight">
                           {ep.fullName ?? [ep.firstName, ep.lastName].filter(Boolean).join(" ") ?? "Unnamed"}
                         </span>
                         {ep.isFullyEnriched && (
-                          <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Fully enriched" />
+                          <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Enriched" />
                         )}
                       </div>
-                      <p className="truncate text-xs text-cos-slate">{ep.title ?? "—"}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-xs text-cos-slate">{ep.title ?? "—"}</p>
+                        {ep.updatedAt && (
+                          <span className="shrink-0 text-[9px] text-cos-slate/50">
+                            {new Date(ep.updatedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Actions */}
@@ -1868,7 +1883,7 @@ export default function CustomerDetailPage() {
                           <Linkedin className="h-3.5 w-3.5" />
                         </a>
                       )}
-                      {showEnrich && !ep.isFullyEnriched && (ep.linkedinUrl || ep.fullName) && (
+                      {showEnrich && (ep.linkedinUrl || ep.fullName) && (
                         enrichingExpert === ep.id ? (
                           <span className="inline-flex items-center gap-1 px-2 text-[10px] text-cos-electric">
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -1878,12 +1893,16 @@ export default function CustomerDetailPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleManualEnrich(ep.id)}
-                            title="Enrich with PDL (1 credit)"
-                            className="h-7 gap-1 px-2 text-[10px] text-cos-warm hover:text-cos-warm hover:bg-cos-warm/5"
+                            onClick={(e) => { e.stopPropagation(); handleManualEnrich(ep.id); }}
+                            title={ep.isFullyEnriched ? "Re-enrich with fresh PDL data (1 credit)" : "Enrich with PDL (1 credit)"}
+                            className={`h-7 gap-1 px-2 text-[10px] ${
+                              ep.isFullyEnriched
+                                ? "text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
+                                : "text-cos-warm hover:text-cos-warm hover:bg-cos-warm/5"
+                            }`}
                           >
                             <Sparkles className="h-3 w-3" />
-                            Enrich
+                            {ep.isFullyEnriched ? "Update" : "Enrich"}
                           </Button>
                         )
                       )}
@@ -1970,6 +1989,38 @@ export default function CustomerDetailPage() {
                         </div>
                         <div className="divide-y divide-cos-border/30">
                           {tierOther.map((ep) => renderExpertRow(ep, true))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pagination */}
+                    {expertsTotalPages > 1 && (
+                      <div className="flex items-center justify-between pt-4">
+                        <span className="text-xs text-cos-slate">
+                          Showing {(expertsPage - 1) * 50 + 1}–{Math.min(expertsPage * 50, expertsTotalCount)} of {expertsTotalCount}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            disabled={expertsPage <= 1 || expertsLoading}
+                            onClick={() => loadExperts(expertsPage - 1)}
+                          >
+                            Previous
+                          </Button>
+                          <span className="px-2 text-xs text-cos-slate">
+                            {expertsPage} / {expertsTotalPages}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            disabled={expertsPage >= expertsTotalPages || expertsLoading}
+                            onClick={() => loadExperts(expertsPage + 1)}
+                          >
+                            Next
+                          </Button>
                         </div>
                       </div>
                     )}

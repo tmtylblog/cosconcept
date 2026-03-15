@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { eq, desc, sql, inArray } from "drizzle-orm";
+import { eq, desc, sql, inArray, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -32,25 +32,41 @@ export async function GET(
   }
 
   const { orgId } = await params;
+  const url = new URL(_req.url);
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "50", 10)));
+  const tier = url.searchParams.get("tier"); // "expert" | "potential_expert" | "not_expert" | null
+  const offset = (page - 1) * limit;
 
   try {
-    // Find firm for this org
-    const [firm] = await db
+    // Find firm(s) for this org
+    const firms = await db
       .select({ id: serviceFirms.id })
       .from(serviceFirms)
-      .where(eq(serviceFirms.organizationId, orgId))
-      .limit(1);
+      .where(eq(serviceFirms.organizationId, orgId));
 
-    if (!firm) {
-      return NextResponse.json({ experts: [], total: 0 });
+    if (firms.length === 0) {
+      return NextResponse.json({ experts: [], total: 0, page, totalPages: 0 });
     }
 
-    // Load experts
+    const firmIds = firms.map((f) => f.id);
+
+    // Count total experts across all firm IDs
+    const [{ count: totalCount }] = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(expertProfiles)
+      .where(inArray(expertProfiles.firmId, firmIds));
+
+    // Load paginated experts
     const experts = await db
       .select()
       .from(expertProfiles)
-      .where(eq(expertProfiles.firmId, firm.id))
-      .orderBy(desc(expertProfiles.updatedAt));
+      .where(inArray(expertProfiles.firmId, firmIds))
+      .orderBy(desc(expertProfiles.updatedAt))
+      .limit(limit)
+      .offset(offset);
+
+    const firm = { id: firmIds[0] }; // Primary firm for specialist profile lookup
 
     // Load specialist profile counts per expert
     const spCounts = await db
@@ -116,7 +132,7 @@ export async function GET(
       const hasSpecialistProfiles = (sp?.total ?? 0) > 0;
       const expertTier = pdlClassification
         ?? (hasSpecialistProfiles || hasExperience ? "expert" : null);
-      const isFullyEnriched = !!ep.pdlEnrichedAt && hasExperience;
+      const isFullyEnriched = hasExperience || ep.enrichmentStatus === "enriched";
 
       return {
         id: ep.id,
@@ -136,6 +152,8 @@ export async function GET(
         partialProfiles: sp?.partial ?? 0,
         profileCompleteness: ep.profileCompleteness,
         createdAt: ep.createdAt,
+        updatedAt: ep.updatedAt,
+        enrichmentStatus: ep.enrichmentStatus,
         // Team import tier + enrichment status
         expertTier,
         isFullyEnriched,
@@ -143,7 +161,13 @@ export async function GET(
       };
     });
 
-    return NextResponse.json({ experts: result, total: result.length });
+    return NextResponse.json({
+      experts: result,
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+    });
   } catch (error) {
     console.error("[Admin] Experts list error:", error);
     return NextResponse.json(
