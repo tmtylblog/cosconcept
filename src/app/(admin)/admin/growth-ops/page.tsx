@@ -129,7 +129,7 @@ function NewMessageModal({
                         onClick={() => setSelected(r)}
                         className="flex w-full items-center gap-3 px-3 py-2.5 hover:bg-cos-cloud text-left"
                       >
-                        <Avatar src={r.profile_picture_url} name={rName} size={7} />
+                        <Avatar src={r.profile_picture_url} name={rName} size={28} />
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-cos-midnight truncate">{rName}</p>
                           {r.headline && <p className="text-xs text-cos-slate truncate">{r.headline}</p>}
@@ -145,7 +145,7 @@ function NewMessageModal({
             <div>
               <label className="text-xs font-medium text-cos-slate mb-1.5 block">To</label>
               <div className="flex items-center gap-2 rounded-cos-lg border border-cos-electric/40 bg-cos-electric/5 px-3 py-2">
-                <Avatar src={selected.profile_picture_url} name={[selected.first_name, selected.last_name].join(" ")} size={6} />
+                <Avatar src={selected.profile_picture_url} name={[selected.first_name, selected.last_name].join(" ")} size={24} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-cos-midnight truncate">
                     {[selected.first_name, selected.last_name].filter(Boolean).join(" ")}

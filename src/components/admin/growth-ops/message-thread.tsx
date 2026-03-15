@@ -80,7 +80,7 @@ export function MessageThread({
         <Avatar
           src={selectedConvo.participantAvatarUrl}
           name={selectedConvo.participantName}
-          size={8}
+          size={32}
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -137,7 +137,7 @@ export function MessageThread({
               <Avatar
                 src={selectedConvo.participantAvatarUrl}
                 name={selectedConvo.participantName}
-                size={6}
+                size={24}
               />
             )}
             <div
@@ -153,7 +153,7 @@ export function MessageThread({
             {m.is_sender && (
               <Avatar
                 name={convoAccountName || "Me"}
-                size={6}
+                size={24}
                 className="opacity-60"
               />
             )}

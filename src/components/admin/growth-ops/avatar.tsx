@@ -3,14 +3,17 @@
 // ── Avatar & AccountBadge ────────────────────────────────────────────────────
 // Shared avatar helpers extracted from the LinkedIn inbox page.
 
+// Tailwind JIT can't generate dynamic class names like `h-${size}`.
+// Use inline styles for dimensions instead.
 export function Avatar({
   src,
   name,
-  size = 8,
+  size = 32,
   className: extraClass = "",
 }: {
   src?: string | null;
   name?: string | null;
+  /** Size in pixels (default 32) */
   size?: number;
   className?: string;
 }) {
@@ -20,17 +23,23 @@ export function Avatar({
     .map((w) => w[0])
     .join("")
     .toUpperCase();
-  const cls = `h-${size} w-${size} rounded-full shrink-0 overflow-hidden flex items-center justify-center text-xs font-semibold ${extraClass}`;
+  const fontSize = size <= 24 ? 9 : size <= 32 ? 11 : 13;
   if (src) {
     return (
-      <div className={cls}>
+      <div
+        className={`rounded-full shrink-0 overflow-hidden ${extraClass}`}
+        style={{ width: size, height: size }}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt={name ?? ""} className="h-full w-full object-cover" />
       </div>
     );
   }
   return (
-    <div className={`${cls} bg-cos-electric/15 text-cos-electric`}>
+    <div
+      className={`rounded-full shrink-0 overflow-hidden flex items-center justify-center font-semibold bg-cos-electric/15 text-cos-electric ${extraClass}`}
+      style={{ width: size, height: size, fontSize }}
+    >
       {initials}
     </div>
   );

@@ -193,7 +193,7 @@ export function ConversationList({
                 key={q.id}
                 className="flex items-start gap-2 px-3 py-2 border-t border-amber-100"
               >
-                <Avatar name={q.contactName} size={7} />
+                <Avatar name={q.contactName} size={28} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-cos-midnight truncate">
                     {q.contactName || q.contactEmail || "Unknown"}
@@ -266,7 +266,7 @@ export function ConversationList({
               <Avatar
                 src={convo.participantAvatarUrl}
                 name={convo.participantName}
-                size={9}
+                size={36}
               />
               {/* Stage color dot */}
               {convo._stageColor && (
