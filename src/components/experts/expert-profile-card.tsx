@@ -102,7 +102,7 @@ export function ExpertProfileCard({
   onEditClick,
   onClose,
 }: ExpertProfileCardProps) {
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
 
   const name =
     expert.fullName ??

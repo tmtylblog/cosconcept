@@ -799,14 +799,29 @@ export default function CustomerDetailPage() {
       await fetch(`/api/admin/customers/${orgId}/experts/${expertId}/enrich`, {
         method: "POST",
       });
-      // After a few seconds, refresh the expert list
-      setTimeout(() => {
-        setExpertsLoaded(false);
-        loadExperts();
-      }, 5000);
+      // Poll until enrichment completes (check every 5s, max 2 min)
+      let attempts = 0;
+      const pollEnrich = async () => {
+        attempts++;
+        if (attempts > 24) { setEnrichingExpert(null); return; }
+        try {
+          const res = await fetch(`/api/admin/customers/${orgId}/experts?ids=${expertId}`);
+          if (res.ok) {
+            const data = await res.json();
+            const expert = data.experts?.[0] ?? data;
+            if (expert?.enrichmentStatus === "enriched" || expert?.isFullyEnriched) {
+              setEnrichingExpert(null);
+              setExpertsLoaded(false);
+              loadExperts();
+              return;
+            }
+          }
+        } catch { /* continue polling */ }
+        setTimeout(pollEnrich, 5000);
+      };
+      setTimeout(pollEnrich, 5000);
     } catch (err) {
       console.error("Failed to enrich expert:", err);
-    } finally {
       setEnrichingExpert(null);
     }
   }
@@ -1854,21 +1869,23 @@ export default function CustomerDetailPage() {
                         </a>
                       )}
                       {showEnrich && !ep.isFullyEnriched && (ep.linkedinUrl || ep.fullName) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleManualEnrich(ep.id)}
-                          disabled={enrichingExpert === ep.id}
-                          title="Enrich with PDL (1 credit)"
-                          className="h-7 gap-1 px-2 text-[10px] text-cos-warm hover:text-cos-warm hover:bg-cos-warm/5"
-                        >
-                          {enrichingExpert === ep.id ? (
+                        enrichingExpert === ep.id ? (
+                          <span className="inline-flex items-center gap-1 px-2 text-[10px] text-cos-electric">
                             <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
+                            Processing...
+                          </span>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleManualEnrich(ep.id)}
+                            title="Enrich with PDL (1 credit)"
+                            className="h-7 gap-1 px-2 text-[10px] text-cos-warm hover:text-cos-warm hover:bg-cos-warm/5"
+                          >
                             <Sparkles className="h-3 w-3" />
-                          )}
-                          Enrich
-                        </Button>
+                            Enrich
+                          </Button>
+                        )
                       )}
                       {!ep.userId && ep.email && (
                         <Button
