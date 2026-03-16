@@ -58,6 +58,7 @@ export default function ExpertEditPage() {
   const [specialistProfiles, setSpecialistProfiles] = useState<SpecialistProfile[]>([]);
   const [editingProfile, setEditingProfile] = useState<SpecialistProfile | null>(null);
   const [creatingNew, setCreatingNew] = useState(isNew);
+  const [expertBio, setExpertBio] = useState<string>("");
 
   useEffect(() => {
     if (!id) return;
@@ -67,6 +68,7 @@ export default function ExpertEditPage() {
         const pdl = data.expert?.pdlData?.experience ?? [];
         setPdlExperiences(pdl);
         setSpecialistProfiles(data.specialistProfiles ?? []);
+        setExpertBio(data.expert?.bio ?? data.expert?.pdlData?.summary ?? "");
 
         if (spId) {
           const found = (data.specialistProfiles ?? []).find(
@@ -113,6 +115,7 @@ export default function ExpertEditPage() {
           })),
         }}
         pdlExperiences={pdlExperiences}
+        expertBio={expertBio}
         onSave={handleSaved}
         onCancel={() => router.push(`/experts/${id}`)}
       />
@@ -126,6 +129,7 @@ export default function ExpertEditPage() {
         expertId={id}
         initialProfile={null}
         pdlExperiences={pdlExperiences}
+        expertBio={expertBio}
         onSave={handleSaved}
         onCancel={() => {
           setCreatingNew(false);

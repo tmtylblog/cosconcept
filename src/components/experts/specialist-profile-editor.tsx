@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Plus, X, ChevronDown, ArrowLeft, Save, Loader2,
-  Briefcase, Lightbulb, History,
+  Briefcase, Lightbulb, History, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { scoreSpecialistProfile, type ScoreResult } from "@/lib/expert/quality-score";
@@ -48,6 +48,8 @@ const EMPTY_EXAMPLE: WorkExample = {
   saveToHistory: false,
 };
 
+const SUBJECT_MAX_CHARS = 500;
+
 interface EditorProps {
   expertId: string;
   initialProfile?: {
@@ -60,48 +62,31 @@ interface EditorProps {
     examples?: WorkExample[];
   } | null;
   pdlExperiences?: PdlExperience[];
+  /** Expert's normalized bio — used as hidden context for AI description generation */
+  expertBio?: string;
   onSave?: (spId: string) => void;
   onCancel?: () => void;
 }
 
-// ─── Skills fetch helper ─────────────────────────────────
+// ─── Smart search helpers (server-side L3→L2 resolution) ──
 
-let skillsCache: string[] | null = null;
-
-async function fetchSkillsList(): Promise<string[]> {
-  if (skillsCache) return skillsCache;
+async function searchSkills(query: string): Promise<string[]> {
   try {
-    const res = await fetch("/api/public/taxonomy?section=skills");
+    const res = await fetch(`/api/taxonomy/skills/search?q=${encodeURIComponent(query)}`);
     const data = await res.json();
-    const l1ToL2 = data.skills?.l1ToL2 ?? {};
-    const all: string[] = Object.values(l1ToL2).flat() as string[];
-    skillsCache = [...new Set(all)].sort();
-    return skillsCache;
+    return (data.results ?? []).map((r: { name: string; matchedVia?: string }) =>
+      r.matchedVia ? `${r.name}` : r.name
+    );
   } catch {
     return [];
   }
 }
 
-async function searchSkills(query: string): Promise<string[]> {
-  const allSkills = await fetchSkillsList();
-  const q = query.toLowerCase();
-  // Prefix matches first, then contains
-  const prefix = allSkills.filter((s) => s.toLowerCase().startsWith(q));
-  const contains = allSkills.filter(
-    (s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q)
-  );
-  return [...prefix, ...contains].slice(0, 15);
-}
-
-// ─── Industries fetch helper ─────────────────────────────
-
 async function searchIndustries(query: string): Promise<string[]> {
   try {
-    const res = await fetch(
-      `/api/graph/search?q=${encodeURIComponent(query)}&type=Industry&limit=15`
-    );
+    const res = await fetch(`/api/taxonomy/industries/search?q=${encodeURIComponent(query)}`);
     const data = await res.json();
-    return (data.results ?? []).map((r: { name: string }) => r.name);
+    return data.results ?? [];
   } catch {
     return [];
   }
@@ -113,9 +98,11 @@ export function SpecialistProfileEditor({
   expertId,
   initialProfile,
   pdlExperiences = [],
+  expertBio,
   onSave,
   onCancel,
 }: EditorProps) {
+  const isEditing = !!initialProfile?.id;
   const [title, setTitle] = useState(initialProfile?.title ?? "");
   const [bodyDescription, setBodyDescription] = useState(
     initialProfile?.bodyDescription ?? ""
@@ -133,6 +120,14 @@ export function SpecialistProfileEditor({
   const [error, setError] = useState<string | null>(null);
   const [showPdlPicker, setShowPdlPicker] = useState(false);
   const [pickerTargetIdx, setPickerTargetIdx] = useState<number>(0);
+  const [generating, setGenerating] = useState(false);
+
+  // Check if all 3 examples have subjects filled
+  const allExamplesComplete = examples.length >= 3 &&
+    examples.every((ex) => ex.title.trim() && ex.subject.trim());
+
+  // Show description section if: editing existing profile with description, OR all 3 examples complete
+  const showDescription = isEditing && bodyDescription.length > 0 || allExamplesComplete;
 
   // Recompute score whenever inputs change
   useEffect(() => {
@@ -178,7 +173,6 @@ export function SpecialistProfileEditor({
         exampleType: "role",
       };
 
-      // If there's a target slot, fill it; otherwise append
       if (pickerTargetIdx < examples.length) {
         updateExample(pickerTargetIdx, newEx);
       } else if (examples.length < 3) {
@@ -188,11 +182,39 @@ export function SpecialistProfileEditor({
     [pickerTargetIdx, examples.length, updateExample]
   );
 
+  const handleGenerateDescription = async () => {
+    if (!title.trim() || examples.length < 3) return;
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/experts/${expertId}/specialist-profiles/generate-description`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          examples: examples.map((ex) => ({
+            title: ex.title,
+            subject: ex.subject,
+            companyName: ex.companyName,
+            companyIndustry: ex.companyIndustry,
+          })),
+          bio: expertBio,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.description) setBodyDescription(data.description);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
-      const isEditing = !!initialProfile?.id;
       const url = isEditing
         ? `/api/experts/${expertId}/specialist-profiles/${initialProfile!.id}`
         : `/api/experts/${expertId}/specialist-profiles`;
@@ -231,7 +253,7 @@ export function SpecialistProfileEditor({
               isCurrent: ex.isCurrent,
               subject: ex.subject,
             }),
-          }).catch(() => {}); // fire and forget
+          }).catch(() => {});
         }
       }
 
@@ -278,7 +300,7 @@ export function SpecialistProfileEditor({
       )}
 
       <h2 className="font-heading text-lg font-semibold text-cos-midnight">
-        {initialProfile?.id ? "Edit Specialist Profile" : "New Specialist Profile"}
+        {isEditing ? "Edit Specialist Profile" : "New Specialist Profile"}
       </h2>
 
       {/* ─── Guidance text ─────────────────────────────── */}
@@ -295,7 +317,7 @@ export function SpecialistProfileEditor({
         </div>
       </div>
 
-      {/* ─── Title + Description + Taxonomy ──────────── */}
+      {/* ─── Title + Taxonomy ────────────────────────── */}
       <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4 space-y-3">
         <label className="block">
           <span className="text-xs font-semibold text-cos-midnight">
@@ -310,29 +332,10 @@ export function SpecialistProfileEditor({
           />
         </label>
 
-        <label className="block">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-cos-midnight">
-              Description
-            </span>
-            <span className="text-[10px] text-cos-slate-dim">
-              {bodyDescription.length} chars
-              {bodyDescription.length < 100 ? ` (need ${100 - bodyDescription.length} more)` : ""}
-            </span>
-          </div>
-          <textarea
-            value={bodyDescription}
-            onChange={(e) => setBodyDescription(e.target.value)}
-            rows={5}
-            placeholder="Describe this specific expertise niche. What kinds of clients do you help? What outcomes do you deliver? (150-500 words ideal)"
-            className="mt-1.5 w-full resize-none rounded-cos-md border border-cos-border bg-white px-3 py-2 text-sm leading-relaxed text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
-          />
-        </label>
-
         {/* Skills autocomplete */}
         <AutocompleteInput
           label="Skills"
-          placeholder="Type to search skills..."
+          placeholder="Type to search skills (e.g. Tableau, SEO, Python)..."
           values={skills}
           onChange={setSkills}
           fetchSuggestions={searchSkills}
@@ -342,11 +345,10 @@ export function SpecialistProfileEditor({
         {/* Industries autocomplete */}
         <AutocompleteInput
           label="Industries"
-          placeholder="Type to search industries..."
+          placeholder="Type to search industries (e.g. SaaS, FinTech, Healthcare)..."
           values={industries}
           onChange={setIndustries}
           fetchSuggestions={searchIndustries}
-          minCharsForResults={2}
           color="signal"
         />
       </div>
@@ -425,6 +427,55 @@ export function SpecialistProfileEditor({
           </button>
         )}
       </div>
+
+      {/* ─── Description (appears after 3 complete examples) ── */}
+      {showDescription && (
+        <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-cos-midnight">
+              Profile Description
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-cos-slate-dim">
+                {bodyDescription.length} chars
+                {bodyDescription.length < 100 ? ` (need ${100 - bodyDescription.length} more)` : ""}
+              </span>
+              {title.trim() && examples.length >= 3 && (
+                <button
+                  onClick={handleGenerateDescription}
+                  disabled={generating}
+                  className="flex items-center gap-1 rounded-cos-md bg-cos-electric/10 px-2 py-1 text-[10px] font-medium text-cos-electric hover:bg-cos-electric/20 disabled:opacity-50 transition-colors"
+                >
+                  {generating ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3" />
+                  )}
+                  {generating ? "Generating..." : "Generate with AI"}
+                </button>
+              )}
+            </div>
+          </div>
+          <textarea
+            value={bodyDescription}
+            onChange={(e) => setBodyDescription(e.target.value)}
+            rows={6}
+            placeholder="A compelling description of this expertise niche will be generated based on your title and work examples. You can also write your own."
+            className="w-full resize-none rounded-cos-md border border-cos-border bg-white px-3 py-2 text-sm leading-relaxed text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+          />
+        </div>
+      )}
+
+      {/* Nudge to complete examples if description is hidden */}
+      {!showDescription && examples.length > 0 && (
+        <div className="rounded-cos-xl border border-dashed border-cos-slate-light/30 bg-cos-cloud/30 p-4 text-center">
+          <p className="text-xs text-cos-slate-dim">
+            {examples.length < 3
+              ? `Add ${3 - examples.length} more work example${3 - examples.length > 1 ? "s" : ""} to unlock the profile description`
+              : "Complete the description field on all 3 examples to unlock the profile description"}
+          </p>
+        </div>
+      )}
 
       {/* ─── Quality Score ─────────────────────────────── */}
       {score && (
@@ -528,6 +579,7 @@ function ExampleForm({
   onRemove: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const subjectLen = example.subject.length;
 
   return (
     <div className="rounded-cos-lg border border-cos-border/60 bg-white">
@@ -571,13 +623,29 @@ function ExampleForm({
             placeholder='Title - e.g. "Rebuilt GTM for Series B Fintech" or "VP Marketing"'
             className="w-full rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
           />
-          <textarea
-            value={example.subject}
-            onChange={(e) => onChange({ subject: e.target.value })}
-            rows={3}
-            placeholder="What did you do and what was the outcome? (2-3 sentences)"
-            className="w-full resize-none rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs leading-relaxed text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
-          />
+
+          {/* Subject with character limit */}
+          <div>
+            <textarea
+              value={example.subject}
+              onChange={(e) => {
+                if (e.target.value.length <= SUBJECT_MAX_CHARS) {
+                  onChange({ subject: e.target.value });
+                }
+              }}
+              rows={3}
+              placeholder="What did you do and what was the outcome? (2-3 sentences)"
+              className="w-full resize-none rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs leading-relaxed text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+            />
+            <div className="flex justify-end mt-0.5">
+              <span className={cn(
+                "text-[9px]",
+                subjectLen > SUBJECT_MAX_CHARS * 0.9 ? "text-cos-ember" : "text-cos-slate-light"
+              )}>
+                {subjectLen}/{SUBJECT_MAX_CHARS}
+              </span>
+            </div>
+          </div>
 
           {/* Company + Industry */}
           <div className="flex gap-2">
