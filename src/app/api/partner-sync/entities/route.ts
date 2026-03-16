@@ -13,6 +13,7 @@ import {
   firmCaseStudies,
   serviceFirms,
   migrationBatches,
+  companyResearch,
 } from "@/lib/db/schema";
 import { eq, and, gt, ilike, sql, asc } from "drizzle-orm";
 import { authenticatePartner } from "../lib/auth";
@@ -316,8 +317,24 @@ export async function GET(req: Request) {
             websiteUrl: importedCompanies.websiteUrl,
             description: importedCompanies.description,
             employeeCountExact: importedCompanies.employeeCountExact,
+            // Research fields (10 shared fields, excludes buyingIntentInsight which is CC-proprietary)
+            executiveSummary: companyResearch.executiveSummary,
+            interestingHighlights: companyResearch.interestingHighlights,
+            offeringSummary: companyResearch.offeringSummary,
+            industryInsight: companyResearch.industryInsight,
+            stageInsight: companyResearch.stageInsight,
+            customerInsight: companyResearch.customerInsight,
+            growthChallenges: companyResearch.growthChallenges,
+            keyMarkets: companyResearch.keyMarkets,
+            competitorsInsight: companyResearch.competitorsInsight,
+            industryTrends: companyResearch.industryTrends,
+            researchedAt: companyResearch.researchedAt,
           })
           .from(importedCompanies)
+          .leftJoin(
+            companyResearch,
+            eq(importedCompanies.domain, companyResearch.domain)
+          )
           .where(conditions)
           .orderBy(asc(importedCompanies.id))
           .limit(limit + 1); // fetch one extra to detect if there are more pages
@@ -347,6 +364,18 @@ export async function GET(req: Request) {
             website: r.websiteUrl,
             description: r.description,
             employeeCount: r.employeeCountExact,
+            // Research fields — only included when present
+            ...(r.executiveSummary && { executiveSummary: r.executiveSummary }),
+            ...(r.interestingHighlights && { interestingHighlights: r.interestingHighlights }),
+            ...(r.offeringSummary && { offeringSummary: r.offeringSummary }),
+            ...(r.industryInsight && { industryInsight: r.industryInsight }),
+            ...(r.stageInsight && { stageInsight: r.stageInsight }),
+            ...(r.customerInsight && { customerInsight: r.customerInsight }),
+            ...(r.growthChallenges && { growthChallenges: r.growthChallenges }),
+            ...(r.keyMarkets && { keyMarkets: r.keyMarkets }),
+            ...(r.competitorsInsight && { competitorsInsight: r.competitorsInsight }),
+            ...(r.industryTrends && { industryTrends: r.industryTrends }),
+            ...(r.researchedAt && { researchedAt: r.researchedAt.toISOString() }),
           },
           source: "cos",
         }));
