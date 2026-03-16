@@ -19,7 +19,8 @@ export const dynamic = "force-dynamic";
 
 async function authorizeExpert(
   expertId: string,
-  userId: string
+  userId: string,
+  userRole?: string
 ): Promise<{ expert: typeof expertProfiles.$inferSelect } | { error: string; status: number }> {
   const [expert] = await db
     .select()
@@ -28,6 +29,9 @@ async function authorizeExpert(
     .limit(1);
 
   if (!expert) return { error: "Not found", status: 404 };
+
+  // Superadmins bypass org membership check
+  if (userRole === "superadmin" || userRole === "admin") return { expert };
 
   // Must be org member OR the expert themselves
   const [firm] = await db
@@ -58,7 +62,7 @@ export async function GET(
   if (!session?.user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const authResult = await authorizeExpert(id, session.user.id);
+  const authResult = await authorizeExpert(id, session.user.id, session.user.role);
   if ("error" in authResult) return Response.json({ error: authResult.error }, { status: authResult.status });
 
   const { expert } = authResult;
@@ -104,7 +108,7 @@ export async function PUT(
   if (!session?.user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const authResult = await authorizeExpert(id, session.user.id);
+  const authResult = await authorizeExpert(id, session.user.id, session.user.role);
   if ("error" in authResult) return Response.json({ error: authResult.error }, { status: authResult.status });
 
   const body = await req.json();

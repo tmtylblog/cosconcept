@@ -16,6 +16,10 @@ import {
   UserPlus,
   Clock,
   AlertTriangle,
+  Plus,
+  Star,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -51,7 +55,12 @@ interface ExpertDetail {
   specialistProfiles: Array<{
     id: string;
     title: string | null;
+    qualityScore: number | null;
     qualityStatus: string | null;
+    skills: string[] | null;
+    industries: string[] | null;
+    status: string | null;
+    isPrimary: boolean | null;
   }>;
 }
 
@@ -93,10 +102,15 @@ export default function FirmExpertDetailPage() {
         if (data?.expert) {
           setExpert({
             ...data.expert,
-            specialistProfiles: (data.specialistProfiles ?? []).map((sp: { id: string; title?: string | null; qualityStatus?: string | null }) => ({
+            specialistProfiles: (data.specialistProfiles ?? []).map((sp: { id: string; title?: string | null; qualityScore?: number | null; qualityStatus?: string | null; skills?: string[] | null; industries?: string[] | null; status?: string | null; isPrimary?: boolean | null }) => ({
               id: sp.id,
               title: sp.title ?? null,
+              qualityScore: sp.qualityScore ?? null,
               qualityStatus: sp.qualityStatus ?? null,
+              skills: sp.skills ?? null,
+              industries: sp.industries ?? null,
+              status: sp.status ?? null,
+              isPrimary: sp.isPrimary ?? null,
             })),
           });
         }
@@ -194,8 +208,8 @@ export default function FirmExpertDetailPage() {
               if (hasExp || data.expert.enrichmentStatus === "enriched") {
                 setExpert({
                   ...data.expert,
-                  specialistProfiles: (data.specialistProfiles ?? []).map((sp: { id: string; title?: string | null; qualityStatus?: string | null }) => ({
-                    id: sp.id, title: sp.title ?? null, qualityStatus: sp.qualityStatus ?? null,
+                  specialistProfiles: (data.specialistProfiles ?? []).map((sp: { id: string; title?: string | null; qualityScore?: number | null; qualityStatus?: string | null; skills?: string[] | null; industries?: string[] | null; status?: string | null; isPrimary?: boolean | null }) => ({
+                    id: sp.id, title: sp.title ?? null, qualityScore: sp.qualityScore ?? null, qualityStatus: sp.qualityStatus ?? null, skills: sp.skills ?? null, industries: sp.industries ?? null, status: sp.status ?? null, isPrimary: sp.isPrimary ?? null,
                   })),
                 });
                 setEnriching(false);
@@ -238,7 +252,7 @@ export default function FirmExpertDetailPage() {
   const currentTier = (expert.pdlData as Record<string, unknown> | null)?.classifiedAs as string ?? (hasWorkHistory ? "expert" : "not_expert");
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-20">
+    <div className="mx-auto max-w-3xl space-y-6 pb-20 pt-4">
       {/* Back link */}
       <Link
         href="/firm/experts"
@@ -460,27 +474,90 @@ export default function FirmExpertDetailPage() {
       )}
 
       {/* Specialist Profiles */}
-      {expert.specialistProfiles && expert.specialistProfiles.length > 0 && (
-        <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-6">
-          <h2 className="text-sm font-semibold text-cos-midnight mb-3">Specialist Profiles</h2>
-          <div className="space-y-2">
-            {expert.specialistProfiles.map((sp) => (
-              <div key={sp.id} className="flex items-center justify-between rounded-cos-lg border border-cos-border px-4 py-2.5">
-                <span className="text-sm text-cos-midnight">{sp.title || "Untitled"}</span>
-                {sp.qualityStatus && (
-                  <span className={`rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${
-                    sp.qualityStatus === "strong" ? "bg-emerald-50 text-emerald-600"
-                    : sp.qualityStatus === "partial" ? "bg-amber-50 text-amber-600"
-                    : "bg-cos-cloud text-cos-slate"
-                  }`}>
-                    {sp.qualityStatus}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+      <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-cos-midnight">
+            Specialist Profiles
+            {expert.specialistProfiles.length > 0 && (
+              <span className="ml-2 text-xs font-normal text-cos-slate">({expert.specialistProfiles.length})</span>
+            )}
+          </h2>
+          <Link
+            href={`/experts/${expertId}/edit?new=1`}
+            className="inline-flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-1.5 text-xs font-medium text-white hover:bg-cos-electric/90 transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Create Profile
+          </Link>
         </div>
-      )}
+        {expert.specialistProfiles.length > 0 ? (
+          <div className="space-y-2">
+            {expert.specialistProfiles.map((sp) => {
+              const score = Math.round(sp.qualityScore ?? 0);
+              const qualityConfig = sp.qualityStatus === "strong"
+                ? { label: "Strong", color: "text-cos-signal", bg: "bg-cos-signal/8", border: "border-cos-signal/30", icon: <Star className="h-3 w-3" /> }
+                : sp.qualityStatus === "partial"
+                ? { label: "Partial", color: "text-cos-electric", bg: "bg-cos-electric/8", border: "border-cos-electric/30", icon: <Eye className="h-3 w-3" /> }
+                : sp.qualityStatus === "weak"
+                ? { label: "Weak", color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200", icon: <AlertTriangle className="h-3 w-3" /> }
+                : { label: "Incomplete", color: "text-cos-slate-dim", bg: "bg-cos-cloud-dim", border: "border-cos-border", icon: <EyeOff className="h-3 w-3" /> };
+
+              const pills = [...(sp.skills ?? []), ...(sp.industries ?? [])].slice(0, 5);
+
+              return (
+                <Link
+                  key={sp.id}
+                  href={`/experts/${expertId}/edit?sp=${sp.id}`}
+                  className={`block rounded-cos-lg border p-3 transition-shadow hover:shadow-sm ${qualityConfig.bg} ${qualityConfig.border}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        {sp.isPrimary && (
+                          <span className="rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-cos-electric">
+                            Primary
+                          </span>
+                        )}
+                        <span className={`flex items-center gap-1 rounded-cos-pill px-2 py-0.5 text-[10px] font-medium ${qualityConfig.bg} ${qualityConfig.color}`}>
+                          {qualityConfig.icon}
+                          {qualityConfig.label} &middot; {score}/100
+                        </span>
+                        {sp.status === "published" && (
+                          <span className="rounded-cos-pill bg-emerald-50 px-2 py-0.5 text-[9px] font-medium text-emerald-600">
+                            Published
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-sm font-semibold text-cos-midnight">
+                        {sp.title || "Untitled profile"}
+                      </h3>
+                      {pills.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {pills.map((pill) => (
+                            <span key={pill} className="rounded-cos-pill bg-cos-midnight/5 px-2 py-0.5 text-[10px] text-cos-slate">
+                              {pill}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[10px] text-cos-electric">
+                      Edit &rarr;
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-cos-lg border border-dashed border-cos-electric/30 bg-cos-electric/3 p-6 text-center">
+            <p className="text-sm text-cos-slate">No specialist profiles yet</p>
+            <p className="text-xs text-cos-slate-dim mt-1">
+              Create a specialist profile to position this expert for specific niches
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

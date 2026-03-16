@@ -30,6 +30,7 @@ import {
   User,
   Share2,
   UserPlus,
+  Plus,
   Link2,
   Mail,
   Copy,
@@ -1859,6 +1860,13 @@ export default function CustomerDetailPage() {
                         {ep.isFullyEnriched && (
                           <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Enriched" />
                         )}
+                        {ep.profileCount > 0 && (
+                          <span className={`shrink-0 rounded-cos-pill px-1.5 py-0.5 text-[9px] font-semibold ${
+                            ep.strongProfiles > 0 ? "bg-cos-signal/10 text-cos-signal" : "bg-cos-electric/10 text-cos-electric"
+                          }`} title={`${ep.profileCount} specialist profile${ep.profileCount > 1 ? "s" : ""} (${ep.strongProfiles} strong)`}>
+                            {ep.profileCount} SP{ep.profileCount > 1 ? "s" : ""}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <p className="truncate text-xs text-cos-slate">{ep.title ?? "—"}</p>
@@ -3020,12 +3028,23 @@ export default function CustomerDetailPage() {
                 <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
               </div>
             ) : drawerExpert ? (
-              <ExpertProfileCard
-                expert={drawerExpert}
-                specialistProfiles={drawerSPs}
-                isAdmin
-                onClose={() => setDrawerExpertId(null)}
-              />
+              <>
+                <ExpertProfileCard
+                  expert={drawerExpert}
+                  specialistProfiles={drawerSPs}
+                  isAdmin
+                  onClose={() => setDrawerExpertId(null)}
+                />
+                <div className="mt-3 flex justify-center">
+                  <a
+                    href={`/experts/${drawerExpertId}/edit?new=1`}
+                    className="inline-flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-4 py-2 text-xs font-medium text-white hover:bg-cos-electric/90 transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Create Specialist Profile
+                  </a>
+                </div>
+              </>
             ) : (
               <div className="flex h-64 items-center justify-center">
                 <p className="text-sm text-cos-slate-dim">Expert not found</p>

@@ -23,7 +23,7 @@ function generateId(prefix: string): string {
 
 export const dynamic = "force-dynamic";
 
-async function authorize(expertId: string, spId: string, userId: string) {
+async function authorize(expertId: string, spId: string, userId: string, userRole?: string) {
   const [sp] = await db
     .select()
     .from(specialistProfiles)
@@ -44,6 +44,9 @@ async function authorize(expertId: string, spId: string, userId: string) {
     .limit(1);
 
   if (!expert) return { error: "Expert not found", status: 404 as const };
+
+  // Superadmins bypass org membership check
+  if (userRole === "superadmin" || userRole === "admin") return { sp, expert };
 
   const [firm] = await db
     .select({ organizationId: serviceFirms.organizationId })
@@ -73,7 +76,7 @@ export async function GET(
   if (!session?.user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, spId } = await params;
-  const authResult = await authorize(id, spId, session.user.id);
+  const authResult = await authorize(id, spId, session.user.id, session.user.role);
   if ("error" in authResult) return Response.json({ error: authResult.error }, { status: authResult.status });
 
   const examples = await db
@@ -97,7 +100,7 @@ export async function PUT(
   if (!session?.user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, spId } = await params;
-  const authResult = await authorize(id, spId, session.user.id);
+  const authResult = await authorize(id, spId, session.user.id, session.user.role);
   if ("error" in authResult) return Response.json({ error: authResult.error }, { status: authResult.status });
 
   const body = await req.json();
@@ -199,7 +202,7 @@ export async function DELETE(
   if (!session?.user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, spId } = await params;
-  const authResult = await authorize(id, spId, session.user.id);
+  const authResult = await authorize(id, spId, session.user.id, session.user.role);
   if ("error" in authResult) return Response.json({ error: authResult.error }, { status: authResult.status });
 
   await db

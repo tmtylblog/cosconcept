@@ -22,7 +22,7 @@ function generateId(prefix: string): string {
 
 export const dynamic = "force-dynamic";
 
-async function authorizeExpert(expertId: string, userId: string) {
+async function authorizeExpert(expertId: string, userId: string, userRole?: string) {
   const [expert] = await db
     .select()
     .from(expertProfiles)
@@ -30,6 +30,9 @@ async function authorizeExpert(expertId: string, userId: string) {
     .limit(1);
 
   if (!expert) return { error: "Not found", status: 404 as const };
+
+  // Superadmins bypass org membership check
+  if (userRole === "superadmin" || userRole === "admin") return { expert };
 
   const [firm] = await db
     .select({ organizationId: serviceFirms.organizationId })
@@ -59,7 +62,7 @@ export async function GET(
   if (!session?.user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const authResult = await authorizeExpert(id, session.user.id);
+  const authResult = await authorizeExpert(id, session.user.id, session.user.role);
   if ("error" in authResult) return Response.json({ error: authResult.error }, { status: authResult.status });
 
   const sps = await db
@@ -94,7 +97,7 @@ export async function POST(
   if (!session?.user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const authResult = await authorizeExpert(id, session.user.id);
+  const authResult = await authorizeExpert(id, session.user.id, session.user.role);
   if ("error" in authResult) return Response.json({ error: authResult.error }, { status: authResult.status });
 
   const { expert } = authResult;
