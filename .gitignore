@@ -54,3 +54,5 @@ next-env.d.ts
 .claude/todos/
 *.env.unipile
 *.env.vercel-prod
+.env.inngest-check
+.claude/settings.local.json

@@ -74,6 +74,10 @@ function domainFromInput(input: string): string {
   d = d.replace(/^www\./, "");
   // Strip trailing path
   d = d.split("/")[0];
+  // If no TLD, it's likely a company name — try appending .com
+  if (!d.includes(".")) {
+    d = d.replace(/\s+/g, "") + ".com";
+  }
   return d;
 }
 
@@ -284,10 +288,12 @@ export async function researchCompany(
   domainOrName: string
 ): Promise<ClientResearchData> {
   const domain = domainFromInput(domainOrName);
+  console.warn(`[ClientResearch] Starting research for: ${domainOrName} → domain: ${domain}`);
 
   // 1. Check company_research table (fastest, richest)
   const cached = await checkCompanyResearchTable(domain);
   if (cached) {
+    console.warn(`[ClientResearch] Cache HIT in company_research table for ${domain}`);
     // Enrich with enrichmentCache data if available
     const cacheData = await checkEnrichmentCache(domain);
     if (cacheData) {
@@ -327,6 +333,7 @@ export async function researchCompany(
   };
 
   if (enrichCacheData) {
+    console.warn(`[ClientResearch] Found raw data in enrichmentCache for ${domain}, skipping paid APIs`);
     // Use cached raw data, skip paid APIs
     companyData = (enrichCacheData.companyData as Record<string, unknown>) ?? null;
     rawContent = (enrichCacheData.groundTruth as string) ?? "";
@@ -340,6 +347,7 @@ export async function researchCompany(
     };
   } else {
     // Phase 1: Fresh data gathering
+    console.warn(`[ClientResearch] Cache MISS — running PDL + Jina for ${domain}`);
     const [pdlResult, jinaResult] = await Promise.allSettled([
       enrichCompany({ website: domain }),
       scrapeFirmWebsite(`https://${domain}`),
@@ -428,6 +436,7 @@ export async function researchCompany(
   }
 
   // Phase 2: Generate strategic intelligence
+  console.warn(`[ClientResearch] Phase 2: Generating intelligence for ${domain}`);
   const companyName = (companyData?.name as string) ?? domain;
   const pdlSummary = companyData
     ? `Name: ${companyName}\nIndustry: ${(companyData.industry as string) ?? "N/A"}\nSize: ${(companyData.size as string) ?? "N/A"}\nEmployees: ${(companyData.employeeCount as number) ?? "N/A"}\nLocation: ${(companyData.location as string) ?? "N/A"}\nRevenue: ${(companyData.inferredRevenue as string) ?? "N/A"}`
@@ -441,47 +450,47 @@ export async function researchCompany(
     (extracted.aboutPitch as string) ?? ""
   );
 
-  // Persist to Neo4j
-  let graphNodeId = neo4jNode?.id ?? null;
-  try {
-    const nodeId = domainId(domain);
-    const graphResult = await writeResearchedCompanyToGraph({
-      id: nodeId,
-      name: companyName,
+  // Persist to Neo4j + company_research table (fire-and-forget — don't block response)
+  const graphNodeId = neo4jNode?.id ?? domainId(domain);
+  const persistPromise = (async () => {
+    try {
+      await writeResearchedCompanyToGraph({
+        id: domainId(domain),
+        name: companyName,
+        domain,
+        entityType: "prospect",
+        industry: (companyData?.industry as string) ?? undefined,
+        employeeCount: (companyData?.employeeCount as number) ?? undefined,
+        location: (companyData?.location as string) ?? undefined,
+        categories: classification.categories,
+        skills: classification.skills,
+        industries: classification.industries,
+        markets: classification.markets,
+        executiveSummary: intelligence.executiveSummary,
+        offeringSummary: intelligence.offeringSummary,
+        customerInsight: intelligence.customerInsight,
+        stageInsight: intelligence.stageInsight,
+        competitorsInsight: intelligence.competitorsInsight,
+        keyMarkets: intelligence.keyMarkets,
+      });
+    } catch (err) {
+      console.error("[ClientResearch] Graph write failed:", err);
+    }
+    await persistResearch(
       domain,
-      entityType: "prospect",
-      industry: (companyData?.industry as string) ?? undefined,
-      employeeCount: (companyData?.employeeCount as number) ?? undefined,
-      location: (companyData?.location as string) ?? undefined,
-      categories: classification.categories,
-      skills: classification.skills,
-      industries: classification.industries,
-      markets: classification.markets,
-      executiveSummary: intelligence.executiveSummary,
-      offeringSummary: intelligence.offeringSummary,
-      customerInsight: intelligence.customerInsight,
-      stageInsight: intelligence.stageInsight,
-      competitorsInsight: intelligence.competitorsInsight,
-      keyMarkets: intelligence.keyMarkets,
-    });
-    if (graphResult.companyNode) graphNodeId = nodeId;
-  } catch (err) {
-    console.error("[ClientResearch] Graph write failed:", err);
-  }
-
-  // Persist to company_research table
-  await persistResearch(
-    domain,
-    companyName,
-    intelligence,
-    classification,
-    companyData ? {
-      industry: (companyData.industry as string) ?? undefined,
-      employeeCount: (companyData.employeeCount as number) ?? undefined,
-      location: (companyData.location as string) ?? undefined,
-    } : null,
-    graphNodeId
-  );
+      companyName,
+      intelligence,
+      classification,
+      companyData ? {
+        industry: (companyData.industry as string) ?? undefined,
+        employeeCount: (companyData.employeeCount as number) ?? undefined,
+        location: (companyData.location as string) ?? undefined,
+      } : null,
+      graphNodeId
+    );
+  })();
+  // Don't await — let it finish in background
+  persistPromise.catch((err) => console.error("[ClientResearch] Background persist failed:", err));
 
   return {
     name: companyName,
