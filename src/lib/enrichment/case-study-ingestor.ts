@@ -138,6 +138,13 @@ export async function ingestCaseStudy(
   });
 
   if (!analysis?.isCaseStudy) return null;
+
+  // Quality gate: require a client name — a case study without a client isn't useful
+  if (!analysis.clientName || analysis.clientName.length < 2) {
+    console.warn(`[CaseStudyIngestor] Rejected: no client name for "${analysis.title}"`);
+    return null;
+  }
+
   return analysis;
 }
 
@@ -153,7 +160,17 @@ async function extractCaseStudyAnalysis(
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       prompt: `Extract structured case study data from this content.
 
-If this is NOT a case study (just a blog post, generic marketing page, or landing page), set isCaseStudy to false and provide minimal data.
+A case study MUST describe specific work done for a specific client. It should have:
+- A clear CLIENT NAME (a real company that hired this firm)
+- A description of what was done (challenge, solution, or approach)
+- Some evidence of outcomes or results
+
+If ANY of these are missing, set isCaseStudy to false:
+- No identifiable client name → NOT a case study
+- Just a few sentences mentioning a brand → NOT a case study (too thin)
+- A generic service description or blog post → NOT a case study
+- A team member bio or profile → NOT a case study
+- A marketing landing page → NOT a case study
 
 ${title ? `TITLE: ${title}` : ""}
 ${url ? `URL: ${url}` : ""}
