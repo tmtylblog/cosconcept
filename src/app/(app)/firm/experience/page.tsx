@@ -46,24 +46,36 @@ export default function FirmExperiencePage() {
   } = useCaseStudies(activeOrg?.id);
 
   // Once the initial case-study load completes and we have 0 entries,
-  // trigger enrichment (force re-run even if status is "done") so persist
-  // can seed firm_case_studies. Runs at most once per mount.
+  // trigger a deep crawl via Inngest to populate firm_case_studies.
   const enrichmentTriggeredRef = useRef(false);
   useEffect(() => {
     if (!activeOrg?.id || isLoading || total > 0) return;
-    if (enrichmentStatus === "loading") return;
     if (enrichmentTriggeredRef.current) return;
     enrichmentTriggeredRef.current = true;
-    fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        const website = data?.enrichmentData?.url || data?.website;
-        const emailDomain = session?.user?.email?.split("@")[1];
-        const fallback = emailDomain ? `https://${emailDomain}` : null;
-        const target = website || fallback;
-        if (target) triggerEnrichment(target, true); // forceGapFill — runs even if already "done"
-      })
+
+    // 1. Fire deep-crawl via Inngest (server-side — populates firm_services + firm_case_studies)
+    fetch("/api/enrich/deep-crawl", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organizationId: activeOrg.id }),
+    })
+      .then((r) => r.json())
+      .then((data) => console.log("[Experience] Deep crawl:", data?.status ?? data?.error))
       .catch(() => {});
+
+    // 2. Also trigger client-side enrichment for the enrichment card
+    if (enrichmentStatus !== "loading") {
+      fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          const website = data?.enrichmentData?.url || data?.website;
+          const emailDomain = session?.user?.email?.split("@")[1];
+          const fallback = emailDomain ? `https://${emailDomain}` : null;
+          const target = website || fallback;
+          if (target) triggerEnrichment(target, true);
+        })
+        .catch(() => {});
+    }
   }, [activeOrg?.id, isLoading, total, enrichmentStatus, session?.user?.email, triggerEnrichment]);
 
   // After enrichment finishes, re-fetch case studies so newly-seeded rows appear.

@@ -39,24 +39,37 @@ export default function FirmOfferingPage() {
   } = useFirmServices(activeOrg?.id);
 
   // Once the initial services load completes and we have 0 services,
-  // trigger enrichment (force re-run even if status is "done") so persist
-  // can seed firm_services. Runs at most once per mount.
+  // trigger a deep crawl via Inngest to populate firm_services.
+  // Also runs the client-side enrichment for the enrichment card display.
   const enrichmentTriggeredRef = useRef(false);
   useEffect(() => {
     if (!activeOrg?.id || isLoading || total > 0) return;
-    if (enrichmentStatus === "loading") return;
     if (enrichmentTriggeredRef.current) return;
     enrichmentTriggeredRef.current = true;
-    fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        const website = data?.enrichmentData?.url || data?.website;
-        const emailDomain = session?.user?.email?.split("@")[1];
-        const fallback = emailDomain ? `https://${emailDomain}` : null;
-        const target = website || fallback;
-        if (target) triggerEnrichment(target, true); // forceGapFill — runs even if already "done"
-      })
+
+    // 1. Fire deep-crawl via Inngest (server-side — populates firm_services + firm_case_studies)
+    fetch("/api/enrich/deep-crawl", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organizationId: activeOrg.id }),
+    })
+      .then((r) => r.json())
+      .then((data) => console.log("[Offering] Deep crawl:", data?.status ?? data?.error))
       .catch(() => {});
+
+    // 2. Also trigger client-side enrichment for the enrichment card
+    if (enrichmentStatus !== "loading") {
+      fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          const website = data?.enrichmentData?.url || data?.website;
+          const emailDomain = session?.user?.email?.split("@")[1];
+          const fallback = emailDomain ? `https://${emailDomain}` : null;
+          const target = website || fallback;
+          if (target) triggerEnrichment(target, true);
+        })
+        .catch(() => {});
+    }
   }, [activeOrg?.id, isLoading, total, enrichmentStatus, session?.user?.email, triggerEnrichment]);
 
   // After enrichment finishes, re-fetch services so newly-seeded rows appear.
