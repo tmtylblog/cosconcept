@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import {
   DollarSign,
   Plus,
   ArrowRight,
+  ExternalLink,
 } from "lucide-react";
 import { TagEditor } from "./tag-editor";
 import type { Deal, Stage } from "./types";
@@ -89,9 +91,13 @@ export function DealCard({
       {/* Header: name + badges */}
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <p className="font-heading text-sm font-semibold text-cos-midnight truncate flex-1">
+          <Link
+            href={`/admin/growth-ops/pipeline/${deal.id}?from=inbox`}
+            className="font-heading text-sm font-semibold text-cos-midnight truncate flex-1 hover:text-cos-electric transition-colors flex items-center gap-1.5"
+          >
             {deal.name}
-          </p>
+            <ExternalLink className="h-3 w-3 shrink-0 opacity-40" />
+          </Link>
           {statusBadge(deal.status)}
         </div>
         <div className="flex items-center gap-2">
