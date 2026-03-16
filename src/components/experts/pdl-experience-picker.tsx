@@ -15,12 +15,15 @@ interface PdlExperience {
 
 interface PdlExperiencePickerProps {
   experiences: PdlExperience[];
+  /** Indices already used as work examples — shown as disabled */
+  usedIndices?: number[];
   onSelect: (ex: PdlExperience, index: number) => void;
   onClose: () => void;
 }
 
 export function PdlExperiencePicker({
   experiences,
+  usedIndices = [],
   onSelect,
   onClose,
 }: PdlExperiencePickerProps) {
@@ -61,25 +64,37 @@ export function PdlExperiencePicker({
               No work history available
             </p>
           ) : (
-            experiences.map((ex, i) => (
+            experiences.map((ex, i) => {
+              const isUsed = usedIndices.includes(i);
+              return (
               <button
                 key={i}
-                onClick={() => setSelected(i)}
+                onClick={() => !isUsed && setSelected(i)}
+                disabled={isUsed}
                 className={cn(
                   "w-full rounded-cos-lg border p-3 text-left transition-colors",
-                  selected === i
-                    ? "border-cos-electric bg-cos-electric/8"
-                    : "border-cos-border bg-white hover:border-cos-electric/40 hover:bg-cos-electric/3"
+                  isUsed
+                    ? "border-cos-border/40 bg-cos-cloud/50 opacity-50 cursor-not-allowed"
+                    : selected === i
+                      ? "border-cos-electric bg-cos-electric/8"
+                      : "border-cos-border bg-white hover:border-cos-electric/40 hover:bg-cos-electric/3"
                 )}
               >
                 <div className="flex items-start gap-2">
-                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-cos-md bg-cos-midnight/8 text-cos-midnight">
+                  <div className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-cos-md", isUsed ? "bg-cos-signal/10 text-cos-signal" : "bg-cos-midnight/8 text-cos-midnight")}>
                     <Briefcase className="h-3.5 w-3.5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-semibold text-cos-midnight truncate">
-                      {ex.title}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[11px] font-semibold text-cos-midnight truncate">
+                        {ex.title}
+                      </p>
+                      {isUsed && (
+                        <span className="shrink-0 rounded-cos-pill bg-cos-signal/10 px-1.5 py-0.5 text-[8px] font-medium text-cos-signal">
+                          Already added
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-cos-slate-dim truncate">
                       {ex.company.name}
                       {ex.company.industry ? ` · ${ex.company.industry}` : ""}
@@ -96,7 +111,8 @@ export function PdlExperiencePicker({
                   </div>
                 </div>
               </button>
-            ))
+              );
+            })
           )}
         </div>
 

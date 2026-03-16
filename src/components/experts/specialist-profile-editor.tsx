@@ -615,6 +615,9 @@ export function SpecialistProfileEditor({
       {showPdlPicker && (
         <PdlExperiencePicker
           experiences={pdlExperiences}
+          usedIndices={examples
+            .filter((ex) => ex.isPdlSource && ex.pdlExperienceIndex !== undefined)
+            .map((ex) => ex.pdlExperienceIndex!)}
           onSelect={handlePdlSelect}
           onClose={() => setShowPdlPicker(false)}
         />
