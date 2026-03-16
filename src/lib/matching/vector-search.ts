@@ -11,7 +11,7 @@
 
 import { db } from "@/lib/db";
 import { abstractionProfiles } from "@/lib/db/schema";
-import { inArray, sql } from "drizzle-orm";
+import { and, inArray, sql } from "drizzle-orm";
 import type { MatchCandidate } from "./types";
 
 /**
@@ -117,18 +117,21 @@ export async function vectorRerank(
     const vectorStr = `[${queryEmbedding.join(",")}]`;
 
     // Get cosine similarity scores for firms that have embeddings
-    const rows = await db.execute<{ entity_id: string; similarity: number }>(
-      sql`SELECT entity_id,
-               (1 - (embedding <=> ${vectorStr}::vector)) AS similarity
-          FROM abstraction_profiles
-          WHERE id = ANY(${entityIds}::text[])
-            AND embedding IS NOT NULL`
-    );
+    const rows = await db
+      .select({
+        entityId: abstractionProfiles.entityId,
+        similarity: sql<number>`1 - (embedding <=> ${vectorStr}::vector)`,
+      })
+      .from(abstractionProfiles)
+      .where(
+        and(
+          inArray(abstractionProfiles.id, entityIds),
+          sql`embedding IS NOT NULL`
+        )
+      );
 
     const similarityMap = new Map(
-      (rows as unknown as { rows: { entity_id: string; similarity: number }[] }).rows.map(
-        (r) => [r.entity_id, r.similarity]
-      )
+      rows.map((r) => [r.entityId, r.similarity])
     );
 
     // For firms without embeddings yet, fall back to text overlap

@@ -17,6 +17,51 @@ import { generateObject } from "ai";
 import { z } from "zod/v4";
 import type { MatchCandidate, AbstractionProfile } from "./types";
 import { logUsage } from "@/lib/ai/gateway";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+// Load symbiotic relationships for partnership context
+let _relationshipsCache: { typeA: string; typeB: string; nature: string; frequency: string }[] | null = null;
+
+function getSymbioticRelationships() {
+  if (_relationshipsCache) return _relationshipsCache;
+  try {
+    const csv = readFileSync(join(process.cwd(), "data/firm-relationships.csv"), "utf-8");
+    const lines = csv.split("\n").slice(1).filter(Boolean);
+    _relationshipsCache = lines.map((line) => {
+      // CSV parsing — handle quoted fields
+      const cols = parseCsvLine(line);
+      return {
+        typeA: cols[0] ?? "",
+        typeB: cols[1] ?? "",
+        nature: cols[2] ?? "",
+        frequency: cols[5] ?? "",
+      };
+    }).filter((r) => r.typeA && r.typeB);
+    return _relationshipsCache;
+  } catch {
+    _relationshipsCache = [];
+    return _relationshipsCache;
+  }
+}
+
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (const ch of line) {
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -88,6 +133,26 @@ Goals: ${searcherProfile.partnershipReadiness.partnershipGoals.join(", ")}
 `
     : "";
 
+  // Build symbiotic relationship context
+  let symbioticContext = "";
+  const relationships = getSymbioticRelationships();
+  if (relationships.length > 0) {
+    // If we know the searcher's categories, show their common partnerships
+    const searcherCategories = searcherProfile?.topServices ?? [];
+    const relevantRels = searcherCategories.length > 0
+      ? relationships.filter((r) =>
+          searcherCategories.some((cat) =>
+            r.typeA.toLowerCase().includes(cat.toLowerCase()) ||
+            r.typeB.toLowerCase().includes(cat.toLowerCase())
+          )
+        ).slice(0, 15)
+      : relationships.filter((r) => r.frequency === "High").slice(0, 15);
+
+    if (relevantRels.length > 0) {
+      symbioticContext = `\n## SYMBIOTIC PARTNERSHIPS (common firm pairings)\n${relevantRels.map((r) => `- ${r.typeA} ↔ ${r.typeB}: ${r.nature.slice(0, 100)}`).join("\n")}\n\nBoost candidates whose category forms a known symbiotic pair with the searcher.`;
+    }
+  }
+
   try {
     const rankStart = Date.now();
     const result = await generateObject({
@@ -96,7 +161,7 @@ Goals: ${searcherProfile.partnershipReadiness.partnershipGoals.join(", ")}
 
 ## SEARCH QUERY
 "${rawQuery}"
-${searcherContext}
+${searcherContext}${symbioticContext}
 
 ## CANDIDATES
 ${candidateSummaries}

@@ -18,12 +18,11 @@ import { deepRank } from "./deep-ranker";
 import { loadAbstractionProfile } from "./abstraction-generator";
 import type { SearchQuery, SearchResult, SearchFilters } from "./types";
 
-// Always use PostgreSQL search.
-// Neo4j legacy firms lack a consistent ID bridge to PostgreSQL service_firms
-// (only 4/1050 firms have a valid f.id mapping), so Neo4j results return
-// firmId=null and break the discover profile flow. Neo4j path is disabled
-// until a reliable ID bridge is built.
-const USE_PG_SEARCH = true;
+// Search mode: "pg" for PostgreSQL-only, "neo4j" for graph-based Layer 1.
+// After running scripts/sync-neo4j-firm-ids.ts, all Neo4j nodes have valid f.id
+// matching PG serviceFirms.id, so Neo4j path is safe to use.
+// Falls back to PG if Neo4j query fails.
+const USE_PG_SEARCH = process.env.SEARCH_MODE === "pg";
 
 /**
  * Execute a full cascading search.
@@ -62,21 +61,40 @@ export async function executeSearch(params: {
     searcherProfile: searcherProfile ?? undefined,
   };
 
+  console.warn("[Search] mode=%s query=%s filters=%j", USE_PG_SEARCH ? "pg" : "neo4j", rawQuery.slice(0, 60), Object.keys(filters));
+
   // Step 2: Layer 1 — Structured filtering (PostgreSQL or Neo4j)
   let layer1Candidates;
   let layer1Count: number;
   if (USE_PG_SEARCH) {
     layer1Candidates = await pgStructuredFilter(filters, 500, searcherFirmId);
     layer1Count = layer1Candidates.length;
-  } else if (searcherFirmId) {
-    // Neo4j with bidirectional matching: enriches filters from PREFERS edges
-    // and boosts candidates with mutual preference fit
-    const biCandidates = await bidirectionalStructuredFilter(filters, searcherFirmId, 500);
-    layer1Candidates = toMatchCandidates(biCandidates);
-    layer1Count = biCandidates.length;
   } else {
-    layer1Candidates = await universalStructuredFilter(filters, 500);
-    layer1Count = layer1Candidates.length;
+    // Neo4j-based Layer 1 with PG fallback on failure
+    try {
+      if (searcherFirmId) {
+        // Neo4j with bidirectional matching: enriches filters from PREFERS edges
+        // and boosts candidates with mutual preference fit
+        const biCandidates = await bidirectionalStructuredFilter(filters, searcherFirmId, 500);
+        layer1Candidates = toMatchCandidates(biCandidates);
+        layer1Count = biCandidates.length;
+      } else {
+        layer1Candidates = await universalStructuredFilter(filters, 500);
+        layer1Count = layer1Candidates.length;
+      }
+      console.warn("[Search] Neo4j Layer 1 returned %d candidates", layer1Count);
+      // Safety net: if Neo4j returned 0, fall back to PG firms so we never return empty
+      if (layer1Count === 0) {
+        console.warn("[Search] Neo4j returned 0, falling back to PG firms");
+        layer1Candidates = await pgStructuredFilter(filters, 500, searcherFirmId);
+        layer1Count = layer1Candidates.length;
+      }
+    } catch (neo4jErr) {
+      console.error("[Search] Neo4j Layer 1 failed, falling back to PG:", neo4jErr);
+      layer1Candidates = await pgStructuredFilter(filters, 500, searcherFirmId);
+      layer1Count = layer1Candidates.length;
+      console.warn("[Search] PG fallback returned %d candidates", layer1Count);
+    }
   }
 
   // Step 3: Layer 2 — Vector similarity re-ranking

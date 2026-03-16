@@ -11,6 +11,7 @@
  */
 
 import { neo4jRead } from "@/lib/neo4j";
+import neo4j from "neo4j-driver";
 import type { SearchFilters, MatchCandidate } from "./types";
 
 interface StructuredCandidate {
@@ -38,14 +39,13 @@ export async function structuredFilter(
 ): Promise<StructuredCandidate[]> {
   // Build dynamic Cypher query based on which filters are provided
   const conditions: string[] = [];
-  const params: Record<string, unknown> = { limit };
+  const params: Record<string, unknown> = { limit: neo4j.int(limit) };
 
   // Base: match all service-provider firms (Company nodes with ServiceFirm role label)
   const matchClause = "MATCH (f:Company:ServiceFirm)";
   const returnFields = [
-    // Enrichment-pipeline nodes use f.id (firm_xxx), legacy nodes use f.neonId (UUID).
-    // Fallback to legacyOrgId for nodes with neither.
-    "coalesce(f.id, f.neonId, 'legacy:' + f.legacyOrgId) AS firmId",
+    // After sync-neo4j-firm-ids.ts, all nodes have valid f.id matching PG serviceFirms.id
+    "f.id AS firmId",
     "f.name AS firmName",
     "coalesce(f.website, f.websiteUrl) AS website",
   ];
@@ -136,8 +136,10 @@ export async function structuredFilter(
 
   // Use OR — a firm matching ANY criterion is a candidate; score reflects how many it matches.
   // AND was too strict: most firms lack IN_CATEGORY edges, causing zero results.
-  const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(" OR ")}` : "";
+  // Always require f.id to be non-null (excludes ~4 orphan nodes without PG mapping).
+  const filterClause =
+    conditions.length > 0 ? ` AND (${conditions.join(" OR ")})` : "";
+  const whereClause = `WHERE f.id IS NOT NULL${filterClause}`;
 
   const query = `
     ${matchClause}
@@ -513,7 +515,7 @@ async function expertFilter(
 
   if (!hasExpertSignals) return [];
 
-  const params: Record<string, unknown> = { limit };
+  const params: Record<string, unknown> = { limit: neo4j.int(limit) };
   const conditions: string[] = [];
 
   if (filters.skills?.length) {
@@ -535,13 +537,16 @@ async function expertFilter(
     params.markets = filters.markets;
   }
 
+  // Use OR so experts matching ANY filter signal are candidates (same as firm filter).
+  // AND was too strict: requiring all filters to match simultaneously returned 0 results
+  // for common multi-criteria queries like "healthcare AND SaaS".
   const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    conditions.length > 0 ? `WHERE ${conditions.join(" OR ")}` : "";
 
   const query = `
     MATCH (p:Person)
     WHERE p.enrichmentStatus <> "stub"
-    ${whereClause ? "AND " + whereClause.replace(/^WHERE /, "") : ""}
+    ${whereClause ? "AND (" + whereClause.replace(/^WHERE /, "") + ")" : ""}
     OPTIONAL MATCH (p)-[:WORKS_AT]->(sf:Company:ServiceFirm)
     WITH p, sf,
       [(p)-[:HAS_SKILL|HAS_EXPERTISE]->(s:Skill) | s.name][0..8] AS skills,
@@ -638,7 +643,7 @@ async function caseStudyFilter(
 
   if (!hasCaseStudySignals) return [];
 
-  const params: Record<string, unknown> = { limit };
+  const params: Record<string, unknown> = { limit: neo4j.int(limit) };
   const conditions: string[] = [];
 
   if (filters.skills?.length) {
@@ -654,8 +659,9 @@ async function caseStudyFilter(
     params.industries = filters.industries;
   }
 
+  // Use OR so case studies matching ANY filter signal are candidates
   const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    conditions.length > 0 ? `WHERE ${conditions.join(" OR ")}` : "";
 
   const query = `
     MATCH (cs:CaseStudy)
