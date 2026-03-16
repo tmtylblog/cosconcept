@@ -84,8 +84,18 @@ export function useFirmServices(
         setHiddenCount(data?.hiddenCount ?? 0);
         setIsLoading(false);
 
-        // Retry polling if initial fetch returns 0 services (deep crawl may still be running)
-        if ((data?.services ?? []).length === 0) {
+        // If 0 services, trigger deep crawl and poll for results
+        if ((data?.services ?? []).length === 0 && organizationId) {
+          // Fire deep crawl via Inngest — this populates firm_services in the background
+          fetch("/api/enrich/deep-crawl", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ organizationId }),
+          })
+            .then((r) => r.json())
+            .then((d) => console.log("[useFirmServices] Deep crawl:", d?.status ?? d?.error))
+            .catch(() => {});
+
           const retryDelays = [3000, 8000, 15000, 30000, 60000];
           for (const delay of retryDelays) {
             if (cancelled) break;

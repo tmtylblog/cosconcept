@@ -111,12 +111,48 @@ export function useCaseStudies(
         setTotal(data?.total ?? 0);
         setHiddenCount(data?.hiddenCount ?? 0);
         setIsLoading(false);
+
+        // If 0 case studies, trigger deep crawl and poll for results
+        if ((data?.caseStudies ?? []).length === 0 && organizationId) {
+          fetch("/api/enrich/deep-crawl", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ organizationId }),
+          })
+            .then((r2) => r2.json())
+            .then((d) => console.log("[useCaseStudies] Deep crawl:", d?.status ?? d?.error))
+            .catch(() => {});
+
+          // Poll for results
+          const retryDelays = [5000, 15000, 30000, 60000];
+          (async () => {
+            for (const delay of retryDelays) {
+              if (cancelled) break;
+              await new Promise((resolve) => setTimeout(resolve, delay));
+              if (cancelled) break;
+              try {
+                const retryRes = await fetch(url);
+                if (!retryRes.ok || cancelled) continue;
+                const retryData = await retryRes.json();
+                if (cancelled) break;
+                if ((retryData?.caseStudies ?? []).length > 0) {
+                  setCaseStudies(retryData.caseStudies);
+                  setTotal(retryData.total ?? 0);
+                  setHiddenCount(retryData.hiddenCount ?? 0);
+                  break;
+                }
+              } catch {
+                // silent
+              }
+            }
+          })();
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [buildUrl]);
+  }, [buildUrl, organizationId]);
 
   // ── Poll when items are in-progress ─────────────────────
   useEffect(() => {
