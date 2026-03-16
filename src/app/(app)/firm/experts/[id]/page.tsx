@@ -56,15 +56,15 @@ interface ExpertDetail {
 }
 
 const STATUS_OPTIONS = [
-  { value: "active", label: "Active Team", color: "bg-emerald-100 text-emerald-700 border-emerald-300" },
-  { value: "prior", label: "Prior Team", color: "bg-amber-100 text-amber-700 border-amber-300" },
-  { value: "incorrect", label: "Incorrect Data", color: "bg-red-100 text-red-700 border-red-300" },
+  { value: "active", label: "Active Team", color: "bg-emerald-100 text-emerald-700 border-emerald-300 ring-2 ring-emerald-300" },
+  { value: "prior", label: "Prior Team", color: "bg-amber-100 text-amber-700 border-amber-300 ring-2 ring-amber-300" },
+  { value: "incorrect", label: "Incorrect Data", color: "bg-red-100 text-red-700 border-red-300 ring-2 ring-red-300" },
 ];
 
 const TIER_OPTIONS = [
-  { value: "expert", label: "Expert", color: "bg-emerald-100 text-emerald-700 border-emerald-300" },
-  { value: "potential_expert", label: "Potential Expert", color: "bg-amber-100 text-amber-700 border-amber-300" },
-  { value: "not_expert", label: "Team Member", color: "bg-cos-cloud text-cos-slate border-cos-border" },
+  { value: "expert", label: "Expert", color: "bg-emerald-100 text-emerald-700 border-emerald-300 ring-2 ring-emerald-300" },
+  { value: "potential_expert", label: "Potential Expert", color: "bg-amber-100 text-amber-700 border-amber-300 ring-2 ring-amber-300" },
+  { value: "not_expert", label: "Team Member", color: "bg-blue-100 text-blue-700 border-blue-300 ring-2 ring-blue-300" },
 ];
 
 function formatDate(dateStr: string | null): string {
