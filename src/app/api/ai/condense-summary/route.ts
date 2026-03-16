@@ -21,28 +21,32 @@ export async function POST(req: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { summary, roleTitle, companyName } = await req.json();
+  const { summary, roleTitle, companyName, specialistTitle } = await req.json();
   if (!summary || summary.length < 10) {
     return Response.json({ condensed: summary ?? "" });
-  }
-
-  // If already short enough, just clean up
-  if (summary.length <= 500 && !summary.includes("\n") && !summary.includes("•") && !summary.includes("-  ")) {
-    return Response.json({ condensed: summary });
   }
 
   try {
     const start = Date.now();
     const result = await generateText({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
-      prompt: `Condense this work experience description into 2-3 sentences (max 500 characters). Remove all bullet points and formatting. Write in third person, focusing on impact and outcomes. Keep it as a single flowing paragraph.
+      prompt: `Rewrite this work experience description into 2-3 clean sentences (max 500 characters total).
 
 Role: ${roleTitle} at ${companyName}
+${specialistTitle ? `Specialist Focus: This description is for a specialist profile titled "${specialistTitle}" — emphasize aspects of this role that are relevant to that specialty. Downplay unrelated work.` : ""}
+
+RULES:
+- Max 500 characters total
+- Remove ALL bullet points, dashes, and formatting
+- Write in THIRD PERSON as a single flowing paragraph
+- Focus on impact and outcomes, not responsibilities
+- If a specialist title is provided, emphasize the parts of this role most relevant to that niche
+${specialistTitle ? `- Do NOT include details that conflict with or dilute the "${specialistTitle}" focus` : ""}
 
 Original:
 ${summary}
 
-Condensed (max 500 chars, no bullets, third person):`,
+Rewritten:`,
       maxTokens: 200,
     });
 
