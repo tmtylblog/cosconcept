@@ -119,9 +119,21 @@ export function ContextPanel({
           </div>
           {contact ? (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-cos-midnight">
-                {contact.firstName} {contact.lastName}
-              </p>
+              {contact.linkedinUrl ? (
+                <a
+                  href={contact.linkedinUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-cos-midnight hover:text-cos-electric transition-colors flex items-center gap-1.5"
+                >
+                  {contact.firstName} {contact.lastName}
+                  <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                </a>
+              ) : (
+                <p className="text-sm font-medium text-cos-midnight">
+                  {contact.firstName} {contact.lastName}
+                </p>
+              )}
               {contact.email && (
                 <div className="flex items-center gap-1.5 text-xs text-cos-slate">
                   <Mail className="h-3 w-3 shrink-0" />
@@ -149,21 +161,20 @@ export function ContextPanel({
             </div>
           ) : (
             <div className="space-y-1.5">
-              <p className="text-sm font-medium text-cos-midnight">
-                {participantName}
-              </p>
-              {participantUrl && (
-                <div className="flex items-center gap-1.5 text-xs text-cos-slate">
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                  <a
-                    href={participantUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-cos-electric truncate"
-                  >
-                    View Profile
-                  </a>
-                </div>
+              {participantUrl ? (
+                <a
+                  href={participantUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-cos-midnight hover:text-cos-electric transition-colors flex items-center gap-1.5"
+                >
+                  {participantName}
+                  <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                </a>
+              ) : (
+                <p className="text-sm font-medium text-cos-midnight">
+                  {participantName}
+                </p>
               )}
               <p className="text-[10px] text-cos-slate-dim italic">
                 Not yet linked to a COS contact
@@ -182,9 +193,21 @@ export function ContextPanel({
               </p>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-medium text-cos-midnight">
-                {company.name}
-              </p>
+              {company.domain ? (
+                <a
+                  href={`https://${company.domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-cos-midnight hover:text-cos-electric transition-colors flex items-center gap-1.5"
+                >
+                  {company.name}
+                  <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                </a>
+              ) : (
+                <p className="text-sm font-medium text-cos-midnight">
+                  {company.name}
+                </p>
+              )}
               {company.domain && (
                 <div className="flex items-center gap-1.5 text-xs text-cos-slate">
                   <Globe className="h-3 w-3 shrink-0" />
