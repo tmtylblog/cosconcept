@@ -432,12 +432,8 @@ function GrowthOpsInboxInner() {
   const accountsRef = useRef(accounts);
   accountsRef.current = accounts;
 
-  const conversationsLoadedForRef = useRef<string>("");
-
   useEffect(() => {
     if (!selectedAccountId || !accountsLoaded) return;
-    // Skip if we already loaded for this exact account selection
-    if (conversationsLoadedForRef.current === selectedAccountId) return;
 
     let cancelled = false;
     setLoadingConvos(true);
@@ -473,7 +469,6 @@ function GrowthOpsInboxInner() {
         setConversations(merged);
         setLoadingConvos(false);
         setUsage(null);
-        conversationsLoadedForRef.current = selectedAccountId;
 
         const urlChat = params.get("chat");
         if (urlChat && merged.some((c) => c.chatId === urlChat)) {
@@ -499,7 +494,6 @@ function GrowthOpsInboxInner() {
         }));
         setConversations(list);
         setLoadingConvos(false);
-        conversationsLoadedForRef.current = selectedAccountId;
         if (usageData && !usageData.error) setUsage(usageData);
 
         const urlChat = params.get("chat");
@@ -636,7 +630,6 @@ function GrowthOpsInboxInner() {
   }
 
   function selectAccount(accountId: string) {
-    conversationsLoadedForRef.current = ""; // Reset so new account triggers fetch
     setSelectedAccountId(accountId);
     setSelectedChatId("");
     setMessages([]);
