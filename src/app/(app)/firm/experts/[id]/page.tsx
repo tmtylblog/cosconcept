@@ -35,6 +35,7 @@ interface ExpertDetail {
   userId: string | null;
   topSkills: string[];
   updatedAt: string | null;
+  firmId: string;
   pdlData: {
     experience?: Array<{
       company: { name: string; website?: string | null; industry?: string | null };
@@ -60,6 +61,12 @@ const STATUS_OPTIONS = [
   { value: "incorrect", label: "Incorrect Data", color: "bg-red-100 text-red-700 border-red-300" },
 ];
 
+const TIER_OPTIONS = [
+  { value: "expert", label: "Expert", color: "bg-emerald-100 text-emerald-700 border-emerald-300" },
+  { value: "potential_expert", label: "Potential Expert", color: "bg-amber-100 text-amber-700 border-amber-300" },
+  { value: "not_expert", label: "Team Member", color: "bg-cos-cloud text-cos-slate border-cos-border" },
+];
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "Present";
   const d = new Date(dateStr);
@@ -82,7 +89,16 @@ export default function FirmExpertDetailPage() {
     fetch(`/api/experts/${expertId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data) setExpert(data);
+        if (data?.expert) {
+          setExpert({
+            ...data.expert,
+            specialistProfiles: (data.specialistProfiles ?? []).map((sp: { id: string; title?: string | null; qualityStatus?: string | null }) => ({
+              id: sp.id,
+              title: sp.title ?? null,
+              qualityStatus: sp.qualityStatus ?? null,
+            })),
+          });
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -99,6 +115,27 @@ export default function FirmExpertDetailPage() {
       });
       if (res.ok) {
         setExpert({ ...expert, rosterStatus: newStatus });
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTierChange(newTier: string) {
+    if (!expert || saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/firm/experts/${expertId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expertTier: newTier }),
+      });
+      if (res.ok) {
+        // Update local pdlData with new classifiedAs
+        const updatedPdl = { ...(expert.pdlData ?? {}), classifiedAs: newTier };
+        setExpert({ ...expert, pdlData: updatedPdl as ExpertDetail["pdlData"] });
       }
     } catch {
       // ignore
@@ -176,7 +213,7 @@ export default function FirmExpertDetailPage() {
   const experience = expert.pdlData?.experience ?? [];
   const skills = expert.topSkills?.length ? expert.topSkills : (expert.pdlData?.skills ?? []);
   const hasWorkHistory = experience.length > 0;
-  const currentStatus = STATUS_OPTIONS.find((s) => s.value === expert.rosterStatus) || STATUS_OPTIONS[0];
+  const currentTier = (expert.pdlData as Record<string, unknown> | null)?.classifiedAs as string ?? (hasWorkHistory ? "expert" : "not_expert");
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-20">
@@ -304,6 +341,27 @@ export default function FirmExpertDetailPage() {
               </button>
             ))}
             {saving && <Loader2 className="h-4 w-4 animate-spin text-cos-electric self-center" />}
+          </div>
+
+          {/* Tier classification */}
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-cos-slate mb-2 block mt-4">
+            Classification
+          </label>
+          <div className="flex gap-2">
+            {TIER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => handleTierChange(opt.value)}
+                disabled={saving}
+                className={`rounded-cos-md border px-3 py-1.5 text-xs font-medium transition-all ${
+                  currentTier === opt.value
+                    ? opt.color
+                    : "border-cos-border bg-cos-cloud text-cos-slate hover:bg-cos-cloud-dim"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>

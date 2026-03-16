@@ -15,6 +15,7 @@ import { expertProfiles, serviceFirms, members } from "@/lib/db/schema";
 export const dynamic = "force-dynamic";
 
 const VALID_ROSTER_STATUSES = ["active", "prior", "incorrect"];
+const VALID_TIERS = ["expert", "potential_expert", "not_expert"];
 
 export async function PATCH(
   req: NextRequest,
@@ -35,11 +36,16 @@ export async function PATCH(
 
   try {
     const body = await req.json();
-    const { rosterStatus } = body;
+    const { rosterStatus, expertTier } = body;
 
     // Validate roster status
     if (rosterStatus && !VALID_ROSTER_STATUSES.includes(rosterStatus)) {
       return NextResponse.json({ error: "Invalid roster status" }, { status: 400 });
+    }
+
+    // Validate expert tier
+    if (expertTier && !VALID_TIERS.includes(expertTier)) {
+      return NextResponse.json({ error: "Invalid expert tier" }, { status: 400 });
     }
 
     // Find the expert
@@ -86,6 +92,18 @@ export async function PATCH(
     // Build update
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (rosterStatus) updates.rosterStatus = rosterStatus;
+
+    // If changing tier, update the classifiedAs field in pdlData
+    if (expertTier) {
+      const [current] = await db
+        .select({ pdlData: expertProfiles.pdlData })
+        .from(expertProfiles)
+        .where(eq(expertProfiles.id, id))
+        .limit(1);
+
+      const existingPdl = (current?.pdlData as Record<string, unknown>) ?? {};
+      updates.pdlData = { ...existingPdl, classifiedAs: expertTier };
+    }
 
     await db
       .update(expertProfiles)
