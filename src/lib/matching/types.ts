@@ -33,6 +33,8 @@ export interface SearchFilters {
   services?: string[];
   /** Firm size band (micro, small, medium, large) */
   sizeBand?: string;
+  /** Languages spoken (e.g., "Spanish", "Mandarin") */
+  languages?: string[];
   /** Minimum match score threshold (0-1) */
   minScore?: number;
   /** Restrict results to a specific entity type */

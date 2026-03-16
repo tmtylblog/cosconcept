@@ -115,11 +115,16 @@ Pre-score: ${c.totalScore.toFixed(2)}`;
       // firm (default)
       const cs = c.preview.caseStudyCount ?? 0;
       const teamExp = c.preview.teamExperience;
+      const langs = c.preview.languages;
+      const markets = c.preview.markets;
+      const services = c.preview.topServices;
       return `[${i}] FIRM: ${c.displayName}
 Categories: ${c.preview.categories.join(", ") || "N/A"}
+Services: ${services?.length ? services.join(", ") : "N/A"}
 Skills: ${c.preview.topSkills.join(", ") || "N/A"}
 Industries: ${c.preview.industries.join(", ") || "N/A"}
-${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"}\n` : ""}${teamExp ? `Team Experience: ${teamExp}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
+Markets: ${markets?.length ? markets.join(", ") : "N/A"}
+${langs?.length ? `Languages: ${langs.join(", ")}\n` : ""}${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"} (proven work)\n` : "No case studies (unproven)\n"}${teamExp ? `Team Experience: ${teamExp}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
     })
     .join("\n\n");
 
@@ -186,11 +191,17 @@ ${candidateSummaries}
 4. Give each a final llmScore (0-1) — use lower scores (0.2-0.4) for partial matches rather than excluding them
 
 Results may include FIRMS, EXPERTS, and CASE STUDIES — rank all together by relevance.
-Focus on COMPLEMENTARY capabilities — entities that fill gaps, not duplicates.
-For experts: weight case study evidence > specialist profiles > listed skills.
-For case studies: weight demonstrated skills and industry match.
-For firms: weight proven work (case studies) over self-described categories. Consider team members' work history as evidence — a firm whose team has worked at relevant companies/industries has deeper practical experience than one without.
-IMPORTANT: Always return something. A partial match with a low score is better than no result.`,
+
+RANKING PRIORITIES (most important first):
+1. PROVEN WORK: Firms with case studies (proven work) should rank significantly higher than those without. A firm with 10 case studies is far more credible than one with zero.
+2. COMPLEMENTARY FIT: Focus on entities that fill gaps in what the searcher needs — not duplicates of what they already do.
+3. EVIDENCE QUALITY: Weight case study evidence > specialist profiles > listed skills > self-described categories. Skills backed by multiple evidence sources are more reliable.
+4. TEAM DEPTH: Firms whose team has worked at relevant companies/industries have deeper practical experience. Consider team experience as a strong credibility signal.
+5. MARKET/LANGUAGE FIT: If the query mentions geography or cross-border needs, weight market presence and language capabilities.
+6. SYMBIOTIC PARTNERSHIPS: If candidate categories form known symbiotic pairs with the searcher, that's a natural fit signal.
+7. For firms marked "No case studies (unproven)" — lower confidence but don't exclude. Some newer firms may still be relevant.
+
+IMPORTANT: Always return results. A partial match with a low score is better than no result.`,
       schema: z.object({
         rankedMatches: z.array(
           z.object({

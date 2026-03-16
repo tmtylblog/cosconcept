@@ -93,6 +93,9 @@ Only extract what the query explicitly or strongly implies. Don't over-extract.`
           .string()
           .optional()
           .describe("Firm size: micro, small, medium, large"),
+        languages: z
+          .array(z.string())
+          .describe("Languages mentioned (e.g., 'Spanish', 'Mandarin', 'French'). Only extract if the user explicitly mentions language requirements."),
         entityType: z
           .enum(["firm", "expert", "case_study"])
           .optional()
@@ -131,6 +134,7 @@ Only extract what the query explicitly or strongly implies. Don't over-extract.`
       // Services are free-form — no taxonomy validation, matched via CONTAINS in Neo4j
       services: result.object.services ?? [],
       sizeBand: result.object.sizeBand,
+      languages: result.object.languages?.length ? result.object.languages : undefined,
       entityType: result.object.entityType,
     };
   } catch (err) {

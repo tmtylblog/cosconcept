@@ -168,6 +168,33 @@ export async function structuredFilter(
     returnFields.push("[] AS serviceMatches");
   }
 
+  // ── Size band filter ─────────────────────────────────────────
+  if (filters.sizeBand) {
+    const sizeRanges: Record<string, [number, number]> = {
+      micro: [1, 10],
+      small: [11, 50],
+      medium: [51, 200],
+      large: [201, 10000],
+    };
+    const range = sizeRanges[filters.sizeBand];
+    if (range) {
+      conditions.push(
+        `f.employeeCount >= ${range[0]} AND f.employeeCount <= ${range[1]}`
+      );
+    }
+  }
+
+  // ── Language filter ──────────────────────────────────────────
+  if (filters.languages?.length) {
+    conditions.push(
+      `EXISTS {
+        MATCH (f)-[:SPEAKS]->(l:Language)
+        WHERE l.name IN $languages
+      }`
+    );
+    params.languages = filters.languages;
+  }
+
   // ── Case study count (evidence depth) ───────────────────────
   returnFields.push(
     `size([(f)-[:HAS_CASE_STUDY]->(cs:CaseStudy) | cs]) AS caseStudyCount`
