@@ -105,8 +105,14 @@ const COMMON_PATHS = [
   "/about",
   "/about-us",
   "/services",
+  "/our-services",
   "/what-we-do",
   "/capabilities",
+  "/solutions",
+  "/practices",
+  "/our-practices",
+  "/our-approach",
+  "/expertise",
   "/work",
   "/our-work",
   "/case-studies",
@@ -258,6 +264,16 @@ export async function deepCrawlWebsite(params: {
       page.url
     );
     services.push(...extracted);
+  }
+
+  // Fallback: if no dedicated service pages found, extract from homepage
+  // Many sites list services on the homepage (e.g. "Our Practice Areas")
+  if (services.length === 0 && homepage.content.length > 200) {
+    const homepageServices = await extractServicesDeep(
+      homepage.content,
+      baseUrl
+    );
+    services.push(...homepageServices);
   }
 
   // Collect client names already extracted by the case study extractor —
