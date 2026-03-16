@@ -157,6 +157,8 @@ export function EnrichmentProvider({
   // Auto-retry: track whether we've attempted gap-fill after hydration
   const autoRetryDoneRef = useRef(false);
   const wasHydratedRef = useRef(false);
+  // Track whether we've fetched from DB (prevents redundant fetches, not skipped fetches)
+  const dbFetchedRef = useRef(false);
 
   // ─── Storage: save enrichment result to survive page reloads + browser close ───
   const STORAGE_KEY = "cos_enrichment_result";
@@ -173,80 +175,81 @@ export function EnrichmentProvider({
     }
   }, [result]);
 
-  // Hydrate from localStorage/sessionStorage on mount, then try DB
+  // Hydrate from localStorage/sessionStorage on mount, then try DB.
+  // Runs when organizationId changes (initially undefined, then resolved).
+  // Always attempts DB fetch when orgId is available, even if localStorage
+  // data exists — DB is authoritative and may have fresher data.
   useEffect(() => {
-    if (result) return; // Already have data in memory
     let cancelled = false;
 
     async function hydrate() {
       // Try localStorage first (survives browser close), then sessionStorage
-      try {
-        const cached = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
-        if (cached && !cancelled) {
-          const enrichmentData = JSON.parse(cached) as EnrichmentResult;
-          if (enrichmentData.domain) {
-            wasHydratedRef.current = true;
-            setResult(enrichmentData);
-            setEnrichedUrl(enrichmentData.url);
-            setContextForOssy(buildContextForOssy(enrichmentData));
-            // Ensure domain key is set in both storages for guest preference DB sync
-            try {
-              localStorage.setItem("cos_guest_domain", enrichmentData.domain);
-              sessionStorage.setItem("cos_guest_domain", enrichmentData.domain);
-            } catch { /* ignore */ }
+      // This gives instant UI while DB fetch is in flight
+      if (!result) {
+        try {
+          const cached = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
+          if (cached && !cancelled) {
+            const enrichmentData = JSON.parse(cached) as EnrichmentResult;
+            if (enrichmentData.domain) {
+              wasHydratedRef.current = true;
+              setResult(enrichmentData);
+              setEnrichedUrl(enrichmentData.url);
+              setContextForOssy(buildContextForOssy(enrichmentData));
+              // Ensure domain key is set in both storages for guest preference DB sync
+              try {
+                localStorage.setItem("cos_guest_domain", enrichmentData.domain);
+                sessionStorage.setItem("cos_guest_domain", enrichmentData.domain);
+              } catch { /* ignore */ }
 
-            // Set accurate status based on ACTUAL data quality
-            // Use the same strict criteria as auto-retry and lookup gap-fill
-            const ed = enrichmentData;
-            const cd = ed.companyData;
-            const hydHasRealPdl = !!(cd && (
-              (cd.employeeCount ?? 0) > 0 || cd.size || cd.location || cd.inferredRevenue
-            ));
-            const hydHasScrape = !!(
-              (ed.extracted?.services?.length) ||
-              (ed.extracted?.clients?.length) ||
-              ed.extracted?.aboutPitch ||
-              ed.groundTruth
-            );
-            const hydHasClassify = !!(
-              ed.classification?.categories?.length &&
-              ed.classification?.skills?.length
-            );
-            const isComplete = hydHasRealPdl && hydHasScrape && hydHasClassify;
-            const hasAnyRealData = hydHasRealPdl || hydHasScrape || hydHasClassify;
+              // Set accurate status based on ACTUAL data quality
+              const ed = enrichmentData;
+              const cd = ed.companyData;
+              const hydHasRealPdl = !!(cd && (
+                (cd.employeeCount ?? 0) > 0 || cd.size || cd.location || cd.inferredRevenue
+              ));
+              const hydHasScrape = !!(
+                (ed.extracted?.services?.length) ||
+                (ed.extracted?.clients?.length) ||
+                ed.extracted?.aboutPitch ||
+                ed.groundTruth
+              );
+              const hydHasClassify = !!(
+                ed.classification?.categories?.length &&
+                ed.classification?.skills?.length
+              );
+              const isComplete = hydHasRealPdl && hydHasScrape && hydHasClassify;
+              const hasAnyRealData = hydHasRealPdl || hydHasScrape || hydHasClassify;
 
-            if (isComplete) {
-              // All three stages have real data — show as done
-              setStatus("done");
-              setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
-            } else if (hasAnyRealData) {
-              // Partial data — show what we have, auto-retry will fill gaps
-              setStatus("done");
-              setStages({
-                overall: "done",
-                pdl: hydHasRealPdl ? "done" : "idle",
-                scrape: hydHasScrape ? "done" : "idle",
-                classify: hydHasClassify ? "done" : "idle",
-              });
-            } else {
-              // No real data at all — show enriching state while auto-retry fills it
-              setStatus("loading");
-              setStages({
-                overall: "enriching",
-                pdl: "loading",
-                scrape: "loading",
-                classify: "idle",
-              });
+              if (isComplete) {
+                setStatus("done");
+                setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
+              } else if (hasAnyRealData) {
+                setStatus("done");
+                setStages({
+                  overall: "done",
+                  pdl: hydHasRealPdl ? "done" : "idle",
+                  scrape: hydHasScrape ? "done" : "idle",
+                  classify: hydHasClassify ? "done" : "idle",
+                });
+              } else {
+                setStatus("loading");
+                setStages({
+                  overall: "enriching",
+                  pdl: "loading",
+                  scrape: "loading",
+                  classify: "idle",
+                });
+              }
             }
-            // Don't return — still try DB hydration to get latest data
           }
+        } catch {
+          // sessionStorage unavailable
         }
-      } catch {
-        // sessionStorage unavailable
       }
 
-      // Then try DB if we have an orgId
-      if (!organizationId) return;
+      // Always try DB fetch when orgId is available (DB is authoritative)
+      if (!organizationId || dbFetchedRef.current) return;
+      dbFetchedRef.current = true;
       try {
         const res = await fetch(`/api/enrich/firm?organizationId=${organizationId}`);
         if (!res.ok || cancelled) return;
