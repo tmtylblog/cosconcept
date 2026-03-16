@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { eq } from "drizzle-orm";
+import { eq, and, not, like, desc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { serviceFirms } from "@/lib/db/schema";
@@ -11,6 +11,10 @@ export const dynamic = "force-dynamic";
  *
  * Returns persisted enrichment data for a firm (if it exists).
  * Used by EnrichmentProvider to hydrate from DB on mount.
+ *
+ * Looks up by organizationId column. When multiple firm records exist
+ * for the same org (legacy import + app-created), prefers the non-legacy
+ * record (id NOT starting with "firm_leg_").
  */
 export async function GET(req: Request) {
   try {
@@ -26,8 +30,8 @@ export async function GET(req: Request) {
       return Response.json({ error: "organizationId is required" }, { status: 400 });
     }
 
-    const firmId = `firm_${organizationId}`;
-    const rows = await db
+    // Try non-legacy firm first (app-created firms have richer data)
+    let rows = await db
       .select({
         enrichmentData: serviceFirms.enrichmentData,
         enrichmentStatus: serviceFirms.enrichmentStatus,
@@ -35,8 +39,27 @@ export async function GET(req: Request) {
         website: serviceFirms.website,
       })
       .from(serviceFirms)
-      .where(eq(serviceFirms.id, firmId))
+      .where(
+        and(
+          eq(serviceFirms.organizationId, organizationId),
+          not(like(serviceFirms.id, "firm_leg_%"))
+        )
+      )
       .limit(1);
+
+    // Fallback: any firm for this org (including legacy)
+    if (rows.length === 0) {
+      rows = await db
+        .select({
+          enrichmentData: serviceFirms.enrichmentData,
+          enrichmentStatus: serviceFirms.enrichmentStatus,
+          name: serviceFirms.name,
+          website: serviceFirms.website,
+        })
+        .from(serviceFirms)
+        .where(eq(serviceFirms.organizationId, organizationId))
+        .limit(1);
+    }
 
     if (rows.length === 0 || !rows[0].enrichmentData) {
       return Response.json({ enrichmentData: null });
