@@ -958,7 +958,7 @@ function GrowthOpsInboxInner() {
       </div>
 
       {/* 3-Panel Layout */}
-      <div className="flex h-[calc(100vh-160px)] rounded-cos-xl border border-cos-border overflow-hidden shadow-sm">
+      <div className="flex h-[calc(100vh-140px)] rounded-cos-xl border border-cos-border overflow-hidden shadow-sm">
         {/* Left: Conversation List (280px) */}
         <div className="w-[280px] shrink-0 border-r border-cos-border bg-white overflow-hidden">
           <ConversationList
@@ -980,7 +980,7 @@ function GrowthOpsInboxInner() {
         </div>
 
         {/* Center: Message Thread (flex-1) */}
-        <div className="flex flex-1 flex-col min-w-0 bg-white">
+        <div className="flex flex-1 flex-col min-w-0 min-h-0 overflow-hidden bg-white">
           <MessageThread
             selectedConvo={selectedConvo}
             messages={messages}

@@ -54,7 +54,7 @@ export function MessageThread({
 
   if (!selectedConvo) {
     return (
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="flex flex-1 flex-col min-w-0 min-h-0">
         <div className="flex flex-1 items-center justify-center text-cos-slate">
           <div className="text-center">
             <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-30" />
@@ -74,7 +74,7 @@ export function MessageThread({
   // ── Thread view ──────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-1 flex-col min-w-0">
+    <div className="flex flex-1 flex-col min-w-0 min-h-0">
       {/* Thread header */}
       <div className="border-b border-cos-border px-5 py-3 flex items-center gap-3">
         <Avatar
