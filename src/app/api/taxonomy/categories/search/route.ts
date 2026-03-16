@@ -16,12 +16,16 @@ function ensureCache() {
 }
 
 export async function GET(req: NextRequest) {
-  const query = new URL(req.url).searchParams.get("q")?.trim();
-  if (!query || query.length < 1) {
-    return NextResponse.json({ results: [] });
-  }
-
   ensureCache();
+
+  const query = new URL(req.url).searchParams.get("q")?.trim();
+
+  // Return all categories when no query (used by dropdown)
+  if (!query || query.length < 1) {
+    return NextResponse.json({
+      results: categoryNames!.map((name) => ({ name })),
+    });
+  }
 
   const q = query.toLowerCase();
   const prefix: { name: string }[] = [];

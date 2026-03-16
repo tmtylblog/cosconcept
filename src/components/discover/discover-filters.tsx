@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { AutocompleteInput } from "@/components/ui/autocomplete-input";
 import type { DiscoverFilters } from "@/hooks/use-discover-results";
@@ -36,19 +36,35 @@ async function fetchIndustrySuggestions(query: string): Promise<string[]> {
   const res = await fetch(`/api/taxonomy/industries/search?q=${encodeURIComponent(query)}`);
   if (!res.ok) return [];
   const data = await res.json();
-  // Industries API returns plain strings, not objects
   return (data.results ?? []).map((r: string | { name: string }) => typeof r === "string" ? r : r.name);
 }
 
-async function fetchCategorySuggestions(query: string): Promise<string[]> {
-  // Use the categories from taxonomy — simple client-side filter
-  const res = await fetch(`/api/taxonomy/categories/search?q=${encodeURIComponent(query)}`);
+// Categories are a static list of 30 — fetched once from API
+let _categoriesCache: string[] | null = null;
+
+async function loadCategories(): Promise<string[]> {
+  if (_categoriesCache) return _categoriesCache;
+  const res = await fetch("/api/taxonomy/categories/search");
   if (!res.ok) return [];
   const data = await res.json();
-  return (data.results ?? []).map((r: { name: string }) => r.name);
+  _categoriesCache = (data.results ?? []).map((r: { name: string }) => r.name);
+  return _categoriesCache;
 }
 
 export function DiscoverFilterSidebar({ filters, onFiltersChange }: DiscoverFilterSidebarProps) {
+  const [categories, setCategories] = useState<string[]>([]);
+  const [localEntityType, setLocalEntityType] = useState<string>(filters.entityType ?? "");
+
+  // Load categories once
+  useEffect(() => {
+    loadCategories().then(setCategories);
+  }, []);
+
+  // Sync local entity type with external filter changes (from Ossy)
+  useEffect(() => {
+    setLocalEntityType(filters.entityType ?? "");
+  }, [filters.entityType]);
+
   const update = useCallback(
     (patch: Partial<DiscoverFilters>) => {
       onFiltersChange({ ...filters, ...patch });
@@ -76,11 +92,13 @@ export function DiscoverFilterSidebar({ filters, onFiltersChange }: DiscoverFilt
             >
               <input
                 type="radio"
-                name="entityType"
-                checked={(filters.entityType ?? "") === opt.value}
-                onChange={() =>
-                  update({ entityType: opt.value ? (opt.value as DiscoverFilters["entityType"]) : undefined })
-                }
+                name="discoverEntityType"
+                value={opt.value}
+                checked={localEntityType === opt.value}
+                onChange={() => {
+                  setLocalEntityType(opt.value);
+                  update({ entityType: opt.value ? (opt.value as DiscoverFilters["entityType"]) : undefined });
+                }}
                 className="h-3 w-3 accent-cos-electric"
               />
               {opt.label}
@@ -111,16 +129,25 @@ export function DiscoverFilterSidebar({ filters, onFiltersChange }: DiscoverFilt
         color="signal"
       />
 
-      {/* Categories */}
-      <AutocompleteInput
-        label="Categories"
-        placeholder="Search categories..."
-        values={filters.categories ?? []}
-        onChange={(categories) => update({ categories })}
-        fetchSuggestions={fetchCategorySuggestions}
-        maxItems={5}
-        color="midnight"
-      />
+      {/* Categories — dropdown since only 30 */}
+      <div>
+        <p className="mb-1.5 text-[11px] font-medium text-cos-midnight">Category</p>
+        <select
+          value={filters.categories?.[0] ?? ""}
+          onChange={(e) => {
+            const val = e.target.value;
+            update({ categories: val ? [val] : [] });
+          }}
+          className="w-full rounded-cos-md border border-cos-border bg-white px-2 py-1.5 text-xs text-cos-midnight focus:border-cos-electric focus:outline-none"
+        >
+          <option value="">Any Category</option>
+          {categories.map((cat) => (
+            <option key={cat} value={cat}>
+              {cat}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* Size Band */}
       <div>

@@ -115,11 +115,28 @@ export function createOssyTools(organizationId: string, firmId?: string) {
             caseStudyCount: c.preview.caseStudyCount ?? undefined,
           }));
 
+          // Build a brief analysis hint for Ossy from the result data
+          const allCategories = candidates.flatMap((c) => c.categories);
+          const allSkills = candidates.flatMap((c) => c.skills);
+          const allIndustries = candidates.flatMap((c) => c.industries);
+          const topCategories = [...new Set(allCategories)].slice(0, 6);
+          const topSkills = [...new Set(allSkills)].slice(0, 8);
+          const topIndustries = [...new Set(allIndustries)].slice(0, 6);
+          const withCaseStudies = candidates.filter((c) => (c.caseStudyCount ?? 0) > 0).length;
+
           return {
             success: true,
             query,
             totalFound: result.candidates.length,
             candidates,
+            resultAnalysis: {
+              categoriesRepresented: topCategories,
+              skillsRepresented: topSkills,
+              industriesRepresented: topIndustries,
+              firmsWithCaseStudies: withCaseStudies,
+              totalCandidates: candidates.length,
+            },
+            _instruction: "IMPORTANT: After presenting these results, you MUST ask a sharpening follow-up question based on what you see in the resultAnalysis. Look at the categories, skills, and industries across all matches — notice patterns, splits, or gaps, and ask ONE specific question that helps the user think deeper about what they need. Do NOT just say 'want me to narrow by X?' — instead tell them what you NOTICED and ask something specific.",
             stats: {
               durationMs: result.stats.totalDurationMs,
               layer1: result.stats.layer1Candidates,

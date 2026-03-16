@@ -133,15 +133,19 @@ export default function DiscoverPage() {
   const handleFiltersChange = useCallback(
     (newFilters: DiscoverFilters) => {
       if (!discover) return;
+      // Update both filters and parsedFilters so the sidebar reflects the change
       discover.setFilters(newFilters);
-      // When filters change manually, tell Ossy via chat injection
+      discover.setParsedFilters(newFilters);
+
+      // Tell Ossy about the change via chat injection
       const changed = diffFilters(discover.parsedFilters, newFilters);
-      if (changed && discover.searchQuery) {
-        // Re-search with updated filters
-        discover.executeSearch(discover.searchQuery, newFilters);
-        // Also inject a message to Ossy so it knows about the filter change
+      if (changed) {
         const msg = describeFilterChange(changed);
         if (msg) {
+          if (discover.searchQuery) {
+            // Active search — re-search with updated filters
+            discover.executeSearch(discover.searchQuery, newFilters);
+          }
           injectIntoChat(msg);
         }
       }
