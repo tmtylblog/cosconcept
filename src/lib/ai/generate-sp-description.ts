@@ -52,12 +52,14 @@ ${expertBio}` : ""}
 
 RULES:
 - Write 150-300 words in THIRD PERSON
-- Focus on the expertise described by "${specialistTitle}"
-- Reference the work examples as evidence of expertise
+- This is a SPECIALIST description — focus ONLY on the expertise described by "${specialistTitle}"
+- Reference the work examples as evidence, but only the parts that support this specific niche
+- CRITICAL: Do NOT include experience or achievements that conflict with or dilute the specialist focus. If the expert has experience in multiple industries, ONLY highlight the one relevant to "${specialistTitle}". A beauty-focused CMO description should NOT mention their SaaS experience.
 - Professional tone, 2-3 short paragraphs maximum
 - NO bullets, NO headers — flowing prose only
 - Emphasize outcomes and impact, not just responsibilities
 - Make it compelling for someone searching for this type of expert
+- Note their broader experience briefly for credibility, but keep the narrative laser-focused on the specialist niche
 
 DESCRIPTION:`,
       maxTokens: 600,
