@@ -659,6 +659,8 @@ export async function writeCaseStudyToGraph(
 
     // Link to client Company (Track A: Company instead of Client)
     // Merged by name stub; enrichmentStatus = "stub" queues PDL domain lookup.
+    // Also creates HAS_CLIENT edge from ServiceFirm → Company so the firm's
+    // client list stays complete when case studies are added individually.
     if (data.clientName) {
       await neo4jWrite(
         `MATCH (cs:CaseStudy {id: $id})
@@ -668,8 +670,12 @@ export async function writeCaseStudyToGraph(
                        c.source = "case_study",
                        c.createdAt = datetime()
          MERGE (cs)-[r:FOR_CLIENT]->(c)
-         SET r.source = "case_study"`,
-        { id: data.caseStudyId, clientName: data.clientName }
+         SET r.source = "case_study"
+         WITH c
+         MATCH (f:Company {id: $firmId})
+         MERGE (f)-[r2:HAS_CLIENT]->(c)
+         SET r2.source = "case_study"`,
+        { id: data.caseStudyId, clientName: data.clientName, firmId: data.firmId }
       );
     }
 

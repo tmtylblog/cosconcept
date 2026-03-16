@@ -596,6 +596,7 @@ export const caseStudyStatusEnum = pgEnum("case_study_status", [
   "blocked",
   "failed",
   "deleted",
+  "not_case_study",
 ]);
 
 export const opportunities = pgTable("opportunities", {

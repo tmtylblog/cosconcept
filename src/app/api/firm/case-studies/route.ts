@@ -276,7 +276,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { id, organizationId, isHidden } = body;
+  const { id, organizationId, isHidden, status } = body;
 
   if (!id || !organizationId) {
     return Response.json({ error: "id and organizationId required" }, { status: 400 });
@@ -305,6 +305,7 @@ export async function PATCH(req: NextRequest) {
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (typeof isHidden === "boolean") updates.isHidden = isHidden;
+  if (status === "not_case_study" || status === "active") updates.status = status;
 
   await db.update(firmCaseStudies).set(updates).where(eq(firmCaseStudies.id, id));
 

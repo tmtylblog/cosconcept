@@ -18,6 +18,8 @@ import {
   Type,
   X,
   ImageIcon,
+  Ban,
+  Undo2,
 } from "lucide-react";
 import { authClient, useActiveOrganization, useSession } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
@@ -68,6 +70,8 @@ export default function FirmExperiencePage() {
     submitText,
     submitPdf,
     toggleHidden,
+    markNotCaseStudy,
+    undoNotCaseStudy,
     refresh,
   } = useCaseStudies(orgId);
 
@@ -146,9 +150,12 @@ export default function FirmExperiencePage() {
   const [showHidden, setShowHidden] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // Split visible / hidden
-  const visibleCaseStudies = caseStudies.filter((cs) => !cs.isHidden);
-  const hiddenCaseStudies = caseStudies.filter((cs) => cs.isHidden);
+  const [showNotCaseStudies, setShowNotCaseStudies] = useState(false);
+
+  // Split visible / hidden / not-case-study
+  const visibleCaseStudies = caseStudies.filter((cs) => !cs.isHidden && cs.status !== "not_case_study");
+  const hiddenCaseStudies = caseStudies.filter((cs) => cs.isHidden && cs.status !== "not_case_study");
+  const notCaseStudies = caseStudies.filter((cs) => cs.status === "not_case_study");
 
   // Count by status
   const pendingCount = caseStudies.filter(
@@ -250,6 +257,7 @@ export default function FirmExperiencePage() {
             key={cs.id}
             caseStudy={cs}
             onToggleHidden={toggleHidden}
+            onMarkNotCaseStudy={markNotCaseStudy}
           />
         ))}
       </div>
@@ -282,7 +290,66 @@ export default function FirmExperiencePage() {
                   key={cs.id}
                   caseStudy={cs}
                   onToggleHidden={toggleHidden}
+                  onMarkNotCaseStudy={markNotCaseStudy}
                 />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Not case studies section */}
+      {notCaseStudies.length > 0 && (
+        <div className="space-y-3 border-t border-cos-border/30 pt-4">
+          <button
+            onClick={() => setShowNotCaseStudies(!showNotCaseStudies)}
+            className="flex items-center gap-2 text-xs font-medium text-cos-slate-dim transition-colors hover:text-cos-midnight"
+          >
+            {showNotCaseStudies ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            <Ban className="h-3.5 w-3.5" />
+            {notCaseStudies.length} marked as not a case {notCaseStudies.length === 1 ? "study" : "studies"}
+          </button>
+
+          {showNotCaseStudies && (
+            <div className="space-y-3 opacity-50">
+              {notCaseStudies.map((cs) => (
+                <div
+                  key={cs.id}
+                  className="rounded-cos-xl border border-cos-border/30 bg-cos-surface/50"
+                >
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-cos-md bg-cos-midnight/5">
+                      <Ban className="h-4 w-4 text-cos-slate-light" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium text-cos-slate-dim">
+                        {cs.title || cs.sourceUrl.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "")}
+                      </p>
+                      {cs.autoTags && (cs.autoTags.skills?.length > 0 || cs.autoTags.industries?.length > 0) && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {cs.autoTags.skills?.slice(0, 2).map((skill) => (
+                            <span key={skill} className="rounded-cos-pill bg-cos-midnight/5 px-1.5 py-0.5 text-[9px] text-cos-slate-dim">
+                              {skill}
+                            </span>
+                          ))}
+                          {cs.autoTags.industries?.slice(0, 1).map((ind) => (
+                            <span key={ind} className="rounded-cos-pill bg-cos-midnight/5 px-1.5 py-0.5 text-[9px] text-cos-slate-dim">
+                              {ind}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => undoNotCaseStudy(cs.id)}
+                      className="flex items-center gap-1 rounded-cos-md px-2 py-1 text-[10px] font-medium text-cos-electric transition-colors hover:bg-cos-electric/10"
+                      title="Undo - restore as case study"
+                    >
+                      <Undo2 className="h-3 w-3" />
+                      Undo
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -333,9 +400,11 @@ export default function FirmExperiencePage() {
 function CaseStudyCard({
   caseStudy,
   onToggleHidden,
+  onMarkNotCaseStudy,
 }: {
   caseStudy: CaseStudy;
   onToggleHidden: (id: string) => Promise<void>;
+  onMarkNotCaseStudy?: (id: string) => Promise<void>;
 }) {
   const isPending = caseStudy.status === "pending" || caseStudy.status === "ingesting";
   const isFailed = caseStudy.status === "failed";
@@ -462,7 +531,16 @@ function CaseStudyCard({
         </div>
 
         {/* Actions */}
-        <div className="flex shrink-0 items-start">
+        <div className="flex shrink-0 items-start gap-0.5">
+          {onMarkNotCaseStudy && (
+            <button
+              onClick={() => onMarkNotCaseStudy(caseStudy.id)}
+              className="flex h-7 w-7 items-center justify-center rounded-cos-md text-cos-slate-light transition-colors hover:bg-cos-ember/10 hover:text-cos-ember"
+              title="Not a case study"
+            >
+              <Ban className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             onClick={() => onToggleHidden(caseStudy.id)}
             className={`flex h-7 w-7 items-center justify-center rounded-cos-md transition-colors ${

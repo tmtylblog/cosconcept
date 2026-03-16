@@ -23,6 +23,7 @@ import {
   Globe,
   FileUp,
   Sparkles,
+  FileX,
 } from "lucide-react";
 import type { AdminSection } from "@/lib/admin/permissions";
 
@@ -110,6 +111,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { href: "/admin/apis", label: "APIs", icon: Globe },
       { href: "/admin/migration", label: "Data Import", icon: FileUp },
       { href: "/admin/enrichment", label: "Enrichment", icon: Sparkles },
+      { href: "/admin/enrichment/poor-results", label: "Poor CS Results", icon: FileX },
     ],
   },
 ];

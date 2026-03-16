@@ -9,7 +9,8 @@ export type CaseStudyStatus =
   | "ingesting"
   | "active"
   | "blocked"
-  | "failed";
+  | "failed"
+  | "not_case_study";
 
 export interface CaseStudy {
   id: string;
@@ -47,6 +48,8 @@ interface UseCaseStudiesReturn {
   submitText: (text: string, userNotes?: string) => Promise<void>;
   submitPdf: (file: File, userNotes?: string) => Promise<void>;
   toggleHidden: (id: string) => Promise<void>;
+  markNotCaseStudy: (id: string) => Promise<void>;
+  undoNotCaseStudy: (id: string) => Promise<void>;
   deleteCaseStudy: (id: string) => Promise<void>;
   refresh: () => void;
 }
@@ -218,6 +221,70 @@ export function useCaseStudies(
     [organizationId, caseStudies]
   );
 
+  // ── Mark not a case study ────────────────────────────────
+  const markNotCaseStudy = useCallback(
+    async (id: string) => {
+      if (!organizationId) return;
+      const cs = caseStudies.find((c) => c.id === id);
+      if (!cs) return;
+
+      const prevStatus = cs.status;
+
+      // Optimistic update
+      setCaseStudies((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: "not_case_study" as CaseStudyStatus } : c))
+      );
+
+      try {
+        const res = await fetch("/api/firm/case-studies", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, organizationId, status: "not_case_study" }),
+        });
+        if (!res.ok) {
+          setCaseStudies((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, status: prevStatus } : c))
+          );
+        }
+      } catch {
+        setCaseStudies((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, status: prevStatus } : c))
+        );
+      }
+    },
+    [organizationId, caseStudies]
+  );
+
+  // ── Undo not a case study ──────────────────────────────
+  const undoNotCaseStudy = useCallback(
+    async (id: string) => {
+      if (!organizationId) return;
+
+      // Optimistic update
+      setCaseStudies((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: "active" as CaseStudyStatus } : c))
+      );
+
+      try {
+        const res = await fetch("/api/firm/case-studies", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, organizationId, status: "active" }),
+        });
+        if (!res.ok) {
+          setCaseStudies((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, status: "not_case_study" as CaseStudyStatus } : c))
+          );
+        }
+      } catch {
+        setCaseStudies((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, status: "not_case_study" as CaseStudyStatus } : c))
+        );
+      }
+    },
+    [organizationId]
+  );
+
   // ── Submit URL ──────────────────────────────────────────
   const submitUrl = useCallback(
     async (url: string, userNotes?: string) => {
@@ -337,6 +404,8 @@ export function useCaseStudies(
     submitText,
     submitPdf,
     toggleHidden,
+    markNotCaseStudy,
+    undoNotCaseStudy,
     deleteCaseStudy,
     refresh: fetchCaseStudies,
   };
