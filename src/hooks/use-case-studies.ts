@@ -39,6 +39,8 @@ interface UseCaseStudiesReturn {
   total: number;
   hiddenCount: number;
   isLoading: boolean;
+  /** True when a deep crawl has been triggered and we're waiting for case studies */
+  isDiscovering: boolean;
   isSubmitting: boolean;
   submitError: string | null;
   submitUrl: (url: string, userNotes?: string) => Promise<void>;
@@ -59,6 +61,7 @@ export function useCaseStudies(
   const [total, setTotal] = useState(0);
   const [hiddenCount, setHiddenCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDiscovering, setIsDiscovering] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -114,6 +117,8 @@ export function useCaseStudies(
 
         // If 0 case studies, trigger deep crawl and poll for results
         if ((data?.caseStudies ?? []).length === 0 && organizationId) {
+          setIsDiscovering(true);
+
           fetch("/api/enrich/deep-crawl", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -124,7 +129,7 @@ export function useCaseStudies(
             .catch(() => {});
 
           // Poll for results
-          const retryDelays = [5000, 15000, 30000, 60000];
+          const retryDelays = [5000, 15000, 30000, 60000, 90000, 120000];
           (async () => {
             for (const delay of retryDelays) {
               if (cancelled) break;
@@ -139,12 +144,14 @@ export function useCaseStudies(
                   setCaseStudies(retryData.caseStudies);
                   setTotal(retryData.total ?? 0);
                   setHiddenCount(retryData.hiddenCount ?? 0);
+                  setIsDiscovering(false);
                   break;
                 }
               } catch {
                 // silent
               }
             }
+            if (!cancelled) setIsDiscovering(false);
           })();
         }
       });
@@ -323,6 +330,7 @@ export function useCaseStudies(
     total,
     hiddenCount,
     isLoading,
+    isDiscovering,
     isSubmitting,
     submitError,
     submitUrl,

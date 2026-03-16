@@ -54,6 +54,7 @@ export default function FirmOfferingPage() {
     total,
     hiddenCount,
     isLoading,
+    isDiscovering,
     toggleHidden,
     updateDescription,
     addService,
@@ -199,20 +200,24 @@ export default function FirmOfferingPage() {
         </form>
       )}
 
-      {/* Loading states */}
-      {(isLoading || enrichmentStatus === "loading") && (
+      {/* Loading / discovering states */}
+      {(isLoading || isDiscovering || enrichmentStatus === "loading") && (
         <div className="rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-4 py-4">
           <div className="flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin text-cos-electric" />
             <p className="text-sm font-medium text-cos-electric">
-              Scanning your website for services...
+              {isDiscovering
+                ? "Discovering your services & solutions..."
+                : "Scanning your website for services..."}
             </p>
           </div>
-          {enrichmentResult?.domain && (
-            <p className="mt-1.5 ml-6 text-xs text-cos-electric/70">
-              Crawling {enrichmentResult.domain} — services will appear here once the scan completes (30–60 seconds).
-            </p>
-          )}
+          <p className="mt-1.5 ml-6 text-xs text-cos-electric/70">
+            {isDiscovering
+              ? "We're crawling your website, analyzing your offerings, and extracting details. This usually takes 1-2 minutes."
+              : enrichmentResult?.domain
+                ? `Crawling ${enrichmentResult.domain} — services will appear here once the scan completes.`
+                : "Your services will appear here shortly."}
+          </p>
         </div>
       )}
 
@@ -298,8 +303,8 @@ export default function FirmOfferingPage() {
         </div>
       )}
 
-      {/* Empty state */}
-      {!hasFirmServices && !isDeepCrawlPending && !isLoading && enrichmentStatus !== "loading" && (
+      {/* Empty state — only show if NOT discovering */}
+      {!hasFirmServices && !isDeepCrawlPending && !isLoading && !isDiscovering && enrichmentStatus !== "loading" && (
         <div className="rounded-cos-xl border border-dashed border-cos-border bg-cos-surface/50 px-6 py-8 text-center">
           <Briefcase className="mx-auto h-8 w-8 text-cos-slate-light" />
           <p className="mt-3 text-sm font-medium text-cos-slate">

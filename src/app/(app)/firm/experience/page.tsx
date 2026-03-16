@@ -59,6 +59,7 @@ export default function FirmExperiencePage() {
     total,
     hiddenCount,
     isLoading,
+    isDiscovering,
     isSubmitting,
     submitError,
     submitUrl,
@@ -192,17 +193,17 @@ export default function FirmExperiencePage() {
         </div>
       )}
 
-      {/* Enrichment scanning banner */}
-      {enrichmentStatus === "loading" && total === 0 && !isLoading && (
+      {/* Enrichment scanning / discovering banner */}
+      {(isDiscovering || enrichmentStatus === "loading") && total === 0 && !isLoading && (
         <div className="rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 px-4 py-4">
           <div className="flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin text-cos-electric" />
             <p className="text-sm font-medium text-cos-electric">
-              Scanning your website for case studies...
+              {isDiscovering ? "Discovering your case studies & portfolio..." : "Scanning your website for case studies..."}
             </p>
           </div>
           <p className="mt-1.5 ml-6 text-xs text-cos-electric/70">
-            We&apos;re crawling {enrichmentResult?.domain ?? "your website"} to find your portfolio. This takes about 30–60 seconds.
+            We&apos;re crawling your website to find evidence of your work — case studies, projects, and client results. This usually takes 1-2 minutes.
           </p>
         </div>
       )}
@@ -282,8 +283,8 @@ export default function FirmExperiencePage() {
         )}
       </div>
 
-      {/* Empty state */}
-      {total === 0 && !isLoading && enrichmentStatus !== "loading" && (
+      {/* Empty state — only show if NOT discovering */}
+      {total === 0 && !isLoading && !isDiscovering && enrichmentStatus !== "loading" && (
         <div className="rounded-cos-xl border border-dashed border-cos-border bg-cos-surface/50 px-6 py-8 text-center">
           <FileText className="mx-auto h-8 w-8 text-cos-slate-light" />
           <p className="mt-3 text-sm font-medium text-cos-slate">
