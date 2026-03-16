@@ -640,6 +640,94 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // ── probeOrgMailboxes — try fetching company page conversations ─────────
+    if (action === "probeOrgMailboxes") {
+      const accountId = req.nextUrl.searchParams.get("accountId") ?? "";
+      const results: Record<string, unknown> = {};
+
+      // First, get account details to find org mailbox URNs
+      try {
+        const acctDetail = await UnipileClient.getAccount(accountId);
+        const cp = (acctDetail as Record<string, unknown>).connection_params as Record<string, unknown> | undefined;
+        const im = cp?.im as Record<string, unknown> | undefined;
+        const orgs = im?.organizations as Array<{ name: string; mailbox_urn: string; organization_urn: string }> | undefined;
+
+        results.account_name = (acctDetail as Record<string, unknown>).name;
+        results.organizations = orgs ?? [];
+
+        // Try fetching chats for each org mailbox
+        if (orgs && orgs.length > 0) {
+          for (const org of orgs) {
+            try {
+              // Try with mailbox_urn as a filter parameter
+              const chatsRes = await fetch(`${process.env.UNIPILE_BASE_URL}/api/v1/chats?account_id=${accountId}&mailbox_urn=${encodeURIComponent(org.mailbox_urn)}&limit=5`, {
+                headers: { "X-API-KEY": process.env.UNIPILE_API_KEY!, accept: "application/json" },
+                signal: AbortSignal.timeout(15000),
+              });
+              const chatsData = await chatsRes.json();
+              results[`org_${org.name}_mailbox`] = {
+                status: chatsRes.status,
+                count: (chatsData.items ?? []).length,
+                sample: (chatsData.items ?? []).slice(0, 3).map((c: Record<string, unknown>) => ({
+                  id: c.id,
+                  name: c.name,
+                  content_type: c.content_type,
+                  timestamp: c.timestamp,
+                  attendee: (c.attendees as Array<Record<string, unknown>>)?.[0]?.attendee_name,
+                })),
+                error: chatsData.error ?? null,
+              };
+            } catch (err) {
+              results[`org_${org.name}_mailbox`] = { error: String(err) };
+            }
+
+            // Also try with organization_urn
+            try {
+              const chatsRes2 = await fetch(`${process.env.UNIPILE_BASE_URL}/api/v1/chats?account_id=${accountId}&organization_urn=${encodeURIComponent(org.organization_urn)}&limit=5`, {
+                headers: { "X-API-KEY": process.env.UNIPILE_API_KEY!, accept: "application/json" },
+                signal: AbortSignal.timeout(15000),
+              });
+              const chatsData2 = await chatsRes2.json();
+              results[`org_${org.name}_org_urn`] = {
+                status: chatsRes2.status,
+                count: (chatsData2.items ?? []).length,
+                sample: (chatsData2.items ?? []).slice(0, 3).map((c: Record<string, unknown>) => ({
+                  id: c.id,
+                  name: c.name,
+                  content_type: c.content_type,
+                  timestamp: c.timestamp,
+                  attendee: (c.attendees as Array<Record<string, unknown>>)?.[0]?.attendee_name,
+                })),
+                error: chatsData2.error ?? null,
+              };
+            } catch (err) {
+              results[`org_${org.name}_org_urn`] = { error: String(err) };
+            }
+          }
+        }
+
+        // Also try regular chats for comparison
+        try {
+          const regularChats = await UnipileClient.listChats(accountId, { limit: 5 });
+          results.regular_chats = {
+            count: (regularChats.items ?? []).length,
+            sample: (regularChats.items ?? []).slice(0, 3).map((c) => ({
+              id: c.id,
+              name: c.name,
+              content_type: c.content_type,
+              timestamp: c.timestamp,
+            })),
+          };
+        } catch (err) {
+          results.regular_chats = { error: String(err) };
+        }
+      } catch (err) {
+        results.error = String(err);
+      }
+
+      return NextResponse.json(results);
+    }
+
     // ── legacy: listChats (kept for backward compat) ───────────────────────
     if (action === "listChats") {
       const accountId = req.nextUrl.searchParams.get("accountId") ?? "";
