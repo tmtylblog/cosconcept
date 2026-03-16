@@ -132,7 +132,7 @@ export function AutocompleteInput({
 
   return (
     <div ref={containerRef} className="relative">
-      <p className="mb-1.5 text-[11px] font-medium text-cos-midnight">{label}</p>
+      {label && <p className="mb-1.5 text-[11px] font-medium text-cos-midnight">{label}</p>}
 
       {/* Selected tags */}
       {values.length > 0 && (

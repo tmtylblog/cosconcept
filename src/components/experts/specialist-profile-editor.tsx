@@ -204,15 +204,11 @@ export function SpecialistProfileEditor({
     setExamples((prev) => prev.filter((_, i) => i !== idx));
   }, []);
 
-  const [condensingIdx, setCondensingIdx] = useState<number | null>(null);
-
   const handlePdlSelect = useCallback(
-    (ex: PdlExperience, pdlIdx: number) => {
-      // Add immediately with raw summary, then condense async
-      const rawSubject = ex.summary ?? "";
+    (ex: PdlExperience, pdlIdx: number, condensedSubject?: string) => {
       const newEx: WorkExample = {
         title: ex.title,
-        subject: rawSubject,
+        subject: condensedSubject ?? ex.summary ?? "",
         companyName: ex.company.name,
         companyIndustry: ex.company.industry ?? "",
         startDate: ex.startDate ?? "",
@@ -223,33 +219,13 @@ export function SpecialistProfileEditor({
         exampleType: "role",
       };
 
-      let targetIdx: number;
       if (pickerTargetIdx < examples.length) {
         updateExample(pickerTargetIdx, newEx);
-        targetIdx = pickerTargetIdx;
       } else if (examples.length < 3) {
         setExamples((prev) => [...prev, newEx]);
-        targetIdx = examples.length;
-      } else {
-        return;
-      }
-
-      // Condense via AI in background
-      if (rawSubject) {
-        setCondensingIdx(targetIdx);
-        condenseSummary(rawSubject, ex.title, ex.company.name, title)
-          .then((condensed) => {
-            if (condensed) {
-              setExamples((prev) =>
-                prev.map((e, i) => (i === targetIdx ? { ...e, subject: condensed } : e))
-              );
-            }
-          })
-          .catch(console.error)
-          .finally(() => setCondensingIdx(null));
       }
     },
-    [pickerTargetIdx, examples.length, updateExample, title]
+    [pickerTargetIdx, examples.length, updateExample]
   );
 
   const handleGenerateDescription = async () => {
@@ -399,23 +375,45 @@ export function SpecialistProfileEditor({
           />
         </label>
 
-        <AutocompleteInput
-          label="Skills"
-          placeholder="Type to search skills (e.g. Tableau, SEO, Python)..."
-          values={skills}
-          onChange={setSkills}
-          fetchSuggestions={searchSkills}
-          color="midnight"
-        />
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <p className="text-[11px] font-medium text-cos-midnight">Skills</p>
+            <span className={cn(
+              "rounded-cos-pill px-1.5 py-0.5 text-[9px] font-bold",
+              skills.length >= 5 ? "bg-cos-signal/10 text-cos-signal" : skills.length > 0 ? "bg-cos-warm/10 text-cos-warm" : "bg-cos-cloud text-cos-slate-light"
+            )}>
+              {skills.length}{skills.length < 5 ? ` / 5 min` : ""}
+            </span>
+          </div>
+          <AutocompleteInput
+            label=""
+            placeholder="Type to search skills (e.g. Tableau, SEO, Python)..."
+            values={skills}
+            onChange={setSkills}
+            fetchSuggestions={searchSkills}
+            color="midnight"
+          />
+        </div>
 
-        <AutocompleteInput
-          label="Industries"
-          placeholder="Type to search industries (e.g. SaaS, FinTech, Healthcare)..."
-          values={industries}
-          onChange={setIndustries}
-          fetchSuggestions={searchIndustries}
-          color="signal"
-        />
+        <div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <p className="text-[11px] font-medium text-cos-midnight">Industries</p>
+            <span className={cn(
+              "rounded-cos-pill px-1.5 py-0.5 text-[9px] font-bold",
+              industries.length >= 2 ? "bg-cos-signal/10 text-cos-signal" : industries.length > 0 ? "bg-cos-warm/10 text-cos-warm" : "bg-cos-cloud text-cos-slate-light"
+            )}>
+              {industries.length}{industries.length < 2 ? ` / 2 min` : ""}
+            </span>
+          </div>
+          <AutocompleteInput
+            label=""
+            placeholder="Type to search industries (e.g. SaaS, FinTech, Healthcare)..."
+            values={industries}
+            onChange={setIndustries}
+            fetchSuggestions={searchIndustries}
+            color="signal"
+          />
+        </div>
       </div>
 
       {/* ─── Work Examples ─────────────────────────────── */}
@@ -475,7 +473,6 @@ export function SpecialistProfileEditor({
             index={idx}
             total={3}
             example={ex}
-            isCondensing={condensingIdx === idx}
             onChange={(patch) => updateExample(idx, patch)}
             onRemove={() => removeExample(idx)}
           />
@@ -642,6 +639,7 @@ export function SpecialistProfileEditor({
           usedIndices={examples
             .filter((ex) => ex.isPdlSource && ex.pdlExperienceIndex !== undefined)
             .map((ex) => ex.pdlExperienceIndex!)}
+          specialistTitle={title}
           onSelect={handlePdlSelect}
           onClose={() => setShowPdlPicker(false)}
         />
@@ -656,14 +654,12 @@ function ExampleForm({
   index,
   total,
   example,
-  isCondensing,
   onChange,
   onRemove,
 }: {
   index: number;
   total: number;
   example: WorkExample;
-  isCondensing?: boolean;
   onChange: (patch: Partial<WorkExample>) => void;
   onRemove: () => void;
 }) {
@@ -713,15 +709,7 @@ function ExampleForm({
             className="w-full rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
           />
 
-          <div className="relative">
-            {isCondensing && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-cos-md bg-white/80 backdrop-blur-[1px]">
-                <div className="flex items-center gap-2 text-cos-electric">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-[10px] font-medium">AI is condensing this summary...</span>
-                </div>
-              </div>
-            )}
+          <div>
             <textarea
               value={example.subject}
               onChange={(e) => {
