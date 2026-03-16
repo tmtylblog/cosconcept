@@ -172,19 +172,40 @@ export default function FirmExpertDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           expertId,
-          firmId: undefined,
+          firmId: expert?.firmId,
           fullName: expert?.fullName,
           linkedinUrl: expert?.linkedinUrl,
+          email: expert?.email,
         }),
       });
-      // Reload after delay
-      setTimeout(() => {
-        fetch(`/api/experts/${expertId}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((data) => { if (data) setExpert(data); })
-          .catch(() => {})
-          .finally(() => setEnriching(false));
-      }, 5000);
+      // Poll for enrichment completion (check every 5s, max 2 min)
+      let attempts = 0;
+      const pollEnrich = async () => {
+        attempts++;
+        if (attempts > 24) { setEnriching(false); return; }
+        try {
+          const res = await fetch(`/api/experts/${expertId}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.expert) {
+              const pdl = data.expert.pdlData as Record<string, unknown> | null;
+              const hasExp = Array.isArray(pdl?.experience) && (pdl?.experience as unknown[]).length > 0;
+              if (hasExp || data.expert.enrichmentStatus === "enriched") {
+                setExpert({
+                  ...data.expert,
+                  specialistProfiles: (data.specialistProfiles ?? []).map((sp: { id: string; title?: string | null; qualityStatus?: string | null }) => ({
+                    id: sp.id, title: sp.title ?? null, qualityStatus: sp.qualityStatus ?? null,
+                  })),
+                });
+                setEnriching(false);
+                return;
+              }
+            }
+          }
+        } catch { /* continue */ }
+        setTimeout(pollEnrich, 5000);
+      };
+      setTimeout(pollEnrich, 5000);
     } catch {
       setEnriching(false);
     }
