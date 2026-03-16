@@ -166,6 +166,19 @@ function ResearchProgressIndicator({ companyName }: { companyName: string }) {
 // ─── Client Research Result Card ──────────────────────────
 
 function ClientResearchResultCard({ result }: { result: Record<string, unknown> }) {
+  // Domain confirmation needed
+  if (result.needsDomain) {
+    const name = (result.companyName as string) ?? "that company";
+    return (
+      <div className="flex items-center gap-2 rounded-cos-lg border border-cos-warm/20 bg-cos-warm/5 px-3 py-2">
+        <Globe className="h-3.5 w-3.5 text-cos-warm" />
+        <span className="text-xs font-medium text-cos-warm">
+          I need a website domain to research {name} — e.g., {name.toLowerCase().replace(/\s+/g, "")}.com
+        </span>
+      </div>
+    );
+  }
+
   if (!result.success) return null;
 
   const client = result.client as Record<string, unknown> | undefined;
