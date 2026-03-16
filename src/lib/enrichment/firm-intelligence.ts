@@ -135,7 +135,7 @@ Analyze this firm and return:
 
 ## 2. HOMEPAGE EXTRACTIONS
 Extract EVERYTHING visible on the homepage:
-- **Offerings**: Any services, practice areas, solutions, capabilities, programs, engagement models, or specialized offerings listed. Include names, brief descriptions, and any sub-items mentioned.
+- **Offerings**: Any services, practice areas, solutions, capabilities, programs, engagement models, or specialized offerings listed. Include names, descriptions (2-3 sentences max, using the firm's own language), and any sub-items mentioned.
 - **Evidence of work**: Any case study references, project mentions, client results, success metrics. Include URLs if linked.
 - **Client signals**: Company names mentioned as clients, in "trusted by" sections, testimonials, or logo sections. Only extract company names that are clearly CLIENTS of this firm (not partners, tools, or the firm itself).
 - **Team mentions**: Leadership or team member names visible on the homepage.
@@ -147,7 +147,12 @@ Prioritize pages that will contain:
 - Evidence of work (case studies, portfolio, projects)
 - Client information (client lists, testimonials)
 - About/team information
-SKIP: individual blog posts, careers, legal/privacy, contact pages, login/signup pages.
+SKIP these URL types — do NOT include them in the scrape plan:
+- Individual blog posts (URLs containing /blog/some-article, /news/, /insights/, /articles/)
+- Blog listing pages (/blog/, /news/)
+- Individual team member profiles (URLs that look like a person's name, e.g., /john-smith/)
+- Careers, legal/privacy, contact, login/signup pages
+- Image/asset URLs
 For each URL, explain WHY you selected it and what content you expect to find.`,
     schema: FirmIntelligenceSchema,
     maxOutputTokens: 2048,

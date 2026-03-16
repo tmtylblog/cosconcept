@@ -173,6 +173,14 @@ export function synthesizeExtractions(params: {
   // ── Case Study URLs ─────────────────────────────────────
   const caseStudyUrlSet = new Set<string>();
 
+  // Collect offering URLs so we don't ingest service pages as case studies
+  const offeringPageUrls = new Set<string>();
+  for (const item of params.intelligence.scrapePlan) {
+    if (item.expectedContent === "offerings") {
+      offeringPageUrls.add(item.url);
+    }
+  }
+
   // From case studies that have source URLs
   for (const cs of caseStudies) {
     if (cs.sourceUrl && cs.sourceUrl.startsWith("http")) {
@@ -196,7 +204,26 @@ export function synthesizeExtractions(params: {
     }
   }
 
-  const caseStudyUrls = [...caseStudyUrlSet].slice(0, 50);
+  // Filter out URLs that are clearly NOT case studies
+  const caseStudyUrls = [...caseStudyUrlSet]
+    .filter((url) => {
+      const lower = url.toLowerCase();
+      // Exclude blog posts (but not /blog/ listing page itself used by WordPress for case studies)
+      if (/\/blog\/[^/]+/.test(lower)) return false;
+      // Exclude common blog variants
+      if (/\/(news|insights|perspectives|articles|posts)\/[^/]+/.test(lower)) return false;
+      // Exclude team/person profile pages
+      if (/\/(team|people|leadership|our-team|our-collective|staff|experts?|authors?)\//i.test(lower)) return false;
+      // Exclude individual person profile pages (common WordPress pattern: /first-last/ with no other path)
+      // But be careful not to exclude case study slugs
+      if (/\/(about|contact|careers|jobs|privacy|terms|legal|faq|login|signup|pricing)\b/i.test(lower)) return false;
+      // Exclude service/offering pages that we already captured
+      if (offeringPageUrls.has(url)) return false;
+      // Exclude pages with service-like URL patterns
+      if (/\/(services|our-services|capabilities|solutions|our-approach|our-practices|practices)\//i.test(lower)) return false;
+      return true;
+    })
+    .slice(0, 50);
 
   // ── About Pitch ─────────────────────────────────────────
   const aboutPitch = intelligence.understanding.summary || "";

@@ -100,7 +100,7 @@ Extract ALL of the following that are present on this page. A single page often 
 ## 1. OFFERINGS
 Services, practice areas, solutions, capabilities, programs, engagement models, workshops, audits, or any other packaged offering this firm provides. For each, extract:
 - Name (e.g., "Brand Strategy", "Fractional CMO", "Performance Audit")
-- Brief description if available
+- Description: 2-3 sentences maximum. Explain what the service delivers and who it's for. Use the firm's own language where possible.
 - Sub-items or specific capabilities listed under it
 
 ## 2. EVIDENCE OF WORK
@@ -129,7 +129,12 @@ People who work at this firm — names, titles/roles, LinkedIn URLs if visible, 
 
 ## 5. CASE STUDY LINKS
 Any URLs on this page that appear to link to individual case study or project detail pages.
-Look for links within portfolio sections, "read more" links on project cards, etc.`,
+Look for links within portfolio sections, "read more" links on project cards, etc.
+EXCLUDE from case study links:
+- Blog post URLs (containing /blog/, /news/, /insights/, /articles/)
+- Team member profile URLs (containing /team/, /people/, /our-collective/, or that look like a single person's name)
+- Service/offering detail pages (containing /services/, /practices/, /capabilities/, /approach/)
+- Contact, about, careers, legal pages`,
       schema: UnifiedPageExtractionSchema,
       maxOutputTokens: 2048,
     });
