@@ -325,7 +325,7 @@ export async function intelligentCrawlWebsite(params: {
     result.extracted.caseStudyUrls = [
       ...result.extracted.caseStudyUrls,
       ...newUrls,
-    ].slice(0, 100); // Cap at 100 case study URLs
+    ].slice(0, 500); // Allow up to 500 case study URLs — cost is low per ingestion
     console.log(
       `[IntelligentCrawl] Added ${newUrls.length} case study URLs from sitemap (total: ${result.extracted.caseStudyUrls.length})`
     );

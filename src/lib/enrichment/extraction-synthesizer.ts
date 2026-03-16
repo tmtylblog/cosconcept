@@ -229,7 +229,7 @@ export function synthesizeExtractions(params: {
       if (/\/(services|our-services|capabilities|solutions|our-approach|our-practices|practices)\//i.test(lower)) return false;
       return true;
     })
-    .slice(0, 50);
+    .slice(0, 500);
 
   // ── About Pitch ─────────────────────────────────────────
   const aboutPitch = intelligence.understanding.summary || "";
