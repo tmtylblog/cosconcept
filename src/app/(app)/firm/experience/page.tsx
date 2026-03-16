@@ -19,7 +19,7 @@ import {
   X,
   ImageIcon,
 } from "lucide-react";
-import { useActiveOrganization, useSession } from "@/lib/auth-client";
+import { authClient, useActiveOrganization, useSession } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useCaseStudies, type CaseStudy } from "@/hooks/use-case-studies";
 import { cn } from "@/lib/utils";
@@ -30,6 +30,29 @@ export default function FirmExperiencePage() {
   const { data: activeOrg } = useActiveOrganization();
   const { data: session } = useSession();
   const { status: enrichmentStatus, result: enrichmentResult, triggerEnrichment } = useEnrichment();
+
+  // Self-healing: useActiveOrganization() often doesn't re-render after
+  // setActive(), so resolve the orgId ourselves (same pattern as experts page)
+  const [resolvedOrgId, setResolvedOrgId] = useState<string>("");
+  const orgId = activeOrg?.id || resolvedOrgId;
+  const orgActivationAttempted = useRef(false);
+
+  useEffect(() => {
+    if (orgId || orgActivationAttempted.current) return;
+    orgActivationAttempted.current = true;
+    (async () => {
+      try {
+        const { data: orgs } = await authClient.organization.list();
+        const orgList = (orgs as { id: string }[]) ?? [];
+        if (orgList.length > 0) {
+          await authClient.organization.setActive({ organizationId: orgList[0].id });
+          setResolvedOrgId(orgList[0].id);
+        }
+      } catch (err) {
+        console.error("[Experience] Failed to auto-activate org:", err);
+      }
+    })();
+  }, [orgId]);
 
   const {
     caseStudies,
@@ -43,13 +66,13 @@ export default function FirmExperiencePage() {
     submitPdf,
     toggleHidden,
     refresh,
-  } = useCaseStudies(activeOrg?.id);
+  } = useCaseStudies(orgId);
 
   // Once the initial case-study load completes and we have 0 entries,
   // trigger a deep crawl via Inngest to populate firm_case_studies.
   const enrichmentTriggeredRef = useRef(false);
   useEffect(() => {
-    if (!activeOrg?.id || isLoading || total > 0) return;
+    if (!orgId || isLoading || total > 0) return;
     if (enrichmentTriggeredRef.current) return;
     enrichmentTriggeredRef.current = true;
 
@@ -57,7 +80,7 @@ export default function FirmExperiencePage() {
     fetch("/api/enrich/deep-crawl", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ organizationId: activeOrg.id }),
+      body: JSON.stringify({ organizationId: orgId }),
     })
       .then((r) => r.json())
       .then((data) => console.log("[Experience] Deep crawl:", data?.status ?? data?.error))
@@ -65,7 +88,7 @@ export default function FirmExperiencePage() {
 
     // 2. Also trigger client-side enrichment for the enrichment card
     if (enrichmentStatus !== "loading") {
-      fetch(`/api/enrich/firm?organizationId=${activeOrg.id}`)
+      fetch(`/api/enrich/firm?organizationId=${orgId}`)
         .then((r) => r.ok ? r.json() : null)
         .then((data) => {
           const website = data?.enrichmentData?.url || data?.website;
@@ -76,7 +99,7 @@ export default function FirmExperiencePage() {
         })
         .catch(() => {});
     }
-  }, [activeOrg?.id, isLoading, total, enrichmentStatus, session?.user?.email, triggerEnrichment]);
+  }, [orgId, isLoading, total, enrichmentStatus, session?.user?.email, triggerEnrichment]);
 
   // After enrichment finishes, re-fetch case studies so newly-seeded rows appear.
   // Persist is fire-and-forget so we poll at 2s, 5s, 10s to catch it.
