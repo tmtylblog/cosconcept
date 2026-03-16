@@ -233,10 +233,15 @@ export async function GET(req: NextRequest) {
         .where(eq(serviceFirms.id, firm.id))
         .limit(1);
       if (firmRow?.website) {
-        inngest.send({
-          name: "enrich/deep-crawl",
-          data: { firmId: firm.id, organizationId, website: firmRow.website, firmName: firmRow.name },
-        }).catch((err: unknown) => console.error("[CaseStudies] Failed to queue deep-crawl:", err));
+        try {
+          await inngest.send({
+            name: "enrich/deep-crawl",
+            data: { firmId: firm.id, organizationId, website: firmRow.website, firmName: firmRow.name },
+          });
+          console.log(`[CaseStudies] Queued deep-crawl for ${firmRow.name} (${firmRow.website})`);
+        } catch (err) {
+          console.error("[CaseStudies] Failed to queue deep-crawl:", err);
+        }
       }
     }
   }

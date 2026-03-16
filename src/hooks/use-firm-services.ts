@@ -84,9 +84,9 @@ export function useFirmServices(
         setHiddenCount(data?.hiddenCount ?? 0);
         setIsLoading(false);
 
-        // Retry polling if initial fetch returns 0 services (enrichment may still be running)
+        // Retry polling if initial fetch returns 0 services (deep crawl may still be running)
         if ((data?.services ?? []).length === 0) {
-          const retryDelays = [2000, 5000, 10000];
+          const retryDelays = [3000, 8000, 15000, 30000, 60000];
           for (const delay of retryDelays) {
             if (cancelled) break;
             await new Promise((r) => setTimeout(r, delay));
