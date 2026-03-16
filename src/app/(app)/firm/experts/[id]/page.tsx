@@ -84,6 +84,7 @@ export default function FirmExpertDetailPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState<string | null>(null);
   const [enriching, setEnriching] = useState(false);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/experts/${expertId}`)
@@ -182,7 +183,7 @@ export default function FirmExpertDetailPage() {
       let attempts = 0;
       const pollEnrich = async () => {
         attempts++;
-        if (attempts > 24) { setEnriching(false); return; }
+        if (attempts > 24) { setEnriching(false); setEnrichError("Enrichment timed out — check Inngest dashboard for errors"); return; }
         try {
           const res = await fetch(`/api/experts/${expertId}`);
           if (res.ok) {
@@ -287,16 +288,22 @@ export default function FirmExpertDetailPage() {
                     Claimed
                   </span>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleEnrich}
-                  disabled={enriching}
-                  className="h-8 gap-1.5 text-xs"
-                >
-                  {enriching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  {hasWorkHistory ? "Update" : "Enrich"}
-                </Button>
+                {expert.linkedinUrl ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleEnrich}
+                    disabled={enriching}
+                    className="h-8 gap-1.5 text-xs"
+                  >
+                    {enriching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    {enriching ? "Enriching..." : hasWorkHistory ? "Update" : "Enrich"}
+                  </Button>
+                ) : (
+                  <span className="text-[10px] text-cos-slate/60 italic">
+                    No LinkedIn — can&apos;t enrich
+                  </span>
+                )}
               </div>
             </div>
 
@@ -337,6 +344,9 @@ export default function FirmExpertDetailPage() {
               <p className={`mt-2 text-xs ${inviteResult.includes("sent") ? "text-emerald-600" : "text-cos-ember"}`}>
                 {inviteResult}
               </p>
+            )}
+            {enrichError && (
+              <p className="mt-2 text-xs text-cos-ember">{enrichError}</p>
             )}
           </div>
         </div>
