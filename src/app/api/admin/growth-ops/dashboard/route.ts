@@ -177,7 +177,7 @@ export async function GET(req: NextRequest) {
         .reduce((s, r) => s + Number(r.cnt), 0),
       direct: periodDeals.filter(
         (d) => d.source === "manual" || d.source === "hubspot_sync",
-      ).length + directSignups,
+      ).length,
     };
 
     // ── Recent Activity (10 items) ──────────────────────────
