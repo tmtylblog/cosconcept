@@ -10,7 +10,7 @@ import {
 } from "@/lib/db/schema";
 import { UnipileClient, resolveMessageDirection, type UnipileMessage } from "@/lib/growth-ops/UnipileClient";
 import { getLimitsForAccountType } from "@/lib/growth-ops/linkedin-limits";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -50,7 +50,7 @@ async function addNeedsReplyFlag(
     .where(
       and(
         eq(growthOpsMessages.linkedinAccountId, linkedinAccountId),
-        sql`${growthOpsMessages.chatId} = ANY(${chatIds})`,
+        inArray(growthOpsMessages.chatId, chatIds),
       ),
     )
     .orderBy(desc(growthOpsMessages.sentAt));
