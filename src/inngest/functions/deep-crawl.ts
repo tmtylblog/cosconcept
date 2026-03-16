@@ -20,7 +20,7 @@ import { inngest } from "../client";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { firmCaseStudies, firmServices } from "@/lib/db/schema";
-import { deepCrawlWebsite } from "@/lib/enrichment/deep-crawler";
+import { intelligentCrawlWebsite } from "@/lib/enrichment/intelligent-crawler";
 import { enrichCompany } from "@/lib/enrichment/pdl";
 import { classifyFirm } from "@/lib/enrichment/ai-classifier";
 import { writeFirmToGraph } from "@/lib/enrichment/graph-writer";
@@ -42,10 +42,10 @@ export const deepCrawl = inngest.createFunction(
   async ({ event, step }) => {
     const { firmId, organizationId, website, firmName } = event.data;
 
-    // Step 1: Enhanced deep crawl (sitemap + probes + AI classification)
+    // Step 1: Intelligent crawl (LLM-guided homepage analysis + targeted extraction)
     const crawlResult = await step.run("deep-crawl", async () => {
-      console.log(`[DeepCrawl] Deep crawling ${website}...`);
-      return deepCrawlWebsite({ firmId, website, firmName });
+      console.log(`[DeepCrawl] Intelligent crawling ${website}...`);
+      return intelligentCrawlWebsite({ firmId, website, firmName });
     });
 
     // Step 2: PDL company enrichment
