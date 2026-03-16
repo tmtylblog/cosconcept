@@ -57,13 +57,15 @@ export default function FirmOverviewPage() {
 
   const [showFullAbout, setShowFullAbout] = useState(false);
 
-  const categories = edits.categories ?? classification?.categories ?? [];
-  const skills = edits.skills ?? classification?.skills ?? [];
-  const industries = edits.industries ?? classification?.industries ?? [];
-  const markets = edits.markets ?? classification?.markets ?? [];
-  const languages = edits.languages ?? classification?.languages ?? [];
-  const clients = edits.clients ?? extracted?.clients ?? [];
-  const aboutPitch = edits.aboutPitch ?? extracted?.aboutPitch ?? "";
+  // Prefer edits if non-empty, otherwise fall back to enrichment data.
+  // Empty arrays from stale edits should not override fresh enrichment data.
+  const categories = edits.categories?.length ? edits.categories : classification?.categories ?? [];
+  const skills = edits.skills?.length ? edits.skills : classification?.skills ?? [];
+  const industries = edits.industries?.length ? edits.industries : classification?.industries ?? [];
+  const markets = edits.markets?.length ? edits.markets : classification?.markets ?? [];
+  const languages = edits.languages?.length ? edits.languages : classification?.languages ?? [];
+  const clients = edits.clients?.length ? edits.clients : extracted?.clients ?? [];
+  const aboutPitch = edits.aboutPitch || extracted?.aboutPitch || "";
 
   // Calculate profile completeness
   const completenessItems = [

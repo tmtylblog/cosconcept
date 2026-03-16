@@ -63,21 +63,23 @@ export function useFirmEdits(
   const defaultsRef = useRef(defaults);
   defaultsRef.current = defaults;
 
-  // Sync enrichment data as defaults when enrichment completes (runs once)
+  // Sync enrichment data as defaults when enrichment completes.
+  // Only seed fields that have actual data — empty arrays would override
+  // later DB hydration via the nullish coalescing fallback chain.
+  // Re-seeds when enrichmentReady transitions (handles stale→fresh data).
   useEffect(() => {
-    if (enrichmentReady && !seededRef.current) {
-      seededRef.current = true;
+    if (enrichmentReady) {
       const d = defaultsRef.current;
       setEdits((prev) => ({
         ...prev,
-        services: prev.services ?? d.services,
-        clients: prev.clients ?? d.clients,
-        categories: prev.categories ?? d.categories,
-        skills: prev.skills ?? d.skills,
-        industries: prev.industries ?? d.industries,
-        markets: prev.markets ?? d.markets,
-        languages: prev.languages ?? d.languages,
-        aboutPitch: prev.aboutPitch ?? d.aboutPitch,
+        services: prev.services?.length ? prev.services : (d.services?.length ? d.services : prev.services),
+        clients: prev.clients?.length ? prev.clients : (d.clients?.length ? d.clients : prev.clients),
+        categories: prev.categories?.length ? prev.categories : (d.categories?.length ? d.categories : prev.categories),
+        skills: prev.skills?.length ? prev.skills : (d.skills?.length ? d.skills : prev.skills),
+        industries: prev.industries?.length ? prev.industries : (d.industries?.length ? d.industries : prev.industries),
+        markets: prev.markets?.length ? prev.markets : (d.markets?.length ? d.markets : prev.markets),
+        languages: prev.languages?.length ? prev.languages : (d.languages?.length ? d.languages : prev.languages),
+        aboutPitch: prev.aboutPitch || d.aboutPitch || prev.aboutPitch,
       }));
     }
   }, [enrichmentReady]);
