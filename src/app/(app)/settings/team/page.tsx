@@ -7,7 +7,7 @@ import {
   ChevronDown, AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSession, useActiveOrganization } from "@/lib/auth-client";
+import { authClient, useSession, useActiveOrganization } from "@/lib/auth-client";
 import { usePlan } from "@/hooks/use-plan";
 import { PLAN_LIMITS, PLAN_DISPLAY_NAMES, type PlanId } from "@/lib/billing/plan-limits";
 import { cn } from "@/lib/utils";
@@ -96,6 +96,27 @@ export default function TeamSettingsPage() {
   const { plan, isLoading: planLoading } = usePlan();
   const limits = PLAN_LIMITS[plan as PlanId] ?? PLAN_LIMITS.free;
 
+  // Self-healing: resolve org if useActiveOrganization() returns null
+  const [resolvedOrgId, setResolvedOrgId] = useState("");
+  const orgActivationAttempted = useRef(false);
+
+  useEffect(() => {
+    if (activeOrg?.id || orgActivationAttempted.current) return;
+    orgActivationAttempted.current = true;
+    (async () => {
+      try {
+        const { data: orgs } = await authClient.organization.list();
+        const orgList = (orgs as { id: string }[]) ?? [];
+        if (orgList.length > 0) {
+          await authClient.organization.setActive({ organizationId: orgList[0].id });
+          setResolvedOrgId(orgList[0].id);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [activeOrg?.id]);
+
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [experts, setExperts] = useState<Expert[]>([]);
   const [callerRole, setCallerRole] = useState<string>("member");
@@ -113,14 +134,15 @@ export default function TeamSettingsPage() {
   const [expertActionLoading, setExpertActionLoading] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const orgId = activeOrg?.id ?? "";
+  const orgId = activeOrg?.id || resolvedOrgId;
   const isOwnerOrAdmin = ["owner", "admin"].includes(callerRole);
   const seatCount = members.length;
   const seatLimit = limits.members;
   const atLimit = seatLimit !== Infinity && seatCount >= seatLimit;
 
   useEffect(() => {
-    if (!orgId || fetchedRef.current) return;
+    if (!orgId) return;
+    if (fetchedRef.current) return;
     fetchedRef.current = true;
     setLoading(true);
 
