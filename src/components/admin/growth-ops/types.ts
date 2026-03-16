@@ -20,6 +20,8 @@ export interface Conversation {
   lastMessagePreview: string | null;
   unreadCount: number;
   isInmailThread: boolean;
+  /** True when the most recent message is from them (they're waiting for our reply) */
+  lastMessageIsInbound?: boolean;
   /** Which account this conversation belongs to (for merged view) */
   _accountId?: string;
   _accountName?: string;

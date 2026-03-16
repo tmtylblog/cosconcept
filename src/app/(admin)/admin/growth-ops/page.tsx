@@ -591,11 +591,10 @@ function GrowthOpsInboxInner() {
   const filteredConversations = (() => {
     if (filter === "all") return conversations;
     if (filter === "needs_reply") {
-      // Show conversations where last message is NOT from sender
+      // Show conversations where the last message is from them (inbound)
       return conversations.filter((c) => {
         if (!c.lastMessagePreview) return false;
-        // Unread count > 0 indicates they replied and we haven&apos;t responded
-        return c.unreadCount > 0;
+        return c.lastMessageIsInbound === true;
       });
     }
     if (filter === "pending_approval") {

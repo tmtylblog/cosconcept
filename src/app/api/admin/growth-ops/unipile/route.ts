@@ -30,6 +30,45 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ── Helper: enrich conversations with lastMessageIsInbound flag ──────────────
+
+async function addNeedsReplyFlag(
+  convos: (typeof growthOpsConversations.$inferSelect)[],
+  linkedinAccountId: string,
+) {
+  if (convos.length === 0) return convos;
+
+  // For each conversation, find the most recent cached message
+  const chatIds = convos.map((c) => c.chatId);
+  const latestMessages = await db
+    .select({
+      chatId: growthOpsMessages.chatId,
+      isOutbound: growthOpsMessages.isOutbound,
+      sentAt: growthOpsMessages.sentAt,
+    })
+    .from(growthOpsMessages)
+    .where(
+      and(
+        eq(growthOpsMessages.linkedinAccountId, linkedinAccountId),
+        sql`${growthOpsMessages.chatId} = ANY(${chatIds})`,
+      ),
+    )
+    .orderBy(desc(growthOpsMessages.sentAt));
+
+  // Group by chatId — first row per chatId is the latest message
+  const latestByChatId = new Map<string, boolean>();
+  for (const msg of latestMessages) {
+    if (!latestByChatId.has(msg.chatId)) {
+      latestByChatId.set(msg.chatId, !msg.isOutbound); // inbound = needs reply
+    }
+  }
+
+  return convos.map((c) => ({
+    ...c,
+    lastMessageIsInbound: latestByChatId.get(c.chatId) ?? (c.unreadCount > 0),
+  }));
+}
+
 // ── Background: persist messages to local cache ──────────────────────────────
 
 async function persistMessages(
@@ -312,7 +351,8 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({ conversations: convos });
+      const enrichedConvos = await addNeedsReplyFlag(convos, acct.id);
+      return NextResponse.json({ conversations: enrichedConvos });
     }
 
     // ── syncConversations — re-fetch from Unipile and update DB ────────────
@@ -423,10 +463,12 @@ export async function GET(req: NextRequest) {
           .where(eq(growthOpsConversations.linkedinAccountId, acct.id))
           .orderBy(desc(growthOpsConversations.lastMessageAt))
           .limit(50);
-        return NextResponse.json({ conversations: updated, synced: items.length, enriched: toEnrich.length });
+        const enrichedUpdated = await addNeedsReplyFlag(updated, acct.id);
+        return NextResponse.json({ conversations: enrichedUpdated, synced: items.length, enriched: toEnrich.length });
       }
 
-      return NextResponse.json({ conversations: convos, synced: items.length, enriched: 0 });
+      const enrichedConvos = await addNeedsReplyFlag(convos, acct.id);
+      return NextResponse.json({ conversations: enrichedConvos, synced: items.length, enriched: 0 });
     }
 
     // ── getMessages — always live, 3-tier direction, persist in BG ────────
