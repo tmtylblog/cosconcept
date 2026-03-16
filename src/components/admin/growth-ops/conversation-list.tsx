@@ -28,6 +28,7 @@ interface ConversationListProps {
   onQueueAction: (id: string, action: "approve" | "reject") => void;
   filter: ConversationFilter;
   onFilterChange: (f: ConversationFilter) => void;
+  needsReplyCount?: number;
   accounts: Account[];
   selectedAccountId: string;
   onSelectAccount: (accountId: string) => void;
@@ -94,6 +95,7 @@ export function ConversationList({
   onQueueAction,
   filter,
   onFilterChange,
+  needsReplyCount,
   accounts,
   selectedAccountId,
   onSelectAccount,
@@ -173,6 +175,11 @@ export function ConversationList({
               }`}
             >
               {f.label}
+              {f.value === "needs_reply" && (needsReplyCount ?? 0) > 0 && (
+                <span className="ml-1 inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-cos-electric px-1 text-[9px] text-white leading-none">
+                  {needsReplyCount}
+                </span>
+              )}
               {f.value === "pending_approval" && pendingItems.length > 0 && (
                 <span className="ml-1 inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] text-white leading-none">
                   {pendingItems.length}

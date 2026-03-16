@@ -641,10 +641,12 @@ function GrowthOpsInboxInner() {
   const filteredConversations = (() => {
     if (filter === "all") return conversations;
     if (filter === "needs_reply") {
-      // Show conversations where the last message is from them (inbound)
       return conversations.filter((c) => {
-        if (!c.lastMessagePreview) return false;
-        return c.lastMessageIsInbound === true;
+        // Primary: unreadCount from Unipile (messages from them we haven't responded to)
+        if (c.unreadCount > 0) return true;
+        // Secondary: cached message direction check
+        if (c.lastMessageIsInbound === true) return true;
+        return false;
       });
     }
     if (filter === "pending_approval") {
@@ -1021,6 +1023,7 @@ function GrowthOpsInboxInner() {
             onQueueAction={handleQueueAction}
             filter={filter}
             onFilterChange={setFilter}
+            needsReplyCount={conversations.filter((c) => c.unreadCount > 0 || c.lastMessageIsInbound === true).length}
             accounts={accounts}
             selectedAccountId={selectedAccountId}
             onSelectAccount={selectAccount}
