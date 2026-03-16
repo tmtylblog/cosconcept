@@ -344,7 +344,19 @@ function GrowthOpsInboxInner() {
   // ── State (ported from LinkedIn inbox) ──────────────────────────────────
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState(""); // "" = not set, "all" = merged
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversations, _setConversations] = useState<Conversation[]>([]);
+  const setConversations = useCallback((val: Conversation[] | ((prev: Conversation[]) => Conversation[])) => {
+    if (typeof val === "function") {
+      _setConversations((prev) => {
+        const next = val(prev);
+        console.warn(`[INBOX DEBUG] setConversations (fn): ${prev.length} → ${next.length}`);
+        return next;
+      });
+    } else {
+      console.warn(`[INBOX DEBUG] setConversations: → ${val.length}`);
+      _setConversations(val);
+    }
+  }, []);
   const [selectedChatId, setSelectedChatId] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
@@ -433,11 +445,21 @@ function GrowthOpsInboxInner() {
   accountsRef.current = accounts;
 
   const conversationsLoadedRef = useRef(false);
+  const effectRunCount = useRef(0);
 
   useEffect(() => {
-    if (!selectedAccountId || !accountsLoaded) return;
-    // Skip re-fetch if we already loaded conversations for this account selection
-    if (conversationsLoadedRef.current && conversations.length > 0) return;
+    effectRunCount.current++;
+    const runId = effectRunCount.current;
+    console.warn(`[INBOX DEBUG] Effect run #${runId}: selectedAccountId=${selectedAccountId}, accountsLoaded=${accountsLoaded}, convosLoaded=${conversationsLoadedRef.current}`);
+
+    if (!selectedAccountId || !accountsLoaded) {
+      console.warn(`[INBOX DEBUG] Effect #${runId}: SKIPPED (no account or accounts not loaded)`);
+      return;
+    }
+    if (conversationsLoadedRef.current) {
+      console.warn(`[INBOX DEBUG] Effect #${runId}: SKIPPED (already loaded)`);
+      return;
+    }
 
     let cancelled = false;
     setLoadingConvos(true);
@@ -462,7 +484,8 @@ function GrowthOpsInboxInner() {
         );
 
       Promise.all(fetches).then((results) => {
-        if (cancelled) return;
+        console.warn(`[INBOX DEBUG] All-accounts fetch done: cancelled=${cancelled}, results=${results.length} arrays, total=${results.flat().length} convos`);
+        if (cancelled) { console.warn("[INBOX DEBUG] CANCELLED — not setting conversations"); return; }
         const merged = results
           .flat()
           .sort((a, b) => {
@@ -470,6 +493,7 @@ function GrowthOpsInboxInner() {
             const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
             return tb - ta;
           });
+        console.warn(`[INBOX DEBUG] Setting ${merged.length} conversations`);
         setConversations(merged);
         setLoadingConvos(false);
         setUsage(null);
@@ -511,7 +535,7 @@ function GrowthOpsInboxInner() {
       });
     }
 
-    return () => { cancelled = true; };
+    return () => { console.warn(`[INBOX DEBUG] Cleanup: cancelling effect #${runId}`); cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId, accountsLoaded]);
 
