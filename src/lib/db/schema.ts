@@ -1793,6 +1793,7 @@ export const growthOpsConversations = pgTable("growth_ops_conversations", {
   lastMessagePreview: text("last_message_preview"),
   unreadCount: integer("unread_count").notNull().default(0),
   isInmailThread: boolean("is_inmail_thread").notNull().default(false),
+  tags: text("tags").array().default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => [{ name: "growth_ops_conversations_account_chat_unique", columns: [t.linkedinAccountId, t.chatId] }]);
@@ -2148,5 +2149,22 @@ export const enrichmentCreditTransactions = pgTable("enrichment_credit_transacti
   expertProfileId: text("expert_profile_id"), // which expert was enriched
   stripePaymentIntentId: text("stripe_payment_intent_id"), // for boost packs
   note: text("note"), // admin notes for manual grants
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Prospect Timeline ──────────────────────────────────────────────────────
+// Unified timeline of all touchpoints with prospects across channels.
+// Powers the Growth Ops dashboard funnel with real data.
+
+export const prospectTimeline = pgTable("prospect_timeline", {
+  id: text("id").primaryKey(),
+  prospectEmail: text("prospect_email").notNull(),
+  prospectName: text("prospect_name"),
+  eventType: text("event_type").notNull(), // email_sent | email_opened | email_replied | linkedin_invite_sent | linkedin_invite_accepted | linkedin_message | deal_created | signed_up | onboarded | paying
+  channel: text("channel").notNull(), // instantly | linkedin | manual | organic
+  campaignId: text("campaign_id"),
+  campaignName: text("campaign_name"),
+  metadata: jsonb("metadata"),
+  eventAt: timestamp("event_at").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

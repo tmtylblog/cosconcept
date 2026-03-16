@@ -52,3 +52,5 @@ next-env.d.ts
 # claude code (worktrees and agent-local state)
 .claude/worktrees/
 .claude/todos/
+*.env.unipile
+*.env.vercel-prod

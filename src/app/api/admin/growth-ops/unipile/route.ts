@@ -819,6 +819,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(data);
     }
 
+    if (body.action === "updateTags") {
+      const conversationId = body.conversationId as string;
+      const tags = body.tags as string[];
+      if (!conversationId || !Array.isArray(tags)) {
+        return NextResponse.json({ error: "conversationId and tags[] required" }, { status: 400 });
+      }
+
+      await db
+        .update(growthOpsConversations)
+        .set({ tags, updatedAt: new Date() })
+        .where(eq(growthOpsConversations.id, conversationId));
+
+      return NextResponse.json({ ok: true, tags });
+    }
+
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

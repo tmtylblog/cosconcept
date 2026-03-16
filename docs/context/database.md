@@ -1039,6 +1039,29 @@ Snapshot of HubSpot deals for fast Kanban rendering.
 
 ---
 
+### `prospect_timeline` — Unified prospect touchpoint timeline
+
+Powers the Growth Ops dashboard funnel with real data across all channels.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| prospect_email | text NOT NULL | Prospect email (or LinkedIn URL for invite-only contacts) |
+| prospect_name | text | |
+| event_type | text NOT NULL | email_sent, email_opened, email_replied, linkedin_invite_sent, linkedin_invite_accepted, linkedin_message, deal_created, signed_up, onboarded, paying |
+| channel | text NOT NULL | instantly, linkedin, manual, organic |
+| campaign_id | text | Instantly campaign ID or LinkedIn campaign ID |
+| campaign_name | text | |
+| metadata | jsonb | Channel-specific extras |
+| event_at | timestamp NOT NULL | When the event occurred |
+| created_at | timestamp | |
+
+**Indexes:** prospect_email, event_type, event_at
+
+**Migration:** `0015_prospect_timeline.sql`
+
+---
+
 ## Conventions
 
 - **All IDs:** Application-generated text (UUIDs via `nanoid` or `crypto.randomUUID`)

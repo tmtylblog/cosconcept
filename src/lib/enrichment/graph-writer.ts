@@ -927,3 +927,92 @@ function extractDomain(url: string): string | null {
     return null;
   }
 }
+
+// ─── Prospect Writer ──────────────────────────────────────
+
+export interface GraphProspectData {
+  /** Unique ID for graph node: prospect:{sourceId} */
+  id: string;
+  email: string;
+  name: string;
+  firstName?: string;
+  lastName?: string;
+  title?: string;
+  linkedinUrl?: string;
+  headline?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  /** imported_contacts.id for back-reference */
+  importedContactId?: string;
+  /** Graph Company node ID to create WORKS_AT edge */
+  companyGraphNodeId?: string;
+}
+
+export interface ProspectWriteResult {
+  personCreated: boolean;
+  worksAtEdge: boolean;
+  errors: string[];
+}
+
+/**
+ * Write a prospect Person node to the Neo4j knowledge graph.
+ * Adds 'prospect' to personTypes array. Creates WORKS_AT edge if company is provided.
+ */
+export async function writeProspectToGraph(
+  data: GraphProspectData,
+): Promise<ProspectWriteResult> {
+  const result: ProspectWriteResult = { personCreated: false, worksAtEdge: false, errors: [] };
+
+  try {
+    await neo4jWrite(
+      `MERGE (p:Person {id: $id})
+       ON CREATE SET
+         p.email = $email, p.name = $name, p.firstName = $firstName,
+         p.lastName = $lastName, p.title = $title, p.linkedinUrl = $linkedinUrl,
+         p.headline = $headline, p.city = $city, p.state = $state,
+         p.country = $country, p.personTypes = ['prospect'],
+         p.importedContactId = $importedContactId, p.createdAt = datetime()
+       ON MATCH SET
+         p.personTypes = CASE
+           WHEN NOT 'prospect' IN coalesce(p.personTypes, [])
+           THEN coalesce(p.personTypes, []) + ['prospect']
+           ELSE p.personTypes
+         END,
+         p.updatedAt = datetime()`,
+      {
+        id: data.id,
+        email: data.email,
+        name: data.name,
+        firstName: data.firstName ?? "",
+        lastName: data.lastName ?? "",
+        title: data.title ?? "",
+        linkedinUrl: data.linkedinUrl ?? "",
+        headline: data.headline ?? "",
+        city: data.city ?? "",
+        state: data.state ?? "",
+        country: data.country ?? "",
+        importedContactId: data.importedContactId ?? "",
+      },
+    );
+    result.personCreated = true;
+  } catch (err) {
+    result.errors.push(`Person node: ${err}`);
+  }
+
+  if (data.companyGraphNodeId) {
+    try {
+      await neo4jWrite(
+        `MATCH (p:Person {id: $personId})
+         MATCH (c:Company {id: $companyId})
+         MERGE (p)-[:WORKS_AT]->(c)`,
+        { personId: data.id, companyId: data.companyGraphNodeId },
+      );
+      result.worksAtEdge = true;
+    } catch (err) {
+      result.errors.push(`WORKS_AT edge: ${err}`);
+    }
+  }
+
+  return result;
+}

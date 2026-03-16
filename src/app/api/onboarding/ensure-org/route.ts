@@ -132,6 +132,16 @@ export async function POST(req: Request) {
           }).where(eq(serviceFirms.id, existingFirm.id));
 
           await inngest.send({ name: "enrich/firm-abstraction", data: { firmId: existingFirm.id, organizationId } }).catch(() => {});
+
+          // Deep crawl to populate firmServices + firmCaseStudies
+          const firmWebsite = existingFirm.website || websiteUrl;
+          await inngest.send({ name: "enrich/deep-crawl", data: {
+            firmId: existingFirm.id,
+            organizationId,
+            website: firmWebsite,
+            firmName,
+          } }).catch(() => {});
+
           console.log(`[EnsureOrg] Hydrated existing stub ${existingFirm.id} from cache for ${resolvedDomain}`);
         } else if (!existingFirm.website && emailDomain) {
           // At minimum, set the website so the offering page can trigger enrichment
@@ -139,6 +149,14 @@ export async function POST(req: Request) {
             website: `https://${emailDomain}`,
             updatedAt: new Date(),
           }).where(eq(serviceFirms.id, existingFirm.id));
+
+          // Fire deep crawl even for stubs — this is what populates services + case studies
+          await inngest.send({ name: "enrich/deep-crawl", data: {
+            firmId: existingFirm.id,
+            organizationId,
+            website: `https://${emailDomain}`,
+            firmName: "Unknown Firm",
+          } }).catch(() => {});
         }
       }
       return NextResponse.json({ firmId: existingFirm.id, created: false });
@@ -209,6 +227,14 @@ export async function POST(req: Request) {
         } }).catch((err: unknown) => console.error(`[EnsureOrg] Failed to queue team-ingest: ${err}`));
       }
 
+      // Deep crawl: populates firmServices + firmCaseStudies tables for /firm/offering and /firm/experience
+      await inngest.send({ name: "enrich/deep-crawl", data: {
+        firmId,
+        organizationId,
+        website: websiteUrl,
+        firmName,
+      } }).catch((err: unknown) => console.error(`[EnsureOrg] Failed to queue deep-crawl: ${err}`));
+
       console.log(`[EnsureOrg] Created + hydrated firm ${firmId} from cache for ${resolvedDomain}`);
     } else {
       // No cache hit — create stub with website so enrichment can be triggered from UI
@@ -232,6 +258,14 @@ export async function POST(req: Request) {
           force: false,
           jobId: "onboard-" + crypto.randomUUID().slice(0, 8),
         } }).catch((err: unknown) => console.error(`[EnsureOrg] Failed to queue team-ingest: ${err}`));
+
+        // Deep crawl: populates firmServices + firmCaseStudies tables for /firm/offering and /firm/experience
+        await inngest.send({ name: "enrich/deep-crawl", data: {
+          firmId,
+          organizationId,
+          website: `https://${emailDomain}`,
+          firmName: org?.name || "Unknown Firm",
+        } }).catch((err: unknown) => console.error(`[EnsureOrg] Failed to queue deep-crawl: ${err}`));
       }
 
       console.log(

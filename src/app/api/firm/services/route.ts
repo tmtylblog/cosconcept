@@ -11,6 +11,7 @@ import { db } from "@/lib/db";
 import { firmServices, serviceFirms, members, enrichmentCache } from "@/lib/db/schema";
 import { randomBytes } from "crypto";
 import { recordManualCorrection } from "@/lib/enrichment/extraction-learner";
+import { inngest } from "@/inngest/client";
 
 /** Resolve redirect domain (e.g. chameleon.co → chameleoncollective.com) — best-effort, 3s timeout */
 async function resolveRedirect(domain: string): Promise<string | null> {
@@ -196,6 +197,21 @@ export async function GET(req: NextRequest) {
       .from(firmServices)
       .where(and(...conditions))
       .orderBy(asc(firmServices.displayOrder), asc(firmServices.createdAt));
+
+    // Still empty after seeding — kick off deep crawl (populates services + case studies via Inngest)
+    if (rows.length === 0) {
+      const [firmRow] = await db
+        .select({ website: serviceFirms.website, name: serviceFirms.name })
+        .from(serviceFirms)
+        .where(eq(serviceFirms.id, firm.id))
+        .limit(1);
+      if (firmRow?.website) {
+        inngest.send({
+          name: "enrich/deep-crawl",
+          data: { firmId: firm.id, organizationId, website: firmRow.website, firmName: firmRow.name },
+        }).catch((err: unknown) => console.error("[Services] Failed to queue deep-crawl:", err));
+      }
+    }
   }
 
   // Count hidden separately

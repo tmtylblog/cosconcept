@@ -9,6 +9,7 @@ import { eq, ne, and, desc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { firmCaseStudies, serviceFirms, members, enrichmentCache } from "@/lib/db/schema";
+import { inngest } from "@/inngest/client";
 
 /** Resolve redirect domain — best-effort, 3s timeout */
 async function resolveRedirect(domain: string): Promise<string | null> {
@@ -21,7 +22,6 @@ async function resolveRedirect(domain: string): Promise<string | null> {
     return finalHost !== domain.toLowerCase() ? finalHost : null;
   } catch { return null; }
 }
-import { inngest } from "@/inngest/client";
 import { recordManualCorrection } from "@/lib/enrichment/extraction-learner";
 
 // ─── Seed from enrichment data (silent, first-load only) ─
@@ -224,6 +224,21 @@ export async function GET(req: NextRequest) {
       .from(firmCaseStudies)
       .where(and(...conditions))
       .orderBy(desc(firmCaseStudies.createdAt));
+
+    // Still empty after seeding — kick off deep crawl (populates services + case studies via Inngest)
+    if (rows.length === 0) {
+      const [firmRow] = await db
+        .select({ website: serviceFirms.website, name: serviceFirms.name })
+        .from(serviceFirms)
+        .where(eq(serviceFirms.id, firm.id))
+        .limit(1);
+      if (firmRow?.website) {
+        inngest.send({
+          name: "enrich/deep-crawl",
+          data: { firmId: firm.id, organizationId, website: firmRow.website, firmName: firmRow.name },
+        }).catch((err: unknown) => console.error("[CaseStudies] Failed to queue deep-crawl:", err));
+      }
+    }
   }
 
   // Count hidden separately

@@ -464,6 +464,13 @@ All routes require `role === "superadmin"`. Added 2026-03-12.
 | POST | `/api/admin/growth-ops/unipile` `{ action: "sendMessage", chatId, text }` | Send message in thread |
 | POST | `/api/admin/growth-ops/unipile` `{ action: "resolveUser", linkedinUrl, accountId }` | Resolve LinkedIn URL → provider_id |
 | POST | `/api/admin/growth-ops/unipile` `{ action: "sendInvite", providerId, accountId, message? }` | Send connection invite |
+| POST | `/api/admin/growth-ops/unipile` `{ action: "updateTags", conversationId, tags[] }` | Update conversation tags (e.g. ['outreach']) |
+
+### Dashboard
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/growth-ops/dashboard?period=30d` | Dashboard metrics: funnel (from prospect_timeline), pipeline metrics (from deals), by-source breakdown, timeline-by-day sparkline data. Periods: 7d, 30d, 90d, all |
 
 ### Instantly Proxy
 
