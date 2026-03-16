@@ -514,6 +514,62 @@ function GrowthOpsInboxInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId, accountsLoaded]);
 
+  // ── Auto-refresh conversations every 60s (silent, no loading spinner) ───
+  useEffect(() => {
+    if (!accountsLoaded) return;
+    const currentAccounts = accountsRef.current;
+    const okAccounts = currentAccounts.filter((a) => a.status === "OK");
+    if (okAccounts.length === 0) return;
+
+    const interval = setInterval(async () => {
+      try {
+        if (selectedAccountId === "all" || !selectedAccountId) {
+          // Refresh all accounts
+          const results = await Promise.all(
+            okAccounts.map((a) =>
+              fetch(`/api/admin/growth-ops/unipile?action=listConversations&accountId=${a.unipileAccountId}`)
+                .then((r) => r.json())
+                .then((d) => {
+                  const convos: Conversation[] = d.conversations ?? [];
+                  return convos.map((c) => ({
+                    ...c,
+                    _accountId: a.unipileAccountId,
+                    _accountName: a.displayName || a.unipileAccountId,
+                  }));
+                })
+                .catch(() => [] as Conversation[])
+            )
+          );
+          const merged = results
+            .flat()
+            .sort((a, b) => {
+              const ta = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+              const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+              return tb - ta;
+            });
+          setConversations(merged);
+        } else {
+          // Refresh single account
+          const d = await fetch(
+            `/api/admin/growth-ops/unipile?action=listConversations&accountId=${selectedAccountId}`
+          ).then((r) => r.json());
+          const acctName = accountNameMap.get(selectedAccountId) ?? selectedAccountId;
+          const list: Conversation[] = (d.conversations ?? []).map((c: Conversation) => ({
+            ...c,
+            _accountId: selectedAccountId,
+            _accountName: acctName,
+          }));
+          setConversations(list);
+        }
+      } catch {
+        // Silent fail — don't disrupt the UI
+      }
+    }, 60_000);
+
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountsLoaded, selectedAccountId]);
+
   // ── Load messages when chat changes ─────────────────────────────────────
   const loadMessages = useCallback(async (chatId: string) => {
     if (!chatId) return;
