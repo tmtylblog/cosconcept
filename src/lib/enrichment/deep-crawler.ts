@@ -271,7 +271,8 @@ export async function deepCrawlWebsite(params: {
   if (services.length === 0 && homepage.content.length > 200) {
     const homepageServices = await extractServicesDeep(
       homepage.content,
-      baseUrl
+      baseUrl,
+      { isHomepage: true }
     );
     services.push(...homepageServices);
   }

@@ -27,9 +27,14 @@ interface ExtractedService {
  */
 export async function extractServicesDeep(
   content: string,
-  url: string
+  url: string,
+  options?: { isHomepage?: boolean }
 ): Promise<ExtractedService[]> {
   if (!content || content.length < 50) return [];
+
+  const homepageHint = options?.isHomepage
+    ? `This is the company HOMEPAGE. Many firms list their services, practice areas, or capabilities on the homepage. Extract any services, practice areas, or solution categories mentioned even if this is not a dedicated services page.`
+    : `If this is NOT a services page, return an empty array.`;
 
   try {
     const result = await generateObject({
@@ -42,7 +47,7 @@ For each service, extract:
 - Sub-services or specific capabilities under this service
 
 Only extract actual service offerings. Skip navigation, CTAs, or generic marketing copy.
-If this is NOT a services page, return an empty array.
+${homepageHint}
 
 PAGE URL: ${url}
 
