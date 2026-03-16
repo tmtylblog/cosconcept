@@ -426,17 +426,23 @@ function GrowthOpsInboxInner() {
   }, []);
 
   // ── Load conversations + usage when account changes ─────────────────────
-  useEffect(() => {
-    if (!selectedAccountId) return;
-    // Don't fetch if accounts haven't loaded yet (avoids clearing conversations with empty results)
-    if (selectedAccountId === "all" && accounts.length === 0) return;
+  // Use accounts.length as dependency (not the array itself) to avoid re-running
+  // when the array reference changes but the content is the same.
+  const accountsLoaded = accounts.length > 0;
+  const accountsRef = useRef(accounts);
+  accountsRef.current = accounts;
 
+  useEffect(() => {
+    if (!selectedAccountId || !accountsLoaded) return;
+
+    let cancelled = false;
     setLoadingConvos(true);
     setMessages([]);
 
     if (selectedAccountId === "all") {
       // Fetch conversations from ALL accounts in parallel
-      const fetches = accounts
+      const currentAccounts = accountsRef.current;
+      const fetches = currentAccounts
         .filter((a) => a.status === "OK")
         .map((a) =>
           fetch(`/api/admin/growth-ops/unipile?action=listConversations&accountId=${a.unipileAccountId}`)
@@ -453,6 +459,7 @@ function GrowthOpsInboxInner() {
         );
 
       Promise.all(fetches).then((results) => {
+        if (cancelled) return;
         const merged = results
           .flat()
           .sort((a, b) => {
@@ -479,6 +486,7 @@ function GrowthOpsInboxInner() {
         fetch(`/api/admin/growth-ops/unipile?action=getUsage&accountId=${selectedAccountId}`)
           .then((r) => r.json()).catch(() => null),
       ]).then(([convoData, usageData]) => {
+        if (cancelled) return;
         const acctName = accountNameMap.get(selectedAccountId) ?? selectedAccountId;
         const list: Conversation[] = (convoData.conversations ?? []).map((c: Conversation) => ({
           ...c,
@@ -497,8 +505,10 @@ function GrowthOpsInboxInner() {
         }
       });
     }
+
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAccountId, accounts]);
+  }, [selectedAccountId, accountsLoaded]);
 
   // ── Load messages when chat changes ─────────────────────────────────────
   const loadMessages = useCallback(async (chatId: string) => {
