@@ -66,7 +66,10 @@ export interface ClientResearchData {
 
 // ─── Helpers ──────────────────────────────────────────────
 
-function domainFromInput(input: string): string {
+/**
+ * Parse input into a domain. Returns null if input is a company name (no TLD).
+ */
+function domainFromInput(input: string): string | null {
   let d = input.trim().toLowerCase();
   // Strip protocol
   d = d.replace(/^https?:\/\//, "");
@@ -74,9 +77,9 @@ function domainFromInput(input: string): string {
   d = d.replace(/^www\./, "");
   // Strip trailing path
   d = d.split("/")[0];
-  // If no TLD, it's likely a company name — try appending .com
+  // If no TLD, it's a company name — return null so the caller can ask the user
   if (!d.includes(".")) {
-    d = d.replace(/\s+/g, "") + ".com";
+    return null;
   }
   return d;
 }
@@ -286,8 +289,14 @@ async function persistResearch(
  */
 export async function researchCompany(
   domainOrName: string
-): Promise<ClientResearchData> {
+): Promise<ClientResearchData | { needsDomain: true; companyName: string }> {
   const domain = domainFromInput(domainOrName);
+
+  if (!domain) {
+    console.warn(`[ClientResearch] No domain detected for "${domainOrName}" — asking user to confirm`);
+    return { needsDomain: true, companyName: domainOrName.trim() };
+  }
+
   console.warn(`[ClientResearch] Starting research for: ${domainOrName} → domain: ${domain}`);
 
   // 1. Check company_research table (fastest, richest)

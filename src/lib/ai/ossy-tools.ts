@@ -363,7 +363,19 @@ export function createOssyTools(organizationId: string, firmId?: string) {
 
         try {
           // 1. Research the client company (cache-first, two-phase pipeline)
-          const clientData = await researchCompany(clientDomainOrName);
+          const researchResult = await researchCompany(clientDomainOrName);
+
+          // If the input was a company name without a domain, ask the user to confirm
+          if ("needsDomain" in researchResult) {
+            return {
+              success: false,
+              needsDomain: true,
+              companyName: researchResult.companyName,
+              _instruction: `The user said "${researchResult.companyName}" but I need a website domain to research them properly. Ask the user to confirm the domain — e.g., "I'd love to research ${researchResult.companyName} for you! What's their website domain? For example, is it ${researchResult.companyName.toLowerCase().replace(/\s+/g, "")}.com?"`,
+            };
+          }
+
+          const clientData = researchResult;
 
           // 2. Load user's firm data for fit assessment
           const [firmRow] = await db
