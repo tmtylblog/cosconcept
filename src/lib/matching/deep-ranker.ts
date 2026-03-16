@@ -138,13 +138,23 @@ Goals: ${searcherProfile.partnershipReadiness.partnershipGoals.join(", ")}
   let symbioticContext = "";
   const relationships = getSymbioticRelationships();
   if (relationships.length > 0) {
-    // If we know the searcher's categories, show their common partnerships
-    const searcherCategories = searcherProfile?.topServices ?? [];
-    const relevantRels = searcherCategories.length > 0
+    // Match against searcher's categories AND services for broader coverage
+    const searcherTerms = [
+      ...(searcherProfile?.topServices ?? []),
+      // Also check if candidate categories were passed from the structured filter
+    ];
+    // Add categories from evidenceSources if available
+    if (searcherProfile?.evidenceSources) {
+      const es = searcherProfile.evidenceSources as Record<string, unknown>;
+      if (Array.isArray(es.categories)) searcherTerms.push(...(es.categories as string[]));
+    }
+    const relevantRels = searcherTerms.length > 0
       ? relationships.filter((r) =>
-          searcherCategories.some((cat) =>
-            r.typeA.toLowerCase().includes(cat.toLowerCase()) ||
-            r.typeB.toLowerCase().includes(cat.toLowerCase())
+          searcherTerms.some((term) =>
+            r.typeA.toLowerCase().includes(term.toLowerCase()) ||
+            r.typeB.toLowerCase().includes(term.toLowerCase()) ||
+            term.toLowerCase().includes(r.typeA.toLowerCase().split(" ")[0]) ||
+            term.toLowerCase().includes(r.typeB.toLowerCase().split(" ")[0])
           )
         ).slice(0, 15)
       : relationships.filter((r) => r.frequency === "High").slice(0, 15);

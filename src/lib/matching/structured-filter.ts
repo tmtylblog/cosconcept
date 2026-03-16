@@ -137,7 +137,7 @@ export async function structuredFilter(
   // Team experience subquery — boost firms whose team has relevant work history
   if (filters.industries?.length || filters.skills?.length) {
     returnFields.push(
-      `size([(f)<-[:CURRENTLY_AT|WORKS_AT]-(p:Person)-[:PREVIOUSLY_AT]->(prev:Company)
+      `size([(f)<-[:CURRENTLY_AT|WORKS_AT]-(p:Person)-[:WORKED_AT]->(prev:Company)
         WHERE ${filters.industries?.length ? "prev.industry IN $teamIndustries" : "true"}
         | DISTINCT prev]) AS teamRelevance`
     );
