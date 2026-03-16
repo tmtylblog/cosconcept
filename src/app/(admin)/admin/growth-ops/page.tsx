@@ -428,6 +428,9 @@ function GrowthOpsInboxInner() {
   // ── Load conversations + usage when account changes ─────────────────────
   useEffect(() => {
     if (!selectedAccountId) return;
+    // Don't fetch if accounts haven't loaded yet (avoids clearing conversations with empty results)
+    if (selectedAccountId === "all" && accounts.length === 0) return;
+
     setLoadingConvos(true);
     setMessages([]);
 
