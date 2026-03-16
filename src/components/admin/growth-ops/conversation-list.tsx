@@ -99,6 +99,8 @@ export function ConversationList({
 }: ConversationListProps) {
   const pendingItems = queueItems.filter((q) => q.status === "pending");
 
+  console.warn(`[CONVO LIST] Render: ${conversations.length} convos, loading=${loadingConvos}, filter=${filter}`);
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header: account selector + new message */}
