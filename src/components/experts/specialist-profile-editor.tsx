@@ -1,10 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, X, ChevronDown, ArrowLeft, Save, Loader2 } from "lucide-react";
+import {
+  Plus, X, ChevronDown, ArrowLeft, Save, Loader2,
+  Briefcase, Lightbulb, History,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { scoreSpecialistProfile, type ScoreResult } from "@/lib/expert/quality-score";
 import { PdlExperiencePicker } from "./pdl-experience-picker";
+import { AutocompleteInput } from "@/components/ui/autocomplete-input";
+import { MonthYearPicker } from "@/components/ui/month-year-picker";
+import { CompanySearch } from "@/components/ui/company-search";
 
 interface PdlExperience {
   company: { name: string; website?: string | null; industry?: string | null };
@@ -26,6 +32,7 @@ interface WorkExample {
   isPdlSource: boolean;
   pdlExperienceIndex?: number;
   exampleType: "project" | "role";
+  saveToHistory?: boolean;
 }
 
 const EMPTY_EXAMPLE: WorkExample = {
@@ -38,11 +45,11 @@ const EMPTY_EXAMPLE: WorkExample = {
   isCurrent: false,
   isPdlSource: false,
   exampleType: "project",
+  saveToHistory: false,
 };
 
 interface EditorProps {
   expertId: string;
-  /** Existing specialist profile to edit (null = creating new) */
   initialProfile?: {
     id?: string;
     title?: string | null;
@@ -56,6 +63,51 @@ interface EditorProps {
   onSave?: (spId: string) => void;
   onCancel?: () => void;
 }
+
+// ─── Skills fetch helper ─────────────────────────────────
+
+let skillsCache: string[] | null = null;
+
+async function fetchSkillsList(): Promise<string[]> {
+  if (skillsCache) return skillsCache;
+  try {
+    const res = await fetch("/api/public/taxonomy?section=skills");
+    const data = await res.json();
+    const l1ToL2 = data.skills?.l1ToL2 ?? {};
+    const all: string[] = Object.values(l1ToL2).flat() as string[];
+    skillsCache = [...new Set(all)].sort();
+    return skillsCache;
+  } catch {
+    return [];
+  }
+}
+
+async function searchSkills(query: string): Promise<string[]> {
+  const allSkills = await fetchSkillsList();
+  const q = query.toLowerCase();
+  // Prefix matches first, then contains
+  const prefix = allSkills.filter((s) => s.toLowerCase().startsWith(q));
+  const contains = allSkills.filter(
+    (s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q)
+  );
+  return [...prefix, ...contains].slice(0, 15);
+}
+
+// ─── Industries fetch helper ─────────────────────────────
+
+async function searchIndustries(query: string): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `/api/graph/search?q=${encodeURIComponent(query)}&type=Industry&limit=15`
+    );
+    const data = await res.json();
+    return (data.results ?? []).map((r: { name: string }) => r.name);
+  } catch {
+    return [];
+  }
+}
+
+// ─── Main Editor ─────────────────────────────────────────
 
 export function SpecialistProfileEditor({
   expertId,
@@ -72,20 +124,9 @@ export function SpecialistProfileEditor({
   const [industries, setIndustries] = useState<string[]>(
     initialProfile?.industries ?? []
   );
-  const [services, setServices] = useState<string[]>(
-    initialProfile?.services ?? []
-  );
   const [examples, setExamples] = useState<WorkExample[]>(
-    initialProfile?.examples?.length
-      ? initialProfile.examples
-      : [{ ...EMPTY_EXAMPLE }]
+    initialProfile?.examples?.length ? initialProfile.examples : []
   );
-
-  const [tagInputs, setTagInputs] = useState({
-    skills: "",
-    industries: "",
-    services: "",
-  });
 
   const [score, setScore] = useState<ScoreResult | null>(null);
   const [saving, setSaving] = useState(false);
@@ -104,37 +145,6 @@ export function SpecialistProfileEditor({
     setScore(result);
   }, [title, bodyDescription, industries, examples]);
 
-  const addTag = useCallback(
-    (field: "skills" | "industries" | "services", value: string) => {
-      if (!value.trim()) return;
-      const setter =
-        field === "skills"
-          ? setSkills
-          : field === "industries"
-            ? setIndustries
-            : setServices;
-      setter((prev) => {
-        if (prev.includes(value.trim())) return prev;
-        return [...prev, value.trim()];
-      });
-      setTagInputs((prev) => ({ ...prev, [field]: "" }));
-    },
-    []
-  );
-
-  const removeTag = useCallback(
-    (field: "skills" | "industries" | "services", value: string) => {
-      const setter =
-        field === "skills"
-          ? setSkills
-          : field === "industries"
-            ? setIndustries
-            : setServices;
-      setter((prev) => prev.filter((v) => v !== value));
-    },
-    []
-  );
-
   const updateExample = useCallback(
     (idx: number, patch: Partial<WorkExample>) => {
       setExamples((prev) =>
@@ -145,8 +155,9 @@ export function SpecialistProfileEditor({
   );
 
   const addExample = useCallback(() => {
+    if (examples.length >= 3) return;
     setExamples((prev) => [...prev, { ...EMPTY_EXAMPLE }]);
-  }, []);
+  }, [examples.length]);
 
   const removeExample = useCallback((idx: number) => {
     setExamples((prev) => prev.filter((_, i) => i !== idx));
@@ -154,8 +165,9 @@ export function SpecialistProfileEditor({
 
   const handlePdlSelect = useCallback(
     (ex: PdlExperience, pdlIdx: number) => {
-      updateExample(pickerTargetIdx, {
+      const newEx: WorkExample = {
         title: ex.title,
+        subject: ex.summary ?? "",
         companyName: ex.company.name,
         companyIndustry: ex.company.industry ?? "",
         startDate: ex.startDate ?? "",
@@ -164,9 +176,16 @@ export function SpecialistProfileEditor({
         isPdlSource: true,
         pdlExperienceIndex: pdlIdx,
         exampleType: "role",
-      });
+      };
+
+      // If there's a target slot, fill it; otherwise append
+      if (pickerTargetIdx < examples.length) {
+        updateExample(pickerTargetIdx, newEx);
+      } else if (examples.length < 3) {
+        setExamples((prev) => [...prev, newEx]);
+      }
     },
-    [pickerTargetIdx, updateExample]
+    [pickerTargetIdx, examples.length, updateExample]
   );
 
   const handleSave = async () => {
@@ -187,7 +206,7 @@ export function SpecialistProfileEditor({
           bodyDescription,
           skills,
           industries,
-          services,
+          services: [],
           examples,
         }),
       });
@@ -195,6 +214,25 @@ export function SpecialistProfileEditor({
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error ?? "Save failed");
+      }
+
+      // Save custom examples to work history if checkbox is checked
+      for (const ex of examples) {
+        if (ex.saveToHistory && !ex.isPdlSource && ex.title && ex.companyName) {
+          fetch(`/api/experts/${expertId}/work-history`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: ex.title,
+              companyName: ex.companyName,
+              companyIndustry: ex.companyIndustry,
+              startDate: ex.startDate,
+              endDate: ex.endDate,
+              isCurrent: ex.isCurrent,
+              subject: ex.subject,
+            }),
+          }).catch(() => {}); // fire and forget
+        }
       }
 
       const data = await res.json();
@@ -224,6 +262,8 @@ export function SpecialistProfileEditor({
         ? "bg-cos-electric"
         : "bg-cos-warm";
 
+  const examplesNeeded = 3 - examples.length;
+
   return (
     <div className="cos-scrollbar mx-auto max-w-2xl space-y-4 overflow-y-auto p-6">
       {/* Back / cancel */}
@@ -241,7 +281,21 @@ export function SpecialistProfileEditor({
         {initialProfile?.id ? "Edit Specialist Profile" : "New Specialist Profile"}
       </h2>
 
-      {/* ─── Title ─────────────────────────────────────── */}
+      {/* ─── Guidance text ─────────────────────────────── */}
+      <div className="rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 p-4">
+        <div className="flex items-start gap-3">
+          <Lightbulb className="h-4 w-4 shrink-0 text-cos-electric mt-0.5" />
+          <p className="text-xs leading-relaxed text-cos-slate">
+            Specialist profiles show your true expertise. Your work history doesn&apos;t always
+            highlight where you excel &mdash; with enough experience, many experts tell their
+            story through multiple unique specialist profiles. Avoid generic stories. Focus on
+            one thing you want to be known for: a certain type of role, a special skill, or an
+            industry expertise.
+          </p>
+        </div>
+      </div>
+
+      {/* ─── Title + Description + Taxonomy ──────────── */}
       <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4 space-y-3">
         <label className="block">
           <span className="text-xs font-semibold text-cos-midnight">
@@ -251,12 +305,11 @@ export function SpecialistProfileEditor({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Fractional CMO for B2B SaaS"
+            placeholder='e.g. "Fractional CMO for B2B SaaS"'
             className="mt-1.5 w-full rounded-cos-md border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
           />
         </label>
 
-        {/* ─── Description ─ */}
         <label className="block">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-cos-midnight">
@@ -271,75 +324,104 @@ export function SpecialistProfileEditor({
             value={bodyDescription}
             onChange={(e) => setBodyDescription(e.target.value)}
             rows={5}
-            placeholder="Describe this specific expertise niche. What kinds of clients do you help? What outcomes do you deliver? (150–500 words ideal)"
+            placeholder="Describe this specific expertise niche. What kinds of clients do you help? What outcomes do you deliver? (150-500 words ideal)"
             className="mt-1.5 w-full resize-none rounded-cos-md border border-cos-border bg-white px-3 py-2 text-sm leading-relaxed text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
           />
         </label>
 
-        {/* ─── Taxonomy tags ─ */}
-        <TagInput
+        {/* Skills autocomplete */}
+        <AutocompleteInput
           label="Skills"
-          tags={skills}
-          inputValue={tagInputs.skills}
-          onInputChange={(v) => setTagInputs((p) => ({ ...p, skills: v }))}
-          onAdd={() => addTag("skills", tagInputs.skills)}
-          onRemove={(v) => removeTag("skills", v)}
-          tagStyle="bg-cos-midnight/5 text-cos-slate"
+          placeholder="Type to search skills..."
+          values={skills}
+          onChange={setSkills}
+          fetchSuggestions={searchSkills}
+          color="midnight"
         />
 
-        <TagInput
+        {/* Industries autocomplete */}
+        <AutocompleteInput
           label="Industries"
-          tags={industries}
-          inputValue={tagInputs.industries}
-          onInputChange={(v) => setTagInputs((p) => ({ ...p, industries: v }))}
-          onAdd={() => addTag("industries", tagInputs.industries)}
-          onRemove={(v) => removeTag("industries", v)}
-          tagStyle="bg-cos-signal/8 text-cos-signal"
-        />
-
-        <TagInput
-          label="Services"
-          tags={services}
-          inputValue={tagInputs.services}
-          onInputChange={(v) => setTagInputs((p) => ({ ...p, services: v }))}
-          onAdd={() => addTag("services", tagInputs.services)}
-          onRemove={(v) => removeTag("services", v)}
-          tagStyle="bg-cos-electric/8 text-cos-electric"
+          placeholder="Type to search industries..."
+          values={industries}
+          onChange={setIndustries}
+          fetchSuggestions={searchIndustries}
+          minCharsForResults={2}
+          color="signal"
         />
       </div>
 
       {/* ─── Work Examples ─────────────────────────────── */}
-      <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4 space-y-3">
+      <div className="rounded-cos-xl border border-cos-electric/20 bg-cos-electric/5 p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-cos-midnight">Work Examples</p>
-          <span className="text-[10px] text-cos-slate-dim">{examples.length}/3 examples</span>
+          <div className="flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-cos-electric" />
+            <p className="text-xs font-semibold text-cos-midnight">Work Examples</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={cn(
+              "text-[10px] font-medium",
+              examples.length >= 3 ? "text-cos-signal" : "text-cos-electric"
+            )}>
+              {examples.length} of 3
+            </span>
+            {examples.length < 3 && (
+              <span className="text-[10px] text-cos-ember">
+                {examplesNeeded} more needed
+              </span>
+            )}
+          </div>
         </div>
 
+        {/* Guidance text — shows when title has been entered */}
+        {title.trim() ? (
+          <p className="text-xs leading-relaxed text-cos-slate">
+            Your three work examples are proof points for your expertise:{" "}
+            <strong className="text-cos-midnight">&ldquo;{title}&rdquo;</strong>.
+            Pick three examples &mdash; they could be roles from your work history, but they
+            could also be projects you&apos;ve taken on at any point in your career or even
+            something you did while working for another firm. This is your personal experience.
+          </p>
+        ) : (
+          <p className="text-xs text-cos-slate-dim italic">
+            Enter a specialist title above to see guidance for your work examples.
+          </p>
+        )}
+
+        {/* Select from Work History button */}
+        {pdlExperiences.length > 0 && examples.length < 3 && (
+          <button
+            onClick={() => {
+              setPickerTargetIdx(examples.length);
+              setShowPdlPicker(true);
+            }}
+            className="flex w-full items-center justify-center gap-2 rounded-cos-lg border-2 border-dashed border-cos-electric/40 bg-white py-2.5 text-xs font-medium text-cos-electric transition-colors hover:border-cos-electric hover:bg-cos-electric/5"
+          >
+            <History className="h-4 w-4" />
+            Select from Work History ({pdlExperiences.length} available)
+          </button>
+        )}
+
+        {/* Example cards */}
         {examples.map((ex, idx) => (
           <ExampleForm
             key={idx}
             index={idx}
+            total={3}
             example={ex}
             onChange={(patch) => updateExample(idx, patch)}
-            onRemove={examples.length > 1 ? () => removeExample(idx) : undefined}
-            onPickFromPdl={
-              pdlExperiences.length > 0
-                ? () => {
-                    setPickerTargetIdx(idx);
-                    setShowPdlPicker(true);
-                  }
-                : undefined
-            }
+            onRemove={() => removeExample(idx)}
           />
         ))}
 
+        {/* Add new example button */}
         {examples.length < 3 && (
           <button
             onClick={addExample}
-            className="flex w-full items-center justify-center gap-1.5 rounded-cos-lg border border-dashed border-cos-border py-2.5 text-xs font-medium text-cos-slate-dim transition-colors hover:border-cos-electric/40 hover:text-cos-electric"
+            className="flex w-full items-center justify-center gap-1.5 rounded-cos-lg border border-dashed border-cos-border bg-white py-2.5 text-xs font-medium text-cos-slate-dim transition-colors hover:border-cos-electric/40 hover:text-cos-electric"
           >
             <Plus className="h-3.5 w-3.5" />
-            Add example
+            Add New Work Example
           </button>
         )}
       </div>
@@ -350,11 +432,10 @@ export function SpecialistProfileEditor({
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold text-cos-midnight">Quality Score</p>
             <span className={cn("text-sm font-bold", statusColor)}>
-              {score.score}/100 · {score.status.toUpperCase()}
+              {score.score}/100 &middot; {score.status.toUpperCase()}
             </span>
           </div>
 
-          {/* Progress bar */}
           <div className="h-2 rounded-cos-full bg-cos-cloud-dim overflow-hidden">
             <div
               className={cn("h-full rounded-cos-full transition-all duration-500", barColor)}
@@ -362,25 +443,19 @@ export function SpecialistProfileEditor({
             />
           </div>
 
-          {/* Breakdown chips */}
           <div className="flex flex-wrap gap-1 pt-1">
-            <ScoreChip
-              label="Title"
-              pts={score.breakdown.title}
-              max={15}
-            />
+            <ScoreChip label="Title" pts={score.breakdown.title} max={15} />
             <ScoreChip label="Description" pts={score.breakdown.bodyLength + score.breakdown.bodyDepth} max={25} />
             <ScoreChip label="Examples" pts={score.breakdown.example1 + score.breakdown.example2 + score.breakdown.example3} max={30} />
             <ScoreChip label="Completeness" pts={score.breakdown.exampleCompleteness} max={15} />
             <ScoreChip label="Coherence" pts={score.breakdown.coherence} max={15} />
           </div>
 
-          {/* Hints */}
           {score.hints.length > 0 && (
             <div className="space-y-1 pt-1">
               {score.hints.map((hint, i) => (
                 <p key={i} className="flex items-start gap-1.5 text-[11px] text-cos-slate-dim">
-                  <span className="mt-0.5 shrink-0 text-cos-warm">→</span>
+                  <span className="mt-0.5 shrink-0 text-cos-warm">&rarr;</span>
                   {hint}
                 </p>
               ))}
@@ -425,7 +500,7 @@ export function SpecialistProfileEditor({
         )}
       </div>
 
-      {/* PDL picker slide-over */}
+      {/* Work History picker slide-over */}
       {showPdlPicker && (
         <PdlExperiencePicker
           experiences={pdlExperiences}
@@ -439,83 +514,18 @@ export function SpecialistProfileEditor({
 
 // ─── Sub-components ──────────────────────────────────────
 
-function TagInput({
-  label,
-  tags,
-  inputValue,
-  onInputChange,
-  onAdd,
-  onRemove,
-  tagStyle,
-}: {
-  label: string;
-  tags: string[];
-  inputValue: string;
-  onInputChange: (v: string) => void;
-  onAdd: () => void;
-  onRemove: (v: string) => void;
-  tagStyle: string;
-}) {
-  return (
-    <div>
-      <p className="mb-1.5 text-[11px] font-medium text-cos-midnight">{label}</p>
-      <div className="flex flex-wrap gap-1 mb-1.5">
-        {tags.map((tag) => (
-          <span
-            key={tag}
-            className={cn(
-              "flex items-center gap-1 rounded-cos-pill px-2 py-0.5 text-[10px] font-medium",
-              tagStyle
-            )}
-          >
-            {tag}
-            <button
-              onClick={() => onRemove(tag)}
-              className="rounded-full p-0.5 hover:bg-black/10"
-            >
-              <X className="h-2.5 w-2.5" />
-            </button>
-          </span>
-        ))}
-      </div>
-      <div className="flex items-center gap-1.5">
-        <input
-          type="text"
-          value={inputValue}
-          onChange={(e) => onInputChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              onAdd();
-            }
-          }}
-          placeholder={`Add ${label.toLowerCase()}...`}
-          className="flex-1 rounded-cos-md border border-cos-border bg-white px-2 py-1 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
-        />
-        <button
-          onClick={onAdd}
-          disabled={!inputValue.trim()}
-          className="flex h-6 w-6 items-center justify-center rounded-cos-md bg-cos-electric/10 text-cos-electric hover:bg-cos-electric/20 disabled:opacity-40"
-        >
-          <Plus className="h-3 w-3" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function ExampleForm({
   index,
+  total,
   example,
   onChange,
   onRemove,
-  onPickFromPdl,
 }: {
   index: number;
+  total: number;
   example: WorkExample;
   onChange: (patch: Partial<WorkExample>) => void;
-  onRemove?: () => void;
-  onPickFromPdl?: () => void;
+  onRemove: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -529,25 +539,20 @@ function ExampleForm({
           {index + 1}
         </span>
         <p className="flex-1 truncate text-xs font-medium text-cos-midnight">
-          {example.title || `Example ${index + 1}`}
+          {example.title || `Example ${index + 1} of ${total}`}
         </p>
         <div className="flex items-center gap-1.5">
-          {onPickFromPdl && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onPickFromPdl(); }}
-              className="rounded-cos-pill border border-cos-border px-2 py-0.5 text-[9px] text-cos-slate-dim hover:border-cos-electric/40 hover:text-cos-electric transition-colors"
-            >
-              Pull from PDL ↓
-            </button>
+          {example.isPdlSource && (
+            <span className="rounded-cos-pill bg-cos-signal/10 px-1.5 py-0.5 text-[8px] font-medium text-cos-signal">
+              From History
+            </span>
           )}
-          {onRemove && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onRemove(); }}
-              className="rounded-cos-md p-0.5 text-cos-slate-light hover:text-cos-ember transition-colors"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="rounded-cos-md p-0.5 text-cos-slate-light hover:text-cos-ember transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
           <ChevronDown
             className={cn(
               "h-3.5 w-3.5 text-cos-slate-light transition-transform",
@@ -563,48 +568,53 @@ function ExampleForm({
             type="text"
             value={example.title}
             onChange={(e) => onChange({ title: e.target.value })}
-            placeholder='Title — e.g. "Rebuilt GTM for Series B Fintech" or "VP Marketing"'
+            placeholder='Title - e.g. "Rebuilt GTM for Series B Fintech" or "VP Marketing"'
             className="w-full rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
           />
           <textarea
             value={example.subject}
             onChange={(e) => onChange({ subject: e.target.value })}
             rows={3}
-            placeholder="What did you do and what was the outcome? (2–3 sentences)"
+            placeholder="What did you do and what was the outcome? (2-3 sentences)"
             className="w-full resize-none rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs leading-relaxed text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
           />
+
+          {/* Company + Industry */}
           <div className="flex gap-2">
-            <input
-              type="text"
+            <CompanySearch
               value={example.companyName}
-              onChange={(e) => onChange({ companyName: e.target.value })}
-              placeholder="Company"
-              className="flex-1 rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+              industry={example.companyIndustry}
+              onSelect={({ name, industry }) =>
+                onChange({ companyName: name, companyIndustry: industry })
+              }
+              placeholder="Search companies..."
             />
             <input
               type="text"
               value={example.companyIndustry}
               onChange={(e) => onChange({ companyIndustry: e.target.value })}
-              placeholder="Industry"
-              className="flex-1 rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+              placeholder="Industry (auto-filled)"
+              className="w-32 shrink-0 rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
             />
           </div>
+
+          {/* Dates */}
           <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={example.startDate}
-              onChange={(e) => onChange({ startDate: e.target.value })}
-              placeholder="Start (YYYY-MM)"
-              className="flex-1 rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
-            />
-            <input
-              type="text"
-              value={example.endDate}
-              onChange={(e) => onChange({ endDate: e.target.value })}
-              placeholder="End (or leave blank)"
-              disabled={example.isCurrent}
-              className="flex-1 rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none disabled:opacity-40"
-            />
+            <div className="flex-1">
+              <MonthYearPicker
+                value={example.startDate}
+                onChange={(val) => onChange({ startDate: val })}
+                placeholder="Start date"
+              />
+            </div>
+            <div className="flex-1">
+              <MonthYearPicker
+                value={example.endDate}
+                onChange={(val) => onChange({ endDate: val })}
+                placeholder="End date"
+                disabled={example.isCurrent}
+              />
+            </div>
             <label className="flex items-center gap-1 text-[10px] text-cos-slate-dim cursor-pointer shrink-0">
               <input
                 type="checkbox"
@@ -617,6 +627,19 @@ function ExampleForm({
               Current
             </label>
           </div>
+
+          {/* Save to work history checkbox — only for manual examples */}
+          {!example.isPdlSource && (
+            <label className="flex items-center gap-2 pt-1 text-[10px] text-cos-slate cursor-pointer">
+              <input
+                type="checkbox"
+                checked={example.saveToHistory ?? false}
+                onChange={(e) => onChange({ saveToHistory: e.target.checked })}
+                className="rounded"
+              />
+              Save to my Work History for future use
+            </label>
+          )}
         </div>
       )}
     </div>
@@ -636,7 +659,7 @@ function ScoreChip({ label, pts, max }: { label: string; pts: number; max: numbe
             : "bg-cos-cloud-dim text-cos-slate-dim"
       )}
     >
-      {full ? "✓ " : pts > 0 ? "◑ " : "○ "}
+      {full ? "\u2713 " : pts > 0 ? "\u25D1 " : "\u25CB "}
       {label} ({pts}/{max})
     </span>
   );

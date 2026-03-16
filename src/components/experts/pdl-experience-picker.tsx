@@ -40,10 +40,10 @@ export function PdlExperiencePicker({
         <div className="flex items-center justify-between border-b border-cos-border px-4 py-3">
           <div>
             <h3 className="text-sm font-semibold text-cos-midnight">
-              Pull from Work History
+              Select from Work History
             </h3>
             <p className="text-[10px] text-cos-slate-dim mt-0.5">
-              Select a role to pre-fill your example
+              Pick a role or past project to add as a work example
             </p>
           </div>
           <button
@@ -58,7 +58,7 @@ export function PdlExperiencePicker({
         <div className="flex-1 overflow-y-auto cos-scrollbar p-3 space-y-2">
           {experiences.length === 0 ? (
             <p className="py-8 text-center text-xs text-cos-slate-dim">
-              No PDL work history available
+              No work history available
             </p>
           ) : (
             experiences.map((ex, i) => (

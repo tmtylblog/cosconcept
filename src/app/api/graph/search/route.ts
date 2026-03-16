@@ -15,6 +15,7 @@ import { neo4jRead } from "@/lib/neo4j";
 import type { SearchResult, NodeType } from "@/lib/graph/types";
 
 const SEARCHABLE_LABELS = [
+  "Company",
   "ServiceFirm",
   "Skill",
   "Category",
@@ -58,7 +59,8 @@ export async function GET(req: NextRequest) {
       WHERE any(lbl IN labels(n) WHERE lbl IN $targetLabels)
         AND n.name IS NOT NULL
         AND toLower(n.name) CONTAINS toLower($query)
-      RETURN elementId(n) as id, n.name as name, labels(n) as nodeLabels
+      RETURN elementId(n) as id, n.name as name, labels(n) as nodeLabels,
+             n.pdlIndustry as industry, n.domain as domain
       ORDER BY
         CASE WHEN toLower(n.name) = toLower($query) THEN 0
              WHEN toLower(n.name) STARTS WITH toLower($query) THEN 1
@@ -68,17 +70,19 @@ export async function GET(req: NextRequest) {
       LIMIT $limit
     `;
 
-    const rows = await neo4jRead<NeoSearchRow>(cypher, {
+    const rows = await neo4jRead<NeoSearchRow & { industry?: string; domain?: string }>(cypher, {
       query,
       targetLabels,
       limit: neo4j.int(limit),
     });
 
-    const results: SearchResult[] = rows.map((row) => ({
+    const results: (SearchResult & { industry?: string; domain?: string })[] = rows.map((row) => ({
       id: row.id,
       name: row.name,
       type: primaryLabel(row.nodeLabels),
       labels: row.nodeLabels,
+      ...(row.industry ? { industry: row.industry } : {}),
+      ...(row.domain ? { domain: row.domain } : {}),
     }));
 
     return NextResponse.json({ results });
