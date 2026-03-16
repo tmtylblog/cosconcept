@@ -1,35 +1,16 @@
-# 15. Background Jobs (Postgres Queue — Inngest Replaced)
+# 15. Background Jobs (Inngest)
 
-> Last updated: 2026-03-11
+> Last updated: 2026-03-16
 
 ## Overview
 
-**Inngest has been replaced** with a self-hosted Postgres-backed job queue. All background/async processing now uses `background_jobs` table in Neon via Drizzle.
+All background/async processing uses **Inngest** for durable, retryable background jobs. Functions are registered at `/api/inngest` and discovered by the Inngest service.
 
 **Key files:**
-- `src/lib/jobs/queue.ts` — `enqueue()`, `claimNextJob()`, `markDone()`, `markFailed()`, `resetStuckJobs()`, `jobQueueStats()`
-- `src/lib/jobs/runner.ts` — `runNextJob()`, `drainQueue()`
-- `src/lib/jobs/registry.ts` — lazy handler map for all 14 job types
-- `src/lib/jobs/handlers/*.ts` — individual job handlers
-- `src/app/api/jobs/worker/route.ts` — worker endpoint (POST, maxDuration=300)
-- `src/app/api/jobs/cron/route.ts` — cron endpoint (GET, every 2 min via Vercel Cron)
-- `vercel.json` — `{ "crons": [{ "path": "/api/jobs/cron", "schedule": "*/2 * * * *" }] }`
-
-**Old Inngest files** (`src/inngest/`) are still present but unused by API routes.
-
-## Environment Variables Required
-
-| Var | Purpose |
-|-----|---------|
-| `JOBS_SECRET` | Bearer token for `/api/jobs/worker` |
-| `CRON_SECRET` | Auto-sent by Vercel Cron to `/api/jobs/cron` |
-
-## How Jobs Are Triggered
-
-1. API route calls `enqueue(type, payload)` — fast DB write
-2. API route calls `after(runNextJob().catch(() => {}))` — runs job after response sent
-3. Vercel Cron hits `/api/jobs/cron` every 2 minutes as safety net (calls `drainQueue(5)`)
-4. Cron also enqueues recurring jobs by UTC time check (weekly-recrawl, weekly-digest, check-stale-partnerships)
+- `src/inngest/client.ts` — Inngest client + event type definitions
+- `src/inngest/functions/*.ts` — individual job functions
+- `src/inngest/functions/index.ts` — function registry (all exports)
+- `src/app/api/inngest/route.ts` — serve endpoint (registers all functions)
 
 ## Atomic Job Claiming (CAS)
 
@@ -38,13 +19,13 @@ Neon HTTP driver doesn't support `FOR UPDATE SKIP LOCKED`. Uses compare-and-swap
 2. UPDATE WHERE `status = 'pending' AND id = candidate.id`
 3. If 0 rows updated → race lost, recurse once
 
-## Job Types (15 total)
+## Job Types (19 total)
 
 ---
 
-## Registered Functions (15 total)
+## Registered Functions (19 total)
 
-All 14 functions are registered in the serve handler at `/api/inngest`.
+All functions are registered in the serve handler at `/api/inngest`.
 
 ### 1. `enrich-deep-crawl` -- Deep Website Crawl
 
@@ -438,6 +419,110 @@ All 14 functions are registered in the serve handler at `/api/inngest`.
 
 ---
 
+### 16. `research-company` — Client/Prospect Research Pipeline
+
+| Property | Value |
+|---|---|
+| **File** | `src/inngest/functions/research-company.ts` |
+| **Event** | `research/company` |
+| **Retries** | 2 |
+| **Concurrency** | 3 |
+| **Durable** | Yes (7 steps) |
+| **Status** | Working |
+
+**Purpose:** Full research pipeline for external companies (clients, prospects). Runs PDL enrichment, Jina website scrape, AI classification, strategic intelligence generation, and persists to DB + Neo4j. Replaces the synchronous `researchCompany()` call that was timing out in the `research_client` tool.
+
+**Steps:**
+1. `check-cache` — Check `company_research` + `enrichmentCache` tables
+2. `enrich-pdl` — PDL company enrichment (skipped if cache hit)
+3. `scrape-website` — Jina website scrape (skipped if cache hit)
+4. `classify` — AI classification against COS taxonomy
+5. `generate-intelligence` — Gemini Flash generates 11 strategic fields
+6. `persist-research` — Write to `company_research` + `enrichmentCache` tables
+7. `write-graph` — Write Company node to Neo4j with taxonomy edges
+
+**Input:** `{ domain, firmId, userId, pitchContext?, conversationId? }`
+**Output:** `{ status, domain }`
+
+**Triggered by:** `research_client` tool in `ossy-tools.ts` (on cache miss)
+**Triggers downstream:** `research/assess-fit` (auto-triggered on completion)
+
+---
+
+### 17. `assess-client-fit` — Client Fit Assessment
+
+| Property | Value |
+|---|---|
+| **File** | `src/inngest/functions/assess-client-fit.ts` |
+| **Event** | `research/assess-fit` |
+| **Retries** | 1 |
+| **Concurrency** | 5 |
+| **Durable** | Yes (5 steps) |
+| **Status** | Working |
+
+**Purpose:** Scores how well a firm fits a researched prospect client. Runs 6-dimension algorithmic scoring, generates AI talking points, and finds gap-filling partners.
+
+**Steps:**
+1. `load-research` — Read `company_research` + `enrichmentCache` for the domain
+2. `load-firm` — Read firm enrichment, abstraction profile, case studies
+3. `score-fit` — 6-dimension weighted scoring + AI talking point generation
+4. `find-partners` — Partner search for gap-filling (if gaps exist)
+5. `persist-result` — Update `company_research` timestamp
+
+**Input:** `{ domain, firmId, userId, pitchContext?, conversationId? }`
+**Output:** `{ status, domain, overallScore, strengths, gaps, partners }`
+
+**Triggered by:** `research-company` function (auto-triggered on completion)
+
+---
+
+### 18. `extract-opportunities` — Opportunity Extraction from Transcripts
+
+| Property | Value |
+|---|---|
+| **File** | `src/inngest/functions/extract-opportunities.ts` |
+| **Event** | `opportunities/extract` |
+| **Retries** | 2 |
+| **Concurrency** | 5 |
+| **Durable** | Yes (2 steps) |
+| **Status** | Working |
+
+**Purpose:** AI opportunity extraction from transcripts as a background job. Available for use by the `calls/analyze` pipeline. Note: the `/api/opportunities/extract-from-transcript` HTTP endpoint still runs extraction synchronously because the frontend UI needs immediate results.
+
+**Steps:**
+1. `extract` — AI model extracts opportunities via Gemini Flash
+2. `persist` — Insert opportunities into `opportunities` table
+
+**Input:** `{ transcript, firmId, userId, organizationId?, firmName?, firmCategories?, source }`
+**Output:** `{ status, opportunitiesExtracted }`
+
+---
+
+### 19. `sync-preferences` — Sync Preferences to Neo4j
+
+| Property | Value |
+|---|---|
+| **File** | `src/inngest/functions/sync-preferences.ts` |
+| **Event** | `preferences/sync-graph` |
+| **Retries** | 2 |
+| **Concurrency** | 5 |
+| **Durable** | Yes (1 step) |
+| **Status** | Working |
+
+**Purpose:** Syncs onboarding preference answers to Neo4j PREFERS edges. Supports both full sync (all preferences) and single-field sync. Replaces fire-and-forget direct calls to `syncAllPreferencesToGraph()` and `syncPreferenceFieldToGraph()`.
+
+**Steps:**
+1. `sync` — Dispatches to full sync or single-field sync based on input
+
+**Input:** `{ firmId, field?, value? }` — if `field` + `value` provided, syncs single field; otherwise syncs all
+**Output:** `{ status, mode, prefersWritten?, propertiesSet?, errors? }`
+
+**Triggered by:**
+- `update_profile` tool in `ossy-tools.ts` (full sync on onboarding completion)
+- `updateProfileField()` in `update-profile-field.ts` (per-field sync on each preference save)
+
+---
+
 ## Cron Schedule Summary
 
 | Function | Schedule | Description |
@@ -479,6 +564,20 @@ Admin Approve Email
   |
   +---> email/send-now
 
+Ossy Chat (research_client tool, cache miss)
+  |
+  +---> research/company
+           |
+           +---> research/assess-fit
+
+Ossy Chat (onFinish callback)
+  |
+  +---> memory/extract
+
+Profile Update (preference field saved)
+  |
+  +---> preferences/sync-graph
+
 Manual API Triggers
   |
   +---> enrich/deep-crawl
@@ -488,6 +587,8 @@ Manual API Triggers
   +---> calls/analyze
   +---> memory/extract
   +---> graph/sync-firm
+  +---> research/company
+  +---> preferences/sync-graph
 ```
 
 ---
@@ -503,7 +604,7 @@ Manual API Triggers
 ## Retry & Error Handling Patterns
 
 - **Retries:** Range from 0 (default) to 3. Enrichment functions use 2 retries; graph-sync uses 3; call/memory functions use 1-2.
-- **Concurrency limits:** Set on compute-heavy functions to avoid API rate limits: deep-crawl (5), case study ingest (3), expert enrichment (5), post-call analysis (5), memory extraction (10).
+- **Concurrency limits:** Set on compute-heavy functions to avoid API rate limits: deep-crawl (5), case study ingest (3), expert enrichment (5), post-call analysis (5), memory extraction (10), research-company (3), assess-client-fit (5), extract-opportunities (5), sync-preferences (5).
 - **Error strategy:** Functions generally throw on fatal errors (triggers Inngest retry). Non-fatal cases (e.g., PDL person not found, thread already resolved) return early with a status object rather than throwing.
 - **Test mode:** The email pipeline has a `settings.email_test_mode` flag that downgrades auto-approved emails to "pending" requiring manual approval.
 - **Idempotency:** Most functions are not strictly idempotent. Running `firm-case-study-ingest` twice on the same case study will overwrite the previous results. `expert-linkedin` handles upsert (insert vs update) based on existing record check.
@@ -514,9 +615,10 @@ Manual API Triggers
 
 | Service | Used By | Purpose |
 |---|---|---|
-| PeopleDataLabs (PDL) | deep-crawl, expert-linkedin | Company + person enrichment |
-| Gemini Flash (via OpenRouter) | deep-crawl (classifier), expert-linkedin (specialist gen), memory-extract | AI classification + extraction |
+| PeopleDataLabs (PDL) | deep-crawl, expert-linkedin, research-company | Company + person enrichment |
+| Gemini Flash (via OpenRouter) | deep-crawl (classifier), expert-linkedin (specialist gen), memory-extract, research-company (intelligence), assess-client-fit (talking points), extract-opportunities | AI classification + extraction |
 | Claude Sonnet (via OpenRouter) | process-inbound-email | Email reply generation |
-| Neo4j Aura | deep-crawl, case-study-ingest, firm-case-study-ingest, expert-linkedin, graph-sync, post-call-analysis | Knowledge graph writes + recommendation queries |
+| Jina Reader API | deep-crawl, research-company | Website scraping |
+| Neo4j Aura | deep-crawl, case-study-ingest, firm-case-study-ingest, expert-linkedin, graph-sync, post-call-analysis, research-company, sync-preferences | Knowledge graph writes + recommendation queries |
 | Resend | follow-up-reminders, weekly-digest, send-approved-email, post-call-analysis | Email delivery |
 | Recall.ai | join-meeting | Meeting bot creation |

@@ -202,6 +202,54 @@ export type LinkedInInviteSchedulerEvent = {
   data: Record<string, never>;
 };
 
+/** Client/prospect research pipeline (PDL + Jina + classify + intelligence) */
+export type ResearchCompanyEvent = {
+  name: "research/company";
+  data: {
+    domain: string;
+    firmId: string;
+    userId: string;
+    pitchContext?: string;
+    conversationId?: string;
+  };
+};
+
+/** Fit assessment after research completes */
+export type AssessClientFitEvent = {
+  name: "research/assess-fit";
+  data: {
+    domain: string;
+    firmId: string;
+    userId: string;
+    pitchContext?: string;
+    conversationId?: string;
+  };
+};
+
+/** Opportunity extraction from transcripts */
+export type ExtractOpportunitiesEvent = {
+  name: "opportunities/extract";
+  data: {
+    transcript: string;
+    firmId: string;
+    userId: string;
+    organizationId?: string;
+    firmName?: string;
+    firmCategories?: string[];
+    source: string;
+  };
+};
+
+/** Sync preferences to Neo4j graph */
+export type SyncPreferencesEvent = {
+  name: "preferences/sync-graph";
+  data: {
+    firmId: string;
+    field?: string;
+    value?: string | string[];
+  };
+};
+
 // Union type for all events
 export type CosEvent =
   | DeepCrawlEvent
@@ -220,4 +268,8 @@ export type CosEvent =
   | TeamIngestEvent
   | NetworkScanEvent
   | AttributionCheckEvent
-  | LinkedInInviteSchedulerEvent;
+  | LinkedInInviteSchedulerEvent
+  | ResearchCompanyEvent
+  | AssessClientFitEvent
+  | ExtractOpportunitiesEvent
+  | SyncPreferencesEvent;

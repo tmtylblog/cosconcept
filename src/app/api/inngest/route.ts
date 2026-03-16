@@ -20,6 +20,10 @@ import {
   firmAbstraction,
   attributionCheck,
   linkedinInviteScheduler,
+  researchCompanyJob,
+  assessFit,
+  extractOpportunitiesJob,
+  syncPreferences,
 } from "@/inngest/functions";
 
 /**
@@ -48,5 +52,9 @@ export const { GET, POST, PUT } = serve({
     firmAbstraction,
     attributionCheck,
     linkedinInviteScheduler,
+    researchCompanyJob,
+    assessFit,
+    extractOpportunitiesJob,
+    syncPreferences,
   ],
 });

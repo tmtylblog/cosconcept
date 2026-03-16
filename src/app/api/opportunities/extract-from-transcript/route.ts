@@ -1,8 +1,12 @@
 /**
  * POST /api/opportunities/extract-from-transcript
  *
- * Synchronous transcript extraction — runs AI opportunity detection inline
- * (no Inngest roundtrip) so results can be shown immediately in the chat UI.
+ * Runs AI opportunity detection on a transcript and returns results synchronously.
+ * This endpoint stays synchronous (not Inngest) because:
+ * 1. The frontend renders opportunity cards immediately from the response
+ * 2. Extraction is a single Gemini Flash call (~3-5s), well within timeout
+ * 3. The UI has no polling/async result mechanism yet
+ *
  * Also creates callRecordings + callTranscripts records for admin visibility.
  */
 
@@ -16,7 +20,7 @@ import {
   callTranscripts,
   opportunities,
 } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { extractOpportunities } from "@/lib/ai/opportunity-extractor";
 
 export const dynamic = "force-dynamic";
@@ -107,7 +111,7 @@ export async function POST(req: Request) {
     processingStatus: "done",
   });
 
-  // Run extraction synchronously
+  // Run extraction synchronously (single Gemini Flash call, ~3-5s)
   const extracted = await extractOpportunities(transcript, {
     firmName: firmName ?? undefined,
     firmCategories: firmCategories.length > 0 ? firmCategories : undefined,

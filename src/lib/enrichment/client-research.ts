@@ -96,7 +96,7 @@ function domainId(domain: string): string {
 
 // ─── Cache Lookups ────────────────────────────────────────
 
-async function checkCompanyResearchTable(domain: string): Promise<ClientResearchData | null> {
+export async function checkCompanyResearchTable(domain: string): Promise<ClientResearchData | null> {
   try {
     const [row] = await db
       .select()
@@ -144,7 +144,7 @@ async function checkCompanyResearchTable(domain: string): Promise<ClientResearch
   }
 }
 
-async function checkEnrichmentCache(domain: string): Promise<Record<string, unknown> | null> {
+export async function checkEnrichmentCache(domain: string): Promise<Record<string, unknown> | null> {
   try {
     const [row] = await db
       .select({ enrichmentData: enrichmentCache.enrichmentData })

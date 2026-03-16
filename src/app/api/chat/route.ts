@@ -14,7 +14,6 @@ import { readAllPreferences, isOnboardingComplete } from "@/lib/profile/update-p
 import { inngest } from "@/inngest/client";
 import { logUsage } from "@/lib/ai/gateway";
 import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
-import { extractMemoriesFromConversation } from "@/lib/ai/memory-extractor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -331,14 +330,17 @@ export async function POST(req: Request) {
           }
         }
 
-        // ─── Extract memories (fire-and-forget) ─────────────
+        // ─── Extract memories via Inngest (background job) ────
         if (userId && capturedConvId && messages.length >= 4) {
-          extractMemoriesFromConversation({
-            conversationId: capturedConvId,
-            userId,
-            organizationId: organizationId ?? undefined,
+          inngest.send({
+            name: "memory/extract",
+            data: {
+              conversationId: capturedConvId,
+              userId,
+              organizationId: organizationId ?? undefined,
+            },
           }).catch((err) => {
-            console.error("[Ossy] Memory extraction failed:", err);
+            console.error("[Ossy] Failed to queue memory extraction:", err);
           });
         }
       },

@@ -1,6 +1,6 @@
 # 5. AI & Ossy
 
-> Last updated: 2026-03-11
+> Last updated: 2026-03-16
 
 Ossy is the AI growth consultant inside Collective OS. This document covers the multi-model strategy, system prompt architecture, tools, memory system, chat API, onboarding flows, cost tracking, and guest chat.
 
@@ -53,8 +53,8 @@ The system prompt is assembled dynamically by `getOssyPrompt(context)`. It layer
 
 Redesigned from 9 questions to 5 high-signal questions (commit `579dad7`, 2026-03-11). Asked one at a time, conversationally. Each confirmed answer triggers `update_profile` tool call, which:
 1. Writes to PG `partnerPreferences.rawOnboardingData` JSONB
-2. Fire-and-forget syncs the answer to Neo4j PREFERS edges via `syncPreferenceFieldToGraph()`
-3. On last question, runs `syncAllPreferencesToGraph()` as a safety net
+2. Queues Neo4j sync via Inngest `preferences/sync-graph` event (per-field sync)
+3. On last question, queues full `preferences/sync-graph` Inngest job as a safety net
 
 **The 5 v2 questions:**
 1. `partnershipPhilosophy` — How they approach partnerships (→ ServiceFirm property in Neo4j)
@@ -64,7 +64,7 @@ Redesigned from 9 questions to 5 high-signal questions (commit `579dad7`, 2026-0
 5. `geographyPreference` — Where they want partners (→ ServiceFirm property + optional PREFERS edge to Market)
 
 **Key files for v2 onboarding:**
-- `src/lib/profile/update-profile-field.ts` — PG write + Neo4j fire-and-forget sync
+- `src/lib/profile/update-profile-field.ts` — PG write + Inngest `preferences/sync-graph` queue
 - `src/lib/enrichment/preference-writer.ts` — All Neo4j PREFERS edge creation logic
 - `src/lib/ai/ossy-tools.ts` — Tool definitions + onboarding completion detection + safety-net sync
 - `src/lib/ai/ossy-prompt.ts` — System prompt with v2 interview instructions
@@ -130,6 +130,23 @@ Calls `lookupFirmDetail()` from `src/lib/matching/firm-lookup.ts`. Looks up a fi
 
 Calls `lookupFirmDetail()` from `src/lib/matching/firm-lookup.ts` using the user's own `firmId`. Returns the same `FirmDetail` object so Ossy can reference the user's firm data in conversation.
 
+### `research_client`
+
+Researches any external company (client, prospect, brand). Cache-first with Inngest fallback:
+
+- **Cache hit:** Loads from `company_research` table, runs fit assessment inline (fast — scoring + 1 AI call for talking points), finds gap-filling partners, returns full results immediately.
+- **Cache miss:** Queues `research/company` Inngest job (PDL + Jina + classify + intelligence + persist + Neo4j), returns `{ queued: true }` with instruction for Ossy to tell the user research is running (~1 min). User asks again later and gets cache hit.
+
+**Key functions:** `checkCompanyResearchTable()`, `checkEnrichmentCache()` from `client-research.ts` for inline cache checks. `assessClientFit()` from `fit-assessment.ts` for inline scoring on cache hit.
+
+### `analyze_client_overlap`
+
+Analyzes which of the user's clients would benefit from a specific partner's capabilities. Generates concrete collaboration ideas for partner meetings. Uses `lookupFirmDetail()` + `analyzeClientOverlap()`.
+
+### `discover_search`
+
+General-purpose search across the Collective OS knowledge graph. Searches firms, experts, and case studies via `executeSearch()`. Returns up to 8 candidates with match scores, categories, skills, and a `resultAnalysis` summary for Ossy to ask sharpening follow-ups.
+
 ---
 
 ## Memory System
@@ -138,7 +155,7 @@ Calls `lookupFirmDetail()` from `src/lib/matching/firm-lookup.ts` using the user
 
 **Key file:** `src/lib/ai/memory-extractor.ts`
 
-- **Trigger:** Fire-and-forget after each chat response when `messages.length >= 4`
+- **Trigger:** Queued via Inngest `memory/extract` event after each chat response when `messages.length >= 4`
 - **Model:** Gemini 2.0 Flash via `generateObject`
 - **Input:** Conversation transcript (truncated to 12,000 chars)
 - **Output:** Array of `{ theme, content, confidence }` objects
@@ -205,7 +222,7 @@ Calls `lookupFirmDetail()` from `src/lib/matching/firm-lookup.ts` using the user
 7. Resolve or create conversation in DB (find most recent or create new)
 8. Persist user message to `messages` table
 9. Stream response via `streamText()` with Claude Sonnet 4
-10. On finish: persist assistant message, log AI usage, log tool calls, fire-and-forget memory extraction
+10. On finish: persist assistant message, log AI usage, log tool calls, queue memory extraction via Inngest
 
 **Request body:**
 ```ts
@@ -451,7 +468,7 @@ Note: `embedding: vector(1536)` column is planned but not yet active (pgvector n
 |---|---|
 | `src/lib/ai/gateway.ts` | AI cost tracking, usage logging, model pricing |
 | `src/lib/ai/ossy-prompt.ts` | System prompt assembly, personality, mode switching |
-| `src/lib/ai/ossy-tools.ts` | All 6 tool definitions: `update_profile`, `search_partners`, `search_experts`, `search_case_studies`, `lookup_firm`, `get_my_profile` |
+| `src/lib/ai/ossy-tools.ts` | All 9 tool definitions: `update_profile`, `search_partners`, `search_experts`, `search_case_studies`, `lookup_firm`, `get_my_profile`, `research_client`, `analyze_client_overlap`, `discover_search` |
 | `src/lib/matching/firm-lookup.ts` | `lookupFirmDetail()` for `lookup_firm` and `get_my_profile` tools |
 | `src/lib/matching/expert-search.ts` | `searchExperts()` for `search_experts` tool |
 | `src/lib/matching/case-study-search.ts` | `searchCaseStudies()` for `search_case_studies` tool |

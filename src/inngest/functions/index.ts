@@ -30,3 +30,9 @@ export { migratePartnershipPrefsToEdges } from "./migrate-partnership-prefs-to-e
 export { skillComputeStrength } from "./skill-compute-strength";
 export { preferenceUpdateRevealed } from "./preference-update-revealed";
 export { companyEnrichStub } from "./company-enrich-stub";
+
+// ── Async Operations (migrated from sync) ──────────────
+export { researchCompany as researchCompanyJob } from "./research-company";
+export { assessFit } from "./assess-client-fit";
+export { extractOpportunitiesJob } from "./extract-opportunities";
+export { syncPreferences } from "./sync-preferences";

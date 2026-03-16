@@ -2,15 +2,15 @@ import { tool } from "ai";
 import { z } from "zod/v4";
 import { updateProfileField, ALL_PROFILE_FIELDS } from "@/lib/profile/update-profile-field";
 import { logOnboardingEvent } from "@/lib/onboarding/event-logger";
-import { syncAllPreferencesToGraph } from "@/lib/enrichment/preference-writer";
 import { executeSearch } from "@/lib/matching/search";
 import { lookupFirmDetail } from "@/lib/matching/firm-lookup";
 import { searchExperts } from "@/lib/matching/expert-search";
 import { searchCaseStudies } from "@/lib/matching/case-study-search";
-import { researchCompany } from "@/lib/enrichment/client-research";
+import { checkCompanyResearchTable, checkEnrichmentCache } from "@/lib/enrichment/client-research";
 import { assessClientFit } from "@/lib/matching/fit-assessment";
 import { analyzeClientOverlap } from "@/lib/matching/client-overlap";
 import { loadAbstractionProfile } from "@/lib/matching/abstraction-generator";
+import { inngest } from "@/inngest/client";
 import { db } from "@/lib/db";
 import { serviceFirms, firmCaseStudies } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -196,10 +196,13 @@ export function createOssyTools(organizationId: string, firmId?: string) {
                 metadata: { questionsAnswered: totalQuestions },
               }).catch(() => {});
 
-              // Safety net: sync ALL preferences to Neo4j graph
+              // Safety net: sync ALL preferences to Neo4j graph via Inngest
               // Catches any per-field syncs that may have failed
-              syncAllPreferencesToGraph(firmId).catch((err) =>
-                console.error(`[Ossy Tools] Neo4j full sync failed:`, err)
+              inngest.send({
+                name: "preferences/sync-graph",
+                data: { firmId },
+              }).catch((err) =>
+                console.error(`[Ossy Tools] Failed to queue preference sync:`, err)
               );
 
               nextAction = "All onboarding questions are complete! Congratulate the user and let them know their dashboard is unlocking.";
@@ -362,105 +365,137 @@ export function createOssyTools(organizationId: string, firmId?: string) {
         }
 
         try {
-          // 1. Research the client company (cache-first, two-phase pipeline)
-          // Wrap in a 45s timeout to avoid Vercel function timeout (60s)
-          const researchResult = await Promise.race([
-            researchCompany(clientDomainOrName),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("Research timed out after 45 seconds. The company may have a complex website. Try again — results are often cached from the partial run.")), 45_000)
-            ),
-          ]);
+          // Parse domain from input
+          let domain = clientDomainOrName.trim().toLowerCase();
+          domain = domain.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
 
-          // If the input was a company name without a domain, ask the user to confirm
-          if ("needsDomain" in researchResult) {
+          // If no TLD, it's a company name — ask the user to confirm domain
+          if (!domain.includes(".")) {
+            const companyName = clientDomainOrName.trim();
             return {
               success: false,
               needsDomain: true,
-              companyName: researchResult.companyName,
-              _instruction: `The user said "${researchResult.companyName}" but I need a website domain to research them properly. Ask the user to confirm the domain — e.g., "I'd love to research ${researchResult.companyName} for you! What's their website domain? For example, is it ${researchResult.companyName.toLowerCase().replace(/\s+/g, "")}.com?"`,
+              companyName,
+              _instruction: `The user said "${companyName}" but I need a website domain to research them properly. Ask the user to confirm the domain — e.g., "I'd love to research ${companyName} for you! What's their website domain? For example, is it ${companyName.toLowerCase().replace(/\s+/g, "")}.com?"`,
             };
           }
 
-          const clientData = researchResult;
+          // Check if research already exists (instant cache check)
+          const cached = await checkCompanyResearchTable(domain);
 
-          // 2. Load user's firm data for fit assessment
-          const [firmRow] = await db
-            .select({ enrichmentData: serviceFirms.enrichmentData, name: serviceFirms.name })
-            .from(serviceFirms)
-            .where(eq(serviceFirms.id, firmId))
-            .limit(1);
-
-          const firmEnrichment = (firmRow?.enrichmentData as Record<string, unknown>) ?? {};
-          const firmAbstraction = await loadAbstractionProfile(firmId);
-
-          // Load case studies
-          const caseStudyRows = await db
-            .select({ autoTags: firmCaseStudies.autoTags })
-            .from(firmCaseStudies)
-            .where(eq(firmCaseStudies.firmId, firmId));
-
-          const caseStudies = caseStudyRows.map((r) => ({
-            autoTags: (r.autoTags as Record<string, unknown>) ?? {},
-          }));
-
-          // 3. Assess fit
-          const fitResult = await assessClientFit({
-            clientData,
-            firmEnrichmentData: firmEnrichment,
-            firmAbstraction,
-            firmCaseStudies: caseStudies,
-            pitchContext: context,
-          });
-
-          // 4. Find gap-filling partners
-          let suggestedPartners: { firmName: string; matchScore: number; relevance: string; categories: string[]; skills: string[] }[] = [];
-          if (fitResult.gaps.length > 0) {
-            try {
-              const gapIndustries = clientData.classification.industries.slice(0, 3);
-              const gapQuery = `${gapIndustries.join(" ")} ${clientData.intelligence.offeringSummary?.slice(0, 100) ?? ""}`.trim();
-              if (gapQuery) {
-                const searchResult = await executeSearch({
-                  rawQuery: gapQuery,
-                  searcherFirmId: firmId,
-                  skipLlmRanking: true,
-                });
-                suggestedPartners = searchResult.candidates.slice(0, 5).map((c) => ({
-                  firmName: c.displayName,
-                  matchScore: Math.round(c.totalScore * 100),
-                  relevance: c.matchExplanation ?? `Relevant for ${clientData.name}'s industry`,
-                  categories: c.preview.categories.slice(0, 3),
-                  skills: c.preview.topSkills.slice(0, 5),
-                }));
-              }
-            } catch (err) {
-              console.error("[Ossy] Partner search for gaps failed:", err);
+          if (cached) {
+            // Enrich cached data from enrichmentCache
+            const cacheData = await checkEnrichmentCache(domain);
+            if (cacheData) {
+              const cd = cacheData.companyData as Record<string, unknown> | undefined;
+              const ext = cacheData.extracted as Record<string, unknown> | undefined;
+              const cls = cacheData.classification as Record<string, unknown> | undefined;
+              cached.industry = (cd?.industry as string) ?? "";
+              cached.size = (cd?.size as string) ?? "";
+              cached.employeeCount = (cd?.employeeCount as number) ?? 0;
+              cached.location = (cd?.location as string) ?? "";
+              cached.inferredRevenue = (cd?.inferredRevenue as string) ?? null;
+              cached.tags = (cd?.tags as string[]) ?? [];
+              cached.services = (ext?.services as string[]) ?? [];
+              cached.aboutPitch = (ext?.aboutPitch as string) ?? "";
+              cached.classification = {
+                categories: (cls?.categories as string[]) ?? [],
+                skills: (cls?.skills as string[]) ?? [],
+                industries: (cls?.industries as string[]) ?? [],
+                markets: (cls?.markets as string[]) ?? [],
+              };
             }
+
+            // Cache HIT — run fit assessment inline (fast: just scoring + 1 AI call)
+            const [firmRow] = await db
+              .select({ enrichmentData: serviceFirms.enrichmentData, name: serviceFirms.name })
+              .from(serviceFirms)
+              .where(eq(serviceFirms.id, firmId))
+              .limit(1);
+
+            const firmEnrichment = (firmRow?.enrichmentData as Record<string, unknown>) ?? {};
+            const firmAbstraction = await loadAbstractionProfile(firmId);
+
+            const caseStudyRows = await db
+              .select({ autoTags: firmCaseStudies.autoTags })
+              .from(firmCaseStudies)
+              .where(eq(firmCaseStudies.firmId, firmId));
+
+            const caseStudies = caseStudyRows.map((r) => ({
+              autoTags: (r.autoTags as Record<string, unknown>) ?? {},
+            }));
+
+            const fitResult = await assessClientFit({
+              clientData: cached,
+              firmEnrichmentData: firmEnrichment,
+              firmAbstraction,
+              firmCaseStudies: caseStudies,
+              pitchContext: context,
+            });
+
+            // Find gap-filling partners
+            let suggestedPartners: { firmName: string; matchScore: number; relevance: string; categories: string[]; skills: string[] }[] = [];
+            if (fitResult.gaps.length > 0) {
+              try {
+                const gapIndustries = cached.classification.industries.slice(0, 3);
+                const gapQuery = `${gapIndustries.join(" ")} ${cached.intelligence.offeringSummary?.slice(0, 100) ?? ""}`.trim();
+                if (gapQuery) {
+                  const searchResult = await executeSearch({
+                    rawQuery: gapQuery,
+                    searcherFirmId: firmId,
+                    skipLlmRanking: true,
+                  });
+                  suggestedPartners = searchResult.candidates.slice(0, 5).map((c) => ({
+                    firmName: c.displayName,
+                    matchScore: Math.round(c.totalScore * 100),
+                    relevance: c.matchExplanation ?? `Relevant for ${cached.name}'s industry`,
+                    categories: c.preview.categories.slice(0, 3),
+                    skills: c.preview.topSkills.slice(0, 5),
+                  }));
+                }
+              } catch (err) {
+                console.error("[Ossy] Partner search for gaps failed:", err);
+              }
+            }
+
+            return {
+              success: true,
+              client: {
+                name: cached.name,
+                domain: cached.domain,
+                industry: cached.industry,
+                size: cached.size,
+                employeeCount: cached.employeeCount,
+                location: cached.location,
+                executiveSummary: cached.intelligence.executiveSummary,
+                stageInsight: cached.intelligence.stageInsight,
+                customerInsight: cached.intelligence.customerInsight,
+                offeringSummary: cached.intelligence.offeringSummary,
+                interestingHighlights: cached.intelligence.interestingHighlights,
+              },
+              fitAssessment: {
+                overallScore: fitResult.overallScore,
+                dimensions: fitResult.dimensions,
+                strengths: fitResult.strengths,
+                gaps: fitResult.gaps,
+                talkingPoints: fitResult.talkingPoints,
+              },
+              suggestedPartners,
+              _instruction: "Present results conversationally. Lead with the fit score and what makes the firm strong for this client. If there are gaps, frame partner suggestions as \"here's how you can strengthen your pitch.\" Use the talking points as specific advice. Don't dump all data — be selective and insightful. (Research was cached — instant lookup)",
+            };
           }
+
+          // Cache MISS — queue background research via Inngest
+          await inngest.send({
+            name: "research/company",
+            data: { domain, firmId, userId: organizationId /* orgId used as userId fallback */, pitchContext: context },
+          });
 
           return {
             success: true,
-            client: {
-              name: clientData.name,
-              domain: clientData.domain,
-              industry: clientData.industry,
-              size: clientData.size,
-              employeeCount: clientData.employeeCount,
-              location: clientData.location,
-              executiveSummary: clientData.intelligence.executiveSummary,
-              stageInsight: clientData.intelligence.stageInsight,
-              customerInsight: clientData.intelligence.customerInsight,
-              offeringSummary: clientData.intelligence.offeringSummary,
-              interestingHighlights: clientData.intelligence.interestingHighlights,
-            },
-            fitAssessment: {
-              overallScore: fitResult.overallScore,
-              dimensions: fitResult.dimensions,
-              strengths: fitResult.strengths,
-              gaps: fitResult.gaps,
-              talkingPoints: fitResult.talkingPoints,
-            },
-            suggestedPartners,
-            _instruction: `Present results conversationally. Lead with the fit score and what makes the firm strong for this client. If there are gaps, frame partner suggestions as "here's how you can strengthen your pitch." Use the talking points as specific advice. Don't dump all data — be selective and insightful.${clientData.fromCache ? " (Research was cached — instant lookup)" : ""}`,
+            queued: true,
+            domain,
+            _instruction: `Tell the user: I don't have research on this company yet. I've started a deep analysis on ${domain} — this takes about a minute. I'll gather firmographics, scrape their website, classify their business, and generate strategic intelligence. When it's ready, just ask me again and I'll have the full research with your fit assessment. In the meantime, is there anything specific you want to know about them?`,
           };
         } catch (err) {
           console.error("[Ossy] research_client failed:", err);
