@@ -344,19 +344,7 @@ function GrowthOpsInboxInner() {
   // ── State (ported from LinkedIn inbox) ──────────────────────────────────
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState(""); // "" = not set, "all" = merged
-  const [conversations, _setConversations] = useState<Conversation[]>([]);
-  const setConversations = useCallback((val: Conversation[] | ((prev: Conversation[]) => Conversation[])) => {
-    if (typeof val === "function") {
-      _setConversations((prev) => {
-        const next = val(prev);
-        console.warn(`[INBOX DEBUG] setConversations (fn): ${prev.length} → ${next.length}`);
-        return next;
-      });
-    } else {
-      console.warn(`[INBOX DEBUG] setConversations: → ${val.length}`);
-      _setConversations(val);
-    }
-  }, []);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedChatId, setSelectedChatId] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
@@ -445,21 +433,10 @@ function GrowthOpsInboxInner() {
   accountsRef.current = accounts;
 
   const conversationsLoadedRef = useRef(false);
-  const effectRunCount = useRef(0);
 
   useEffect(() => {
-    effectRunCount.current++;
-    const runId = effectRunCount.current;
-    console.warn(`[INBOX DEBUG] Effect run #${runId}: selectedAccountId=${selectedAccountId}, accountsLoaded=${accountsLoaded}, convosLoaded=${conversationsLoadedRef.current}`);
-
-    if (!selectedAccountId || !accountsLoaded) {
-      console.warn(`[INBOX DEBUG] Effect #${runId}: SKIPPED (no account or accounts not loaded)`);
-      return;
-    }
-    if (conversationsLoadedRef.current) {
-      console.warn(`[INBOX DEBUG] Effect #${runId}: SKIPPED (already loaded)`);
-      return;
-    }
+    if (!selectedAccountId || !accountsLoaded) return;
+    if (conversationsLoadedRef.current) return;
 
     let cancelled = false;
     setLoadingConvos(true);
@@ -484,8 +461,7 @@ function GrowthOpsInboxInner() {
         );
 
       Promise.all(fetches).then((results) => {
-        console.warn(`[INBOX DEBUG] All-accounts fetch done: cancelled=${cancelled}, results=${results.length} arrays, total=${results.flat().length} convos`);
-        if (cancelled) { console.warn("[INBOX DEBUG] CANCELLED — not setting conversations"); return; }
+        if (cancelled) return;
         const merged = results
           .flat()
           .sort((a, b) => {
@@ -493,7 +469,6 @@ function GrowthOpsInboxInner() {
             const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
             return tb - ta;
           });
-        console.warn(`[INBOX DEBUG] Setting ${merged.length} conversations`);
         setConversations(merged);
         setLoadingConvos(false);
         setUsage(null);
@@ -535,7 +510,7 @@ function GrowthOpsInboxInner() {
       });
     }
 
-    return () => { console.warn(`[INBOX DEBUG] Cleanup: cancelling effect #${runId}`); cancelled = true; };
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId, accountsLoaded]);
 
@@ -983,7 +958,7 @@ function GrowthOpsInboxInner() {
       </div>
 
       {/* 3-Panel Layout */}
-      <div className="flex h-[calc(100vh-120px)] rounded-cos-xl border border-cos-border overflow-hidden shadow-sm">
+      <div className="flex h-[calc(100vh-160px)] rounded-cos-xl border border-cos-border overflow-hidden shadow-sm">
         {/* Left: Conversation List (280px) */}
         <div className="w-[280px] shrink-0 border-r border-cos-border bg-white overflow-hidden">
           <ConversationList
