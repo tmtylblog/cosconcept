@@ -16,6 +16,7 @@ import { z } from "zod/v4";
 import { db } from "@/lib/db";
 import { abstractionProfiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { neo4jRead } from "@/lib/neo4j";
 import { generateFirmEmbedding } from "./vector-search";
 import type { AbstractionProfile } from "./types";
 
@@ -69,6 +70,59 @@ interface FirmEvidence {
     size?: string;
     rolesHeld: string[];
   }[];
+}
+
+// ─── Client Size Profiling ─────────────────────────────────
+
+type ClientSizeSegment = "startup" | "smb" | "mid_market" | "enterprise" | "mixed";
+
+/**
+ * Compute what size clients a firm typically serves based on their
+ * case study clients' and HAS_CLIENT companies' employee counts.
+ *
+ * Returns a segment label: startup (<50), smb (50-200), mid_market (200-1000),
+ * enterprise (1000+), or mixed if spread across segments.
+ */
+async function computeClientSizeSegment(firmId: string): Promise<ClientSizeSegment | undefined> {
+  try {
+    interface ClientSizeRow {
+      employeeCount: number;
+    }
+
+    const rows = await neo4jRead<ClientSizeRow>(
+      `MATCH (f:Company {id: $firmId})-[:HAS_CLIENT|HAS_CASE_STUDY]->()-[:FOR_CLIENT*0..1]->(c:Company)
+       WHERE c.employeeCount IS NOT NULL AND c.employeeCount > 0
+       RETURN DISTINCT c.employeeCount AS employeeCount`,
+      { firmId }
+    );
+
+    if (rows.length === 0) return undefined;
+
+    const counts = rows.map((r) =>
+      typeof r.employeeCount === "object"
+        ? (r.employeeCount as { low: number }).low
+        : r.employeeCount
+    );
+
+    // Categorize each client
+    let startup = 0, smb = 0, midMarket = 0, enterprise = 0;
+    for (const count of counts) {
+      if (count < 50) startup++;
+      else if (count < 200) smb++;
+      else if (count < 1000) midMarket++;
+      else enterprise++;
+    }
+
+    const total = counts.length;
+    // If 60%+ in one segment, label as that segment
+    if (startup / total >= 0.6) return "startup";
+    if (smb / total >= 0.6) return "smb";
+    if (midMarket / total >= 0.6) return "mid_market";
+    if (enterprise / total >= 0.6) return "enterprise";
+    return "mixed";
+  } catch {
+    return undefined;
+  }
 }
 
 // ─── Generator ─────────────────────────────────────────────
@@ -203,6 +257,9 @@ Be specific and factual. Avoid generic language.`,
     ),
   };
 
+  // Compute client size segment from actual client data in the graph
+  const clientSizeSegment = await computeClientSizeSegment(evidence.firmId);
+
   const profile: AbstractionProfile = {
     id: `abs_${evidence.firmId}`,
     entityType: "firm",
@@ -212,6 +269,7 @@ Be specific and factual. Avoid generic language.`,
     topSkills: result.object.topSkills,
     topIndustries: result.object.topIndustries,
     typicalClientProfile: result.object.typicalClientProfile,
+    clientSizeSegment,
     partnershipReadiness: result.object.partnershipReadiness,
     confidenceScores,
     evidenceSources: {

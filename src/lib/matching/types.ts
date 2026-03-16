@@ -57,6 +57,8 @@ export interface AbstractionProfile {
   topIndustries: string[];
   /** Typical client profile description */
   typicalClientProfile: string;
+  /** Client size segment: startup, smb, mid_market, enterprise, mixed */
+  clientSizeSegment?: "startup" | "smb" | "mid_market" | "enterprise" | "mixed";
   /** Partnership readiness signals */
   partnershipReadiness: {
     openToPartnerships: boolean;
@@ -135,6 +137,8 @@ export interface MatchCandidate {
     contributorCount?: number;
     /** Firm: team collective experience summary (notable companies worked at) */
     teamExperience?: string;
+    /** Firm: what size clients they typically serve */
+    clientSizeSegment?: "startup" | "smb" | "mid_market" | "enterprise" | "mixed";
   };
 }
 

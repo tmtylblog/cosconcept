@@ -19,6 +19,9 @@
  */
 
 import { neo4jWrite } from "../neo4j";
+import { db } from "../db";
+import { importedCompanies } from "../db/schema";
+import { eq } from "drizzle-orm";
 import type { FirmClassification } from "./ai-classifier";
 import type { FirmGroundTruth } from "./jina-scraper";
 import type { PdlCompany, PdlExperience } from "./pdl";
@@ -830,6 +833,14 @@ export async function writeWorkHistoryToGraph(
       `[GraphWriter] Work history for ${expertId}: ` +
       `${result.edgesCreated} WORKED_AT edges (${withDomain.length} with domain, ${withoutDomain.length} name-only)`
     );
+
+    // Auto-enrich any new Company stubs with data from imported_companies
+    const domainsToEnrich = withDomain
+      .map((e) => e.companyDomain)
+      .filter((d): d is string => !!d);
+    if (domainsToEnrich.length > 0) {
+      autoEnrichCompanyStubs(domainsToEnrich).catch(() => {}); // Non-blocking
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[GraphWriter] Work history failed for ${expertId}: ${msg}`);
@@ -921,6 +932,104 @@ export async function writeSkillsFromPdlToGraph(
   }
 
   return result;
+}
+
+// ─── Auto-Enrich Company Stubs ───────────────────────────
+
+/**
+ * Enrich Company stub nodes in Neo4j with data from imported_companies (PG).
+ * Called automatically after creating Company stubs from work history,
+ * case study clients, or extracted client names.
+ *
+ * Matches by domain — updates industry, size, employee count, location.
+ * Non-blocking: errors are logged but don't fail the caller.
+ */
+export async function autoEnrichCompanyStubs(domains: string[]): Promise<number> {
+  if (domains.length === 0) return 0;
+
+  // Filter to valid, non-empty domains
+  const validDomains = domains.filter((d) => d && d.length > 2);
+  if (validDomains.length === 0) return 0;
+
+  try {
+    // Batch lookup in PG
+    const rows = await db
+      .select({
+        domain: importedCompanies.domain,
+        industry: importedCompanies.industry,
+        size: importedCompanies.size,
+        employeeCountExact: importedCompanies.employeeCountExact,
+        employeeRange: importedCompanies.employeeRange,
+        city: importedCompanies.city,
+        state: importedCompanies.state,
+        country: importedCompanies.country,
+        description: importedCompanies.description,
+        foundedYear: importedCompanies.foundedYear,
+        sector: importedCompanies.sector,
+      })
+      .from(importedCompanies)
+      .where(
+        eq(importedCompanies.domain, validDomains[0]) // Single domain fast path
+      )
+      .limit(1);
+
+    // For batch: use raw SQL since Drizzle doesn't support IN with string arrays easily
+    // For now, do single lookups for small batches, or use the batch script for large ones
+    let enriched = 0;
+
+    for (const domain of validDomains.slice(0, 20)) { // Cap at 20 per call to avoid blocking
+      try {
+        const [row] = await db
+          .select({
+            industry: importedCompanies.industry,
+            sector: importedCompanies.sector,
+            size: importedCompanies.size,
+            employeeCountExact: importedCompanies.employeeCountExact,
+            city: importedCompanies.city,
+            country: importedCompanies.country,
+            description: importedCompanies.description,
+          })
+          .from(importedCompanies)
+          .where(eq(importedCompanies.domain, domain))
+          .limit(1);
+
+        if (!row) continue;
+
+        await neo4jWrite(
+          `MATCH (c:Company {domain: $domain})
+           WHERE c.enrichmentStatus IS NULL OR c.enrichmentStatus = "stub"
+           SET c.industry = coalesce($industry, c.industry),
+               c.size = coalesce($size, c.size),
+               c.employeeCount = coalesce($employeeCount, c.employeeCount),
+               c.city = coalesce($city, c.city),
+               c.country = coalesce($country, c.country),
+               c.description = coalesce($description, c.description),
+               c.enrichmentStatus = "researched",
+               c.updatedAt = datetime()`,
+          {
+            domain,
+            industry: row.industry ?? row.sector ?? null,
+            size: row.size ?? null,
+            employeeCount: row.employeeCountExact ?? null,
+            city: row.city ?? null,
+            country: row.country ?? null,
+            description: row.description?.slice(0, 500) ?? null,
+          }
+        );
+        enriched++;
+      } catch {
+        // Non-blocking — skip this domain
+      }
+    }
+
+    if (enriched > 0) {
+      console.log(`[GraphWriter] Auto-enriched ${enriched}/${validDomains.length} Company stubs from PG`);
+    }
+    return enriched;
+  } catch (err) {
+    console.warn(`[GraphWriter] Auto-enrich failed:`, err);
+    return 0;
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────

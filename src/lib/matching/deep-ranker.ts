@@ -118,13 +118,21 @@ Pre-score: ${c.totalScore.toFixed(2)}`;
       const langs = c.preview.languages;
       const markets = c.preview.markets;
       const services = c.preview.topServices;
+      const clientSize = c.preview.clientSizeSegment;
+      const clientSizeLabel: Record<string, string> = {
+        startup: "Startup/Early-stage clients",
+        smb: "SMB clients (50-200 employees)",
+        mid_market: "Mid-market clients (200-1000 employees)",
+        enterprise: "Enterprise clients (1000+ employees)",
+        mixed: "Mixed client sizes",
+      };
       return `[${i}] FIRM: ${c.displayName}
 Categories: ${c.preview.categories.join(", ") || "N/A"}
 Services: ${services?.length ? services.join(", ") : "N/A"}
 Skills: ${c.preview.topSkills.join(", ") || "N/A"}
 Industries: ${c.preview.industries.join(", ") || "N/A"}
 Markets: ${markets?.length ? markets.join(", ") : "N/A"}
-${langs?.length ? `Languages: ${langs.join(", ")}\n` : ""}${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"} (proven work)\n` : "No case studies (unproven)\n"}${teamExp ? `Team Experience: ${teamExp}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
+${clientSize ? `Client Segment: ${clientSizeLabel[clientSize] ?? clientSize}\n` : ""}${langs?.length ? `Languages: ${langs.join(", ")}\n` : ""}${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"} (proven work)\n` : "No case studies (unproven)\n"}${teamExp ? `Team Experience: ${teamExp}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
     })
     .join("\n\n");
 
