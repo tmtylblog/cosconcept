@@ -22,6 +22,8 @@ import {
 import { authClient, useActiveOrganization, useSession } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useCaseStudies, type CaseStudy } from "@/hooks/use-case-studies";
+import { useOssyContext } from "@/hooks/use-ossy-context";
+import { emitOssyEvent } from "@/lib/ossy-events";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 25;
@@ -68,6 +70,32 @@ export default function FirmExperiencePage() {
     toggleHidden,
     refresh,
   } = useCaseStudies(orgId);
+
+  // ─── Ossy context: register page state ─────────────────────
+  const { setPageContext } = useOssyContext();
+  const prevCaseStudyCountRef = useRef(0);
+
+  useEffect(() => {
+    const activeCount = caseStudies.filter((cs) => cs.status === "active" && !cs.isHidden).length;
+    const pendingCount = caseStudies.filter((cs) => cs.status === "pending" || cs.status === "processing").length;
+    const failedCount = caseStudies.filter((cs) => cs.status === "failed").length;
+    setPageContext({
+      page: "experience",
+      caseStudyCount: total,
+      pendingCount,
+      activeCount,
+      failedCount,
+    });
+    return () => setPageContext(null);
+  }, [caseStudies, total, setPageContext]);
+
+  // Emit event when case studies are first discovered
+  useEffect(() => {
+    if (total > 0 && prevCaseStudyCountRef.current === 0) {
+      emitOssyEvent({ type: "case_study_ingested", title: `${total} case studies`, status: "discovered" });
+    }
+    prevCaseStudyCountRef.current = total;
+  }, [total]);
 
   // Once the initial case-study load completes and we have 0 entries,
   // trigger a deep crawl via Inngest to populate firm_case_studies.

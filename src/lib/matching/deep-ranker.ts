@@ -114,11 +114,12 @@ Pre-score: ${c.totalScore.toFixed(2)}`;
       }
       // firm (default)
       const cs = c.preview.caseStudyCount ?? 0;
+      const teamExp = c.preview.teamExperience;
       return `[${i}] FIRM: ${c.displayName}
 Categories: ${c.preview.categories.join(", ") || "N/A"}
 Skills: ${c.preview.topSkills.join(", ") || "N/A"}
 Industries: ${c.preview.industries.join(", ") || "N/A"}
-${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
+${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"}\n` : ""}${teamExp ? `Team Experience: ${teamExp}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
     })
     .join("\n\n");
 
@@ -178,7 +179,7 @@ Results may include FIRMS, EXPERTS, and CASE STUDIES — rank all together by re
 Focus on COMPLEMENTARY capabilities — entities that fill gaps, not duplicates.
 For experts: weight case study evidence > specialist profiles > listed skills.
 For case studies: weight demonstrated skills and industry match.
-For firms: weight proven work (case studies) over self-described categories.
+For firms: weight proven work (case studies) over self-described categories. Consider team members' work history as evidence — a firm whose team has worked at relevant companies/industries has deeper practical experience than one without.
 IMPORTANT: Always return something. A partial match with a low score is better than no result.`,
       schema: z.object({
         rankedMatches: z.array(

@@ -12,6 +12,7 @@ import { EnrichmentProvider, useEnrichment } from "@/hooks/use-enrichment";
 import { ProfileProvider, useProfile } from "@/hooks/use-profile";
 import { GuestDataProvider, useGuestData } from "@/hooks/use-guest-data";
 import { DiscoverResultsProvider, useDiscoverResults, type DiscoverCandidate } from "@/hooks/use-discover-results";
+import { OssyContextProvider } from "@/hooks/use-ossy-context";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { authClient, useSession, useActiveOrganization } from "@/lib/auth-client";
 import { getEmailDomain, isPersonalEmail } from "@/lib/email-validation";
@@ -42,7 +43,9 @@ export default function AppLayout({
   return (
     <GuestDataProvider>
       <DiscoverResultsProvider>
-        <AppLayoutOuter>{children}</AppLayoutOuter>
+        <OssyContextProvider>
+          <AppLayoutOuter>{children}</AppLayoutOuter>
+        </OssyContextProvider>
       </DiscoverResultsProvider>
     </GuestDataProvider>
   );

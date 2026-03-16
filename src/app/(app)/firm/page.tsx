@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Building2,
   Globe,
@@ -19,6 +19,8 @@ import {
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useFirmEdits } from "@/hooks/use-firm-edits";
+import { useOssyContext } from "@/hooks/use-ossy-context";
+import { emitOssyEvent } from "@/lib/ossy-events";
 import { cn } from "@/lib/utils";
 import {
   EditableTagSection,
@@ -79,6 +81,42 @@ export default function FirmOverviewPage() {
   ];
   const completedCount = completenessItems.filter(Boolean).length;
   const completeness = Math.round((completedCount / completenessItems.length) * 100);
+
+  // ─── Ossy context: register page state ─────────────────────
+  const { setPageContext } = useOssyContext();
+  const prevCompletenessRef = useRef(0);
+
+  useEffect(() => {
+    setPageContext({
+      page: "overview",
+      completeness,
+      filledFields: completedCount,
+      totalFields: completenessItems.length,
+      enrichmentStatus: status,
+    });
+    return () => setPageContext(null);
+  }, [completeness, completedCount, completenessItems.length, status, setPageContext]);
+
+  // Emit milestone events for profile completeness
+  useEffect(() => {
+    if (completeness > 0 && prevCompletenessRef.current < completeness) {
+      // Emit at 50% and 100% milestones
+      if (completeness >= 50 && prevCompletenessRef.current < 50) {
+        emitOssyEvent({ type: "profile_completeness_milestone", percent: completeness });
+      }
+      if (completeness === 100 && prevCompletenessRef.current < 100) {
+        emitOssyEvent({ type: "profile_completeness_milestone", percent: 100 });
+      }
+    }
+    prevCompletenessRef.current = completeness;
+  }, [completeness]);
+
+  // Emit enrichment complete event
+  useEffect(() => {
+    if (status === "done") {
+      emitOssyEvent({ type: "enrichment_stage_complete", stage: "firm_profile" });
+    }
+  }, [status]);
 
   return (
     <div className="cos-scrollbar mx-auto max-w-3xl space-y-4 overflow-y-auto p-6">

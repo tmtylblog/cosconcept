@@ -134,6 +134,20 @@ export async function structuredFilter(
     returnFields.push("[] AS matchedServices");
   }
 
+  // Team experience subquery — boost firms whose team has relevant work history
+  if (filters.industries?.length || filters.skills?.length) {
+    returnFields.push(
+      `size([(f)<-[:CURRENTLY_AT|WORKS_AT]-(p:Person)-[:PREVIOUSLY_AT]->(prev:Company)
+        WHERE ${filters.industries?.length ? "prev.industry IN $teamIndustries" : "true"}
+        | DISTINCT prev]) AS teamRelevance`
+    );
+    if (filters.industries?.length) {
+      params.teamIndustries = filters.industries;
+    }
+  } else {
+    returnFields.push("0 AS teamRelevance");
+  }
+
   // Use OR — a firm matching ANY criterion is a candidate; score reflects how many it matches.
   // AND was too strict: most firms lack IN_CATEGORY edges, causing zero results.
   // Always require f.id to be non-null (excludes ~4 orphan nodes without PG mapping).
@@ -157,6 +171,7 @@ export async function structuredFilter(
     matchedMarkets?: string[];
     matchedServices?: string[];
     categories?: string[];
+    teamRelevance?: number;
   }
 
   const records = await neo4jRead<Neo4jFirmRow>(query, params);
@@ -201,7 +216,14 @@ export async function structuredFilter(
       maxScore += 1;
     }
 
-    const structuredScore = maxScore > 0 ? score / maxScore : 0.5;
+    let structuredScore = maxScore > 0 ? score / maxScore : 0.5;
+
+    // Team experience boost: up to 15% for firms whose team has relevant work history
+    const teamRelevance = record.teamRelevance ?? 0;
+    if (teamRelevance > 0) {
+      const teamBoost = Math.min(teamRelevance, 5) / 5 * 0.15; // Cap at 5 relevant companies
+      structuredScore = Math.min(1, structuredScore + teamBoost);
+    }
 
     return {
       firmId: record.firmId,

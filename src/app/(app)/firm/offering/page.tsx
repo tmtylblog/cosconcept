@@ -20,6 +20,8 @@ import {
 import { authClient, useActiveOrganization, useSession } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useFirmServices, type FirmService } from "@/hooks/use-firm-services";
+import { useOssyContext } from "@/hooks/use-ossy-context";
+import { emitOssyEvent } from "@/lib/ossy-events";
 
 export default function FirmOfferingPage() {
   const { data: activeOrg } = useActiveOrganization();
@@ -61,6 +63,34 @@ export default function FirmOfferingPage() {
     deleteService,
     refresh,
   } = useFirmServices(orgId);
+
+  // ─── Ossy context: register page state ─────────────────────
+  const { setPageContext } = useOssyContext();
+  const prevServiceCountRef = useRef(0);
+
+  useEffect(() => {
+    const withDesc = services.filter((s) => !s.isHidden && s.description).length;
+    const withoutDesc = services.filter((s) => !s.isHidden && !s.description).length;
+    const isDeepCrawling = !total && (enrichmentStatus === "loading" || (enrichmentStatus === "done" && (enrichmentResult?.extracted?.services ?? []).length > 0 && total === 0));
+    setPageContext({
+      page: "offering",
+      serviceCount: services.filter((s) => !s.isHidden).length,
+      hiddenCount: hiddenCount,
+      withDescription: withDesc,
+      withoutDescription: withoutDesc,
+      deepCrawlRunning: isDeepCrawling,
+    });
+    return () => setPageContext(null);
+  }, [services, total, hiddenCount, enrichmentStatus, enrichmentResult, setPageContext]);
+
+  // Emit event when services are first discovered
+  useEffect(() => {
+    const visibleCount = services.filter((s) => !s.isHidden).length;
+    if (visibleCount > 0 && prevServiceCountRef.current === 0) {
+      emitOssyEvent({ type: "services_discovered", count: visibleCount });
+    }
+    prevServiceCountRef.current = visibleCount;
+  }, [services]);
 
   // Once the initial services load completes and we have 0 services,
   // trigger a deep crawl via Inngest to populate firm_services.

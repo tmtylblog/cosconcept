@@ -264,6 +264,36 @@ export const enrichmentCache = pgTable("enrichment_cache", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ─── Company Research (general company intelligence) ─────
+// Stores strategic research on any company (clients, prospects, brands).
+// Structured columns for CORE sync. Domain-keyed — one row per company.
+export const companyResearch = pgTable("company_research", {
+  id: text("id").primaryKey(), // "cr_<domain-hash>"
+  domain: text("domain").notNull().unique(),
+  companyName: text("company_name").notNull(),
+  companyNameNormalized: text("company_name_normalized"), // stripped of Inc/LLC/Corp
+
+  // The 11 research fields (CORE-sync compatible, from n8n general company researcher)
+  executiveSummary: text("executive_summary"),
+  interestingHighlights: text("interesting_highlights"), // JSON array of {title, description}
+  offeringSummary: text("offering_summary"),
+  industryInsight: text("industry_insight"),
+  stageInsight: text("stage_insight"), // Startup/Early | Growth | Expansion | Mature | Decline
+  customerInsight: text("customer_insight"),
+  buyingIntentInsight: text("buying_intent_insight"),
+  growthChallenges: text("growth_challenges"),
+  keyMarkets: text("key_markets"),
+  competitorsInsight: text("competitors_insight"),
+  industryTrends: text("industry_trends"),
+
+  // Metadata
+  graphNodeId: text("graph_node_id"), // Neo4j Company node ID
+  researchSource: text("research_source").notNull().default("ossy"), // ossy | n8n_import | manual
+  researchedAt: timestamp("researched_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const partnerPreferences = pgTable("partner_preferences", {
   id: text("id").primaryKey(),
   firmId: text("firm_id")

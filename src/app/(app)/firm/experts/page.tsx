@@ -27,6 +27,8 @@ import { useDbExperts } from "@/hooks/use-db-experts";
 import { useEnrichmentCredits } from "@/hooks/use-enrichment-credits";
 import { usePlan } from "@/hooks/use-plan";
 import { useTeamDiscovery } from "@/hooks/use-team-discovery";
+import { useOssyContext } from "@/hooks/use-ossy-context";
+import { emitOssyEvent } from "@/lib/ossy-events";
 import { Button } from "@/components/ui/button";
 import { TeamDiscoveryProgress } from "@/components/firm/team-discovery-progress";
 import type { Expert } from "@/types/cos-data";
@@ -74,6 +76,31 @@ export default function FirmExpertsPage() {
     isLoading: creditsLoading,
     refetch: refetchCredits,
   } = useEnrichmentCredits();
+
+  // ─── Ossy context: register page state ─────────────────────
+  const { setPageContext } = useOssyContext();
+  const prevExpertCountRef = useRef(0);
+
+  useEffect(() => {
+    const enrichedCount = dbExperts.filter((e) => e.enrichmentStatus === "enriched").length;
+    const pendingCount = dbExperts.filter((e) => e.enrichmentStatus === "roster").length;
+    setPageContext({
+      page: "experts",
+      expertCount: dbTotalExperts,
+      enrichedCount,
+      pendingCount,
+      creditsRemaining: credits?.availableCredits ?? 0,
+    });
+    return () => setPageContext(null);
+  }, [dbExperts, dbTotalExperts, credits, setPageContext]);
+
+  // Emit event when team discovery completes
+  useEffect(() => {
+    if (dbTotalExperts > 0 && prevExpertCountRef.current === 0) {
+      emitOssyEvent({ type: "team_discovery_complete", count: dbTotalExperts });
+    }
+    prevExpertCountRef.current = dbTotalExperts;
+  }, [dbTotalExperts]);
 
   // Team discovery: auto-trigger when 0 experts
   const discovery = useTeamDiscovery(orgId, dbTotalExperts, !dbLoading && !!orgId);

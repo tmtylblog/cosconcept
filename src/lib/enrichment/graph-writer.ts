@@ -959,6 +959,184 @@ export interface ProspectWriteResult {
  * Write a prospect Person node to the Neo4j knowledge graph.
  * Adds 'prospect' to personTypes array. Creates WORKS_AT edge if company is provided.
  */
+// ─── Researched Company (prospects, clients, brands) ─────
+
+export interface ResearchedCompanyData {
+  /** Unique ID for this company (e.g., "rc_nike_com") */
+  id: string;
+  name: string;
+  domain: string;
+  /** Entity type: prospect, brand, client */
+  entityType: "prospect" | "brand" | "client";
+  industry?: string;
+  employeeCount?: number;
+  location?: string;
+  /** Classification edges */
+  categories?: string[];
+  skills?: string[];
+  industries?: string[];
+  markets?: string[];
+  /** Research intelligence properties */
+  executiveSummary?: string;
+  offeringSummary?: string;
+  customerInsight?: string;
+  stageInsight?: string;
+  competitorsInsight?: string;
+  keyMarkets?: string;
+}
+
+export interface ResearchedCompanyWriteResult {
+  companyNode: boolean;
+  categories: number;
+  skills: number;
+  industries: number;
+  markets: number;
+  errors: string[];
+}
+
+/**
+ * Write a researched Company node (non-member) to the Neo4j knowledge graph.
+ * Unlike writeFirmToGraph, this does NOT add the :ServiceFirm label.
+ * Creates taxonomy edges so the company is traversable in graph queries.
+ */
+export async function writeResearchedCompanyToGraph(
+  data: ResearchedCompanyData
+): Promise<ResearchedCompanyWriteResult> {
+  const result: ResearchedCompanyWriteResult = {
+    companyNode: false,
+    categories: 0,
+    skills: 0,
+    industries: 0,
+    markets: 0,
+    errors: [],
+  };
+
+  const safe = async (label: string, fn: () => Promise<void>) => {
+    try {
+      await fn();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[GraphWriter] ResearchedCompany ${label} failed: ${msg}`);
+      result.errors.push(`${label}: ${msg}`);
+    }
+  };
+
+  // 1. MERGE Company node (no :ServiceFirm label)
+  await safe("CompanyNode", async () => {
+    await neo4jWrite(
+      `MERGE (c:Company {domain: $domain})
+       ON CREATE SET
+         c.id = $id,
+         c.name = $name,
+         c.entityType = $entityType,
+         c.industry = $industry,
+         c.employeeCount = $employeeCount,
+         c.location = $location,
+         c.executiveSummary = $executiveSummary,
+         c.offeringSummary = $offeringSummary,
+         c.customerInsight = $customerInsight,
+         c.stageInsight = $stageInsight,
+         c.competitorsInsight = $competitorsInsight,
+         c.keyMarkets = $keyMarkets,
+         c.enrichmentStatus = "researched",
+         c.researchedAt = datetime(),
+         c.createdAt = datetime()
+       ON MATCH SET
+         c.name = $name,
+         c.entityType = CASE WHEN c.entityType IS NULL THEN $entityType ELSE c.entityType END,
+         c.industry = coalesce($industry, c.industry),
+         c.employeeCount = coalesce($employeeCount, c.employeeCount),
+         c.location = coalesce($location, c.location),
+         c.executiveSummary = coalesce($executiveSummary, c.executiveSummary),
+         c.offeringSummary = coalesce($offeringSummary, c.offeringSummary),
+         c.customerInsight = coalesce($customerInsight, c.customerInsight),
+         c.stageInsight = coalesce($stageInsight, c.stageInsight),
+         c.competitorsInsight = coalesce($competitorsInsight, c.competitorsInsight),
+         c.keyMarkets = coalesce($keyMarkets, c.keyMarkets),
+         c.enrichmentStatus = "researched",
+         c.researchedAt = datetime(),
+         c.updatedAt = datetime()`,
+      {
+        id: data.id,
+        domain: data.domain.toLowerCase(),
+        name: data.name,
+        entityType: data.entityType,
+        industry: data.industry ?? null,
+        employeeCount: data.employeeCount ?? null,
+        location: data.location ?? null,
+        executiveSummary: data.executiveSummary ?? null,
+        offeringSummary: data.offeringSummary ?? null,
+        customerInsight: data.customerInsight ?? null,
+        stageInsight: data.stageInsight ?? null,
+        competitorsInsight: data.competitorsInsight ?? null,
+        keyMarkets: data.keyMarkets ?? null,
+      }
+    );
+    result.companyNode = true;
+  });
+
+  if (!result.companyNode) return result;
+
+  // 2. Taxonomy edges (same pattern as writeFirmToGraph)
+  if (data.categories?.length) {
+    await safe("Categories", async () => {
+      await neo4jWrite(
+        `MATCH (c:Company {domain: $domain})
+         UNWIND $names AS catName
+         MERGE (cat:FirmCategory {name: catName})
+         MERGE (c)-[r:IN_CATEGORY]->(cat)
+         SET r.source = "research"`,
+        { domain: data.domain.toLowerCase(), names: data.categories }
+      );
+      result.categories = data.categories!.length;
+    });
+  }
+
+  if (data.skills?.length) {
+    await safe("Skills", async () => {
+      await neo4jWrite(
+        `MATCH (c:Company {domain: $domain})
+         UNWIND $names AS skillName
+         MERGE (s:Skill {name: skillName})
+         MERGE (c)-[r:HAS_SKILL]->(s)
+         SET r.source = "research"`,
+        { domain: data.domain.toLowerCase(), names: data.skills }
+      );
+      result.skills = data.skills!.length;
+    });
+  }
+
+  if (data.industries?.length) {
+    await safe("Industries", async () => {
+      await neo4jWrite(
+        `MATCH (c:Company {domain: $domain})
+         UNWIND $names AS indName
+         MERGE (i:Industry {name: indName})
+         MERGE (c)-[r:SERVES_INDUSTRY]->(i)
+         SET r.source = "research"`,
+        { domain: data.domain.toLowerCase(), names: data.industries }
+      );
+      result.industries = data.industries!.length;
+    });
+  }
+
+  if (data.markets?.length) {
+    await safe("Markets", async () => {
+      await neo4jWrite(
+        `MATCH (c:Company {domain: $domain})
+         UNWIND $names AS mktName
+         MERGE (m:Market {name: mktName})
+         MERGE (c)-[r:OPERATES_IN]->(m)
+         SET r.source = "research"`,
+        { domain: data.domain.toLowerCase(), names: data.markets }
+      );
+      result.markets = data.markets!.length;
+    });
+  }
+
+  return result;
+}
+
 export async function writeProspectToGraph(
   data: GraphProspectData,
 ): Promise<ProspectWriteResult> {

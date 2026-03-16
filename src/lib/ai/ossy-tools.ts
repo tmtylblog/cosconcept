@@ -7,6 +7,13 @@ import { executeSearch } from "@/lib/matching/search";
 import { lookupFirmDetail } from "@/lib/matching/firm-lookup";
 import { searchExperts } from "@/lib/matching/expert-search";
 import { searchCaseStudies } from "@/lib/matching/case-study-search";
+import { researchCompany } from "@/lib/enrichment/client-research";
+import { assessClientFit } from "@/lib/matching/fit-assessment";
+import { analyzeClientOverlap } from "@/lib/matching/client-overlap";
+import { loadAbstractionProfile } from "@/lib/matching/abstraction-generator";
+import { db } from "@/lib/db";
+import { serviceFirms, firmCaseStudies } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 /** v2 interview fields (new 5-question flow) — used for funnel tracking */
 const INTERVIEW_FIELDS_V2 = [
@@ -321,8 +328,9 @@ export function createOssyTools(organizationId: string, firmId?: string) {
 
     lookup_firm: tool({
       description:
-        "Look up detailed information about a specific firm by name or domain. " +
-        "Use when the user mentions a specific company and wants to know more about it.",
+        "Look up a service provider firm that is already registered on the Collective OS platform. " +
+        "Only use this for firms that are platform members — NOT for external companies, clients, or prospects. " +
+        "For researching external companies (clients, prospects, brands), use research_client instead.",
       inputSchema: z.object({
         nameOrDomain: z.string().describe("The firm name or website domain to look up"),
       }),
@@ -332,6 +340,199 @@ export function createOssyTools(organizationId: string, firmId?: string) {
         } catch (err) {
           console.error("[Ossy Tools] lookup_firm failed:", err);
           return { found: false, message: "Failed to look up firm. Please try again." };
+        }
+      },
+    }),
+
+    research_client: tool({
+      description:
+        "Research ANY external company — a client, prospect, brand, or any company not on the platform. " +
+        "Use this whenever a user asks to 'research', 'look into', 'tell me about', or 'analyze' a company, " +
+        "or when they mention pitching or preparing for a client meeting. " +
+        "Gathers firmographics, scrapes their website, generates strategic intelligence " +
+        "(executive summary, offering analysis, customer insight, growth challenges, competitors), " +
+        "assesses how well the user's firm fits, and suggests partners that could help win the deal.",
+      parameters: z.object({
+        clientDomainOrName: z.string().describe("Client company domain (e.g., 'nike.com') or name (e.g., 'Nike')"),
+        context: z.string().optional().describe("Optional pitch context, e.g., 'digital transformation project' or 'e-commerce replatforming'"),
+      }),
+      execute: async ({ clientDomainOrName, context }) => {
+        if (!firmId) {
+          return { success: false, error: "I need your firm profile to assess fit. Complete onboarding first." };
+        }
+
+        try {
+          // 1. Research the client company (cache-first, two-phase pipeline)
+          const clientData = await researchCompany(clientDomainOrName);
+
+          // 2. Load user's firm data for fit assessment
+          const [firmRow] = await db
+            .select({ enrichmentData: serviceFirms.enrichmentData, name: serviceFirms.name })
+            .from(serviceFirms)
+            .where(eq(serviceFirms.id, firmId))
+            .limit(1);
+
+          const firmEnrichment = (firmRow?.enrichmentData as Record<string, unknown>) ?? {};
+          const firmAbstraction = await loadAbstractionProfile(firmId);
+
+          // Load case studies
+          const caseStudyRows = await db
+            .select({ autoTags: firmCaseStudies.autoTags })
+            .from(firmCaseStudies)
+            .where(eq(firmCaseStudies.firmId, firmId));
+
+          const caseStudies = caseStudyRows.map((r) => ({
+            autoTags: (r.autoTags as Record<string, unknown>) ?? {},
+          }));
+
+          // 3. Assess fit
+          const fitResult = await assessClientFit({
+            clientData,
+            firmEnrichmentData: firmEnrichment,
+            firmAbstraction,
+            firmCaseStudies: caseStudies,
+            pitchContext: context,
+          });
+
+          // 4. Find gap-filling partners
+          let suggestedPartners: { firmName: string; matchScore: number; relevance: string; categories: string[]; skills: string[] }[] = [];
+          if (fitResult.gaps.length > 0) {
+            try {
+              const gapIndustries = clientData.classification.industries.slice(0, 3);
+              const gapQuery = `${gapIndustries.join(" ")} ${clientData.intelligence.offeringSummary?.slice(0, 100) ?? ""}`.trim();
+              if (gapQuery) {
+                const searchResult = await executeSearch({
+                  rawQuery: gapQuery,
+                  searcherFirmId: firmId,
+                  skipLlmRanking: true,
+                });
+                suggestedPartners = searchResult.candidates.slice(0, 5).map((c) => ({
+                  firmName: c.displayName,
+                  matchScore: Math.round(c.totalScore * 100),
+                  relevance: c.matchExplanation ?? `Relevant for ${clientData.name}'s industry`,
+                  categories: c.preview.categories.slice(0, 3),
+                  skills: c.preview.topSkills.slice(0, 5),
+                }));
+              }
+            } catch (err) {
+              console.error("[Ossy] Partner search for gaps failed:", err);
+            }
+          }
+
+          return {
+            success: true,
+            client: {
+              name: clientData.name,
+              domain: clientData.domain,
+              industry: clientData.industry,
+              size: clientData.size,
+              employeeCount: clientData.employeeCount,
+              location: clientData.location,
+              executiveSummary: clientData.intelligence.executiveSummary,
+              stageInsight: clientData.intelligence.stageInsight,
+              customerInsight: clientData.intelligence.customerInsight,
+              offeringSummary: clientData.intelligence.offeringSummary,
+              interestingHighlights: clientData.intelligence.interestingHighlights,
+            },
+            fitAssessment: {
+              overallScore: fitResult.overallScore,
+              dimensions: fitResult.dimensions,
+              strengths: fitResult.strengths,
+              gaps: fitResult.gaps,
+              talkingPoints: fitResult.talkingPoints,
+            },
+            suggestedPartners,
+            _instruction: `Present results conversationally. Lead with the fit score and what makes the firm strong for this client. If there are gaps, frame partner suggestions as "here's how you can strengthen your pitch." Use the talking points as specific advice. Don't dump all data — be selective and insightful.${clientData.fromCache ? " (Research was cached — instant lookup)" : ""}`,
+          };
+        } catch (err) {
+          console.error("[Ossy] research_client failed:", err);
+          return { success: false, error: `Research failed: ${String(err)}` };
+        }
+      },
+    }),
+
+    analyze_client_overlap: tool({
+      description:
+        "Analyze which of the user's clients would benefit from a specific partner's capabilities. " +
+        "Generates concrete collaboration ideas for partner meetings. " +
+        "Use this when a user mentions meeting a partner and wants to discuss their clients.",
+      parameters: z.object({
+        partnerNameOrDomain: z.string().describe("The partner firm's name or domain to analyze overlap with"),
+      }),
+      execute: async ({ partnerNameOrDomain }) => {
+        if (!firmId) {
+          return { success: false, error: "I need your firm profile first. Complete onboarding." };
+        }
+
+        try {
+          // 1. Look up the partner
+          const partnerDetail = await lookupFirmDetail(partnerNameOrDomain);
+          if (!partnerDetail.found) {
+            return {
+              success: false,
+              error: `I couldn't find "${partnerNameOrDomain}" on the platform. Can you provide their domain (e.g., acme.com)?`,
+            };
+          }
+
+          // Load partner abstraction for richer data
+          // We need to find the partner's firmId first
+          const [partnerFirm] = await db
+            .select({ id: serviceFirms.id })
+            .from(serviceFirms)
+            .where(eq(serviceFirms.name, partnerDetail.name ?? ""))
+            .limit(1);
+
+          const partnerAbstraction = partnerFirm
+            ? await loadAbstractionProfile(partnerFirm.id)
+            : null;
+
+          // Get firm name
+          const [myFirm] = await db
+            .select({ name: serviceFirms.name })
+            .from(serviceFirms)
+            .where(eq(serviceFirms.id, firmId))
+            .limit(1);
+
+          // 2. Run overlap analysis
+          const result = await analyzeClientOverlap({
+            firmId,
+            firmName: myFirm?.name ?? "Your firm",
+            partnerName: partnerDetail.name ?? partnerNameOrDomain,
+            partnerCategories: partnerDetail.categories ?? [],
+            partnerSkills: partnerDetail.skills ?? [],
+            partnerIndustries: partnerDetail.industries ?? [],
+            partnerTopServices: partnerAbstraction?.topServices ?? [],
+            partnerCaseStudyCount: partnerDetail.caseStudyCount ?? 0,
+          });
+
+          if (result.totalClients === 0) {
+            return {
+              success: false,
+              error: "I don't see any clients in your profile yet. Add clients on your firm overview page, or I can research your website to find them.",
+            };
+          }
+
+          return {
+            success: true,
+            partner: {
+              name: partnerDetail.name,
+              website: partnerDetail.website,
+              categories: partnerDetail.categories,
+              skills: partnerDetail.skills,
+              industries: partnerDetail.industries,
+              caseStudyCount: partnerDetail.caseStudyCount,
+            },
+            clientAnalysis: {
+              totalClients: result.totalClients,
+              analyzedClients: result.analyzedClients,
+              relevantClients: result.relevantClients,
+            },
+            meetingTalkingPoints: result.meetingTalkingPoints,
+            _instruction: "Present this as meeting prep. Lead with the strongest collaboration opportunity. List 3-5 clients with specific ideas. End with the talking points as conversation starters. Be practical and specific — this should feel like a consultant briefing before a meeting.",
+          };
+        } catch (err) {
+          console.error("[Ossy] analyze_client_overlap failed:", err);
+          return { success: false, error: `Analysis failed: ${String(err)}` };
         }
       },
     }),

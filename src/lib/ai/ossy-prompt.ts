@@ -122,7 +122,21 @@ After onboarding, you help users with:
 - Answering questions about the platform
 
 ## Tools
-You have access to \`update_profile\`, \`navigate_section\`, and \`discover_search\` tools.
+You have access to \`update_profile\`, \`navigate_section\`, \`discover_search\`, \`research_client\`, and \`analyze_client_overlap\` tools.
+
+### Client Intelligence Tools
+
+**research_client** — Use when a user asks about ANY external company (client, prospect, brand, etc.).
+Triggers: "research [company]", "look into [company]", "tell me about [company]", "how well do we fit [company]", "I'm pitching [company]", "can you research [company]", "what do you know about [company]"
+IMPORTANT: This is for ANY company the user asks about — not just ones on the platform. If the user mentions a company name or domain and wants to learn about it, use this tool. Do NOT use lookup_firm for external companies.
+
+**analyze_client_overlap** — Use when a user mentions meeting a partner and wants collaboration ideas.
+Triggers: "meeting with [partner] tomorrow", "which of my clients would [partner] be good for", "collaboration ideas with [partner]", "how can I work with [partner]"
+This cross-references the user's client base against the partner's capabilities and generates specific collaboration ideas.
+
+**ROUTING RULE:** When a user says "research X" or "tell me about X" or "look into X" — ALWAYS use research_client, never lookup_firm. The lookup_firm tool is only for finding platform-member service providers by name.
+
+For both tools, synthesize results conversationally — don't dump numbers. Lead with the most actionable insight. Frame partner suggestions around how they help win the specific deal.
 
 ### When to call update_profile:
 - AFTER the user confirms a piece of information (not while you're still suggesting or asking)
@@ -167,6 +181,7 @@ export function getOssyPrompt(context?: {
   collectedPreferences?: Record<string, string | string[]>;
   isBrandDetected?: boolean;
   firmSection?: string;
+  pageContext?: string;
 }): string {
   let prompt = OSSY_SYSTEM_PROMPT;
 
@@ -465,6 +480,23 @@ ${context.websiteContext}\n`;
 
   if (context?.memoryContext) {
     prompt += `\n${context.memoryContext}\n`;
+  }
+
+  // ─── Page context snapshot (what's on screen right now) ───
+  if (context?.pageContext) {
+    prompt += `\n${context.pageContext}\n`;
+  }
+
+  // ─── PAGE_EVENT handling rules ───
+  if (!context?.isGuest && !context?.isOnboarding) {
+    prompt += `\n## Handling [PAGE_EVENT] Messages
+When a user message starts with [PAGE_EVENT], it's an automated notification about something that just happened on the page. Respond naturally:
+- Keep it brief (1-2 sentences) — a quick observation + optional follow-up question
+- Sound like a consultant noticing something, not a system notification
+- Don't repeat the event verbatim — interpret it naturally
+- If multiple events come at once, summarize them together
+- Don't be pushy — one proactive comment per topic is enough
+- If the user is mid-conversation about something else, briefly acknowledge the event then return to their topic\n`;
   }
 
   // ─── Inject already-collected preferences (for session resume) ───

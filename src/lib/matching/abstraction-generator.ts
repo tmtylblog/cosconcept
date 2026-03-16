@@ -62,6 +62,13 @@ interface FirmEvidence {
     employeeCount: number;
     summary: string;
   };
+  /** Team work history — companies the team has previously worked at */
+  teamWorkHistory?: {
+    companyName: string;
+    industry?: string;
+    size?: string;
+    rolesHeld: string[];
+  }[];
 }
 
 // ─── Generator ─────────────────────────────────────────────
@@ -98,6 +105,18 @@ export async function generateFirmAbstraction(
           .join("\n")
       : "No expert data available";
 
+  // Build team work history summary
+  const teamWorkHistorySummary =
+    evidence.teamWorkHistory && evidence.teamWorkHistory.length > 0
+      ? evidence.teamWorkHistory
+          .slice(0, 15)
+          .map(
+            (wh) =>
+              `- ${wh.companyName}${wh.industry ? ` (${wh.industry})` : ""}${wh.size ? ` [${wh.size}]` : ""}: ${wh.rolesHeld.join(", ")}`
+          )
+          .join("\n")
+      : "No team work history available";
+
   const result = await generateObject({
     model: openrouter.chat("google/gemini-2.0-flash-001"),
     prompt: `Generate a normalized abstraction profile for this professional services firm.
@@ -119,9 +138,12 @@ ${caseStudySummary}
 ## TEAM
 ${expertSummary}
 
+## TEAM WORK HISTORY (companies team members previously worked at)
+${teamWorkHistorySummary}
+
 ## INSTRUCTIONS
 Create a normalized profile that captures:
-1. A 200-word "hidden narrative" — a structured summary of what this firm actually does, based on evidence
+1. A 200-word "hidden narrative" — a structured summary of what this firm actually does, based on evidence. Include team collective experience: mention notable companies they've worked at and the industries/domains that represents.
 2. Top services (what they actually deliver, not just claim)
 3. Top skills (specific capabilities demonstrated)
 4. Industries they serve (based on case studies + clients, not just claims)
@@ -129,6 +151,7 @@ Create a normalized profile that captures:
 6. Partnership readiness signals
 
 Prioritize EVIDENCE over CLAIMS. Case studies and actual work > marketing copy.
+Team work history is strong signal — a firm with ex-Google, ex-McKinsey talent has deep enterprise/consulting experience even if their own website doesn't emphasize it.
 Be specific and factual. Avoid generic language.`,
     schema: z.object({
       hiddenNarrative: z

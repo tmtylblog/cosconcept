@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   Briefcase,
   Building2,
@@ -17,6 +17,7 @@ import {
   Plus,
 } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
+import { useOssyContext } from "@/hooks/use-ossy-context";
 import { cn } from "@/lib/utils";
 import { asArray, EmptyHint } from "@/components/firm/shared";
 
@@ -72,6 +73,36 @@ export default function FirmPreferencesPage() {
     },
     [profileData, updateField]
   );
+
+  // ─── Ossy context: register page state ─────────────────────
+  const { setPageContext } = useOssyContext();
+
+  // V2 preference fields
+  const prefFields = useMemo(() => [
+    "partnershipPhilosophy",
+    "capabilityGaps",
+    "preferredPartnerTypes",
+    "dealBreaker",
+    "geographyPreference",
+  ], []);
+
+  useEffect(() => {
+    if (!profileHydrated) return;
+    const data = profileData as Record<string, unknown>;
+    const filled = prefFields.filter((f) => {
+      const val = data[f];
+      if (Array.isArray(val)) return val.length > 0;
+      return !!val;
+    });
+    const empty = prefFields.filter((f) => !filled.includes(f));
+    setPageContext({
+      page: "preferences",
+      filledFields: filled,
+      emptyFields: empty,
+      completeness: Math.round((filled.length / prefFields.length) * 100),
+    });
+    return () => setPageContext(null);
+  }, [profileData, profileHydrated, prefFields, setPageContext]);
 
   if (!profileHydrated) {
     return (

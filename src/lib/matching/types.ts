@@ -131,6 +131,8 @@ export interface MatchCandidate {
     languages?: string[];
     /** Case study: number of contributing persons */
     contributorCount?: number;
+    /** Firm: team collective experience summary (notable companies worked at) */
+    teamExperience?: string;
   };
 }
 

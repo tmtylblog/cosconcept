@@ -13,8 +13,11 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
 import { useProfile } from "@/hooks/use-profile";
 import { useGuestData } from "@/hooks/use-guest-data";
+import { useOssyContext } from "@/hooks/use-ossy-context";
 import { cn } from "@/lib/utils";
 import { ToolResultRenderer } from "@/components/chat/tool-result-renderer";
+import { generatePageContextPrompt } from "@/lib/ai/ossy-page-prompts";
+import { formatEventsForOssy, type OssyPageEvent } from "@/lib/ossy-events";
 
 const GUEST_MESSAGE_LIMIT = 30;
 
@@ -194,6 +197,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   } = useEnrichment();
   const { updateField: updateProfileField } = useProfile();
   const { guestPreferences, setGuestPreference, setGuestMessages, forceFlushToDb } = useGuestData();
+  const { pageContext } = useOssyContext();
   const [input, setInput] = useState("");
   const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
 
@@ -378,14 +382,16 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         isBrandDetected,
       };
     } else {
+      const pageContextPrompt = generatePageContextPrompt(pageContext);
       transportBodyRef.current = {
         organizationId: activeOrg?.id ?? "",
         websiteContext: contextForOssy,
         conversationId: conversationIdRef.current,
         firmSection: firmSection ?? undefined,
+        pageContext: pageContextPrompt || undefined,
       };
     }
-  }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id, isBrandDetected, firmSection]);
+  }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id, isBrandDetected, firmSection, pageContext]);
 
   // Load greeting on mount — clean slate every session.
   // In onboarding mode: hardcoded onboarding welcome (skip greeting endpoint).
@@ -442,6 +448,102 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       body: () => transportBodyRef.current,
     }),
   });
+
+  // ─── Ossy page event listener + auto-send ───────────────────
+  const eventQueueRef = useRef<OssyPageEvent[]>([]);
+  const lastProactiveRef = useRef<number>(0);
+  const proactiveFiredForSectionRef = useRef<string | null>(null);
+  const sessionTipsShownRef = useRef<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = sessionStorage.getItem("cos_ossy_tips_shown");
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  // Reset proactive tracking on page navigation
+  useEffect(() => {
+    proactiveFiredForSectionRef.current = null;
+  }, [firmSection]);
+
+  // Listen for cos:page-event custom events
+  useEffect(() => {
+    if (isGuest || isOnboarding) return;
+
+    const handler = (e: Event) => {
+      const event = (e as CustomEvent<OssyPageEvent>).detail;
+      if (!event?.type) return;
+      eventQueueRef.current.push(event);
+    };
+
+    window.addEventListener("cos:page-event", handler);
+    return () => window.removeEventListener("cos:page-event", handler);
+  }, [isGuest, isOnboarding]);
+
+  // Process event queue — flush when idle + throttled
+  useEffect(() => {
+    if (isGuest || isOnboarding) return;
+
+    const interval = setInterval(() => {
+      const queue = eventQueueRef.current;
+      if (queue.length === 0) return;
+
+      // Don't send if Ossy is busy (streaming/submitted)
+      if (status === "submitted" || status === "streaming") return;
+
+      // Don't send within 30s of the last proactive message
+      if (Date.now() - lastProactiveRef.current < 30_000) return;
+
+      // Only one proactive comment per page visit
+      const currentSection = firmSection ?? "unknown";
+      if (proactiveFiredForSectionRef.current === currentSection) {
+        eventQueueRef.current = [];
+        return;
+      }
+
+      // Check session dedup
+      const eventTypes = queue.map((e) => e.type);
+      const allShown = eventTypes.every((t) => (sessionTipsShownRef.current as Set<string>).has(t));
+      if (allShown) {
+        eventQueueRef.current = [];
+        return;
+      }
+
+      // Don't interrupt mid-conversation (recent user messages within 10s)
+      // Simple heuristic: if there are more than initial messages, user is active
+      if (messages.length > 3) {
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg?.role === "user") {
+          // User just sent something — hold events
+          return;
+        }
+      }
+
+      // Flush the queue
+      const eventsToSend = [...queue];
+      eventQueueRef.current = [];
+
+      const eventMessage = formatEventsForOssy(eventsToSend);
+      lastProactiveRef.current = Date.now();
+      proactiveFiredForSectionRef.current = currentSection;
+
+      // Track shown tips in session
+      for (const e of eventsToSend) {
+        (sessionTipsShownRef.current as Set<string>).add(e.type);
+      }
+      try {
+        sessionStorage.setItem(
+          "cos_ossy_tips_shown",
+          JSON.stringify([...(sessionTipsShownRef.current as Set<string>)])
+        );
+      } catch { /* ignore */ }
+
+      // Auto-send as a user message (Ossy will respond naturally)
+      sendMessage({ text: eventMessage });
+    }, 3000); // Check every 3s
+
+    return () => clearInterval(interval);
+  }, [isGuest, isOnboarding, status, firmSection, messages, sendMessage]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
