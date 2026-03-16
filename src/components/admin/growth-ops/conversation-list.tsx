@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import {
   Loader2,
   MessageSquare,
@@ -7,6 +8,7 @@ import {
   Check,
   X,
   ChevronDown,
+  Search,
 } from "lucide-react";
 import { Avatar, AccountBadge } from "./avatar";
 import type { Conversation, Account, Usage, QueueItem } from "./types";
@@ -98,6 +100,17 @@ export function ConversationList({
   usage,
 }: ConversationListProps) {
   const pendingItems = queueItems.filter((q) => q.status === "pending");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const displayedConversations = useMemo(() => {
+    if (!searchQuery.trim()) return conversations;
+    const q = searchQuery.toLowerCase();
+    return conversations.filter((c) =>
+      (c.participantName ?? "").toLowerCase().includes(q) ||
+      (c.participantHeadline ?? "").toLowerCase().includes(q) ||
+      (c.lastMessagePreview ?? "").toLowerCase().includes(q)
+    );
+  }, [conversations, searchQuery]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -176,6 +189,25 @@ export function ConversationList({
             <PenSquare className="h-3.5 w-3.5" />
           </button>
         </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-cos-slate pointer-events-none" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search conversations..."
+            className="w-full rounded-cos-lg border border-cos-border bg-cos-surface pl-7 pr-7 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-dim focus:border-cos-electric focus:outline-none"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-cos-slate hover:text-cos-midnight"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Scrollable area */}
@@ -238,21 +270,25 @@ export function ConversationList({
         )}
 
         {/* Empty state */}
-        {!loadingConvos && conversations.length === 0 && (
+        {!loadingConvos && displayedConversations.length === 0 && (
           <div className="p-6 text-center">
             <MessageSquare className="h-6 w-6 mx-auto mb-2 text-cos-slate opacity-30" />
-            <p className="text-xs text-cos-slate">No conversations yet.</p>
-            <button
-              onClick={onNewMessage}
-              className="mt-3 text-xs text-cos-electric hover:underline"
-            >
-              Start one
-            </button>
+            <p className="text-xs text-cos-slate">
+              {searchQuery ? `No results for "${searchQuery}"` : "No conversations yet."}
+            </p>
+            {!searchQuery && (
+              <button
+                onClick={onNewMessage}
+                className="mt-3 text-xs text-cos-electric hover:underline"
+              >
+                Start one
+              </button>
+            )}
           </div>
         )}
 
         {/* Conversation rows */}
-        {conversations.map((convo) => (
+        {displayedConversations.map((convo) => (
           <button
             key={`${convo._accountId}-${convo.chatId}`}
             onClick={() => onSelectChat(convo.chatId)}
