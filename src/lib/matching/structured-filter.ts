@@ -7,7 +7,10 @@
  *
  * Query strategy:
  * 1. Neo4j for relationship-based filtering (skills, industries, markets)
- * 2. PostgreSQL for firmographic filtering (size, status)
+ * 2. Skill/Industry/Market hierarchy expansion via BELONGS_TO edges
+ * 3. Evidence-weighted scoring (case study count, expert count on edges)
+ * 4. Team experience boost via WORKED_AT edges
+ * 5. Confidence thresholds to filter noise
  */
 
 import { neo4jRead } from "@/lib/neo4j";
@@ -31,7 +34,13 @@ interface StructuredCandidate {
  * Layer 1: Filter firms using Neo4j graph traversal.
  *
  * Returns ~500 candidates with structured match scores.
- * Score is based on how many filter criteria each firm matches.
+ * Score is based on:
+ *   - How many filter criteria each firm matches
+ *   - Hierarchy expansion (parent skills/industries/markets)
+ *   - Evidence weighting (case study + expert backing on skills)
+ *   - Case study volume
+ *   - Team work history relevance
+ *   - Confidence thresholds
  */
 export async function structuredFilter(
   filters: SearchFilters,
@@ -44,31 +53,39 @@ export async function structuredFilter(
   // Base: match all service-provider firms (Company nodes with ServiceFirm role label)
   const matchClause = "MATCH (f:Company:ServiceFirm)";
   const returnFields = [
-    // After sync-neo4j-firm-ids.ts, all nodes have valid f.id matching PG serviceFirms.id
     "f.id AS firmId",
     "f.name AS firmName",
     "coalesce(f.website, f.websiteUrl) AS website",
   ];
 
-  // Skills filter
+  // ── Skills filter with hierarchy expansion ──────────────────
+  // Expand skills via BELONGS_TO: if user searches "SEO", also match
+  // firms with parent L2 skill "Digital Marketing" or sibling L3 skills
   if (filters.skills?.length) {
     conditions.push(
       `EXISTS {
-        MATCH (f)-[:HAS_SKILL]->(s:Skill)
+        MATCH (f)-[hs:HAS_SKILL]->(s:Skill)
         WHERE s.name IN $skills
+          OR EXISTS { MATCH (s)<-[:BELONGS_TO]-(child:Skill) WHERE child.name IN $skills }
+          OR EXISTS { MATCH (s)-[:BELONGS_TO]->(parent:Skill) WHERE parent.name IN $skills }
       }`
     );
     params.skills = filters.skills;
 
-    // Also collect matched skills for scoring
+    // Return matched skills with evidence strength
     returnFields.push(
-      `[(f)-[:HAS_SKILL]->(s:Skill) WHERE s.name IN $skills | s.name] AS matchedSkills`
+      `[(f)-[hs:HAS_SKILL]->(s:Skill)
+        WHERE s.name IN $skills
+          OR EXISTS { MATCH (s)<-[:BELONGS_TO]-(child:Skill) WHERE child.name IN $skills }
+          OR EXISTS { MATCH (s)-[:BELONGS_TO]->(parent:Skill) WHERE parent.name IN $skills }
+        | {name: s.name, evidence: coalesce(hs.caseStudyCount, 0) + coalesce(hs.expertCount, 0), confidence: coalesce(hs.confidence, 0.5)}
+      ] AS skillMatches`
     );
   } else {
-    returnFields.push("[] AS matchedSkills");
+    returnFields.push("[] AS skillMatches");
   }
 
-  // FirmCategory filter
+  // ── FirmCategory filter ─────────────────────────────────────
   if (filters.categories?.length) {
     conditions.push(
       `EXISTS {
@@ -86,39 +103,53 @@ export async function structuredFilter(
     );
   }
 
-  // Industry filter
+  // ── Industry filter with hierarchy expansion ────────────────
+  // Expand via BELONGS_TO: "Technology" also matches "SaaS", "Cloud", "AI/ML"
   if (filters.industries?.length) {
     conditions.push(
       `EXISTS {
         MATCH (f)-[:SERVES_INDUSTRY]->(i:Industry)
         WHERE i.name IN $industries
+          OR EXISTS { MATCH (i)<-[:BELONGS_TO]-(child:Industry) WHERE child.name IN $industries }
+          OR EXISTS { MATCH (i)-[:BELONGS_TO]->(parent) WHERE parent.name IN $industries }
       }`
     );
     params.industries = filters.industries;
     returnFields.push(
-      `[(f)-[:SERVES_INDUSTRY]->(i:Industry) WHERE i.name IN $industries | i.name] AS matchedIndustries`
+      `[(f)-[:SERVES_INDUSTRY]->(i:Industry)
+        WHERE i.name IN $industries
+          OR EXISTS { MATCH (i)<-[:BELONGS_TO]-(child:Industry) WHERE child.name IN $industries }
+          OR EXISTS { MATCH (i)-[:BELONGS_TO]->(parent) WHERE parent.name IN $industries }
+        | i.name] AS matchedIndustries`
     );
   } else {
     returnFields.push("[] AS matchedIndustries");
   }
 
-  // Market filter
+  // ── Market filter with hierarchy expansion ──────────────────
+  // "Asia Pacific" also matches "Japan", "Singapore", etc.
   if (filters.markets?.length) {
     conditions.push(
       `EXISTS {
         MATCH (f)-[:OPERATES_IN]->(m:Market)
         WHERE m.name IN $markets
+          OR EXISTS { MATCH (m)<-[:PARENT_REGION]-(child:Market) WHERE child.name IN $markets }
+          OR EXISTS { MATCH (m)-[:PARENT_REGION]->(parent:Market) WHERE parent.name IN $markets }
       }`
     );
     params.markets = filters.markets;
     returnFields.push(
-      `[(f)-[:OPERATES_IN]->(m:Market) WHERE m.name IN $markets | m.name] AS matchedMarkets`
+      `[(f)-[:OPERATES_IN]->(m:Market)
+        WHERE m.name IN $markets
+          OR EXISTS { MATCH (m)<-[:PARENT_REGION]-(child:Market) WHERE child.name IN $markets }
+          OR EXISTS { MATCH (m)-[:PARENT_REGION]->(parent:Market) WHERE parent.name IN $markets }
+        | m.name] AS matchedMarkets`
     );
   } else {
     returnFields.push("[] AS matchedMarkets");
   }
 
-  // Services filter — partial keyword match against Service.name
+  // ── Services filter ─────────────────────────────────────────
   if (filters.services?.length) {
     conditions.push(
       `EXISTS {
@@ -128,13 +159,21 @@ export async function structuredFilter(
     );
     params.serviceKeywords = filters.services;
     returnFields.push(
-      `[(f)-[:OFFERS_SERVICE]->(s:Service) WHERE ANY(kw IN $serviceKeywords WHERE toLower(s.name) CONTAINS toLower(kw)) | s.name] AS matchedServices`
+      `[(f)-[os:OFFERS_SERVICE]->(s:Service)
+        WHERE ANY(kw IN $serviceKeywords WHERE toLower(s.name) CONTAINS toLower(kw))
+        | {name: s.name, evidence: coalesce(os.caseStudyCount, 0) + coalesce(os.expertCount, 0)}
+      ] AS serviceMatches`
     );
   } else {
-    returnFields.push("[] AS matchedServices");
+    returnFields.push("[] AS serviceMatches");
   }
 
-  // Team experience subquery — boost firms whose team has relevant work history
+  // ── Case study count (evidence depth) ───────────────────────
+  returnFields.push(
+    `size([(f)-[:HAS_CASE_STUDY]->(cs:CaseStudy) | cs]) AS caseStudyCount`
+  );
+
+  // ── Team experience (WORKED_AT edges) ───────────────────────
   if (filters.industries?.length || filters.skills?.length) {
     returnFields.push(
       `size([(f)<-[:CURRENTLY_AT|WORKS_AT]-(p:Person)-[:WORKED_AT]->(prev:Company)
@@ -148,9 +187,13 @@ export async function structuredFilter(
     returnFields.push("0 AS teamRelevance");
   }
 
+  // ── Enrichment quality signal ───────────────────────────────
+  returnFields.push(
+    `coalesce(f.classifierConfidence, 0.3) AS classifierConfidence`
+  );
+
   // Use OR — a firm matching ANY criterion is a candidate; score reflects how many it matches.
-  // AND was too strict: most firms lack IN_CATEGORY edges, causing zero results.
-  // Always require f.id to be non-null (excludes ~4 orphan nodes without PG mapping).
+  // Always require f.id to be non-null (excludes orphan nodes without PG mapping).
   const filterClause =
     conditions.length > 0 ? ` AND (${conditions.join(" OR ")})` : "";
   const whereClause = `WHERE f.id IS NOT NULL${filterClause}`;
@@ -162,35 +205,59 @@ export async function structuredFilter(
     LIMIT $limit
   `;
 
+  interface SkillMatch {
+    name: string;
+    evidence: number;
+    confidence: number;
+  }
+  interface ServiceMatch {
+    name: string;
+    evidence: number;
+  }
+
   interface Neo4jFirmRow {
     firmId: string;
     firmName: string;
     website?: string;
-    matchedSkills?: string[];
+    skillMatches?: SkillMatch[];
     matchedIndustries?: string[];
     matchedMarkets?: string[];
-    matchedServices?: string[];
+    serviceMatches?: ServiceMatch[];
     categories?: string[];
+    caseStudyCount?: number;
     teamRelevance?: number;
+    classifierConfidence?: number;
   }
 
   const records = await neo4jRead<Neo4jFirmRow>(query, params);
 
-  // Calculate structured match scores
+  // Calculate structured match scores with evidence weighting
   const candidates: StructuredCandidate[] = records.map((record) => {
-    const matchedSkills: string[] = record.matchedSkills ?? [];
+    const skillMatches: SkillMatch[] = (record.skillMatches ?? []) as SkillMatch[];
     const matchedIndustries: string[] = record.matchedIndustries ?? [];
     const matchedMarkets: string[] = record.matchedMarkets ?? [];
-    const matchedServices: string[] = record.matchedServices ?? [];
+    const serviceMatches: ServiceMatch[] = (record.serviceMatches ?? []) as ServiceMatch[];
     const categories: string[] = record.categories ?? [];
+    const caseStudyCount = typeof record.caseStudyCount === "object"
+      ? (record.caseStudyCount as { low: number }).low ?? 0
+      : record.caseStudyCount ?? 0;
 
-    // Score based on how many criteria matched
+    const matchedSkills = skillMatches.map((s) => s.name);
+    const matchedServices = serviceMatches.map((s) => s.name);
+
+    // ── Base score: fraction of criteria matched ──────────────
     let score = 0;
     let maxScore = 0;
 
     if (filters.skills?.length) {
-      score += matchedSkills.length / filters.skills.length;
-      maxScore += 1;
+      // Evidence-weighted skill score: skills backed by case studies/experts score higher
+      const totalEvidence = skillMatches.reduce((sum, s) => sum + s.evidence, 0);
+      const avgEvidence = skillMatches.length > 0 ? totalEvidence / skillMatches.length : 0;
+      const coverageFraction = matchedSkills.length / filters.skills.length;
+      // Boost by evidence: 0 evidence = 1x, 5+ evidence = 1.5x
+      const evidenceMultiplier = 1 + Math.min(avgEvidence, 5) / 10;
+      score += coverageFraction * evidenceMultiplier;
+      maxScore += 1.5; // max with evidence boost
     }
     if (filters.industries?.length) {
       score += matchedIndustries.length / filters.industries.length;
@@ -208,21 +275,41 @@ export async function structuredFilter(
       maxScore += 1;
     }
     if (filters.services?.length) {
-      // Score: how many of the service keywords produced at least one match?
       const matchedKeywords = filters.services.filter((kw) =>
         matchedServices.some((s) => s.toLowerCase().includes(kw.toLowerCase()))
       );
-      score += matchedKeywords.length / filters.services.length;
-      maxScore += 1;
+      // Evidence-weighted service score
+      const totalServiceEvidence = serviceMatches.reduce((sum, s) => sum + s.evidence, 0);
+      const avgServiceEvidence = serviceMatches.length > 0 ? totalServiceEvidence / serviceMatches.length : 0;
+      const serviceCoverage = matchedKeywords.length / filters.services.length;
+      const serviceEvidenceMultiplier = 1 + Math.min(avgServiceEvidence, 5) / 10;
+      score += serviceCoverage * serviceEvidenceMultiplier;
+      maxScore += 1.5;
     }
 
     let structuredScore = maxScore > 0 ? score / maxScore : 0.5;
 
-    // Team experience boost: up to 15% for firms whose team has relevant work history
-    const teamRelevance = record.teamRelevance ?? 0;
+    // ── Case study depth boost: up to +10% ───────────────────
+    if (caseStudyCount > 0) {
+      const csBoost = Math.min(caseStudyCount, 10) / 10 * 0.10;
+      structuredScore = Math.min(1, structuredScore + csBoost);
+    }
+
+    // ── Team experience boost: up to +15% ────────────────────
+    const teamRelevance = typeof record.teamRelevance === "object"
+      ? (record.teamRelevance as { low: number }).low ?? 0
+      : record.teamRelevance ?? 0;
     if (teamRelevance > 0) {
-      const teamBoost = Math.min(teamRelevance, 5) / 5 * 0.15; // Cap at 5 relevant companies
+      const teamBoost = Math.min(teamRelevance, 5) / 5 * 0.15;
       structuredScore = Math.min(1, structuredScore + teamBoost);
+    }
+
+    // ── Confidence quality boost: up to +5% ──────────────────
+    const confidence = record.classifierConfidence ?? 0.3;
+    if (confidence > 0.7) {
+      structuredScore = Math.min(1, structuredScore + 0.05);
+    } else if (confidence < 0.3) {
+      structuredScore *= 0.9; // Penalize low-confidence firms
     }
 
     return {
@@ -444,7 +531,6 @@ export async function bidirectionalStructuredFilter(
   );
 
   // Compute weWantThem: how many of our PREFERS match what the candidate offers?
-  // (Already implicit in structuredScore from enriched filters, but let's normalize)
   const totalSearcherPrefs =
     searcherPrefs.skills.length +
     searcherPrefs.categories.length +
@@ -453,7 +539,6 @@ export async function bidirectionalStructuredFilter(
   const boosted = filtered.map((c) => {
     const theyWantUs = theyWantUsMap.get(c.firmId) ?? 0;
 
-    // weWantThem: what fraction of our PREFERS does this candidate match?
     let weWantThemMatches = 0;
     if (totalSearcherPrefs > 0) {
       for (const s of searcherPrefs.skills) {
@@ -523,13 +608,12 @@ export async function universalStructuredFilter(
 
 /**
  * Query Person:Expert nodes with skill/industry/market matching.
- * Only runs when at least one expert-relevant filter signal exists.
+ * Uses hierarchy expansion same as firm filter.
  */
 async function expertFilter(
   filters: SearchFilters,
   limit: number
 ): Promise<MatchCandidate[]> {
-  // No signals that apply to experts — skip entirely to avoid noise
   const hasExpertSignals =
     (filters.skills?.length ?? 0) > 0 ||
     (filters.industries?.length ?? 0) > 0 ||
@@ -541,27 +625,37 @@ async function expertFilter(
   const conditions: string[] = [];
 
   if (filters.skills?.length) {
+    // Skill hierarchy expansion for experts too
     conditions.push(
-      `EXISTS { MATCH (p)-[:HAS_SKILL|HAS_EXPERTISE]->(s:Skill) WHERE s.name IN $skills }`
+      `EXISTS { MATCH (p)-[:HAS_SKILL|HAS_EXPERTISE]->(s:Skill)
+        WHERE s.name IN $skills
+          OR EXISTS { MATCH (s)<-[:BELONGS_TO]-(child:Skill) WHERE child.name IN $skills }
+          OR EXISTS { MATCH (s)-[:BELONGS_TO]->(parent:Skill) WHERE parent.name IN $skills }
+      }`
     );
     params.skills = filters.skills;
   }
   if (filters.industries?.length) {
     conditions.push(
-      `EXISTS { MATCH (p)-[:SERVES_INDUSTRY]->(i:Industry) WHERE i.name IN $industries }`
+      `EXISTS { MATCH (p)-[:SERVES_INDUSTRY]->(i:Industry)
+        WHERE i.name IN $industries
+          OR EXISTS { MATCH (i)<-[:BELONGS_TO]-(child:Industry) WHERE child.name IN $industries }
+          OR EXISTS { MATCH (i)-[:BELONGS_TO]->(parent) WHERE parent.name IN $industries }
+      }`
     );
     params.industries = filters.industries;
   }
   if (filters.markets?.length) {
     conditions.push(
-      `EXISTS { MATCH (p)-[:OPERATES_IN]->(m:Market) WHERE m.name IN $markets }`
+      `EXISTS { MATCH (p)-[:OPERATES_IN]->(m:Market)
+        WHERE m.name IN $markets
+          OR EXISTS { MATCH (m)<-[:PARENT_REGION]-(child:Market) WHERE child.name IN $markets }
+          OR EXISTS { MATCH (m)-[:PARENT_REGION]->(parent:Market) WHERE parent.name IN $markets }
+      }`
     );
     params.markets = filters.markets;
   }
 
-  // Use OR so experts matching ANY filter signal are candidates (same as firm filter).
-  // AND was too strict: requiring all filters to match simultaneously returned 0 results
-  // for common multi-criteria queries like "healthcare AND SaaS".
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" OR ")}` : "";
 
@@ -608,7 +702,6 @@ async function expertFilter(
   const records = await neo4jRead<ExpertRow>(query, params);
 
   return records.map((r) => {
-    // Score based on how many filter criteria matched
     let score = 0;
     let maxScore = 0;
     if (filters.skills?.length) {
@@ -653,7 +746,7 @@ async function expertFilter(
 
 /**
  * Query CaseStudy nodes matching skills and industries.
- * Only runs when at least one case-study-relevant filter signal exists.
+ * Uses hierarchy expansion for broader matches.
  */
 async function caseStudyFilter(
   filters: SearchFilters,
@@ -670,18 +763,25 @@ async function caseStudyFilter(
 
   if (filters.skills?.length) {
     conditions.push(
-      `EXISTS { MATCH (cs)-[:DEMONSTRATES_SKILL]->(s:Skill) WHERE s.name IN $skills }`
+      `EXISTS { MATCH (cs)-[:DEMONSTRATES_SKILL]->(s:Skill)
+        WHERE s.name IN $skills
+          OR EXISTS { MATCH (s)<-[:BELONGS_TO]-(child:Skill) WHERE child.name IN $skills }
+          OR EXISTS { MATCH (s)-[:BELONGS_TO]->(parent:Skill) WHERE parent.name IN $skills }
+      }`
     );
     params.skills = filters.skills;
   }
   if (filters.industries?.length) {
     conditions.push(
-      `EXISTS { MATCH (cs)-[:IN_INDUSTRY]->(i:Industry) WHERE i.name IN $industries }`
+      `EXISTS { MATCH (cs)-[:IN_INDUSTRY]->(i:Industry)
+        WHERE i.name IN $industries
+          OR EXISTS { MATCH (i)<-[:BELONGS_TO]-(child:Industry) WHERE child.name IN $industries }
+          OR EXISTS { MATCH (i)-[:BELONGS_TO]->(parent) WHERE parent.name IN $industries }
+      }`
     );
     params.industries = filters.industries;
   }
 
-  // Use OR so case studies matching ANY filter signal are candidates
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" OR ")}` : "";
 
@@ -727,7 +827,6 @@ async function caseStudyFilter(
     }
     const structuredScore = maxScore > 0 ? score / maxScore : 0.3;
 
-    // Truncate long summaries used as displayName
     const displayName = r.displayName?.length > 80
       ? r.displayName.slice(0, 77) + "…"
       : r.displayName;
