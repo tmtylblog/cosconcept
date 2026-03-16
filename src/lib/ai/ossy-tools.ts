@@ -363,7 +363,13 @@ export function createOssyTools(organizationId: string, firmId?: string) {
 
         try {
           // 1. Research the client company (cache-first, two-phase pipeline)
-          const researchResult = await researchCompany(clientDomainOrName);
+          // Wrap in a 45s timeout to avoid Vercel function timeout (60s)
+          const researchResult = await Promise.race([
+            researchCompany(clientDomainOrName),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("Research timed out after 45 seconds. The company may have a complex website. Try again — results are often cached from the partial run.")), 45_000)
+            ),
+          ]);
 
           // If the input was a company name without a domain, ask the user to confirm
           if ("needsDomain" in researchResult) {
