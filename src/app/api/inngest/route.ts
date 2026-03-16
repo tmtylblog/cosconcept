@@ -24,6 +24,7 @@ import {
   assessFit,
   extractOpportunitiesJob,
   syncPreferences,
+  backfillHasClientEdges,
 } from "@/inngest/functions";
 
 /**
@@ -56,5 +57,6 @@ export const { GET, POST, PUT } = serve({
     assessFit,
     extractOpportunitiesJob,
     syncPreferences,
+    backfillHasClientEdges,
   ],
 });

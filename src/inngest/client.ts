@@ -250,6 +250,12 @@ export type SyncPreferencesEvent = {
   };
 };
 
+/** One-time backfill: create HAS_CLIENT edges + sync case study clients to firm profiles */
+export type BackfillHasClientEvent = {
+  name: "migration/backfill-has-client";
+  data: Record<string, never>;
+};
+
 // Union type for all events
 export type CosEvent =
   | DeepCrawlEvent
@@ -272,4 +278,5 @@ export type CosEvent =
   | ResearchCompanyEvent
   | AssessClientFitEvent
   | ExtractOpportunitiesEvent
-  | SyncPreferencesEvent;
+  | SyncPreferencesEvent
+  | BackfillHasClientEvent;

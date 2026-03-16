@@ -36,3 +36,4 @@ export { researchCompany as researchCompanyJob } from "./research-company";
 export { assessFit } from "./assess-client-fit";
 export { extractOpportunitiesJob } from "./extract-opportunities";
 export { syncPreferences } from "./sync-preferences";
+export { backfillHasClientEdges } from "./backfill-has-client-edges";
