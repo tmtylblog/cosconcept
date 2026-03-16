@@ -97,6 +97,10 @@ export interface ExtractedService {
   name: string;
   description?: string;
   subServices: string[];
+  /** "service" = broad category (Brand, Marketing), "solution" = specific named offering (Market Readiness Scan) */
+  offeringType?: "service" | "solution";
+  skills?: string[];
+  industries?: string[];
 }
 
 // ─── Common URL patterns to probe ──────────────────────────

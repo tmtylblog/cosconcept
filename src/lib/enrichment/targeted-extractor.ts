@@ -25,9 +25,12 @@ const openrouter = createOpenRouter({
 const UnifiedPageExtractionSchema = z.object({
   offerings: z.array(
     z.object({
-      name: z.string(),
-      description: z.string().optional(),
-      subItems: z.array(z.string()),
+      name: z.string().describe("Exact name the firm uses for this offering"),
+      description: z.string().describe("2-3 substantive sentences describing what this delivers and who it's for"),
+      offeringType: z.enum(["service", "solution"]).describe("'service' = broad category (e.g. Brand, Marketing), 'solution' = specific named offering (e.g. Market Readiness Scan, Performance Audit)"),
+      solutions: z.array(z.string()).describe("Specific named solutions, products, or sub-offerings listed under this"),
+      skills: z.array(z.string()).describe("Specific skills, tools, or technologies associated with this offering"),
+      industries: z.array(z.string()).describe("Industries or verticals this offering targets"),
     })
   ),
   evidenceOfWork: z.array(
@@ -98,10 +101,16 @@ ${content.slice(0, 8000)}
 Extract ALL of the following that are present on this page. A single page often contains multiple types of content — extract everything you find.
 
 ## 1. OFFERINGS
-Services, practice areas, solutions, capabilities, programs, engagement models, workshops, audits, or any other packaged offering this firm provides. For each, extract:
-- Name (e.g., "Brand Strategy", "Fractional CMO", "Performance Audit")
-- Description: 2-3 sentences maximum. Explain what the service delivers and who it's for. Use the firm's own language where possible.
-- Sub-items or specific capabilities listed under it
+Services, practice areas, solutions, capabilities, programs, engagement models, workshops, audits, or any other packaged offering this firm provides.
+
+IMPORTANT RULES:
+- Use the EXACT name the firm uses. If they call it "Market Readiness Scan", use that — don't rename it.
+- Description MUST be 2-3 substantive sentences. Explain what this delivers, how it works, and who it's for. Use the firm's own language. Never leave blank or write just a few words.
+- Classify each as "service" (broad category like Brand, Marketing, Technology) or "solution" (specific named offering like Market Readiness Scan, Performance Audit, Growth Accelerator).
+- Under "solutions": list any specific named sub-offerings, workshops, frameworks, or packaged products mentioned.
+- Do NOT create duplicate entries. If "Brand" and "Brand Strategy" refer to the same offering, pick the most specific name.
+- Do NOT extract navigation labels or vague section headers as separate offerings.
+- If you find associated skills (tools, technologies, methodologies) or target industries, include them.
 
 ## 2. EVIDENCE OF WORK
 Case studies, project descriptions, success stories, client results, portfolio items — anything showing work the firm has done. For each, extract:

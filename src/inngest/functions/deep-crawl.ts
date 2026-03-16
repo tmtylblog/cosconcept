@@ -163,6 +163,9 @@ export const deepCrawl = inngest.createFunction(
           name: s.name,
           description: s.description || null,
           subServices: s.subServices.length > 0 ? s.subServices : null,
+          offeringType: s.offeringType || "service",
+          skills: s.skills && s.skills.length > 0 ? s.skills : [],
+          industries: s.industries && s.industries.length > 0 ? s.industries : [],
           isHidden: false,
           displayOrder: i,
         }));

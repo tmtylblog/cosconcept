@@ -1084,6 +1084,9 @@ export const firmServices = pgTable("firm_services", {
   sourceUrl: text("source_url"), // link to page where found
   sourcePageTitle: text("source_page_title"),
   subServices: jsonb("sub_services").$type<string[]>(),
+  offeringType: text("offering_type").default("service"), // "service" (broad: Brand, Marketing) | "solution" (specific: Market Readiness Scan)
+  skills: jsonb("skills").$type<string[]>().default([]),
+  industries: jsonb("industries").$type<string[]>().default([]),
 
   // Visibility
   isHidden: boolean("is_hidden").notNull().default(false),

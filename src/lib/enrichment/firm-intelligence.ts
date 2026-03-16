@@ -57,9 +57,12 @@ const FirmIntelligenceSchema = z.object({
   homepageExtractions: z.object({
     offerings: z.array(
       z.object({
-        name: z.string(),
-        description: z.string().optional(),
-        subItems: z.array(z.string()),
+        name: z.string().describe("Exact name the firm uses"),
+        description: z.string().describe("2-3 substantive sentences about what this delivers"),
+        offeringType: z.enum(["service", "solution"]).describe("'service' = broad category, 'solution' = specific named offering"),
+        solutions: z.array(z.string()).describe("Specific named sub-offerings or solutions"),
+        skills: z.array(z.string()),
+        industries: z.array(z.string()),
       })
     ),
     evidenceOfWork: z.array(

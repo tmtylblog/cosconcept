@@ -63,7 +63,10 @@ export function synthesizeExtractions(params: {
     allOfferings.push({
       name: o.name,
       description: o.description,
-      subServices: o.subItems,
+      subServices: o.solutions,
+      offeringType: o.offeringType,
+      skills: o.skills,
+      industries: o.industries,
     });
   }
 
@@ -73,7 +76,10 @@ export function synthesizeExtractions(params: {
       allOfferings.push({
         name: o.name,
         description: o.description,
-        subServices: o.subItems,
+        subServices: o.solutions,
+        offeringType: o.offeringType,
+        skills: o.skills,
+        industries: o.industries,
       });
     }
   }
@@ -259,28 +265,55 @@ function normalizeForDedup(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 }
 
+/** Check if two offering names refer to the same thing */
+function isSameOffering(a: string, b: string): boolean {
+  const normA = normalizeForDedup(a);
+  const normB = normalizeForDedup(b);
+  if (normA === normB) return true;
+  // One contains the other: "Brand" matches "Brand Strategy & Positioning"
+  if (normA.includes(normB) || normB.includes(normA)) return true;
+  // Handle parenthetical variants: "Experience (Customer Experience)" → "Customer Experience"
+  const stripParens = (s: string) => s.replace(/\s*\(.*?\)\s*/g, "").trim().toLowerCase();
+  if (stripParens(a) === stripParens(b)) return true;
+  // Handle "X Practice Area" → "X"
+  const stripSuffix = (s: string) => s.replace(/\s*(practice area|services?|solutions?|group|division|pod)\s*$/i, "").trim().toLowerCase();
+  if (stripSuffix(a) === stripSuffix(b)) return true;
+  if (normalizeForDedup(stripSuffix(a)) === normB || normA === normalizeForDedup(stripSuffix(b))) return true;
+  return false;
+}
+
 function deduplicateOfferings(offerings: ExtractedService[]): ExtractedService[] {
-  const seen = new Map<string, ExtractedService>();
+  const result: ExtractedService[] = [];
 
   for (const o of offerings) {
-    if (!o.name || o.name.length < 2) continue;
-    const key = normalizeForDedup(o.name);
-    if (!key) continue;
+    if (!o.name || o.name.length < 2 || o.name.length > 100) continue;
+    // Skip vague navigation-like entries
+    if (/^(lead|deliver|recruit)$/i.test(o.name) && !o.description) continue;
 
-    const existing = seen.get(key);
-    if (!existing) {
-      seen.set(key, o);
+    // Find existing match
+    const existingIdx = result.findIndex((r) => isSameOffering(r.name, o.name));
+
+    if (existingIdx === -1) {
+      result.push(o);
     } else {
-      // Keep the richer version
-      if ((o.description?.length ?? 0) > (existing.description?.length ?? 0)) {
-        seen.set(key, { ...o, subServices: mergeArrays(existing.subServices, o.subServices) });
-      } else {
-        seen.set(key, { ...existing, subServices: mergeArrays(existing.subServices, o.subServices) });
-      }
+      const existing = result[existingIdx];
+      // Merge: keep the version with the better description, merge sub-items
+      const merged: ExtractedService = {
+        // Prefer the more specific name (longer but not overly long)
+        name: o.name.length > existing.name.length && o.name.length < 60 ? o.name : existing.name,
+        // Prefer the longer/richer description
+        description: (o.description?.length ?? 0) > (existing.description?.length ?? 0) ? o.description : existing.description,
+        subServices: mergeArrays(existing.subServices, o.subServices),
+        // Prefer "solution" over "service" if either says so
+        offeringType: o.offeringType === "solution" || existing.offeringType === "solution" ? "solution" : existing.offeringType,
+        skills: mergeArrays(existing.skills ?? [], o.skills ?? []),
+        industries: mergeArrays(existing.industries ?? [], o.industries ?? []),
+      };
+      result[existingIdx] = merged;
     }
   }
 
-  return [...seen.values()].filter((o) => o.name.length < 100).slice(0, 30);
+  return result.slice(0, 30);
 }
 
 function deduplicateCaseStudies(studies: ExtractedCaseStudy[]): ExtractedCaseStudy[] {
