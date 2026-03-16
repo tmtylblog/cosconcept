@@ -108,9 +108,9 @@ export function createOssyTools(organizationId: string, firmId?: string) {
             firmName: c.firmName ?? c.preview.firmName ?? c.preview.subtitle ?? c.displayName,
             matchScore: Math.round(c.totalScore * 100),
             explanation: c.matchExplanation ?? "",
-            categories: c.preview.categories.slice(0, 3),
-            skills: c.preview.topSkills.slice(0, 5),
-            industries: c.preview.industries.slice(0, 3),
+            categories: c.preview.categories.slice(0, 5),
+            skills: c.preview.topSkills.slice(0, 8),
+            industries: c.preview.industries.slice(0, 5),
             website: c.preview.website ?? undefined,
             caseStudyCount: c.preview.caseStudyCount ?? undefined,
           }));
