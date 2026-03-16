@@ -199,17 +199,15 @@ export function SpecialistProfileEditor({
     setExamples((prev) => prev.filter((_, i) => i !== idx));
   }, []);
 
-  const handlePdlSelect = useCallback(
-    async (ex: PdlExperience, pdlIdx: number) => {
-      // Always condense PDL summary via AI — shaped by specialist title
-      let subject = ex.summary ?? "";
-      if (subject) {
-        subject = await condenseSummary(subject, ex.title, ex.company.name, title);
-      }
+  const [condensingIdx, setCondensingIdx] = useState<number | null>(null);
 
+  const handlePdlSelect = useCallback(
+    (ex: PdlExperience, pdlIdx: number) => {
+      // Add immediately with raw summary, then condense async
+      const rawSubject = ex.summary ?? "";
       const newEx: WorkExample = {
         title: ex.title,
-        subject,
+        subject: rawSubject,
         companyName: ex.company.name,
         companyIndustry: ex.company.industry ?? "",
         startDate: ex.startDate ?? "",
@@ -220,10 +218,27 @@ export function SpecialistProfileEditor({
         exampleType: "role",
       };
 
+      let targetIdx: number;
       if (pickerTargetIdx < examples.length) {
         updateExample(pickerTargetIdx, newEx);
+        targetIdx = pickerTargetIdx;
       } else if (examples.length < 3) {
         setExamples((prev) => [...prev, newEx]);
+        targetIdx = examples.length;
+      } else {
+        return;
+      }
+
+      // Condense via AI in background
+      if (rawSubject) {
+        setCondensingIdx(targetIdx);
+        condenseSummary(rawSubject, ex.title, ex.company.name, title)
+          .then((condensed) => {
+            setExamples((prev) =>
+              prev.map((e, i) => (i === targetIdx ? { ...e, subject: condensed } : e))
+            );
+          })
+          .finally(() => setCondensingIdx(null));
       }
     },
     [pickerTargetIdx, examples.length, updateExample, title]
@@ -452,6 +467,7 @@ export function SpecialistProfileEditor({
             index={idx}
             total={3}
             example={ex}
+            isCondensing={condensingIdx === idx}
             onChange={(patch) => updateExample(idx, patch)}
             onRemove={() => removeExample(idx)}
           />
@@ -632,12 +648,14 @@ function ExampleForm({
   index,
   total,
   example,
+  isCondensing,
   onChange,
   onRemove,
 }: {
   index: number;
   total: number;
   example: WorkExample;
+  isCondensing?: boolean;
   onChange: (patch: Partial<WorkExample>) => void;
   onRemove: () => void;
 }) {
@@ -687,7 +705,15 @@ function ExampleForm({
             className="w-full rounded-cos-md border border-cos-border bg-cos-cloud/30 px-2.5 py-1.5 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
           />
 
-          <div>
+          <div className="relative">
+            {isCondensing && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-cos-md bg-white/80 backdrop-blur-[1px]">
+                <div className="flex items-center gap-2 text-cos-electric">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-[10px] font-medium">AI is condensing this summary...</span>
+                </div>
+              </div>
+            )}
             <textarea
               value={example.subject}
               onChange={(e) => {
