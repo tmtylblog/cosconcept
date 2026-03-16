@@ -112,6 +112,10 @@ export default function FirmOfferingPage() {
 
   return (
     <div className="cos-scrollbar mx-auto max-w-3xl space-y-4 overflow-y-auto p-6">
+      {/* TEMP: deploy verification — remove after confirming cache is fresh */}
+      <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 px-4 py-2 text-sm text-yellow-300">
+        BUILD MARKER: deploy verified 2026-03-16T05:00Z — if you see this, cache is fresh
+      </div>
       {/* Page header */}
       <div className="flex items-start justify-between gap-4">
         <div>
