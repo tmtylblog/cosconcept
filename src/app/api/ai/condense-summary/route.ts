@@ -51,19 +51,20 @@ Rewritten:`,
     });
 
     const duration = Date.now() - start;
-    await logUsage({
+    logUsage({
       model: "google/gemini-2.0-flash-001",
       feature: "enrichment",
       inputTokens: result.usage?.promptTokens ?? 0,
       outputTokens: result.usage?.completionTokens ?? 0,
       durationMs: duration,
-    });
+    }).catch(() => {}); // non-blocking
 
     let condensed = result.text?.trim() ?? summary;
     if (condensed.length > 500) condensed = condensed.slice(0, 497) + "...";
 
     return Response.json({ condensed });
-  } catch {
+  } catch (err) {
+    console.error("[condense-summary] Error:", err);
     return Response.json({ condensed: summary.slice(0, 500) });
   }
 }

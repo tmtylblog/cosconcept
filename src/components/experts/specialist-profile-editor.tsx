@@ -99,9 +99,14 @@ async function condenseSummary(summary: string, roleTitle: string, companyName: 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ summary, roleTitle, companyName, specialistTitle }),
     });
+    if (!res.ok) {
+      console.warn("[condense] API returned", res.status);
+      return summary.slice(0, 500);
+    }
     const data = await res.json();
-    return data.condensed ?? summary.slice(0, 500);
-  } catch {
+    return data.condensed || summary.slice(0, 500);
+  } catch (err) {
+    console.warn("[condense] fetch failed:", err);
     return summary.slice(0, 500);
   }
 }
@@ -234,10 +239,13 @@ export function SpecialistProfileEditor({
         setCondensingIdx(targetIdx);
         condenseSummary(rawSubject, ex.title, ex.company.name, title)
           .then((condensed) => {
-            setExamples((prev) =>
-              prev.map((e, i) => (i === targetIdx ? { ...e, subject: condensed } : e))
-            );
+            if (condensed) {
+              setExamples((prev) =>
+                prev.map((e, i) => (i === targetIdx ? { ...e, subject: condensed } : e))
+              );
+            }
           })
+          .catch(console.error)
           .finally(() => setCondensingIdx(null));
       }
     },
