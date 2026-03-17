@@ -71,9 +71,11 @@ export const backfillAllFirms = inngest.createFunction(
     } = event.data;
 
     // Full-system mode overrides
+    // Full-system runs everything EXCEPT steps completed within the last 7 days.
+    // This avoids re-crawling/re-enriching fresh data while still filling all gaps.
     const isFullSystem = mode === "full-system";
-    const effectiveSkip = isFullSystem ? false : skipCompleted;
     const autoEnrichLimit = isFullSystem ? -1 : 10;
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
     // Step 1: Resolve which firms to process
     const firms = await step.run("resolve-firms", async () => {
@@ -163,7 +165,6 @@ export const backfillAllFirms = inngest.createFunction(
 
       // ── Phase 1: Deep Crawl ──────────────────────────────
       const needsDeepCrawl = await step.run(`check-deep-crawl-${firm.id}`, async () => {
-        if (!effectiveSkip) return true;
         if (!enrichmentData?.companyData?.employeeCount) return true;
         const [svcRow] = await db
           .select({ cnt: count() })
@@ -185,7 +186,31 @@ export const backfillAllFirms = inngest.createFunction(
         const hasServices = (svcRow?.cnt ?? 0) > 0;
         const hasCaseStudies = (csRow?.cnt ?? 0) > 0;
         const hasClassifier = (auditRow?.cnt ?? 0) > 0;
-        return !(hasServices && hasCaseStudies && hasClassifier);
+
+        if (!hasServices || !hasCaseStudies || !hasClassifier) return true;
+
+        // In full-system mode, re-crawl unless done within last 7 days
+        if (isFullSystem) {
+          const [recentAudit] = await db
+            .select({ createdAt: enrichmentAuditLog.createdAt })
+            .from(enrichmentAuditLog)
+            .where(
+              and(
+                eq(enrichmentAuditLog.firmId, firm.id),
+                eq(enrichmentAuditLog.phase, "deep_crawl")
+              )
+            )
+            .orderBy(sql`${enrichmentAuditLog.createdAt} DESC`)
+            .limit(1);
+          if (recentAudit?.createdAt) {
+            const age = Date.now() - new Date(recentAudit.createdAt).getTime();
+            return age > SEVEN_DAYS_MS;
+          }
+          return true; // no audit record — needs crawl
+        }
+
+        // Incremental: already has everything
+        return false;
       });
 
       if (needsDeepCrawl && firm.website) {
@@ -214,12 +239,31 @@ export const backfillAllFirms = inngest.createFunction(
 
       // ── Phase 2: Team Roster Import ──────────────────────
       const needsTeamIngest = await step.run(`check-team-${firm.id}`, async () => {
-        if (!effectiveSkip) return true;
         const [row] = await db
           .select({ cnt: count() })
           .from(expertProfiles)
           .where(eq(expertProfiles.firmId, firm.id));
-        return (row?.cnt ?? 0) < 3;
+        const expertCount = row?.cnt ?? 0;
+
+        if (expertCount < 3) return true;
+
+        // In full-system mode, re-import unless done within last 7 days
+        if (isFullSystem) {
+          const [recentExpert] = await db
+            .select({ pdlEnrichedAt: expertProfiles.pdlEnrichedAt })
+            .from(expertProfiles)
+            .where(eq(expertProfiles.firmId, firm.id))
+            .orderBy(sql`${expertProfiles.pdlEnrichedAt} DESC NULLS LAST`)
+            .limit(1);
+          if (recentExpert?.pdlEnrichedAt) {
+            const age = Date.now() - new Date(recentExpert.pdlEnrichedAt).getTime();
+            return age > SEVEN_DAYS_MS;
+          }
+          return true; // no enrichment timestamp — needs import
+        }
+
+        // Incremental: enough experts already
+        return false;
       });
 
       if (needsTeamIngest && firm.website) {
@@ -262,7 +306,8 @@ export const backfillAllFirms = inngest.createFunction(
 
       // ── Phase 4: Graph Sync ──────────────────────────────
       const needsGraphSync = await step.run(`check-graph-sync-${firm.id}`, async () => {
-        if (!effectiveSkip) return true;
+        // Graph sync is cheap — always run in full-system mode
+        if (isFullSystem) return true;
         const hasGraphNode = !!enrichmentData?.graphNodeId;
         const [row] = await db
           .select({ cnt: count() })
@@ -318,7 +363,7 @@ export const backfillAllFirms = inngest.createFunction(
 
       // ── Phase 6: Abstraction Profile ─────────────────────
       const needsAbstraction = await step.run(`check-abstraction-${firm.id}`, async () => {
-        if (!effectiveSkip) return true;
+        // Both modes: skip if abstraction exists and is < 7 days old
         const [row] = await db
           .select({ cnt: count(), lastEnrichedAt: abstractionProfiles.lastEnrichedAt })
           .from(abstractionProfiles)
@@ -330,8 +375,8 @@ export const backfillAllFirms = inngest.createFunction(
           );
         if (!row || row.cnt === 0) return true;
         if (row.lastEnrichedAt) {
-          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-          return new Date(row.lastEnrichedAt) <= sevenDaysAgo;
+          const age = Date.now() - new Date(row.lastEnrichedAt).getTime();
+          return age > SEVEN_DAYS_MS;
         }
         return true;
       });

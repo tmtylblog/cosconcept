@@ -345,8 +345,8 @@ function FullSystemEnrichmentSection() {
       {mode === "full-system" && (
         <div className="flex items-center gap-2 rounded-cos-lg border border-cos-warm/20 bg-cos-warm/5 px-3 py-2 text-xs text-cos-warm">
           <Zap className="h-3.5 w-3.5 shrink-0" />
-          Full System mode: Pro treatment for all firms. Enriches ALL experts (no cap), forces re-abstraction,
-          skips nothing. Higher API cost but produces the most complete knowledge graph.
+          Full System mode: Pro treatment for all firms. Enriches ALL experts (no cap), re-runs graph sync
+          and skill strength. Skips steps completed within the last 7 days to avoid wasting credits.
         </div>
       )}
 
