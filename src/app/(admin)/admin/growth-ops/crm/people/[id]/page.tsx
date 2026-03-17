@@ -278,19 +278,23 @@ export default function PersonDetailPage() {
               <div>
                 <h3 className="text-sm font-medium text-cos-slate-dim mb-2">Education</h3>
                 <div className="space-y-2">
-                  {education.map((edu: any, i: number) => (
-                    <div key={i} className="p-2.5 rounded-cos-md bg-cos-cloud/50">
-                      <div className="text-sm font-medium text-cos-midnight">{edu.schoolName || edu.school_name || edu.school}</div>
-                      {(edu.degreeName || edu.degree_name || edu.fieldOfStudy || edu.field_of_study) && (
-                        <div className="text-xs text-cos-slate">
-                          {edu.degreeName || edu.degree_name}{(edu.degreeName || edu.degree_name) && (edu.fieldOfStudy || edu.field_of_study) && " — "}{edu.fieldOfStudy || edu.field_of_study}
-                        </div>
-                      )}
-                      {(edu.graduationDate || edu.graduation_date) && (
-                        <div className="text-xs text-cos-slate-light">{edu.graduationDate || edu.graduation_date}</div>
-                      )}
-                    </div>
-                  ))}
+                  {education.map((edu: any, i: number) => {
+                    const schoolName = typeof edu.school === "object" ? edu.school?.name : (edu.schoolName || edu.school_name || edu.school || "");
+                    const degree = edu.degreeName || edu.degree_name || (Array.isArray(edu.degrees) ? edu.degrees[0] : null) || "";
+                    const field = edu.fieldOfStudy || edu.field_of_study || "";
+                    const endDate = edu.graduationDate || edu.graduation_date || edu.endDate || edu.end_date || "";
+                    return (
+                      <div key={i} className="p-2.5 rounded-cos-md bg-cos-cloud/50">
+                        <div className="text-sm font-medium text-cos-midnight">{schoolName}</div>
+                        {(degree || field) && (
+                          <div className="text-xs text-cos-slate">
+                            {degree}{degree && field && " — "}{field}
+                          </div>
+                        )}
+                        {endDate && <div className="text-xs text-cos-slate-light">{endDate}</div>}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
