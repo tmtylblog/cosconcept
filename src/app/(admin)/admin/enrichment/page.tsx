@@ -16,6 +16,10 @@ import {
   Zap,
   AlertCircle,
   Brain,
+  UserCheck,
+  Wrench,
+  FileText,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
@@ -120,6 +124,178 @@ interface ProviderHealth {
   quota?: { used: number; limit: number; remaining: number; unit: string; percentUsed: number };
   message?: string;
 }
+
+// ─── Enrichment Stats Overview ──────────────────────────
+
+interface EnrichStats {
+  firms: { total: number; enriched: number };
+  services: { total: number };
+  caseStudies: { total: number; active: number; pending: number };
+  experts: { total: number; enriched: number };
+  specialists: { total: number };
+  abstractions: { total: number; withEmbedding: number };
+}
+
+function ProgressBar({ done, total, color = "bg-cos-electric" }: { done: number; total: number; color?: string }) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-2 rounded-full bg-cos-cloud-dim overflow-hidden">
+        <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-[10px] font-mono text-cos-slate w-16 text-right">{done.toLocaleString()}/{total.toLocaleString()}</span>
+      <span className="text-[10px] font-bold text-cos-midnight w-8">{pct}%</span>
+    </div>
+  );
+}
+
+function EnrichmentStatsSection() {
+  const [stats, setStats] = useState<EnrichStats | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/enrich/stats")
+      .then((r) => r.ok ? r.json() : null)
+      .then(setStats)
+      .catch(() => {});
+  }, []);
+
+  // Auto-refresh every 30s
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const r = await fetch("/api/admin/enrich/stats");
+        if (r.ok) setStats(await r.json());
+      } catch { /* ignore */ }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!stats) return null;
+
+  return (
+    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-5 space-y-3">
+      <h2 className="font-heading text-base font-semibold text-cos-midnight flex items-center gap-2">
+        <Database className="h-4 w-4 text-cos-electric" />
+        Enrichment Progress
+      </h2>
+      <div className="grid gap-3">
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-cos-midnight flex items-center gap-1.5"><Globe className="h-3 w-3 text-cos-electric" /> Firms Enriched</span>
+          </div>
+          <ProgressBar done={stats.firms.enriched} total={stats.firms.total} color="bg-cos-electric" />
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-cos-midnight flex items-center gap-1.5"><Wrench className="h-3 w-3 text-cos-signal" /> Services Discovered</span>
+            <span className="text-[10px] text-cos-slate">{stats.services.total.toLocaleString()} total</span>
+          </div>
+          <ProgressBar done={stats.services.total} total={stats.services.total} color="bg-cos-signal" />
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-cos-midnight flex items-center gap-1.5"><FileText className="h-3 w-3 text-cos-warm" /> Case Studies Analyzed</span>
+            <span className="text-[10px] text-cos-slate">{stats.caseStudies.pending > 0 ? `${stats.caseStudies.pending} pending` : ""}</span>
+          </div>
+          <ProgressBar done={stats.caseStudies.active} total={stats.caseStudies.total} color="bg-cos-warm" />
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-cos-midnight flex items-center gap-1.5"><UserCheck className="h-3 w-3 text-cos-ember" /> Experts Enriched (work history)</span>
+          </div>
+          <ProgressBar done={stats.experts.enriched} total={stats.experts.total} color={stats.experts.enriched / stats.experts.total < 0.5 ? "bg-cos-ember" : "bg-cos-signal"} />
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-cos-midnight flex items-center gap-1.5"><Brain className="h-3 w-3 text-purple-500" /> Specialist Profiles</span>
+            <span className="text-[10px] text-cos-slate">{stats.specialists.total.toLocaleString()} total</span>
+          </div>
+          <ProgressBar done={stats.specialists.total} total={stats.experts.enriched > 0 ? stats.experts.enriched : stats.experts.total} color="bg-purple-500" />
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-medium text-cos-midnight flex items-center gap-1.5"><Brain className="h-3 w-3 text-cos-signal" /> Abstraction Profiles (with embedding)</span>
+          </div>
+          <ProgressBar done={stats.abstractions.withEmbedding} total={stats.firms.enriched} color="bg-cos-signal" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Expert Enrichment Section ──────────────────────────
+
+function ExpertEnrichmentSection() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function retryExperts(dryRun: boolean) {
+    if (!dryRun) {
+      if (!window.confirm("Queue all unenriched experts for enrichment? Uses EnrichLayer (primary) + PDL (fallback).")) return;
+    }
+    setRunning(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/enrich/retry-experts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      if (dryRun) {
+        setResult(`Preview: ${data.total} experts need enrichment across ${data.byFirm?.length ?? 0} firms.`);
+      } else {
+        setResult(data.message ?? `Queued ${data.queued} experts for enrichment.`);
+      }
+    } catch (err) {
+      setResult(`Error: ${err instanceof Error ? err.message : "Failed"}`);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-5 space-y-3">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="font-heading text-base font-semibold text-cos-midnight flex items-center gap-2">
+            <UserCheck className="h-4 w-4 text-cos-ember" />
+            Expert Enrichment
+          </h2>
+          <p className="mt-1 text-xs text-cos-slate">
+            Enrich expert profiles with work history, skills, and education via EnrichLayer (primary, ~$0.02) with PDL fallback (~$0.28).
+            Generates AI specialist profiles from the enriched data.
+          </p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => retryExperts(true)} disabled={running} className="text-xs">
+            {running ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />}
+            Preview
+          </Button>
+          <Button size="sm" onClick={() => retryExperts(false)} disabled={running} className="bg-cos-ember hover:bg-cos-ember/90 text-xs">
+            {running ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <UserCheck className="mr-1.5 h-3.5 w-3.5" />}
+            Enrich All Experts
+          </Button>
+        </div>
+      </div>
+      {result && (
+        <div className={`flex items-center gap-2 rounded-cos-lg px-3 py-2 text-xs font-medium ${
+          result.startsWith("Error")
+            ? "border border-cos-ember/20 bg-cos-ember/5 text-cos-ember"
+            : result.startsWith("Preview")
+            ? "border border-cos-warm/20 bg-cos-warm/5 text-cos-warm"
+            : "border border-cos-signal/20 bg-cos-signal/5 text-cos-signal"
+        }`}>
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          {result}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Full System Enrichment Section ─────────────────────
 
 function FullSystemEnrichmentSection() {
   const [preview, setPreview] = useState<BackfillAllResult | null>(null);
@@ -754,11 +930,17 @@ export default function AdminEnrichmentPage() {
         </p>
       </div>
 
-      {/* Full System Enrichment */}
-      <FullSystemEnrichmentSection />
+      {/* Enrichment Progress Overview */}
+      <EnrichmentStatsSection />
+
+      {/* Expert Enrichment */}
+      <ExpertEnrichmentSection />
 
       {/* Abstraction Regeneration */}
       <AbstractionSection />
+
+      {/* Full System Enrichment */}
+      <FullSystemEnrichmentSection />
 
       {/* Enrichment Audit Trail */}
       <form
