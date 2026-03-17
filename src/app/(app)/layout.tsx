@@ -308,6 +308,11 @@ function AppLayoutInner({
     : pathname === "/firm/preferences" ? "preferences"
     : pathname.startsWith("/firm/case-studies") ? "experience"
     : pathname === "/discover" || pathname.startsWith("/discover/") ? "discover"
+    : pathname === "/dashboard" ? "dashboard"
+    : pathname.startsWith("/settings") ? "settings"
+    : pathname === "/partnerships" ? "partnerships"
+    : pathname === "/network" ? "network"
+    : pathname.startsWith("/calls") ? "calls"
     : null;
 
   // ─── Discover results context ────────────────────────────────

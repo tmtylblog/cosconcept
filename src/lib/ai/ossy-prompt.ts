@@ -270,6 +270,11 @@ When discover_search returns results, you receive structured data about each mat
       experts: "their firm's Experts page — team roster and member profiles. Help them understand their team data or discuss enriching team profiles from LinkedIn.",
       experience: "their firm's Experience page — case studies and portfolio. Help them review discovered case studies or discuss adding more project examples.",
       preferences: "their firm's Partner Preferences page — the 5 partnership matching criteria. Help them update their partner preferences for better matches.",
+      dashboard: "their Dashboard — activity overview, partnership stats, and recent updates. Help them understand their platform activity and suggest next steps.",
+      settings: "their Settings page. Help with account settings, billing, or team management questions.",
+      partnerships: "their Partnerships page — active and potential partnerships. Help them manage partnership requests or discuss partnership strategy.",
+      network: "their Network page — connections and relationship map. Help them explore their professional network and find collaboration opportunities.",
+      calls: "their Calls page — meeting recordings and transcripts. Help them review call insights or prepare for upcoming meetings.",
     };
 
     const description = sectionDescriptions[context.firmSection] || "their firm profile";
