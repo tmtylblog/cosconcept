@@ -224,7 +224,8 @@ export default function CrmPeoplePage() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(p.linkedinUrl!, "_blank");
+                              const url = p.linkedinUrl!.startsWith("http") ? p.linkedinUrl! : `https://${p.linkedinUrl!}`;
+                              window.open(url, "_blank");
                             }}
                             title="Open LinkedIn"
                           >

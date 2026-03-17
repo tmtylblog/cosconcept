@@ -139,7 +139,10 @@ export default function CompanyDetailPage() {
               </Button>
             )}
             {data.linkedinUrl && (
-              <Button variant="outline" size="sm" onClick={() => window.open(data.linkedinUrl, "_blank")}>
+              <Button variant="outline" size="sm" onClick={() => {
+                const url = data.linkedinUrl.startsWith("http") ? data.linkedinUrl : `https://${data.linkedinUrl}`;
+                window.open(url, "_blank");
+              }}>
                 <Linkedin className="h-4 w-4 mr-1" /> LinkedIn
               </Button>
             )}
@@ -367,7 +370,7 @@ export default function CompanyDetailPage() {
                       {p.source === "expert" ? "Expert" : "Prospect"}
                     </span>
                     {p.linkedinUrl && (
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); window.open(p.linkedinUrl, "_blank"); }}>
+                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); const url = p.linkedinUrl.startsWith("http") ? p.linkedinUrl : `https://${p.linkedinUrl}`; window.open(url, "_blank"); }}>
                         <ExternalLink className="h-3.5 w-3.5" />
                       </Button>
                     )}

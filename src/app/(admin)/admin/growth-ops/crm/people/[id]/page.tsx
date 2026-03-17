@@ -137,7 +137,10 @@ export default function PersonDetailPage() {
               </Button>
             )}
             {data.linkedinUrl && (
-              <Button variant="outline" size="sm" onClick={() => window.open(data.linkedinUrl, "_blank")}>
+              <Button variant="outline" size="sm" onClick={() => {
+                const url = data.linkedinUrl.startsWith("http") ? data.linkedinUrl : `https://${data.linkedinUrl}`;
+                window.open(url, "_blank");
+              }}>
                 <Linkedin className="h-4 w-4 mr-1" /> LinkedIn
               </Button>
             )}
