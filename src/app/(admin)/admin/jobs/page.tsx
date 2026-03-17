@@ -12,9 +12,16 @@ import {
   Loader2,
   Zap,
   Timer,
+  Play,
+  Database,
+  Users,
+  Mail,
+  Phone,
+  BarChart3,
+  GitBranch,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
 
 interface InngestFunction {
   id: string;
@@ -56,6 +63,121 @@ const STATUS_STYLES: Record<string, { bg: string; icon: typeof Activity }> = {
   failed: { bg: "bg-red-100 text-red-800", icon: XCircle },
 };
 
+// Group functions by category for display
+const FUNCTION_CATEGORIES: Record<string, { label: string; icon: typeof Database; color: string; ids: string[] }> = {
+  enrichment: {
+    label: "Enrichment",
+    icon: Database,
+    color: "text-cos-electric",
+    ids: [
+      "enrich-deep-crawl",
+      "enrich-case-study-ingest",
+      "enrich-expert-linkedin",
+      "enrich-team-ingest",
+      "enrich-firm-abstraction",
+      "enrich-firm-case-study-ingest",
+      "enrich-backfill-all-firms",
+      "company-enrich-stub",
+      "skill-compute-strength",
+      "backfill-has-client-edges",
+    ],
+  },
+  research: {
+    label: "Research & Matching",
+    icon: Globe,
+    color: "text-purple-600",
+    ids: [
+      "research-company",
+      "assess-client-fit",
+      "extract-opportunities",
+    ],
+  },
+  communication: {
+    label: "Communication",
+    icon: Mail,
+    color: "text-cos-warm",
+    ids: [
+      "email-process-inbound",
+      "email-schedule-follow-up",
+      "email-send-now",
+    ],
+  },
+  calls: {
+    label: "Call Intelligence",
+    icon: Phone,
+    color: "text-emerald-600",
+    ids: [
+      "calls-analyze",
+      "calls-join-meeting",
+    ],
+  },
+  graph: {
+    label: "Knowledge Graph",
+    icon: GitBranch,
+    color: "text-blue-600",
+    ids: [
+      "graph-sync-firm",
+      "sync-preferences",
+    ],
+  },
+  growthOps: {
+    label: "Growth Ops",
+    icon: BarChart3,
+    color: "text-cos-signal",
+    ids: [
+      "growth-attribution-check",
+      "network-scan",
+    ],
+  },
+  other: {
+    label: "Other",
+    icon: Zap,
+    color: "text-cos-slate",
+    ids: [
+      "memory-extract",
+    ],
+  },
+  cron: {
+    label: "Scheduled (Cron)",
+    icon: Timer,
+    color: "text-cos-warm",
+    ids: [
+      "cron-weekly-recrawl",
+      "cron-weekly-digest",
+      "cron-check-stale-partnerships",
+      "cron-linkedin-invite-scheduler",
+    ],
+  },
+};
+
+// Functions that can be triggered from the admin UI
+const TRIGGERABLE_FUNCTIONS: Record<string, { endpoint: string; method: string; body?: object; confirm?: string }> = {
+  "enrich-deep-crawl": {
+    endpoint: "/api/admin/enrich/backfill-deep-crawl",
+    method: "POST",
+    body: { limit: 10 },
+    confirm: "Queue deep crawl for up to 10 unenriched firms?",
+  },
+  "enrich-team-ingest": {
+    endpoint: "/api/admin/enrich/team-ingest",
+    method: "POST",
+    body: {},
+    confirm: "Queue team import for all firms without rosters?",
+  },
+  "enrich-firm-abstraction": {
+    endpoint: "/api/admin/enrich/backfill-abstractions",
+    method: "POST",
+    body: {},
+    confirm: "Queue abstraction profile generation for all firms missing profiles?",
+  },
+  "enrich-backfill-all-firms": {
+    endpoint: "/api/admin/enrich/backfill-all",
+    method: "POST",
+    body: { skipCompleted: true },
+    confirm: "Run full enrichment backfill for all firms? This will skip already-completed steps.",
+  },
+};
+
 function StatusBadge({ status }: { status: string }) {
   const style = STATUS_STYLES[status] || STATUS_STYLES.pending;
   const Icon = style.icon;
@@ -86,13 +208,54 @@ function duration(start: string | null, end: string | null): string {
   return `${(ms / 60000).toFixed(1)}m`;
 }
 
+function FunctionCard({
+  fn,
+  onTrigger,
+  triggering,
+}: {
+  fn: InngestFunction;
+  onTrigger?: () => void;
+  triggering?: boolean;
+}) {
+  const isCron = fn.type === "cron";
+  return (
+    <div className="bg-cos-surface px-4 py-3 flex items-center justify-between gap-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-cos-text truncate">{fn.name}</p>
+        <code className="text-xs text-cos-text-secondary">{fn.trigger}</code>
+      </div>
+      {onTrigger && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onTrigger}
+          disabled={triggering}
+          className="shrink-0 text-xs h-7 px-2"
+        >
+          {triggering ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Play className="h-3 w-3" />
+          )}
+        </Button>
+      )}
+      {isCron && (
+        <span className="shrink-0 inline-flex items-center rounded-full bg-cos-warm/10 px-2 py-0.5 text-[10px] font-medium text-cos-warm">
+          <Timer className="h-2.5 w-2.5 mr-1" />
+          cron
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function AdminJobsPage() {
   const [data, setData] = useState<JobsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [cleaning, setCleaning] = useState(false);
-  const [jobsPage, setJobsPage] = useState(1);
   const [cleanResult, setCleanResult] = useState<string | null>(null);
-  const pag = usePaginated(data?.recentJobs ?? [], jobsPage);
+  const [triggeringId, setTriggeringId] = useState<string | null>(null);
+  const [triggerResult, setTriggerResult] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -132,6 +295,33 @@ export default function AdminJobsPage() {
     }
   }
 
+  async function handleTrigger(fnId: string) {
+    const config = TRIGGERABLE_FUNCTIONS[fnId];
+    if (!config) return;
+    if (config.confirm && !window.confirm(config.confirm)) return;
+
+    setTriggeringId(fnId);
+    setTriggerResult(null);
+    try {
+      const res = await fetch(config.endpoint, {
+        method: config.method,
+        headers: { "Content-Type": "application/json" },
+        body: config.body ? JSON.stringify(config.body) : undefined,
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setTriggerResult(`${fnId}: ${result.message || result.queued ? `Queued ${result.queued}` : "Triggered"}`);
+      } else {
+        setTriggerResult(`${fnId} failed: ${result.error}`);
+      }
+      await fetchData();
+    } catch {
+      setTriggerResult(`${fnId}: trigger failed`);
+    } finally {
+      setTriggeringId(null);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -144,8 +334,8 @@ export default function AdminJobsPage() {
     return <div className="p-6 text-red-500">Failed to load job data</div>;
   }
 
-  const eventFns = data.functions.filter((f) => f.type === "event");
-  const cronFns = data.functions.filter((f) => f.type === "cron");
+  // Build a map for quick lookup
+  const fnMap = new Map(data.functions.map((f) => [f.id, f]));
 
   return (
     <div className="space-y-6 p-6">
@@ -154,7 +344,7 @@ export default function AdminJobsPage() {
         <div>
           <h1 className="text-2xl font-bold text-cos-text">Background Jobs</h1>
           <p className="text-sm text-cos-text-secondary mt-1">
-            All jobs run via Inngest &mdash; {data.functions.length} functions registered
+            {data.functions.length} Inngest functions registered &mdash; grouped by category
           </p>
         </div>
         <div className="flex gap-2">
@@ -171,43 +361,71 @@ export default function AdminJobsPage() {
         </div>
       </div>
 
-      {/* Inngest Functions — Event-triggered */}
-      <div className="rounded-lg border border-cos-border bg-cos-surface">
-        <div className="border-b border-cos-border px-4 py-3 flex items-center gap-2">
-          <Zap className="h-4 w-4 text-cos-electric" />
-          <h2 className="text-sm font-semibold text-cos-text">Event-Triggered Functions ({eventFns.length})</h2>
+      {/* Trigger result notification */}
+      {triggerResult && (
+        <div className="rounded-lg border border-cos-electric/20 bg-cos-electric/5 px-4 py-2 text-sm text-cos-electric flex items-center justify-between">
+          <span>{triggerResult}</span>
+          <button onClick={() => setTriggerResult(null)} className="text-cos-slate hover:text-cos-midnight">
+            <XCircle className="h-4 w-4" />
+          </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-cos-border">
-          {eventFns.map((fn) => (
-            <div key={fn.id} className="bg-cos-surface px-4 py-3">
-              <p className="text-sm font-medium text-cos-text">{fn.name}</p>
-              <code className="text-xs text-cos-text-secondary">{fn.trigger}</code>
+      )}
+
+      {/* Job Stats Summary */}
+      {Object.keys(data.stats).length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {Object.entries(data.stats).map(([status, cnt]) => (
+            <div key={status} className="rounded-lg border border-cos-border bg-cos-surface px-4 py-3 text-center">
+              <div className="text-2xl font-bold text-cos-midnight">{cnt}</div>
+              <div className="text-[10px] uppercase tracking-wider text-cos-slate">
+                <StatusBadge status={status} />
+              </div>
             </div>
           ))}
         </div>
-      </div>
+      )}
 
-      {/* Inngest Functions — Cron */}
-      <div className="rounded-lg border border-cos-border bg-cos-surface">
-        <div className="border-b border-cos-border px-4 py-3 flex items-center gap-2">
-          <Timer className="h-4 w-4 text-cos-warm" />
-          <h2 className="text-sm font-semibold text-cos-text">Cron Functions ({cronFns.length})</h2>
-        </div>
-        <div className="divide-y divide-cos-border">
-          {cronFns.map((fn) => (
-            <div key={fn.id} className="flex items-center justify-between px-4 py-3">
-              <p className="text-sm font-medium text-cos-text">{fn.name}</p>
-              <code className="text-xs bg-cos-bg px-2 py-1 rounded text-cos-text-secondary">{fn.trigger}</code>
+      {/* Functions grouped by category */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {Object.entries(FUNCTION_CATEGORIES).map(([catKey, cat]) => {
+          const fns = cat.ids
+            .map((id) => fnMap.get(id))
+            .filter(Boolean) as InngestFunction[];
+          if (fns.length === 0) return null;
+
+          const CatIcon = cat.icon;
+          return (
+            <div key={catKey} className="rounded-lg border border-cos-border bg-cos-surface">
+              <div className="border-b border-cos-border px-4 py-3 flex items-center gap-2">
+                <CatIcon className={`h-4 w-4 ${cat.color}`} />
+                <h2 className="text-sm font-semibold text-cos-text">
+                  {cat.label} ({fns.length})
+                </h2>
+              </div>
+              <div className="divide-y divide-cos-border">
+                {fns.map((fn) => (
+                  <FunctionCard
+                    key={fn.id}
+                    fn={fn}
+                    onTrigger={
+                      TRIGGERABLE_FUNCTIONS[fn.id]
+                        ? () => handleTrigger(fn.id)
+                        : undefined
+                    }
+                    triggering={triggeringId === fn.id}
+                  />
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
-      {/* Job Tracking Log (backgroundJobs table — used for status polling) */}
+      {/* Job Tracking Log */}
       {data.recentJobs.length > 0 && (
         <div className="rounded-lg border border-cos-border bg-cos-surface">
           <div className="border-b border-cos-border px-4 py-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-cos-text">Job Tracking Log ({data.totalJobs} total)</h2>
+            <h2 className="text-sm font-semibold text-cos-text">Recent Job Log ({data.totalJobs} total)</h2>
             <Button variant="outline" size="sm" disabled={cleaning} onClick={handleCleanup}>
               {cleaning ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
               Purge Old
@@ -226,7 +444,7 @@ export default function AdminJobsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-cos-border">
-                {pag.pageItems.map((job) => (
+                {data.recentJobs.map((job) => (
                   <tr key={job.id} className="hover:bg-cos-bg">
                     <td className="px-4 py-2 font-mono text-xs">{job.type}</td>
                     <td className="px-4 py-2"><StatusBadge status={job.status} /></td>
@@ -237,9 +455,6 @@ export default function AdminJobsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
-          <div className="px-4 pb-3">
-            <PaginationFooter page={pag.safePage} totalPages={pag.totalPages} total={pag.total} onPageChange={setJobsPage} />
           </div>
         </div>
       )}
