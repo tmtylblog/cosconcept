@@ -41,10 +41,15 @@ import {
   AlertCircle,
   Trash2,
   AlertTriangle,
+  Target,
   X,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { FirmOverviewTab } from "./components/firm-overview-tab";
+import { FirmOfferingTab } from "./components/firm-offering-tab";
+import { FirmExperienceTab } from "./components/firm-experience-tab";
+import { FirmPreferencesTab } from "./components/firm-preferences-tab";
 import {
   ExpertProfileCard,
   type ExpertProfileData,
@@ -416,6 +421,7 @@ export default function CustomerDetailPage() {
   const [activityLoaded, setActivityLoaded] = useState(false);
   const [activityFilter, setActivityFilter] = useState("all");
   const [activityView, setActivityView] = useState<"timeline" | "conversations">("timeline");
+  const [firmSubTab, setFirmSubTab] = useState<"overview" | "offering" | "experience" | "preferences">("overview");
 
   const [partnershipData, setPartnershipData] = useState<{
     partnerships: PartnershipRow[];
@@ -2041,175 +2047,46 @@ export default function CustomerDetailPage() {
 
         {/* ── FIRM PROFILE TAB ── */}
         {activeTab === "firm-profile" && (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {firm ? (
               <>
-                {/* About */}
-                {firm.description && (
-                  <Section title="About" icon={<Building2 className="h-4 w-4 text-cos-signal" />}>
-                    <p className="text-sm text-cos-midnight leading-relaxed">{firm.description}</p>
-                  </Section>
+                {/* Sub-tab bar */}
+                <div className="flex items-center gap-3">
+                  <div className="flex rounded-cos-lg border border-cos-border bg-cos-cloud/30 p-0.5">
+                    {([
+                      { id: "overview" as const, label: "Overview", Icon: Building2 },
+                      { id: "offering" as const, label: "Offering", Icon: Sparkles },
+                      { id: "experience" as const, label: "Experience", Icon: FileText },
+                      { id: "preferences" as const, label: "Preferences", Icon: Target },
+                    ] as const).map(({ id, label, Icon }) => (
+                      <button
+                        key={id}
+                        onClick={() => setFirmSubTab(id)}
+                        className={`flex items-center gap-1.5 rounded-cos px-3 py-1.5 text-xs font-medium transition-colors ${
+                          firmSubTab === id
+                            ? "bg-white text-cos-midnight shadow-sm"
+                            : "text-cos-slate hover:text-cos-midnight"
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sub-tab content */}
+                {firmSubTab === "overview" && (
+                  <FirmOverviewTab orgId={orgId} firm={firm} />
                 )}
-
-                {/* Enrichment Data */}
-                {firm.enrichmentData && (
-                  <>
-                    {/* Services — check both top-level and extracted.services */}
-                    {(() => {
-                      const ed = firm.enrichmentData as { services?: { name: string; description?: string }[]; extracted?: { services?: string[] } } | null;
-                      const structured = ed?.services; // structured format {name, description}
-                      const extracted = ed?.extracted?.services; // string[] format
-                      if (!structured?.length && !extracted?.length) return null;
-                      return (
-                        <Section title={`Services (${structured?.length || extracted?.length || 0})`} icon={<Sparkles className="h-4 w-4 text-cos-electric" />}>
-                          <div className="space-y-2">
-                            {structured?.length ? structured.map((svc, i) => (
-                              <div key={i} className="rounded-cos bg-cos-cloud/50 px-3 py-2">
-                                <p className="text-sm font-medium text-cos-midnight">{svc.name}</p>
-                                {svc.description && (
-                                  <p className="mt-0.5 text-xs text-cos-slate">{svc.description}</p>
-                                )}
-                              </div>
-                            )) : extracted?.map((svc, i) => (
-                              <div key={i} className="rounded-cos bg-cos-cloud/50 px-3 py-2">
-                                <p className="text-sm font-medium text-cos-midnight">{svc}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </Section>
-                      );
-                    })()}
-
-                    {/* Clients */}
-                    {(() => {
-                      const ed = firm.enrichmentData as { extracted?: { clients?: string[] } } | null;
-                      const clients = ed?.extracted?.clients;
-                      if (!clients?.length) return null;
-                      return (
-                        <Section title={`Clients (${clients.length})`} icon={<UserCheck className="h-4 w-4 text-cos-signal" />}>
-                          <div className="flex flex-wrap gap-1.5">
-                            {clients.map((c: string) => (
-                              <span key={c} className="rounded-cos-pill border border-cos-border bg-white px-2.5 py-0.5 text-xs text-cos-midnight">
-                                {c}
-                              </span>
-                            ))}
-                          </div>
-                        </Section>
-                      );
-                    })()}
-
-                    {/* Taxonomy (skills, industries, markets) */}
-                    {(() => {
-                      const ed = firm.enrichmentData as Record<string, unknown>;
-                      const skills = ed?.skills as string[] | undefined;
-                      const industries = ed?.industries as string[] | undefined;
-                      const markets = ed?.markets as string[] | undefined;
-                      const categories = ed?.categories as string[] | undefined;
-
-                      const hasTaxonomy =
-                        (skills?.length ?? 0) > 0 ||
-                        (industries?.length ?? 0) > 0 ||
-                        (markets?.length ?? 0) > 0 ||
-                        (categories?.length ?? 0) > 0;
-
-                      if (!hasTaxonomy) return null;
-
-                      return (
-                        <Section title="Taxonomy" icon={<Share2 className="h-4 w-4 text-cos-signal" />}>
-                          <div className="space-y-4">
-                            {categories && categories.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-cos-warm mb-1.5">Categories</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {categories.map((c) => (
-                                    <span key={c} className="rounded-cos-pill bg-cos-warm/10 px-2.5 py-0.5 text-xs text-cos-warm">
-                                      {c}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {skills && skills.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-cos-signal mb-1.5">Skills</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {skills.slice(0, 30).map((s) => (
-                                    <span key={s} className="rounded-cos-pill bg-cos-signal/10 px-2.5 py-0.5 text-xs text-cos-signal">
-                                      {s}
-                                    </span>
-                                  ))}
-                                  {skills.length > 30 && (
-                                    <span className="text-xs text-cos-slate-light">
-                                      +{skills.length - 30} more
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                            {industries && industries.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-cos-ember mb-1.5">Industries</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {industries.map((ind) => (
-                                    <span key={ind} className="rounded-cos-pill bg-cos-ember/10 px-2.5 py-0.5 text-xs text-cos-ember">
-                                      {ind}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {markets && markets.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-cos-warm mb-1.5">Markets</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {markets.map((mkt) => (
-                                    <span key={mkt} className="rounded-cos-pill bg-cos-warm/10 px-2.5 py-0.5 text-xs text-cos-warm">
-                                      {mkt}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </Section>
-                      );
-                    })()}
-
-                    {/* Case Studies — check both top-level and extracted.caseStudyUrls */}
-                    {(() => {
-                      const ed = firm.enrichmentData as {
-                        caseStudies?: { title: string; client?: string; outcome?: string }[];
-                        extracted?: { caseStudyUrls?: string[] };
-                      } | null;
-                      const structured = ed?.caseStudies;
-                      const urls = ed?.extracted?.caseStudyUrls;
-                      if (!structured?.length && !urls?.length) return null;
-                      return (
-                        <Section title={`Case Studies (${structured?.length || urls?.length || 0})`} icon={<FileText className="h-4 w-4 text-cos-warm" />}>
-                          <div className="space-y-3">
-                            {structured?.length ? structured.map((cs, i) => (
-                              <div key={i} className="rounded-cos bg-cos-cloud/50 p-3">
-                                <p className="text-sm font-medium text-cos-midnight">{cs.title}</p>
-                                {cs.client && (
-                                  <p className="mt-0.5 text-xs text-cos-slate">Client: {cs.client}</p>
-                                )}
-                                {cs.outcome && (
-                                  <p className="mt-1 text-xs text-cos-slate">{cs.outcome}</p>
-                                )}
-                              </div>
-                            )) : urls?.map((url, i) => (
-                              <div key={i} className="rounded-cos bg-cos-cloud/50 p-3">
-                                <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-cos-electric hover:underline flex items-center gap-1.5">
-                                  <ExternalLink className="h-3 w-3" />
-                                  {url}
-                                </a>
-                              </div>
-                            ))}
-                          </div>
-                        </Section>
-                      );
-                    })()}
-                  </>
+                {firmSubTab === "offering" && (
+                  <FirmOfferingTab orgId={orgId} />
+                )}
+                {firmSubTab === "experience" && (
+                  <FirmExperienceTab orgId={orgId} />
+                )}
+                {firmSubTab === "preferences" && (
+                  <FirmPreferencesTab orgId={orgId} />
                 )}
 
                 {/* Raw enrichment data (collapsed) */}
