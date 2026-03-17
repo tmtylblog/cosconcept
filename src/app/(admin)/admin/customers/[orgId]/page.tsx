@@ -281,7 +281,7 @@ type TabId =
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <BarChart3 className="h-4 w-4" /> },
-  { id: "users", label: "Users & Team", icon: <Users className="h-4 w-4" /> },
+  { id: "users", label: "User Mgmt", icon: <Users className="h-4 w-4" /> },
   { id: "firm-profile", label: "Firm Profile", icon: <Building2 className="h-4 w-4" /> },
   { id: "activity", label: "Activity", icon: <Activity className="h-4 w-4" /> },
   { id: "billing", label: "Billing", icon: <CreditCard className="h-4 w-4" /> },
@@ -421,7 +421,7 @@ export default function CustomerDetailPage() {
   const [activityLoaded, setActivityLoaded] = useState(false);
   const [activityFilter, setActivityFilter] = useState("all");
   const [activityView, setActivityView] = useState<"timeline" | "conversations">("timeline");
-  const [firmSubTab, setFirmSubTab] = useState<"overview" | "offering" | "experience" | "preferences">("overview");
+  const [firmSubTab, setFirmSubTab] = useState<"overview" | "offering" | "experts" | "experience" | "preferences">("overview");
 
   const [partnershipData, setPartnershipData] = useState<{
     partnerships: PartnershipRow[];
@@ -654,13 +654,13 @@ export default function CustomerDetailPage() {
   }, [orgId]);
 
   useEffect(() => {
-    if (activeTab !== "users" || expertsLoaded) return;
+    if ((activeTab !== "users" && activeTab !== "firm-profile") || expertsLoaded) return;
     loadExperts();
   }, [activeTab, expertsLoaded, loadExperts]);
 
-  // Auto-check import status when Users tab loads (picks up in-progress imports)
+  // Auto-check import status when experts are shown (picks up in-progress imports)
   useEffect(() => {
-    if (activeTab !== "users" || importPolling || importStatus) return;
+    if ((activeTab !== "users" && activeTab !== "firm-profile") || importPolling || importStatus) return;
     fetch(`/api/admin/customers/${orgId}/team-import/status`)
       .then((r) => r.json())
       .then((status: TeamImportStatus) => {
@@ -1029,6 +1029,546 @@ export default function CustomerDetailPage() {
       createdAt: lu.createdAt,
     })),
   ];
+
+  // Expert Roster inline component (captures parent state)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function ExpertRosterInline() {
+    return (
+      <Section
+        title={`Expert Roster (${experts.length})`}
+        icon={<Users className="h-4 w-4 text-cos-signal" />}
+        action={
+          <div className="flex items-center gap-2">
+            {data?.firm?.website && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleImportEstimate("free")}
+                  disabled={importLoading || importPolling || importEstimateLoading}
+                  className="h-7 gap-1.5 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                >
+                  {importEstimateLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  Import Team (Free)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleImportEstimate("pro")}
+                  disabled={importLoading || importPolling || importEstimateLoading}
+                  className="h-7 gap-1.5 text-xs border-cos-electric/30 text-cos-electric hover:bg-cos-electric/5"
+                >
+                  {importEstimateLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="h-3.5 w-3.5" />
+                  )}
+                  Import Team (Pro)
+                </Button>
+              </>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddExpert(true)}
+              className="h-7 gap-1.5 text-xs"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              Add Expert
+            </Button>
+          </div>
+        }
+      >
+        {/* Add Expert Dialog */}
+        {showAddExpert && (
+          <div className="mb-4 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/[0.02] p-4">
+            <h4 className="mb-3 text-sm font-semibold text-cos-midnight">Add Expert</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                placeholder="First name"
+                value={addExpertForm.firstName}
+                onChange={(e) => setAddExpertForm((f) => ({ ...f, firstName: e.target.value }))}
+                className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
+              />
+              <input
+                placeholder="Last name"
+                value={addExpertForm.lastName}
+                onChange={(e) => setAddExpertForm((f) => ({ ...f, lastName: e.target.value }))}
+                className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
+              />
+              <input
+                placeholder="Email"
+                type="email"
+                value={addExpertForm.email}
+                onChange={(e) => setAddExpertForm((f) => ({ ...f, email: e.target.value }))}
+                className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
+              />
+              <input
+                placeholder="Title / Role"
+                value={addExpertForm.title}
+                onChange={(e) => setAddExpertForm((f) => ({ ...f, title: e.target.value }))}
+                className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
+              />
+              <input
+                placeholder="LinkedIn URL"
+                value={addExpertForm.linkedinUrl}
+                onChange={(e) => setAddExpertForm((f) => ({ ...f, linkedinUrl: e.target.value }))}
+                className="col-span-2 rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
+              />
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowAddExpert(false)} className="h-8 text-xs">
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleAddExpert}
+                disabled={addingExpert || (!addExpertForm.firstName && !addExpertForm.lastName)}
+                className="h-8 gap-1.5 text-xs bg-cos-electric text-white hover:bg-cos-electric/90"
+              >
+                {addingExpert ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                Add Expert
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Import Confirmation Dialog */}
+        {showImportConfirm && (
+          <div className="mb-4 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/[0.02] p-4">
+            <h4 className="mb-2 text-sm font-semibold text-cos-midnight">
+              Import Team ({showImportConfirm === "pro" ? "Pro" : "Free"})
+            </h4>
+            {importEstimate?.estimates ? (
+              <>
+                <p className="text-xs text-cos-slate mb-3">
+                  PDL shows ~{importEstimate.employeeCount} employees at this company.
+                </p>
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div className="rounded-cos bg-white border border-cos-border p-2 text-center">
+                    <div className="text-sm font-bold text-cos-midnight">
+                      {importEstimate.estimates.searchCredits}
+                    </div>
+                    <div className="text-[10px] text-cos-slate">Search credits</div>
+                  </div>
+                  <div className="rounded-cos bg-white border border-cos-border p-2 text-center">
+                    <div className="text-sm font-bold text-cos-electric">
+                      {showImportConfirm === "pro" ? importEstimate.estimates.enrichCreditsPro : importEstimate.estimates.enrichCreditsFree}
+                    </div>
+                    <div className="text-[10px] text-cos-slate">Enrich credits</div>
+                  </div>
+                  <div className="rounded-cos bg-white border border-cos-border p-2 text-center">
+                    <div className="text-sm font-bold text-cos-warm">
+                      {showImportConfirm === "pro" ? importEstimate.estimates.totalPro : importEstimate.estimates.totalFree}
+                    </div>
+                    <div className="text-[10px] text-cos-slate">Total credits</div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-cos-slate-light mb-3">
+                  {showImportConfirm === "free"
+                    ? "Free tier: Searches all employees, classifies them, and auto-enriches the first 5 experts."
+                    : "Pro tier: Searches all employees, classifies them, and auto-enriches ALL experts with work history."}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-cos-slate mb-3">
+                Employee count unknown. Costs depend on company size (1 credit per person found).
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowImportConfirm(null)} className="h-8 text-xs">
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleTeamImport(showImportConfirm)}
+                disabled={importLoading}
+                className="h-8 gap-1.5 text-xs bg-cos-electric text-white hover:bg-cos-electric/90"
+              >
+                {importLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                Confirm Import
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Import Progress Panel */}
+        {(importPolling || importStatus) && importStatus?.phase !== "idle" && (
+          <div className="mb-4 rounded-cos-lg border border-cos-border bg-cos-cloud/30 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
+                Import Progress
+              </h4>
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
+                  importStatus?.phase === "done" && importStatus?.searchResults?.total === 0
+                    ? "bg-amber-50 text-amber-600"
+                    : importStatus?.phase === "done" ? "bg-emerald-50 text-emerald-600"
+                    : importStatus?.phase === "error" ? "bg-cos-ember/10 text-cos-ember"
+                    : importStatus?.phase === "discovered" ? "bg-purple-50 text-purple-600"
+                    : "bg-cos-electric/10 text-cos-electric"
+                }`}>
+                  {importPolling && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {importStatus?.phase === "done"
+                    ? (importStatus?.searchResults?.total === 0 ? "No Results" :
+                       (importStatus.jobResult as Record<string, unknown> | null)?.skipped ? "Skipped" : "Complete")
+                    : importStatus?.phase === "error" ? "Error"
+                    : importStatus?.phase === "discovered" ? "Team Discovered via PDL"
+                    : importStatus?.phase === "enriching" ? "Enriching..."
+                    : importStatus?.phase === "searching" ? "Searching PDL..."
+                    : importStatus?.phase === "queued" ? "Queued in Inngest..."
+                    : importStatus?.phase}
+                </span>
+                {(importStatus?.phase === "error" || importStatus?.phase === "queued") && !importLoading && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => handleTeamImport("free", true)}
+                  >
+                    <Zap className="h-3 w-3 mr-1" />
+                    Retry
+                  </Button>
+                )}
+                {importStatus?.phase === "discovered" && !enrichingAll && !enrichAllResult && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[10px] px-2 border-purple-200 text-purple-600 hover:bg-purple-50"
+                    onClick={handleEnrichAll}
+                  >
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Enrich All Experts
+                  </Button>
+                )}
+                {enrichingAll && (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-purple-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Queuing enrichment jobs...
+                  </span>
+                )}
+                {enrichAllResult && (
+                  <span className="text-[10px] text-emerald-600">
+                    ✓ Queued {enrichAllResult.queued} enrichments ({enrichAllResult.skipped} skipped)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {importStatus?.phase === "queued" && (
+              <div className="mb-2 flex items-start gap-2 rounded bg-amber-50 p-2">
+                <Clock className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                <div className="text-[10px] text-amber-700">
+                  <p>Job is queued in Inngest &mdash; should start within seconds.</p>
+                  {importStatus.startedAt && (
+                    <p className="text-amber-600/70 mt-0.5">
+                      Waiting since {new Date(importStatus.startedAt).toLocaleTimeString()}
+                    </p>
+                  )}
+                  {importStatus.jobError && (
+                    <p className="text-cos-ember mt-0.5">Last error: {importStatus.jobError}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {importStatus?.phase === "done" && importStatus?.searchResults && importStatus.searchResults.total === 0 && (
+              <div className="mb-2 flex items-start gap-2 rounded bg-amber-50 p-2">
+                <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                <div className="text-[10px] text-amber-700">
+                  <p className="font-medium">No employees found for this domain.</p>
+                  <p className="mt-0.5 text-amber-600/70">
+                    PDL returned 0 results. This usually means the domain isn&apos;t in PDL&apos;s database,
+                    or employees are indexed under a different domain (e.g. a parent company or domain alias).
+                  </p>
+                  {importStatus.jobResult && (importStatus.jobResult as Record<string, unknown>).domain && (
+                    <p className="mt-0.5 font-mono text-amber-600/70">
+                      Searched: {String((importStatus.jobResult as Record<string, unknown>).domain)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {importStatus?.phase === "done" && importStatus.jobResult && (importStatus.jobResult as Record<string, unknown>).skipped === true && (
+              <div className="mb-2 flex items-start gap-2 rounded bg-blue-50 p-2">
+                <Clock className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
+                <div className="text-[10px] text-blue-700">
+                  <p className="font-medium">Import skipped &mdash; already ingested within the last 30 days.</p>
+                  <p className="mt-0.5 text-blue-500">Use &quot;Force&quot; to re-import if needed.</p>
+                </div>
+              </div>
+            )}
+
+            {importStatus?.searchResults && importStatus.searchResults.total > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                <span className="rounded-cos-pill bg-white border border-cos-border px-2.5 py-1 text-[10px]">
+                  <span className="font-semibold text-cos-midnight">{importStatus.searchResults.total}</span>{" "}
+                  <span className="text-cos-slate">Found</span>
+                </span>
+                <span className="rounded-cos-pill bg-emerald-50 px-2.5 py-1 text-[10px]">
+                  <span className="font-semibold text-emerald-600">{importStatus.searchResults.experts}</span>{" "}
+                  <span className="text-emerald-600/70">Expert</span>
+                </span>
+                <span className="rounded-cos-pill bg-amber-50 px-2.5 py-1 text-[10px]">
+                  <span className="font-semibold text-amber-600">{importStatus.searchResults.potentialExperts}</span>{" "}
+                  <span className="text-amber-600/70">Potential</span>
+                </span>
+                <span className="rounded-cos-pill bg-cos-cloud px-2.5 py-1 text-[10px]">
+                  <span className="font-semibold text-cos-slate">{importStatus.searchResults.notExperts}</span>{" "}
+                  <span className="text-cos-slate/70">Not Expert</span>
+                </span>
+              </div>
+            )}
+
+            {importStatus?.enrichProgress && importStatus.enrichProgress.total > 0 && (
+              <div>
+                <div className="flex items-center justify-between text-[10px] text-cos-slate mb-1">
+                  <span>Enriching experts...</span>
+                  <span>{importStatus.enrichProgress.completed}/{importStatus.enrichProgress.total}</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-cos-cloud">
+                  <div
+                    className="h-full rounded-full bg-cos-electric transition-all"
+                    style={{ width: `${Math.round((importStatus.enrichProgress.completed / importStatus.enrichProgress.total) * 100)}%` }}
+                  />
+                </div>
+                {importStatus.enrichProgress.failed > 0 && (
+                  <p className="mt-1 text-[10px] text-cos-ember">
+                    {importStatus.enrichProgress.failed} enrichment(s) failed
+                  </p>
+                )}
+              </div>
+            )}
+
+            {importStatus?.phase === "error" && importStatus.jobError && (
+              <div className="mt-2 flex items-start gap-2 rounded bg-cos-ember/5 p-2">
+                <AlertCircle className="h-3.5 w-3.5 text-cos-ember mt-0.5 shrink-0" />
+                <p className="text-[10px] text-cos-ember">{importStatus.jobError}</p>
+              </div>
+            )}
+
+            {importStatus?.jobId && (
+              <p className="mt-2 text-[9px] text-cos-slate/50 font-mono">
+                Job: {importStatus.jobId}
+              </p>
+            )}
+          </div>
+        )}
+
+        {expertsLoading && !expertsLoaded ? (
+          <div className="flex items-center gap-2 py-8 justify-center text-cos-slate">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-xs">Loading experts...</span>
+          </div>
+        ) : experts.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-8">
+            <Users className="h-8 w-8 text-cos-slate-light" />
+            <p className="text-xs text-cos-slate-light">No experts in the roster yet</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAddExpert(true)}
+              className="mt-1 h-7 gap-1.5 text-xs"
+            >
+              <UserPlus className="h-3 w-3" />
+              Add First Expert
+            </Button>
+          </div>
+        ) : (() => {
+          const tierExperts = experts.filter((ep) => ep.expertTier === "expert");
+          const tierPotential = experts.filter((ep) => ep.expertTier === "potential_expert");
+          const tierNotExpert = experts.filter((ep) => ep.expertTier === "not_expert");
+          const tierOther = experts.filter((ep) => !ep.expertTier || !["expert", "potential_expert", "not_expert"].includes(ep.expertTier));
+
+          const renderExpertRow = (ep: AdminExpert, showEnrich: boolean) => (
+            <div key={ep.id} onClick={() => setDrawerExpertId(ep.id)} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-cos-electric/[0.02] cursor-pointer">
+              {ep.photoUrl ? (
+                <img src={ep.photoUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
+              ) : (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-xs font-semibold text-cos-signal">
+                  {(ep.fullName ?? ep.firstName ?? "?").charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium text-cos-midnight">
+                    {ep.fullName ?? [ep.firstName, ep.lastName].filter(Boolean).join(" ") ?? "Unnamed"}
+                  </span>
+                  {ep.isFullyEnriched && (
+                    <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Enriched" />
+                  )}
+                  {ep.profileCount > 0 && (
+                    <span className={`shrink-0 rounded-cos-pill px-1.5 py-0.5 text-[9px] font-semibold ${
+                      ep.strongProfiles > 0 ? "bg-cos-signal/10 text-cos-signal" : "bg-cos-electric/10 text-cos-electric"
+                    }`} title={`${ep.profileCount} specialist profile${ep.profileCount > 1 ? "s" : ""} (${ep.strongProfiles} strong)`}>
+                      {ep.profileCount} SP{ep.profileCount > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-xs text-cos-slate">{ep.title ?? "—"}</p>
+                  {ep.updatedAt && (
+                    <span className="shrink-0 text-[9px] text-cos-slate/50">
+                      {new Date(ep.updatedAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                {ep.linkedinUrl && (
+                  <a
+                    href={ep.linkedinUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex h-7 w-7 items-center justify-center rounded text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
+                    title="View LinkedIn"
+                  >
+                    <Linkedin className="h-3.5 w-3.5" />
+                  </a>
+                )}
+                {showEnrich && (ep.linkedinUrl || ep.fullName) && (
+                  enrichingExpert === ep.id ? (
+                    <span className="inline-flex items-center gap-1 px-2 text-[10px] text-cos-electric">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Processing...
+                    </span>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); handleManualEnrich(ep.id); }}
+                      title={ep.isFullyEnriched ? "Re-enrich with fresh PDL data (1 credit)" : "Enrich with PDL (1 credit)"}
+                      className={`h-7 gap-1 px-2 text-[10px] ${
+                        ep.isFullyEnriched
+                          ? "text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
+                          : "text-cos-warm hover:text-cos-warm hover:bg-cos-warm/5"
+                      }`}
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      {ep.isFullyEnriched ? "Update" : "Enrich"}
+                    </Button>
+                  )
+                )}
+                {!ep.userId && ep.email && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSendInvite(ep.id)}
+                    disabled={invitingExpert === ep.id}
+                    title="Send invite email"
+                    className="h-7 gap-1 px-2 text-[10px] text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
+                  >
+                    {invitingExpert === ep.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Mail className="h-3 w-3" />
+                    )}
+                    Invite
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+
+          return (
+            <div className="space-y-4">
+              {tierExperts.length > 0 && (
+                <div className="overflow-hidden rounded-cos-lg border border-cos-signal/20">
+                  <div className="flex items-center justify-between bg-cos-signal/8 px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-cos-signal">Experts</span>
+                      <span className="rounded-cos-pill bg-cos-signal/15 px-2 py-0.5 text-[10px] font-bold text-cos-signal">{tierExperts.length}</span>
+                    </div>
+                    <span className="text-[10px] text-cos-signal/70">Client-facing roles — enrichable</span>
+                  </div>
+                  <div className="divide-y divide-cos-signal/10">
+                    {tierExperts.map((ep) => renderExpertRow(ep, true))}
+                  </div>
+                </div>
+              )}
+              {tierPotential.length > 0 && (
+                <div className="overflow-hidden rounded-cos-lg border border-cos-warm/20">
+                  <div className="flex items-center justify-between bg-cos-warm/8 px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-cos-warm">Potential Experts</span>
+                      <span className="rounded-cos-pill bg-cos-warm/15 px-2 py-0.5 text-[10px] font-bold text-cos-warm">{tierPotential.length}</span>
+                    </div>
+                    <span className="text-[10px] text-cos-warm/70">Ambiguous roles — may be client-facing</span>
+                  </div>
+                  <div className="divide-y divide-cos-warm/10">
+                    {tierPotential.map((ep) => renderExpertRow(ep, true))}
+                  </div>
+                </div>
+              )}
+              {tierNotExpert.length > 0 && (
+                <div className="overflow-hidden rounded-cos-lg border border-cos-border/60">
+                  <div className="flex items-center justify-between bg-cos-cloud/50 px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-cos-slate">Not Experts</span>
+                      <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-bold text-cos-slate">{tierNotExpert.length}</span>
+                    </div>
+                    <span className="text-[10px] text-cos-slate/70">Internal ops — HR, admin, sales, etc.</span>
+                  </div>
+                  <div className="divide-y divide-cos-border/30">
+                    {tierNotExpert.map((ep) => renderExpertRow(ep, false))}
+                  </div>
+                </div>
+              )}
+              {tierOther.length > 0 && (
+                <div className="overflow-hidden rounded-cos-lg border border-cos-border/60">
+                  <div className="flex items-center justify-between bg-cos-cloud/30 px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-cos-slate">Unclassified</span>
+                      <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-bold text-cos-slate">{tierOther.length}</span>
+                    </div>
+                    <span className="text-[10px] text-cos-slate/70">Not yet classified by PDL</span>
+                  </div>
+                  <div className="divide-y divide-cos-border/30">
+                    {tierOther.map((ep) => renderExpertRow(ep, true))}
+                  </div>
+                </div>
+              )}
+              {expertsTotalPages > 1 && (
+                <div className="flex items-center justify-between pt-4">
+                  <span className="text-xs text-cos-slate">
+                    Showing {(expertsPage - 1) * 50 + 1}–{Math.min(expertsPage * 50, expertsTotalCount)} of {expertsTotalCount}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      disabled={expertsPage <= 1 || expertsLoading}
+                      onClick={() => loadExperts(expertsPage - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <span className="px-2 text-xs text-cos-slate">
+                      {expertsPage} / {expertsTotalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      disabled={expertsPage >= expertsTotalPages || expertsLoading}
+                      onClick={() => loadExperts(expertsPage + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Section>
+    );
+  }
 
   return (
     <>
@@ -1487,561 +2027,7 @@ export default function CustomerDetailPage() {
               )}
             </Section>
 
-            {/* ── SECTION 2: Expert Roster ── */}
-            <Section
-              title={`Expert Roster (${experts.length})`}
-              icon={<Users className="h-4 w-4 text-cos-signal" />}
-              action={
-                <div className="flex items-center gap-2">
-                  {data?.firm?.website && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleImportEstimate("free")}
-                        disabled={importLoading || importPolling || importEstimateLoading}
-                        className="h-7 gap-1.5 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                      >
-                        {importEstimateLoading ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Download className="h-3.5 w-3.5" />
-                        )}
-                        Import Team (Free)
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleImportEstimate("pro")}
-                        disabled={importLoading || importPolling || importEstimateLoading}
-                        className="h-7 gap-1.5 text-xs border-cos-electric/30 text-cos-electric hover:bg-cos-electric/5"
-                      >
-                        {importEstimateLoading ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Zap className="h-3.5 w-3.5" />
-                        )}
-                        Import Team (Pro)
-                      </Button>
-                    </>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAddExpert(true)}
-                    className="h-7 gap-1.5 text-xs"
-                  >
-                    <UserPlus className="h-3.5 w-3.5" />
-                    Add Expert
-                  </Button>
-                </div>
-              }
-            >
-              {/* Add Expert Dialog */}
-              {showAddExpert && (
-                <div className="mb-4 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/[0.02] p-4">
-                  <h4 className="mb-3 text-sm font-semibold text-cos-midnight">Add Expert</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      placeholder="First name"
-                      value={addExpertForm.firstName}
-                      onChange={(e) => setAddExpertForm((f) => ({ ...f, firstName: e.target.value }))}
-                      className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
-                    />
-                    <input
-                      placeholder="Last name"
-                      value={addExpertForm.lastName}
-                      onChange={(e) => setAddExpertForm((f) => ({ ...f, lastName: e.target.value }))}
-                      className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
-                    />
-                    <input
-                      placeholder="Email"
-                      type="email"
-                      value={addExpertForm.email}
-                      onChange={(e) => setAddExpertForm((f) => ({ ...f, email: e.target.value }))}
-                      className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
-                    />
-                    <input
-                      placeholder="Title / Role"
-                      value={addExpertForm.title}
-                      onChange={(e) => setAddExpertForm((f) => ({ ...f, title: e.target.value }))}
-                      className="rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
-                    />
-                    <input
-                      placeholder="LinkedIn URL"
-                      value={addExpertForm.linkedinUrl}
-                      onChange={(e) => setAddExpertForm((f) => ({ ...f, linkedinUrl: e.target.value }))}
-                      className="col-span-2 rounded-cos border border-cos-border bg-white px-3 py-2 text-sm outline-none focus:border-cos-electric"
-                    />
-                  </div>
-                  <div className="mt-3 flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setShowAddExpert(false)} className="h-8 text-xs">
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleAddExpert}
-                      disabled={addingExpert || (!addExpertForm.firstName && !addExpertForm.lastName)}
-                      className="h-8 gap-1.5 text-xs bg-cos-electric text-white hover:bg-cos-electric/90"
-                    >
-                      {addingExpert ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
-                      Add Expert
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Import Confirmation Dialog */}
-              {showImportConfirm && (
-                <div className="mb-4 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/[0.02] p-4">
-                  <h4 className="mb-2 text-sm font-semibold text-cos-midnight">
-                    Import Team ({showImportConfirm === "pro" ? "Pro" : "Free"})
-                  </h4>
-                  {importEstimate?.estimates ? (
-                    <>
-                      <p className="text-xs text-cos-slate mb-3">
-                        PDL shows ~{importEstimate.employeeCount} employees at this company.
-                      </p>
-                      <div className="grid grid-cols-3 gap-3 mb-3">
-                        <div className="rounded-cos bg-white border border-cos-border p-2 text-center">
-                          <div className="text-sm font-bold text-cos-midnight">
-                            {importEstimate.estimates.searchCredits}
-                          </div>
-                          <div className="text-[10px] text-cos-slate">Search credits</div>
-                        </div>
-                        <div className="rounded-cos bg-white border border-cos-border p-2 text-center">
-                          <div className="text-sm font-bold text-cos-electric">
-                            {showImportConfirm === "pro" ? importEstimate.estimates.enrichCreditsPro : importEstimate.estimates.enrichCreditsFree}
-                          </div>
-                          <div className="text-[10px] text-cos-slate">Enrich credits</div>
-                        </div>
-                        <div className="rounded-cos bg-white border border-cos-border p-2 text-center">
-                          <div className="text-sm font-bold text-cos-warm">
-                            {showImportConfirm === "pro" ? importEstimate.estimates.totalPro : importEstimate.estimates.totalFree}
-                          </div>
-                          <div className="text-[10px] text-cos-slate">Total credits</div>
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-cos-slate-light mb-3">
-                        {showImportConfirm === "free"
-                          ? "Free tier: Searches all employees, classifies them, and auto-enriches the first 5 experts."
-                          : "Pro tier: Searches all employees, classifies them, and auto-enriches ALL experts with work history."}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-cos-slate mb-3">
-                      Employee count unknown. Costs depend on company size (1 credit per person found).
-                    </p>
-                  )}
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setShowImportConfirm(null)} className="h-8 text-xs">
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => handleTeamImport(showImportConfirm)}
-                      disabled={importLoading}
-                      className="h-8 gap-1.5 text-xs bg-cos-electric text-white hover:bg-cos-electric/90"
-                    >
-                      {importLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                      Confirm Import
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Import Progress Panel */}
-              {(importPolling || importStatus) && importStatus?.phase !== "idle" && (
-                <div className="mb-4 rounded-cos-lg border border-cos-border bg-cos-cloud/30 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-cos-slate">
-                      Import Progress
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center gap-1.5 rounded-cos-pill px-2.5 py-0.5 text-[10px] font-medium ${
-                        importStatus?.phase === "done" && importStatus?.searchResults?.total === 0
-                          ? "bg-amber-50 text-amber-600"
-                          : importStatus?.phase === "done" ? "bg-emerald-50 text-emerald-600"
-                          : importStatus?.phase === "error" ? "bg-cos-ember/10 text-cos-ember"
-                          : importStatus?.phase === "discovered" ? "bg-purple-50 text-purple-600"
-                          : "bg-cos-electric/10 text-cos-electric"
-                      }`}>
-                        {importPolling && <Loader2 className="h-3 w-3 animate-spin" />}
-                        {importStatus?.phase === "done"
-                          ? (importStatus?.searchResults?.total === 0 ? "No Results" :
-                             (importStatus.jobResult as Record<string, unknown> | null)?.skipped ? "Skipped" : "Complete")
-                          : importStatus?.phase === "error" ? "Error"
-                          : importStatus?.phase === "discovered" ? "Team Discovered via PDL"
-                          : importStatus?.phase === "enriching" ? "Enriching..."
-                          : importStatus?.phase === "searching" ? "Searching PDL..."
-                          : importStatus?.phase === "queued" ? "Queued in Inngest..."
-                          : importStatus?.phase}
-                      </span>
-                      {/* Retry button for stuck/failed jobs */}
-                      {(importStatus?.phase === "error" || importStatus?.phase === "queued") && !importLoading && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 text-[10px] px-2"
-                          onClick={() => handleTeamImport("free", true)}
-                        >
-                          <Zap className="h-3 w-3 mr-1" />
-                          Retry
-                        </Button>
-                      )}
-                      {/* Enrich All Experts button for discovered phase */}
-                      {importStatus?.phase === "discovered" && !enrichingAll && !enrichAllResult && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 text-[10px] px-2 border-purple-200 text-purple-600 hover:bg-purple-50"
-                          onClick={handleEnrichAll}
-                        >
-                          <Sparkles className="h-3 w-3 mr-1" />
-                          Enrich All Experts
-                        </Button>
-                      )}
-                      {enrichingAll && (
-                        <span className="inline-flex items-center gap-1.5 text-[10px] text-purple-500">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Queuing enrichment jobs...
-                        </span>
-                      )}
-                      {enrichAllResult && (
-                        <span className="text-[10px] text-emerald-600">
-                          ✓ Queued {enrichAllResult.queued} enrichments ({enrichAllResult.skipped} skipped)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Queued state */}
-                  {importStatus?.phase === "queued" && (
-                    <div className="mb-2 flex items-start gap-2 rounded bg-amber-50 p-2">
-                      <Clock className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
-                      <div className="text-[10px] text-amber-700">
-                        <p>Job is queued in Inngest &mdash; should start within seconds.</p>
-                        {importStatus.startedAt && (
-                          <p className="text-amber-600/70 mt-0.5">
-                            Waiting since {new Date(importStatus.startedAt).toLocaleTimeString()}
-                          </p>
-                        )}
-                        {importStatus.jobError && (
-                          <p className="text-cos-ember mt-0.5">Last error: {importStatus.jobError}</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Done with 0 results — PDL had no data for this domain */}
-                  {importStatus?.phase === "done" && importStatus?.searchResults && importStatus.searchResults.total === 0 && (
-                    <div className="mb-2 flex items-start gap-2 rounded bg-amber-50 p-2">
-                      <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
-                      <div className="text-[10px] text-amber-700">
-                        <p className="font-medium">No employees found for this domain.</p>
-                        <p className="mt-0.5 text-amber-600/70">
-                          PDL returned 0 results. This usually means the domain isn&apos;t in PDL&apos;s database,
-                          or employees are indexed under a different domain (e.g. a parent company or domain alias).
-                        </p>
-                        {importStatus.jobResult && (importStatus.jobResult as Record<string, unknown>).domain && (
-                          <p className="mt-0.5 font-mono text-amber-600/70">
-                            Searched: {String((importStatus.jobResult as Record<string, unknown>).domain)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Done but was skipped (recently ingested) */}
-                  {importStatus?.phase === "done" && importStatus.jobResult && (importStatus.jobResult as Record<string, unknown>).skipped === true && (
-                    <div className="mb-2 flex items-start gap-2 rounded bg-blue-50 p-2">
-                      <Clock className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
-                      <div className="text-[10px] text-blue-700">
-                        <p className="font-medium">Import skipped &mdash; already ingested within the last 30 days.</p>
-                        <p className="mt-0.5 text-blue-500">Use &quot;Force&quot; to re-import if needed.</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {importStatus?.searchResults && importStatus.searchResults.total > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      <span className="rounded-cos-pill bg-white border border-cos-border px-2.5 py-1 text-[10px]">
-                        <span className="font-semibold text-cos-midnight">{importStatus.searchResults.total}</span>{" "}
-                        <span className="text-cos-slate">Found</span>
-                      </span>
-                      <span className="rounded-cos-pill bg-emerald-50 px-2.5 py-1 text-[10px]">
-                        <span className="font-semibold text-emerald-600">{importStatus.searchResults.experts}</span>{" "}
-                        <span className="text-emerald-600/70">Expert</span>
-                      </span>
-                      <span className="rounded-cos-pill bg-amber-50 px-2.5 py-1 text-[10px]">
-                        <span className="font-semibold text-amber-600">{importStatus.searchResults.potentialExperts}</span>{" "}
-                        <span className="text-amber-600/70">Potential</span>
-                      </span>
-                      <span className="rounded-cos-pill bg-cos-cloud px-2.5 py-1 text-[10px]">
-                        <span className="font-semibold text-cos-slate">{importStatus.searchResults.notExperts}</span>{" "}
-                        <span className="text-cos-slate/70">Not Expert</span>
-                      </span>
-                    </div>
-                  )}
-
-                  {importStatus?.enrichProgress && importStatus.enrichProgress.total > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between text-[10px] text-cos-slate mb-1">
-                        <span>Enriching experts...</span>
-                        <span>{importStatus.enrichProgress.completed}/{importStatus.enrichProgress.total}</span>
-                      </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-cos-cloud">
-                        <div
-                          className="h-full rounded-full bg-cos-electric transition-all"
-                          style={{ width: `${Math.round((importStatus.enrichProgress.completed / importStatus.enrichProgress.total) * 100)}%` }}
-                        />
-                      </div>
-                      {importStatus.enrichProgress.failed > 0 && (
-                        <p className="mt-1 text-[10px] text-cos-ember">
-                          {importStatus.enrichProgress.failed} enrichment(s) failed
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {importStatus?.phase === "error" && importStatus.jobError && (
-                    <div className="mt-2 flex items-start gap-2 rounded bg-cos-ember/5 p-2">
-                      <AlertCircle className="h-3.5 w-3.5 text-cos-ember mt-0.5 shrink-0" />
-                      <p className="text-[10px] text-cos-ember">{importStatus.jobError}</p>
-                    </div>
-                  )}
-
-                  {/* Job ID for debugging */}
-                  {importStatus?.jobId && (
-                    <p className="mt-2 text-[9px] text-cos-slate/50 font-mono">
-                      Job: {importStatus.jobId}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {expertsLoading && !expertsLoaded ? (
-                <div className="flex items-center gap-2 py-8 justify-center text-cos-slate">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-xs">Loading experts...</span>
-                </div>
-              ) : experts.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-8">
-                  <Users className="h-8 w-8 text-cos-slate-light" />
-                  <p className="text-xs text-cos-slate-light">No experts in the roster yet</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAddExpert(true)}
-                    className="mt-1 h-7 gap-1.5 text-xs"
-                  >
-                    <UserPlus className="h-3 w-3" />
-                    Add First Expert
-                  </Button>
-                </div>
-              ) : (() => {
-                // Group experts by tier
-                const tierExperts = experts.filter((ep) => ep.expertTier === "expert");
-                const tierPotential = experts.filter((ep) => ep.expertTier === "potential_expert");
-                const tierNotExpert = experts.filter((ep) => ep.expertTier === "not_expert");
-                const tierOther = experts.filter((ep) => !ep.expertTier || !["expert", "potential_expert", "not_expert"].includes(ep.expertTier));
-
-                const renderExpertRow = (ep: AdminExpert, showEnrich: boolean) => (
-                  <div key={ep.id} onClick={() => setDrawerExpertId(ep.id)} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-cos-electric/[0.02] cursor-pointer">
-                    {/* Avatar */}
-                    {ep.photoUrl ? (
-                      <img src={ep.photoUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" />
-                    ) : (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-signal/20 to-cos-electric/20 text-xs font-semibold text-cos-signal">
-                        {(ep.fullName ?? ep.firstName ?? "?").charAt(0).toUpperCase()}
-                      </div>
-                    )}
-
-                    {/* Name + Title + Updated */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium text-cos-midnight">
-                          {ep.fullName ?? [ep.firstName, ep.lastName].filter(Boolean).join(" ") ?? "Unnamed"}
-                        </span>
-                        {ep.isFullyEnriched && (
-                          <Sparkles className="h-3 w-3 shrink-0 text-cos-electric" title="Enriched" />
-                        )}
-                        {ep.profileCount > 0 && (
-                          <span className={`shrink-0 rounded-cos-pill px-1.5 py-0.5 text-[9px] font-semibold ${
-                            ep.strongProfiles > 0 ? "bg-cos-signal/10 text-cos-signal" : "bg-cos-electric/10 text-cos-electric"
-                          }`} title={`${ep.profileCount} specialist profile${ep.profileCount > 1 ? "s" : ""} (${ep.strongProfiles} strong)`}>
-                            {ep.profileCount} SP{ep.profileCount > 1 ? "s" : ""}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-xs text-cos-slate">{ep.title ?? "—"}</p>
-                        {ep.updatedAt && (
-                          <span className="shrink-0 text-[9px] text-cos-slate/50">
-                            {new Date(ep.updatedAt).toLocaleDateString()}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex shrink-0 items-center gap-1">
-                      {ep.linkedinUrl && (
-                        <a
-                          href={ep.linkedinUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex h-7 w-7 items-center justify-center rounded text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5 transition-colors"
-                          title="View LinkedIn"
-                        >
-                          <Linkedin className="h-3.5 w-3.5" />
-                        </a>
-                      )}
-                      {showEnrich && (ep.linkedinUrl || ep.fullName) && (
-                        enrichingExpert === ep.id ? (
-                          <span className="inline-flex items-center gap-1 px-2 text-[10px] text-cos-electric">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            Processing...
-                          </span>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => { e.stopPropagation(); handleManualEnrich(ep.id); }}
-                            title={ep.isFullyEnriched ? "Re-enrich with fresh PDL data (1 credit)" : "Enrich with PDL (1 credit)"}
-                            className={`h-7 gap-1 px-2 text-[10px] ${
-                              ep.isFullyEnriched
-                                ? "text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
-                                : "text-cos-warm hover:text-cos-warm hover:bg-cos-warm/5"
-                            }`}
-                          >
-                            <Sparkles className="h-3 w-3" />
-                            {ep.isFullyEnriched ? "Update" : "Enrich"}
-                          </Button>
-                        )
-                      )}
-                      {!ep.userId && ep.email && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSendInvite(ep.id)}
-                          disabled={invitingExpert === ep.id}
-                          title="Send invite email"
-                          className="h-7 gap-1 px-2 text-[10px] text-cos-slate hover:text-cos-electric hover:bg-cos-electric/5"
-                        >
-                          {invitingExpert === ep.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Mail className="h-3 w-3" />
-                          )}
-                          Invite
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-
-                return (
-                  <div className="space-y-4">
-                    {/* ── Experts Section ── */}
-                    {tierExperts.length > 0 && (
-                      <div className="overflow-hidden rounded-cos-lg border border-cos-signal/20">
-                        <div className="flex items-center justify-between bg-cos-signal/8 px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-cos-signal">Experts</span>
-                            <span className="rounded-cos-pill bg-cos-signal/15 px-2 py-0.5 text-[10px] font-bold text-cos-signal">{tierExperts.length}</span>
-                          </div>
-                          <span className="text-[10px] text-cos-signal/70">Client-facing roles — enrichable</span>
-                        </div>
-                        <div className="divide-y divide-cos-signal/10">
-                          {tierExperts.map((ep) => renderExpertRow(ep, true))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ── Potential Experts Section ── */}
-                    {tierPotential.length > 0 && (
-                      <div className="overflow-hidden rounded-cos-lg border border-cos-warm/20">
-                        <div className="flex items-center justify-between bg-cos-warm/8 px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-cos-warm">Potential Experts</span>
-                            <span className="rounded-cos-pill bg-cos-warm/15 px-2 py-0.5 text-[10px] font-bold text-cos-warm">{tierPotential.length}</span>
-                          </div>
-                          <span className="text-[10px] text-cos-warm/70">Ambiguous roles — may be client-facing</span>
-                        </div>
-                        <div className="divide-y divide-cos-warm/10">
-                          {tierPotential.map((ep) => renderExpertRow(ep, true))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ── Not Experts Section ── */}
-                    {tierNotExpert.length > 0 && (
-                      <div className="overflow-hidden rounded-cos-lg border border-cos-border/60">
-                        <div className="flex items-center justify-between bg-cos-cloud/50 px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-cos-slate">Not Experts</span>
-                            <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-bold text-cos-slate">{tierNotExpert.length}</span>
-                          </div>
-                          <span className="text-[10px] text-cos-slate/70">Internal ops — HR, admin, sales, etc.</span>
-                        </div>
-                        <div className="divide-y divide-cos-border/30">
-                          {tierNotExpert.map((ep) => renderExpertRow(ep, false))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ── Unclassified (legacy imports without PDL data) ── */}
-                    {tierOther.length > 0 && (
-                      <div className="overflow-hidden rounded-cos-lg border border-cos-border/60">
-                        <div className="flex items-center justify-between bg-cos-cloud/30 px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-cos-slate">Unclassified</span>
-                            <span className="rounded-cos-pill bg-cos-cloud px-2 py-0.5 text-[10px] font-bold text-cos-slate">{tierOther.length}</span>
-                          </div>
-                          <span className="text-[10px] text-cos-slate/70">Not yet classified by PDL</span>
-                        </div>
-                        <div className="divide-y divide-cos-border/30">
-                          {tierOther.map((ep) => renderExpertRow(ep, true))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Pagination */}
-                    {expertsTotalPages > 1 && (
-                      <div className="flex items-center justify-between pt-4">
-                        <span className="text-xs text-cos-slate">
-                          Showing {(expertsPage - 1) * 50 + 1}–{Math.min(expertsPage * 50, expertsTotalCount)} of {expertsTotalCount}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            disabled={expertsPage <= 1 || expertsLoading}
-                            onClick={() => loadExperts(expertsPage - 1)}
-                          >
-                            Previous
-                          </Button>
-                          <span className="px-2 text-xs text-cos-slate">
-                            {expertsPage} / {expertsTotalPages}
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            disabled={expertsPage >= expertsTotalPages || expertsLoading}
-                            onClick={() => loadExperts(expertsPage + 1)}
-                          >
-                            Next
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </Section>
+            {/* Expert Roster moved to Firm Profile > Experts sub-tab */}
           </div>
         )}
 
@@ -2056,6 +2042,7 @@ export default function CustomerDetailPage() {
                     {([
                       { id: "overview" as const, label: "Overview", Icon: Building2 },
                       { id: "offering" as const, label: "Offering", Icon: Sparkles },
+                      { id: "experts" as const, label: "Experts", Icon: Users },
                       { id: "experience" as const, label: "Experience", Icon: FileText },
                       { id: "preferences" as const, label: "Preferences", Icon: Target },
                     ] as const).map(({ id, label, Icon }) => (
@@ -2081,6 +2068,9 @@ export default function CustomerDetailPage() {
                 )}
                 {firmSubTab === "offering" && (
                   <FirmOfferingTab orgId={orgId} />
+                )}
+                {firmSubTab === "experts" && (
+                  <ExpertRosterInline />
                 )}
                 {firmSubTab === "experience" && (
                   <FirmExperienceTab orgId={orgId} />
