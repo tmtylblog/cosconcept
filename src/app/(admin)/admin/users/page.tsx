@@ -83,24 +83,21 @@ export default function AdminUsersPage() {
   >({});
 
   useEffect(() => {
-    authClient.admin
-      .listUsers({ query: { limit: 100 } })
-      .then((res) => {
-        if (res.data?.users) {
-          // Only show admin and superadmin users (internal staff)
-          const allUsers = res.data.users.map((u) => ({
-            id: u.id,
-            name: u.name,
-            email: u.email,
-            role: (u as unknown as { role: string }).role ?? "user",
-            banned: (u as unknown as { banned: boolean }).banned ?? false,
-            createdAt: u.createdAt
-              ? new Date(u.createdAt).toLocaleDateString()
-              : "",
-          }));
-          const STAFF_ROLES = ["superadmin", "admin", "growth_ops", "customer_success"];
+    fetch("/api/admin/staff")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.staff) {
           setUsers(
-            allUsers.filter((u) => STAFF_ROLES.includes(u.role))
+            data.staff.map((u: { id: string; name: string; email: string; role: string | null; banned: boolean | null; createdAt: string }) => ({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              role: u.role ?? "user",
+              banned: u.banned ?? false,
+              createdAt: u.createdAt
+                ? new Date(u.createdAt).toLocaleDateString()
+                : "",
+            }))
           );
         }
       })
