@@ -657,7 +657,7 @@ export default function CustomerDetailPage() {
   // Lazy load experts when Users & Team tab is active
   const loadExperts = useCallback((page = 1) => {
     setExpertsLoading(true);
-    fetch(`/api/admin/customers/${orgId}/experts?page=${page}&limit=50`)
+    fetch(`/api/admin/customers/${orgId}/experts?page=${page}&limit=100`)
       .then((r) => r.json())
       .then((d) => {
         setExperts(d.experts ?? []);
@@ -1051,7 +1051,7 @@ export default function CustomerDetailPage() {
   function ExpertRosterInline() {
     return (
       <Section
-        title={`Expert Roster (${experts.length})`}
+        title={`Expert Roster (${expertsTotalCount || experts.length})`}
         icon={<Users className="h-4 w-4 text-cos-signal" />}
         action={
           <div className="flex items-center gap-2">
@@ -1552,7 +1552,7 @@ export default function CustomerDetailPage() {
               {expertsTotalPages > 1 && (
                 <div className="flex items-center justify-between pt-4">
                   <span className="text-xs text-cos-slate">
-                    Showing {(expertsPage - 1) * 50 + 1}–{Math.min(expertsPage * 50, expertsTotalCount)} of {expertsTotalCount}
+                    Showing {(expertsPage - 1) * 100 + 1}–{Math.min(expertsPage * 100, expertsTotalCount)} of {expertsTotalCount}
                   </span>
                   <div className="flex items-center gap-1">
                     <Button
