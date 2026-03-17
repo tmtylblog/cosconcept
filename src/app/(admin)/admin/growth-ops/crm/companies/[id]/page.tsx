@@ -52,15 +52,12 @@ export default function CompanyDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    // For now, fetch from the companies list and find the match
-    // In Phase 2, this will use a dedicated detail API
-    fetch(`/api/admin/growth-ops/crm/companies?search=${encodeURIComponent(decodeURIComponent(id as string))}&limit=1000`)
-      .then((r) => r.json())
-      .then((data) => {
-        const decodedId = decodeURIComponent(id as string);
-        const match = (data.items || []).find((c: CompanyDetail) => c.id === decodedId);
-        setCompany(match || null);
+    fetch(`/api/admin/growth-ops/crm/companies/${encodeURIComponent(id as string)}`)
+      .then((r) => {
+        if (!r.ok) throw new Error("Not found");
+        return r.json();
       })
+      .then(setCompany)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);

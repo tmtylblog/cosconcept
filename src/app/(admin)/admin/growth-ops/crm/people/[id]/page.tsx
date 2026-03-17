@@ -48,13 +48,12 @@ export default function PersonDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    fetch(`/api/admin/growth-ops/crm/people?limit=5000`)
-      .then((r) => r.json())
-      .then((data) => {
-        const decodedId = decodeURIComponent(id as string);
-        const match = (data.items || []).find((p: PersonDetail) => p.id === decodedId);
-        setPerson(match || null);
+    fetch(`/api/admin/growth-ops/crm/people/${encodeURIComponent(id as string)}`)
+      .then((r) => {
+        if (!r.ok) throw new Error("Not found");
+        return r.json();
       })
+      .then(setPerson)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
