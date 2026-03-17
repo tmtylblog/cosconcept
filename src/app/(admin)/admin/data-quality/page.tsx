@@ -143,9 +143,13 @@ export default function DataQualityPage() {
         if (res.ok) {
           deleted++;
         } else {
+          const errBody = await res.json().catch(() => ({}));
+          console.error(`Delete failed for org ${orgIds[i]}:`, errBody);
+          setDeleteResult(`Failed on org ${i + 1}: ${errBody.detail || errBody.error || res.status}`);
           failedCount++;
         }
-      } catch {
+      } catch (err) {
+        console.error(`Delete network error for org ${orgIds[i]}:`, err);
         failedCount++;
       }
     }
