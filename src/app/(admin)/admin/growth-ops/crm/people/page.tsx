@@ -9,6 +9,9 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -29,28 +32,17 @@ interface UnifiedPerson {
   createdAt: string | null;
 }
 
-type TabFilter = "all" | "expert" | "prospect_contact" | "legacy_contact";
-
-const TAB_CONFIG: { key: TabFilter; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "expert", label: "Experts" },
-  { key: "prospect_contact", label: "Prospects" },
-  { key: "legacy_contact", label: "Legacy" },
-];
-
-const ENTITY_BADGE: Record<string, { label: string; className: string }> = {
-  expert: { label: "Expert", className: "bg-green-100 text-green-700" },
-  prospect_contact: { label: "Prospect", className: "bg-blue-100 text-blue-700" },
-  platform_user: { label: "User", className: "bg-purple-100 text-purple-700" },
-  legacy_contact: { label: "Legacy", className: "bg-gray-100 text-gray-600" },
-};
+type SortKey = "name" | "created" | "activity";
+type SortDir = "asc" | "desc";
 
 export default function CrmPeoplePage() {
   const router = useRouter();
   const [people, setPeople] = useState<UnifiedPerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<TabFilter>("all");
+  const [expertOnly, setExpertOnly] = useState(false);
+  const [sort, setSort] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -62,11 +54,11 @@ export default function CrmPeoplePage() {
       const params = new URLSearchParams({
         page: String(page),
         limit: String(limit),
-        sort: "name",
-        sortDir: "asc",
+        sort,
+        sortDir,
       });
       if (search) params.set("search", search);
-      if (tab !== "all") params.set("entityClass", tab);
+      if (expertOnly) params.set("entityClass", "expert");
 
       const res = await fetch(`/api/admin/growth-ops/crm/people?${params}`);
       if (!res.ok) throw new Error("Failed to load");
@@ -79,7 +71,7 @@ export default function CrmPeoplePage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, tab]);
+  }, [page, search, expertOnly, sort, sortDir]);
 
   useEffect(() => {
     fetchPeople();
@@ -94,6 +86,23 @@ export default function CrmPeoplePage() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  function toggleSort(key: SortKey) {
+    if (sort === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSort(key);
+      setSortDir("asc");
+    }
+    setPage(1);
+  }
+
+  function SortIcon({ column }: { column: SortKey }) {
+    if (sort !== column) return <ArrowUpDown className="h-3 w-3 ml-1 text-cos-slate-light" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="h-3 w-3 ml-1 text-cos-electric" />
+      : <ArrowDown className="h-3 w-3 ml-1 text-cos-electric" />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -103,27 +112,21 @@ export default function CrmPeoplePage() {
           People
         </h1>
         <p className="text-sm text-cos-slate mt-1">
-          Every person in the system — experts, prospect contacts, and legacy contacts.
+          Everyone in the system. Search 3+ characters to include legacy contacts (1.9M+).
         </p>
       </div>
 
-      {/* Filter Tabs + Search */}
+      {/* Filters + Search */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex gap-1 bg-cos-cloud rounded-cos-md p-1">
-          {TAB_CONFIG.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => { setTab(t.key); setPage(1); }}
-              className={`px-3 py-1.5 text-sm font-medium rounded-cos-md transition-colors ${
-                tab === t.key
-                  ? "bg-white text-cos-midnight shadow-sm"
-                  : "text-cos-slate hover:text-cos-midnight"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={expertOnly}
+            onChange={(e) => { setExpertOnly(e.target.checked); setPage(1); }}
+            className="accent-cos-electric h-4 w-4 rounded"
+          />
+          <span className="text-sm font-medium text-cos-midnight">Expert On Platform</span>
+        </label>
 
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-cos-slate-light" />
@@ -146,31 +149,38 @@ export default function CrmPeoplePage() {
           </div>
         ) : people.length === 0 ? (
           <div className="text-center py-16 text-cos-slate-light text-sm">
-            {(tab === "legacy_contact" || tab === "all") && !search ? (
-              <div>
-                <p className="mb-1">Legacy contacts (1.9M+) are search-only.</p>
-                <p>Type at least 3 characters to search across all contacts.</p>
-              </div>
-            ) : (
-              "No people found."
-            )}
+            {!search ? "No people found. Try searching by name or email." : "No people found."}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-cos-border bg-cos-cloud/50 text-left">
-                  <th className="px-4 py-3 font-medium text-cos-slate-dim">Person</th>
-                  <th className="px-4 py-3 font-medium text-cos-slate-dim">Type</th>
+                  <th
+                    className="px-4 py-3 font-medium text-cos-slate-dim cursor-pointer hover:text-cos-midnight select-none"
+                    onClick={() => toggleSort("name")}
+                  >
+                    <span className="inline-flex items-center">
+                      Person <SortIcon column="name" />
+                    </span>
+                  </th>
                   <th className="px-4 py-3 font-medium text-cos-slate-dim">Title</th>
                   <th className="px-4 py-3 font-medium text-cos-slate-dim">Email</th>
                   <th className="px-4 py-3 font-medium text-cos-slate-dim">Company</th>
+                  <th
+                    className="px-4 py-3 font-medium text-cos-slate-dim cursor-pointer hover:text-cos-midnight select-none"
+                    onClick={() => toggleSort("created")}
+                  >
+                    <span className="inline-flex items-center">
+                      Added <SortIcon column="created" />
+                    </span>
+                  </th>
                   <th className="px-4 py-3 font-medium text-cos-slate-dim text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {people.map((p) => {
-                  const badge = ENTITY_BADGE[p.entityClass] || ENTITY_BADGE.legacy_contact;
+                  const isExpert = p.entityClass === "expert";
                   return (
                     <tr
                       key={p.id}
@@ -180,32 +190,33 @@ export default function CrmPeoplePage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           {p.photoUrl ? (
-                            <img
-                              src={p.photoUrl}
-                              alt=""
-                              className="h-8 w-8 rounded-full object-cover shrink-0"
-                            />
+                            <img src={p.photoUrl} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
                           ) : (
                             <div className="h-8 w-8 rounded-full bg-cos-electric/10 flex items-center justify-center text-xs font-bold text-cos-electric shrink-0">
                               {p.fullName.charAt(0)}
                             </div>
                           )}
                           <div>
-                            <div className="font-medium text-cos-midnight">{p.fullName}</div>
+                            <div className="font-medium text-cos-midnight flex items-center gap-1.5">
+                              {p.fullName}
+                              {isExpert && (
+                                <span className="inline-flex items-center rounded-full bg-green-100 text-green-700 px-1.5 py-0.5 text-[10px] font-medium leading-none">
+                                  Expert
+                                </span>
+                              )}
+                            </div>
                             {p.headline && (
                               <div className="text-xs text-cos-slate-light line-clamp-1">{p.headline}</div>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                      </td>
                       <td className="px-4 py-3 text-cos-slate">{p.title || "-"}</td>
-                      <td className="px-4 py-3 text-cos-slate text-xs">{p.email || "-"}</td>
+                      <td className="px-4 py-3 text-cos-slate text-xs">{p.email && !p.email.includes("@placeholder.local") ? p.email : "-"}</td>
                       <td className="px-4 py-3 text-cos-slate">{p.companyName || p.companyDomain || "-"}</td>
+                      <td className="px-4 py-3 text-cos-slate text-xs">
+                        {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "-"}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         {p.linkedinUrl && (
                           <Button
