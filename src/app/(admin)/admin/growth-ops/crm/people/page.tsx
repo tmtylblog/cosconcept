@@ -111,7 +111,7 @@ export default function CrmPeoplePage() {
           People
         </h1>
         <p className="text-sm text-cos-slate mt-1">
-          Everyone in the system. Search 3+ characters to include legacy contacts (1.9M+).
+          A view of all Prospects, Experts, and Customers in the system.
         </p>
       </div>
 
