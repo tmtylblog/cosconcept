@@ -190,7 +190,14 @@ export default function CrmCompaniesPage() {
           </div>
         ) : companies.length === 0 ? (
           <div className="text-center py-16 text-cos-slate-light text-sm">
-            No companies found.
+            {(tab === "knowledge_graph" || tab === "all") && !search ? (
+              <div>
+                <p className="mb-1">Knowledge Graph companies (8M+) are search-only.</p>
+                <p>Type at least 3 characters to search across the full graph.</p>
+              </div>
+            ) : (
+              "No companies found."
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

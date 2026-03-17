@@ -146,7 +146,14 @@ export default function CrmPeoplePage() {
           </div>
         ) : people.length === 0 ? (
           <div className="text-center py-16 text-cos-slate-light text-sm">
-            No people found.
+            {(tab === "legacy_contact" || tab === "all") && !search ? (
+              <div>
+                <p className="mb-1">Legacy contacts (1.9M+) are search-only.</p>
+                <p>Type at least 3 characters to search across all contacts.</p>
+              </div>
+            ) : (
+              "No people found."
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
