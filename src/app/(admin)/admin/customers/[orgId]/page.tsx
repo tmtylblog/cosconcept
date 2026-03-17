@@ -433,13 +433,6 @@ export default function CustomerDetailPage() {
   const [leadsPage, setLeadsPage] = useState(1);
   const [billingEventsPage, setBillingEventsPage] = useState(1);
 
-  // Paginated views (hooks must be called unconditionally)
-  const membersPag = usePaginated(data?.members ?? [], usersPage);
-  const billingEventsPag = usePaginated(billingData?.billingEvents ?? [], billingEventsPage);
-  const partnershipsPag = usePaginated(partnershipData?.partnerships ?? [], partnershipsPage);
-  const oppsPag = usePaginated(partnershipData?.opportunities ?? [], oppsPage);
-  const leadsPag = usePaginated(partnershipData?.leads ?? [], leadsPage);
-
   const [partnershipData, setPartnershipData] = useState<{
     partnerships: PartnershipRow[];
     opportunities: OpportunityRow[];
@@ -517,6 +510,13 @@ export default function CustomerDetailPage() {
   const [enrichingExpert, setEnrichingExpert] = useState<string | null>(null);
   const [enrichingAll, setEnrichingAll] = useState(false);
   const [enrichAllResult, setEnrichAllResult] = useState<{ queued: number; skipped: number } | null>(null);
+
+  // Paginated views (hooks must be called unconditionally, after all state)
+  const membersPag = usePaginated(data?.members ?? [], usersPage);
+  const billingEventsPag = usePaginated(billingData?.billingEvents ?? [], billingEventsPage);
+  const partnershipsPag = usePaginated(partnershipData?.partnerships ?? [], partnershipsPage);
+  const oppsPag = usePaginated(partnershipData?.opportunities ?? [], oppsPage);
+  const leadsPag = usePaginated(partnershipData?.leads ?? [], leadsPage);
 
   // Primary data load
   useEffect(() => {
