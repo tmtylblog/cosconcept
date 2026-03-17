@@ -14,8 +14,12 @@ import {
   acqCompanies,
   importedCompanies,
   companyResearch,
+  expertProfiles,
+  acqContacts,
+  acqDeals,
+  growthOpsConversations,
 } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, ilike, or, desc } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -201,7 +205,107 @@ export async function GET(
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
 
-    return NextResponse.json(company);
+    // ─── Fetch related data in parallel ──────────────────────
+    const sfId = company.serviceFirmId as string | null;
+    const acqCoId = company.acqCompanyId as string | null;
+    const domain = company.domain as string | null;
+
+    const [people, deals, conversations] = await Promise.all([
+      // People: experts from the firm + acqContacts from the acqCompany
+      (async () => {
+        const results: Record<string, unknown>[] = [];
+        if (sfId) {
+          const experts = await db
+            .select({
+              id: expertProfiles.id,
+              fullName: expertProfiles.fullName,
+              email: expertProfiles.email,
+              title: expertProfiles.title,
+              headline: expertProfiles.headline,
+              linkedinUrl: expertProfiles.linkedinUrl,
+              photoUrl: expertProfiles.photoUrl,
+              division: expertProfiles.division,
+            })
+            .from(expertProfiles)
+            .where(eq(expertProfiles.firmId, sfId))
+            .limit(50);
+          for (const e of experts) {
+            results.push({ ...e, source: "expert", crmId: `ep_${e.id}` });
+          }
+        }
+        if (acqCoId) {
+          const contacts = await db
+            .select({
+              id: acqContacts.id,
+              firstName: acqContacts.firstName,
+              lastName: acqContacts.lastName,
+              email: acqContacts.email,
+              linkedinUrl: acqContacts.linkedinUrl,
+            })
+            .from(acqContacts)
+            .where(eq(acqContacts.companyId, acqCoId))
+            .limit(50);
+          for (const c of contacts) {
+            results.push({
+              ...c,
+              fullName: [c.firstName, c.lastName].filter(Boolean).join(" ") || c.email,
+              source: "prospect_contact",
+              crmId: `ac_${c.id}`,
+            });
+          }
+        }
+        return results;
+      })(),
+
+      // Deals linked to this acqCompany
+      acqCoId
+        ? db
+            .select({
+              id: acqDeals.id,
+              name: acqDeals.name,
+              stageLabel: acqDeals.stageLabel,
+              dealValue: acqDeals.dealValue,
+              status: acqDeals.status,
+              source: acqDeals.source,
+              priority: acqDeals.priority,
+              lastActivityAt: acqDeals.lastActivityAt,
+              createdAt: acqDeals.createdAt,
+            })
+            .from(acqDeals)
+            .where(eq(acqDeals.companyId, acqCoId))
+            .orderBy(desc(acqDeals.createdAt))
+            .limit(50)
+        : Promise.resolve([]),
+
+      // LinkedIn conversations matching domain in participant headline/profileUrl
+      domain
+        ? db
+            .select({
+              id: growthOpsConversations.id,
+              participantName: growthOpsConversations.participantName,
+              participantHeadline: growthOpsConversations.participantHeadline,
+              participantProfileUrl: growthOpsConversations.participantProfileUrl,
+              lastMessageAt: growthOpsConversations.lastMessageAt,
+              lastMessagePreview: growthOpsConversations.lastMessagePreview,
+            })
+            .from(growthOpsConversations)
+            .where(
+              or(
+                ilike(growthOpsConversations.participantHeadline, `%${domain}%`),
+                ilike(growthOpsConversations.participantProfileUrl, `%${domain}%`)
+              )
+            )
+            .orderBy(desc(growthOpsConversations.lastMessageAt))
+            .limit(20)
+        : Promise.resolve([]),
+    ]);
+
+    return NextResponse.json({
+      ...company,
+      people,
+      deals,
+      conversations,
+    });
   } catch (error) {
     console.error("[CRM] Company detail error:", error);
     return NextResponse.json(
