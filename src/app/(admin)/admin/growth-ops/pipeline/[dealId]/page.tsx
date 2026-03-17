@@ -17,71 +17,14 @@ import {
   ChevronDown,
   Save,
   Trash2,
-  Pencil,
-  X,
 } from "lucide-react";
 
-interface Stage {
-  id: string;
-  label: string;
-  displayOrder: number;
-  color: string;
-  isClosedWon: boolean;
-  isClosedLost: boolean;
-}
-
-interface Deal {
-  id: string;
-  name: string;
-  stageId: string | null;
-  stageLabel: string;
-  dealValue: string | null;
-  status: string;
-  source: string;
-  sourceChannel: string | null;
-  sourceCampaignName: string | null;
-  notes: string | null;
-  priority: string;
-  lastActivityAt: string | null;
-  sentimentScore: number | null;
-  hubspotDealId: string | null;
-  closedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface Contact {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  linkedinUrl: string | null;
-  companyId: string | null;
-}
-
-interface Company {
-  id: string;
-  name: string;
-  domain: string | null;
-  industry: string | null;
-  sizeEstimate: string | null;
-}
-
-interface Activity {
-  id: string;
-  activityType: string;
-  description: string | null;
-  metadata: Record<string, unknown> | null;
-  createdAt: string;
-}
-
-interface Touchpoint {
-  id: string;
-  channel: string;
-  sourceName: string | null;
-  touchpointAt: string;
-  interactionType: string;
-}
+interface Stage { id: string; label: string; displayOrder: number; color: string; isClosedWon: boolean; isClosedLost: boolean; }
+interface Deal { id: string; name: string; stageId: string | null; stageLabel: string; dealValue: string | null; status: string; source: string; sourceChannel: string | null; sourceCampaignName: string | null; notes: string | null; priority: string; lastActivityAt: string | null; sentimentScore: number | null; hubspotDealId: string | null; closedAt: string | null; createdAt: string; updatedAt: string; }
+interface Contact { id: string; email: string; firstName: string; lastName: string; linkedinUrl: string | null; companyId: string | null; }
+interface Company { id: string; name: string; domain: string | null; industry: string | null; sizeEstimate: string | null; }
+interface Activity { id: string; activityType: string; description: string | null; metadata: Record<string, unknown> | null; createdAt: string; }
+interface Touchpoint { id: string; channel: string; sourceName: string | null; touchpointAt: string; interactionType: string; }
 
 function activityIcon(type: string) {
   switch (type) {
@@ -93,6 +36,8 @@ function activityIcon(type: string) {
     default: return <Clock className="h-3.5 w-3.5 text-cos-slate" />;
   }
 }
+
+const PRIORITIES = ["low", "normal", "high", "urgent"];
 
 export default function DealDetailPage({ params }: { params: Promise<{ dealId: string }> }) {
   const { dealId } = use(params);
@@ -108,21 +53,20 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  // Check if navigated from inbox
+  // Inline editable fields
+  const [editName, setEditName] = useState("");
+  const [editValue, setEditValue] = useState("");
+  const [editPriority, setEditPriority] = useState("normal");
+  const [savingField, setSavingField] = useState<string | null>(null);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setFromInbox(params.get("from") === "inbox");
+      const p = new URLSearchParams(window.location.search);
+      setFromInbox(p.get("from") === "inbox");
     }
   }, []);
-
-  // Edit mode
-  const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", dealValue: "", priority: "normal", source: "", stageId: "" });
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [dealSources, setDealSources] = useState<{ key: string; label: string }[]>([]);
-  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -137,6 +81,9 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
         setActivities(data.activities ?? []);
         setTouchpoints(data.touchpoints ?? []);
         setNotes(data.deal?.notes ?? "");
+        setEditName(data.deal?.name ?? "");
+        setEditValue(data.deal?.dealValue ?? "");
+        setEditPriority(data.deal?.priority ?? "normal");
       } catch (e) {
         setError(String(e));
       } finally {
@@ -145,6 +92,17 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
     }
     load();
   }, [dealId]);
+
+  async function reload() {
+    const res = await fetch(`/api/admin/growth-ops/pipeline/${dealId}`);
+    const data = await res.json();
+    if (!data.error) {
+      setDeal(data.deal);
+      setStages(data.stages ?? []);
+      setActivities(data.activities ?? []);
+      setTouchpoints(data.touchpoints ?? []);
+    }
+  }
 
   async function changeStage(stageId: string) {
     if (!deal) return;
@@ -155,10 +113,19 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
     });
     const stage = stages.find((s) => s.id === stageId);
     setDeal((d) => d ? { ...d, stageId, stageLabel: stage?.label ?? "" } : d);
-    // Reload activities
-    const res = await fetch(`/api/admin/growth-ops/pipeline/${dealId}`);
-    const data = await res.json();
-    if (!data.error) setActivities(data.activities ?? []);
+    await reload();
+  }
+
+  async function saveField(field: string, value: unknown) {
+    if (!deal) return;
+    setSavingField(field);
+    await fetch("/api/admin/growth-ops/pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "updateDeal", dealId: deal.id, [field]: value }),
+    });
+    await reload();
+    setSavingField(null);
   }
 
   async function saveNotes() {
@@ -170,56 +137,6 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
       body: JSON.stringify({ action: "updateDeal", dealId: deal.id, notes }),
     });
     setSavingNotes(false);
-  }
-
-  function startEditing() {
-    if (!deal) return;
-    setEditForm({
-      name: deal.name,
-      dealValue: deal.dealValue ?? "",
-      priority: deal.priority,
-      source: deal.source,
-      stageId: deal.stageId ?? "",
-    });
-    setEditing(true);
-    // Load deal sources
-    fetch("/api/admin/growth-ops/pipeline?action=getDealSources")
-      .then((r) => r.json())
-      .then((d) => setDealSources(d.sources ?? []))
-      .catch(() => {});
-  }
-
-  async function saveEdit() {
-    if (!deal) return;
-    setSavingEdit(true);
-    try {
-      await fetch("/api/admin/growth-ops/pipeline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "updateDeal",
-          dealId: deal.id,
-          name: editForm.name,
-          dealValue: editForm.dealValue || null,
-          priority: editForm.priority,
-          source: editForm.source,
-          stageId: editForm.stageId || null,
-        }),
-      });
-      // Reload deal data
-      const res = await fetch(`/api/admin/growth-ops/pipeline/${dealId}`);
-      const data = await res.json();
-      if (!data.error) {
-        setDeal(data.deal);
-        setStages(data.stages ?? []);
-        setActivities(data.activities ?? []);
-      }
-      setEditing(false);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setSavingEdit(false);
-    }
   }
 
   async function handleDelete() {
@@ -261,8 +178,6 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
   }
 
   const currentStage = stages.find((s) => s.id === deal.stageId);
-
-  // Merge activities + touchpoints into unified timeline
   const timeline = [
     ...activities.map((a) => ({ type: "activity" as const, date: a.createdAt, data: a })),
     ...touchpoints.map((t) => ({ type: "touchpoint" as const, date: t.touchpointAt, data: t })),
@@ -270,152 +185,64 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6">
-        <Link href={fromInbox ? "/admin/growth-ops" : "/admin/growth-ops/pipeline"} className="text-xs text-cos-electric hover:underline flex items-center gap-1 mb-3">
-          <ArrowLeft className="h-3 w-3" /> {fromInbox ? "Back to LinkedIn Inbox" : "Back to Pipeline"}
-        </Link>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="font-heading text-2xl font-bold text-cos-midnight">{deal.name}</h1>
-            <div className="flex items-center gap-3 mt-1">
-              {currentStage && (
-                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" style={{ backgroundColor: currentStage.color + "1a", color: currentStage.color }}>
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: currentStage.color }} />
-                  {currentStage.label}
-                </span>
-              )}
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${deal.status === "won" ? "bg-emerald-100 text-emerald-700" : deal.status === "lost" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
-                {deal.status}
+      {/* Back link */}
+      <Link href={fromInbox ? "/admin/growth-ops" : "/admin/growth-ops/pipeline"} className="text-xs text-cos-electric hover:underline flex items-center gap-1 mb-4">
+        <ArrowLeft className="h-3 w-3" /> {fromInbox ? "Back to LinkedIn Inbox" : "Back to Pipeline"}
+      </Link>
+
+      {/* Header: Name + Status + Value */}
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div className="flex-1">
+          <input
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={() => { if (editName.trim() && editName !== deal.name) saveField("name", editName.trim()); }}
+            className="font-heading text-2xl font-bold text-cos-midnight bg-transparent border-b border-transparent hover:border-cos-border focus:border-cos-electric focus:outline-none w-full pb-0.5 transition-colors"
+          />
+          <div className="flex items-center gap-3 mt-1.5">
+            {currentStage && (
+              <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" style={{ backgroundColor: currentStage.color + "1a", color: currentStage.color }}>
+                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: currentStage.color }} />
+                {currentStage.label}
               </span>
-              {deal.source !== "hubspot_sync" && deal.source !== "manual" && (
-                <span className="text-[10px] text-cos-slate-dim">via {deal.sourceChannel ?? deal.source}</span>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {deal.dealValue && (
-              <p className="text-2xl font-bold text-cos-signal flex items-center gap-1 mr-3">
-                <DollarSign className="h-5 w-5" />
-                {Number(deal.dealValue).toLocaleString()}
-              </p>
             )}
-            <button
-              onClick={startEditing}
-              className="flex items-center gap-1.5 rounded-cos-lg border border-cos-border bg-white px-3 py-1.5 text-xs font-medium text-cos-slate hover:text-cos-midnight transition-colors"
-            >
-              <Pencil className="h-3 w-3" /> Edit
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="flex items-center gap-1.5 rounded-cos-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700 disabled:opacity-50 transition-colors"
-            >
-              {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />} Delete
-            </button>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${deal.status === "won" ? "bg-emerald-100 text-emerald-700" : deal.status === "lost" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
+              {deal.status}
+            </span>
+            {deal.sentimentScore != null && (
+              <span className="text-[10px] text-cos-slate-dim">Sentiment: {Math.round(deal.sentimentScore * 100)}%</span>
+            )}
           </div>
         </div>
-
-        {/* Edit modal */}
-        {editing && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditing(false)}>
-            <div className="w-full max-w-md rounded-cos-xl border border-cos-border bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-semibold text-cos-midnight">Edit Deal</h2>
-                <button onClick={() => setEditing(false)}><X className="h-4 w-4 text-cos-slate" /></button>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-medium text-cos-slate mb-1 block">Deal Name</label>
-                  <input
-                    type="text"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-cos-slate mb-1 block">Value ($)</label>
-                    <input
-                      type="number"
-                      value={editForm.dealValue}
-                      onChange={(e) => setEditForm({ ...editForm, dealValue: e.target.value })}
-                      className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-cos-slate mb-1 block">Priority</label>
-                    <select
-                      value={editForm.priority}
-                      onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}
-                      className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
-                    >
-                      <option value="low">Low</option>
-                      <option value="normal">Normal</option>
-                      <option value="high">High</option>
-                      <option value="urgent">Urgent</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-cos-slate mb-1 block">Stage</label>
-                    <select
-                      value={editForm.stageId}
-                      onChange={(e) => setEditForm({ ...editForm, stageId: e.target.value })}
-                      className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
-                    >
-                      <option value="">None</option>
-                      {stages.map((s) => (
-                        <option key={s.id} value={s.id}>{s.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-cos-slate mb-1 block">Source</label>
-                    <select
-                      value={editForm.source}
-                      onChange={(e) => setEditForm({ ...editForm, source: e.target.value })}
-                      className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm focus:border-cos-electric focus:outline-none"
-                    >
-                      {dealSources.length > 0
-                        ? dealSources.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)
-                        : <>
-                            <option value="manual">Manual</option>
-                            <option value="hubspot_sync">HubSpot Sync</option>
-                            <option value="linkedin_auto">LinkedIn Auto</option>
-                            <option value="instantly_auto">Instantly Auto</option>
-                          </>
-                      }
-                    </select>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2 mt-4">
-                <button onClick={() => setEditing(false)} className="rounded-cos-lg border border-cos-border px-4 py-2 text-xs font-medium text-cos-slate hover:text-cos-midnight transition-colors">
-                  Cancel
-                </button>
-                <button
-                  onClick={saveEdit}
-                  disabled={savingEdit || !editForm.name.trim()}
-                  className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-4 py-2 text-xs font-medium text-white hover:bg-cos-electric-hover disabled:opacity-50 transition-colors"
-                >
-                  {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                  Save Changes
-                </button>
-              </div>
-            </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1">
+            <DollarSign className="h-4 w-4 text-cos-slate" />
+            <input
+              type="number"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={() => { if (editValue !== (deal.dealValue ?? "")) saveField("dealValue", editValue || null); }}
+              placeholder="Value"
+              className="w-28 text-xl font-bold text-cos-signal bg-transparent border-b border-transparent hover:border-cos-border focus:border-cos-electric focus:outline-none text-right transition-colors"
+            />
           </div>
-        )}
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="flex items-center gap-1 rounded-cos-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700 disabled:opacity-50 transition-colors"
+          >
+            {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />} Delete
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column — Deal info + Contact + Company */}
+        {/* ─── Left Column ─── */}
         <div className="lg:col-span-1 space-y-4">
-          {/* Quick stage change */}
+          {/* Stage selector */}
           <div className="rounded-cos-xl border border-cos-border bg-white p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Move to Stage</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Stage</h3>
             <div className="flex flex-wrap gap-1.5">
               {stages.map((stage) => (
                 <button
@@ -432,6 +259,57 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
                   {stage.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Inline deal fields */}
+          <div className="rounded-cos-xl border border-cos-border bg-white p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Deal Details</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-medium text-cos-slate-light uppercase tracking-wide">Priority</label>
+                <select
+                  value={editPriority}
+                  onChange={(e) => { setEditPriority(e.target.value); saveField("priority", e.target.value); }}
+                  className="w-full mt-0.5 rounded-cos-md border border-cos-border px-2.5 py-1.5 text-sm text-cos-midnight focus:border-cos-electric focus:outline-none"
+                >
+                  {PRIORITIES.map((p) => (
+                    <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-cos-slate">Source</span>
+                <span className="font-medium text-cos-midnight">{deal.source.replace(/_/g, " ")}</span>
+              </div>
+              {deal.sourceCampaignName && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-cos-slate">Campaign</span>
+                  <span className="font-medium text-cos-midnight truncate ml-4">{deal.sourceCampaignName}</span>
+                </div>
+              )}
+              {deal.sourceChannel && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-cos-slate">Channel</span>
+                  <span className="font-medium text-cos-midnight capitalize">{deal.sourceChannel}</span>
+                </div>
+              )}
+              {deal.hubspotDealId && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-cos-slate">HubSpot</span>
+                  <span className="font-mono text-cos-slate-dim text-[10px]">{deal.hubspotDealId}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs">
+                <span className="text-cos-slate">Created</span>
+                <span className="text-cos-midnight">{new Date(deal.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+              </div>
+              {deal.closedAt && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-cos-slate">Closed</span>
+                  <span className="text-cos-midnight">{new Date(deal.closedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -452,10 +330,7 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
                   <Linkedin className="h-3 w-3" /> LinkedIn Profile
                 </a>
               )}
-              <Link
-                href={`/admin/growth-ops/crm/people/ac_${contact.id}`}
-                className="text-xs text-cos-electric flex items-center gap-1 mt-2 hover:underline"
-              >
+              <Link href={`/admin/growth-ops/crm/people/ac_${contact.id}`} className="text-xs text-cos-electric flex items-center gap-1 mt-2 hover:underline">
                 View in CRM &rarr;
               </Link>
             </div>
@@ -471,50 +346,16 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
               {company.domain && <p className="text-xs text-cos-slate mt-0.5">{company.domain}</p>}
               {company.industry && <p className="text-xs text-cos-slate mt-0.5">{company.industry}</p>}
               {company.sizeEstimate && <p className="text-xs text-cos-slate mt-0.5">{company.sizeEstimate} employees</p>}
-              <Link
-                href={`/admin/growth-ops/crm/companies/acq_${company.id}`}
-                className="text-xs text-cos-electric flex items-center gap-1 mt-2 hover:underline"
-              >
+              <Link href={`/admin/growth-ops/crm/companies/acq_${company.id}`} className="text-xs text-cos-electric flex items-center gap-1 mt-2 hover:underline">
                 View in CRM &rarr;
               </Link>
             </div>
           )}
-
-          {/* Deal details */}
-          <div className="rounded-cos-xl border border-cos-border bg-white p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Deal Details</h3>
-            <dl className="space-y-2 text-xs">
-              <div className="flex justify-between">
-                <dt className="text-cos-slate">Priority</dt>
-                <dd className="font-medium text-cos-midnight capitalize">{deal.priority}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-cos-slate">Source</dt>
-                <dd className="font-medium text-cos-midnight">{deal.source.replace(/_/g, " ")}</dd>
-              </div>
-              {deal.sourceCampaignName && (
-                <div className="flex justify-between">
-                  <dt className="text-cos-slate">Campaign</dt>
-                  <dd className="font-medium text-cos-midnight truncate ml-4">{deal.sourceCampaignName}</dd>
-                </div>
-              )}
-              {deal.hubspotDealId && (
-                <div className="flex justify-between">
-                  <dt className="text-cos-slate">HubSpot ID</dt>
-                  <dd className="font-mono text-cos-slate-dim">{deal.hubspotDealId}</dd>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <dt className="text-cos-slate">Created</dt>
-                <dd className="text-cos-midnight">{new Date(deal.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</dd>
-              </div>
-            </dl>
-          </div>
         </div>
 
-        {/* Right column — Notes + Timeline */}
+        {/* ─── Right Column ─── */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Notes */}
+          {/* Notes — inline */}
           <div className="rounded-cos-xl border border-cos-border bg-white p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Notes</h3>
             <textarea
@@ -544,7 +385,7 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
             ) : (
               <div className="space-y-0">
                 {timeline.map((item, i) => (
-                  <div key={item.type === "activity" ? item.data.id : item.data.id} className="flex gap-3 py-2.5">
+                  <div key={item.data.id} className="flex gap-3 py-2.5">
                     <div className="flex flex-col items-center">
                       <div className="rounded-full bg-cos-cloud p-1.5">
                         {item.type === "activity" ? activityIcon(item.data.activityType) : <Globe className="h-3.5 w-3.5 text-cos-slate" />}
