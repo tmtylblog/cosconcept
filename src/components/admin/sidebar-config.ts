@@ -24,6 +24,7 @@ import {
   FileUp,
   Sparkles,
   FileX,
+  FlaskConical,
 } from "lucide-react";
 import type { AdminSection } from "@/lib/admin/permissions";
 
@@ -112,6 +113,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { href: "/admin/migration", label: "Data Import", icon: FileUp },
       { href: "/admin/enrichment", label: "Enrichment", icon: Sparkles },
       { href: "/admin/enrichment/poor-results", label: "Poor CS Results", icon: FileX },
+      { href: "/admin/sandbox", label: "Sandbox", icon: FlaskConical },
     ],
   },
 ];

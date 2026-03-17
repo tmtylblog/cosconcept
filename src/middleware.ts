@@ -25,6 +25,7 @@ const PUBLIC_EXCEPTIONS = [
   "/api/admin/enrich",         // enrichment backfill endpoints (protected by session OR ADMIN_SECRET)
   "/api/admin/promote-user",   // bootstrap admin role (protected by ADMIN_SECRET header)
   "/api/admin/experts/diagnostic",  // expert data diagnostic (protected by session OR ADMIN_SECRET)
+  "/api/sandbox/enter",              // sandbox login token consumption (validates its own token)
 ];
 
 function isProtectedPath(pathname: string): boolean {
