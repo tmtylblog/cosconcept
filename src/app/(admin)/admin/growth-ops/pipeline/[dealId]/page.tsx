@@ -6,7 +6,6 @@ import Link from "next/link";
 import {
   Loader2,
   ArrowLeft,
-  DollarSign,
   Mail,
   Linkedin,
   Globe,
@@ -66,7 +65,6 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
 
   // Inline editable fields
   const [editName, setEditName] = useState("");
-  const [editValue, setEditValue] = useState("");
   const [editPriority, setEditPriority] = useState("normal");
   const [, setSavingField] = useState<string | null>(null);
 
@@ -106,7 +104,6 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
         setQueueMessage(data.queueMessage ?? null);
         setNotes(data.deal?.notes ?? "");
         setEditName(data.deal?.name ?? "");
-        setEditValue(data.deal?.dealValue ?? "");
         setEditPriority(data.deal?.priority ?? "normal");
       } catch (e) {
         setError(String(e));
@@ -339,18 +336,7 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="flex items-center gap-1">
-            <DollarSign className="h-4 w-4 text-cos-slate" />
-            <input
-              type="number"
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onBlur={() => { if (editValue !== (deal.dealValue ?? "")) saveField("dealValue", editValue || null); }}
-              placeholder="Value"
-              className="w-28 text-xl font-bold text-cos-signal bg-transparent border-b border-transparent hover:border-cos-border focus:border-cos-electric focus:outline-none text-right transition-colors"
-            />
-          </div>
+        <div className="shrink-0">
           <button
             onClick={handleDelete}
             disabled={deleting}
@@ -362,61 +348,94 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* ─── Left Column — Associations ─── */}
-        <div className="lg:col-span-3 space-y-4">
+        {/* ─── Left Column — Stage + Associations + Metadata ─── */}
+        <div className="lg:col-span-4 space-y-4">
+          {/* Stage selector */}
+          <div className="rounded-cos-xl border border-cos-border bg-white p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Stage</h3>
+            <select
+              value={currentParentStage?.id ?? ""}
+              onChange={(e) => changeStage(e.target.value)}
+              className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm font-medium text-cos-midnight focus:border-cos-electric focus:outline-none"
+              style={currentParentStage ? { borderLeftWidth: 3, borderLeftColor: currentParentStage.color } : {}}
+            >
+              {parentStages.sort((a, b) => a.displayOrder - b.displayOrder).map((stage) => (
+                <option key={stage.id} value={stage.id}>{stage.label}{stage.isClosedWon ? " (Won)" : ""}{stage.isClosedLost ? " (Lost)" : ""}</option>
+              ))}
+            </select>
+
+            {/* Substage dropdown — only if parent has substages */}
+            {currentSubstages.length > 0 && (
+              <div className="mt-2">
+                <label className="text-[10px] font-medium text-cos-slate-light uppercase tracking-wide">{currentParentStage?.label} Reason</label>
+                <select
+                  value={currentStage?.parentStageId ? deal.stageId ?? "" : ""}
+                  onChange={(e) => { if (e.target.value) changeStage(e.target.value); }}
+                  className="w-full mt-0.5 rounded-cos-lg border border-cos-border px-3 py-2 text-sm text-cos-midnight focus:border-cos-electric focus:outline-none"
+                >
+                  <option value="">Select a reason&hellip;</option>
+                  {currentSubstages.sort((a, b) => a.displayOrder - b.displayOrder).map((sub) => (
+                    <option key={sub.id} value={sub.id}>{sub.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
           {/* Company card */}
           <div className="rounded-cos-xl border border-cos-border bg-white p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3 flex items-center gap-1.5">
               <Building2 className="h-3.5 w-3.5" /> Company
             </h3>
-            {company ? (
+            {company && !showCompanySearch ? (
               <>
                 <p className="text-sm font-medium text-cos-midnight">{company.name}</p>
                 {company.domain && <p className="text-xs text-cos-slate mt-0.5">{company.domain}</p>}
                 {company.industry && <p className="text-xs text-cos-slate mt-0.5">{company.industry}</p>}
                 {company.sizeEstimate && <p className="text-xs text-cos-slate mt-0.5">{company.sizeEstimate} employees</p>}
-                <Link href={`/admin/growth-ops/crm/companies/acq_${company.id}`} className="text-xs text-cos-electric flex items-center gap-1 mt-2 hover:underline">
-                  View in CRM &rarr;
-                </Link>
-              </>
-            ) : (
-              <>
-                {!showCompanySearch ? (
-                  <button onClick={() => setShowCompanySearch(true)} className="flex items-center gap-1.5 text-xs text-cos-electric hover:underline">
-                    <Search className="h-3 w-3" /> Link Company
+                <div className="flex items-center gap-3 mt-2">
+                  <Link href={`/admin/growth-ops/crm/companies/acq_${company.id}`} className="text-xs text-cos-electric hover:underline">
+                    View in CRM &rarr;
+                  </Link>
+                  <button onClick={() => setShowCompanySearch(true)} className="text-[10px] text-cos-slate hover:text-cos-electric transition-colors">
+                    Change
                   </button>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={companySearch}
-                        onChange={(e) => handleCompanySearch(e.target.value)}
-                        placeholder="Search by name or domain..."
-                        className="w-full rounded-cos-lg border border-cos-border px-3 py-1.5 text-xs focus:border-cos-electric focus:outline-none pr-7"
-                        autoFocus
-                      />
-                      <button onClick={() => { setShowCompanySearch(false); setCompanySearch(""); setCompanyResults([]); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-cos-slate-dim hover:text-cos-midnight">
-                        <X className="h-3 w-3" />
+                </div>
+              </>
+            ) : !showCompanySearch ? (
+              <button onClick={() => setShowCompanySearch(true)} className="flex items-center gap-1.5 text-xs text-cos-electric hover:underline">
+                <Search className="h-3 w-3" /> Link Company
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={companySearch}
+                    onChange={(e) => handleCompanySearch(e.target.value)}
+                    placeholder="Search by name or domain..."
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-1.5 text-xs focus:border-cos-electric focus:outline-none pr-7"
+                    autoFocus
+                  />
+                  <button onClick={() => { setShowCompanySearch(false); setCompanySearch(""); setCompanyResults([]); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-cos-slate-dim hover:text-cos-midnight">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                {searchingCompany && <Loader2 className="h-3 w-3 animate-spin text-cos-electric mx-auto" />}
+                {companyResults.length > 0 && (
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {companyResults.map((r) => (
+                      <button key={r.id} onClick={() => linkCompany(r.id)} className="w-full text-left rounded-cos-md px-2 py-1.5 text-xs hover:bg-cos-cloud transition-colors">
+                        <p className="font-medium text-cos-midnight">{r.name}</p>
+                        {r.domain && <p className="text-[10px] text-cos-slate">{r.domain}</p>}
                       </button>
-                    </div>
-                    {searchingCompany && <Loader2 className="h-3 w-3 animate-spin text-cos-electric mx-auto" />}
-                    {companyResults.length > 0 && (
-                      <div className="max-h-40 overflow-y-auto space-y-1">
-                        {companyResults.map((r) => (
-                          <button key={r.id} onClick={() => linkCompany(r.id)} className="w-full text-left rounded-cos-md px-2 py-1.5 text-xs hover:bg-cos-cloud transition-colors">
-                            <p className="font-medium text-cos-midnight">{r.name}</p>
-                            {r.domain && <p className="text-[10px] text-cos-slate">{r.domain}</p>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {companySearch.length >= 2 && !searchingCompany && companyResults.length === 0 && (
-                      <p className="text-[10px] text-cos-slate-dim text-center py-1">No companies found</p>
-                    )}
+                    ))}
                   </div>
                 )}
-              </>
+                {companySearch.length >= 2 && !searchingCompany && companyResults.length === 0 && (
+                  <p className="text-[10px] text-cos-slate-dim text-center py-1">No companies found</p>
+                )}
+              </div>
             )}
           </div>
 
@@ -516,6 +535,12 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
                   ))}
                 </select>
               </div>
+              {deal.dealValue && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-cos-slate">Value</span>
+                  <span className="font-medium text-cos-signal">${Number(deal.dealValue).toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex justify-between text-xs">
                 <span className="text-cos-slate">Source</span>
                 <span className="font-medium text-cos-midnight">{deal.source.replace(/_/g, " ")}</span>
@@ -552,8 +577,8 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
           </div>
         </div>
 
-        {/* ─── Center Column — Activity & Notes ─── */}
-        <div className="lg:col-span-6 space-y-4">
+        {/* ─── Right Column — Activity & Notes ─── */}
+        <div className="lg:col-span-8 space-y-4">
           {/* Notes */}
           <div className="rounded-cos-xl border border-cos-border bg-white p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Notes</h3>
@@ -630,93 +655,6 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
           </div>
         </div>
 
-        {/* ─── Right Column — Stage Management ─── */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="rounded-cos-xl border border-cos-border bg-white p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Stage Pipeline</h3>
-            <div className="space-y-1">
-              {parentStages.sort((a, b) => a.displayOrder - b.displayOrder).map((stage) => {
-                const isCurrentParent = currentParentStage?.id === stage.id;
-                const subs = substagesMap[stage.id] ?? [];
-                const isCurrentStage = deal.stageId === stage.id;
-                return (
-                  <div key={stage.id}>
-                    <button
-                      onClick={() => changeStage(stage.id)}
-                      disabled={isCurrentStage}
-                      className={`w-full text-left rounded-cos-lg px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
-                        isCurrentParent
-                          ? "ring-2 ring-offset-1"
-                          : "hover:opacity-80"
-                      }`}
-                      style={{
-                        backgroundColor: isCurrentParent ? stage.color + "20" : stage.color + "08",
-                        color: stage.color,
-                        ...(isCurrentParent ? { ringColor: stage.color } : {}),
-                      }}
-                    >
-                      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
-                      {stage.label}
-                      {stage.isClosedWon && <span className="ml-auto text-[9px] opacity-60">Won</span>}
-                      {stage.isClosedLost && <span className="ml-auto text-[9px] opacity-60">Lost</span>}
-                    </button>
-
-                    {/* Show substages if this is current parent or always show them */}
-                    {subs.length > 0 && isCurrentParent && (
-                      <div className="ml-4 mt-1 mb-1 space-y-0.5">
-                        {subs.sort((a, b) => a.displayOrder - b.displayOrder).map((sub) => {
-                          const isCurrentSub = deal.stageId === sub.id;
-                          return (
-                            <button
-                              key={sub.id}
-                              onClick={() => changeStage(sub.id)}
-                              disabled={isCurrentSub}
-                              className={`w-full text-left rounded-cos-md px-2.5 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-1.5 ${
-                                isCurrentSub
-                                  ? "bg-cos-electric/10 text-cos-electric ring-1 ring-cos-electric/30"
-                                  : "text-cos-slate hover:bg-cos-cloud hover:text-cos-midnight"
-                              }`}
-                            >
-                              <span className={`h-1.5 w-1.5 rounded-full ${isCurrentSub ? "bg-cos-electric" : "bg-cos-slate-dim"}`} />
-                              {sub.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Substage quick-select pills (if current parent has substages) */}
-          {currentSubstages.length > 0 && (
-            <div className="rounded-cos-xl border border-cos-border bg-white p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">
-                {currentParentStage?.label} Substage
-              </h3>
-              <div className="flex flex-wrap gap-1.5">
-                {currentSubstages.sort((a, b) => a.displayOrder - b.displayOrder).map((sub) => {
-                  const isActive = deal.stageId === sub.id;
-                  return (
-                    <button
-                      key={sub.id}
-                      onClick={() => changeStage(sub.id)}
-                      className={`rounded-cos-pill px-3 py-1 text-xs font-medium transition-colors ${
-                        isActive
-                          ? "bg-cos-electric text-white"
-                          : "bg-cos-cloud text-cos-slate hover:bg-cos-electric/10 hover:text-cos-electric"
-                      }`}
-                    >
-                      {sub.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
