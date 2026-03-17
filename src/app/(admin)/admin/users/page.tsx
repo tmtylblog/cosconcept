@@ -98,10 +98,9 @@ export default function AdminUsersPage() {
               ? new Date(u.createdAt).toLocaleDateString()
               : "",
           }));
+          const STAFF_ROLES = ["superadmin", "admin", "growth_ops", "customer_success"];
           setUsers(
-            allUsers.filter(
-              (u) => u.role === "admin" || u.role === "superadmin"
-            )
+            allUsers.filter((u) => STAFF_ROLES.includes(u.role))
           );
         }
       })

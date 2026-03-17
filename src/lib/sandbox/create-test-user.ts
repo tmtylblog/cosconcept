@@ -52,6 +52,12 @@ export async function createSandboxUser(opts: {
   const email = `support+sandbox-${sandboxId}@joincollectiveos.com`;
   const name = opts.name || `Sandbox ${randomWord(RANDOM_ADJECTIVES)} ${randomWord(RANDOM_NOUNS)}`;
 
+  // Normalize domain — strip protocol, trailing slashes, www prefix
+  let domain = domain?.trim() || undefined;
+  if (domain) {
+    domain = domain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  }
+
   // 1. Create user
   const userId = crypto.randomBytes(16).toString("hex");
   await db.insert(users).values({
@@ -81,12 +87,12 @@ export async function createSandboxUser(opts: {
   const orgSlug = `sandbox-${sandboxId}`;
   await db.insert(organizations).values({
     id: orgId,
-    name: `Sandbox: ${opts.domain || name}`,
+    name: `Sandbox: ${domain || name}`,
     slug: orgSlug,
     metadata: JSON.stringify({
       source: "sandbox",
       sandboxId,
-      domain: opts.domain || null,
+      domain: domain || null,
       mode: opts.mode,
     }),
     createdAt: now,
@@ -125,11 +131,11 @@ export async function createSandboxUser(opts: {
 
   // Check enrichment cache if domain provided and pre-onboarded
   let enrichmentData = null;
-  if (opts.domain && isPreOnboarded) {
+  if (domain && isPreOnboarded) {
     const [cached] = await db
       .select({ enrichmentData: enrichmentCache.enrichmentData })
       .from(enrichmentCache)
-      .where(eq(enrichmentCache.domain, opts.domain))
+      .where(eq(enrichmentCache.domain, domain))
       .limit(1);
     if (cached) {
       enrichmentData = cached.enrichmentData;
@@ -139,8 +145,8 @@ export async function createSandboxUser(opts: {
   await db.insert(serviceFirms).values({
     id: firmId,
     organizationId: orgId,
-    name: opts.domain ? `Sandbox (${opts.domain})` : name,
-    website: opts.domain ? `https://${opts.domain}` : null,
+    name: domain ? `Sandbox (${domain})` : name,
+    website: domain ? `https://${domain}` : null,
     enrichmentStatus: isPreOnboarded ? "enriched" : "pending",
     enrichmentData: enrichmentData,
     entityType: "service_firm",
