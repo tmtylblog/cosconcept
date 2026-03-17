@@ -58,6 +58,53 @@ export async function POST(req: NextRequest) {
   const dryRun = body.dryRun === true;
   const skipCompleted = mode === "full-system" ? false : body.skipCompleted !== false;
   const firmIds: string[] | undefined = body.firmIds;
+  const resumeJobId: string | undefined = body.resumeJobId;
+
+  // ── Resume mode: re-trigger with the same jobId so checkpoint data is reused ──
+  if (resumeJobId) {
+    const [existingJob] = await db
+      .select()
+      .from(backgroundJobs)
+      .where(eq(backgroundJobs.id, resumeJobId));
+
+    if (!existingJob) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payload = existingJob.payload as Record<string, any> | null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = existingJob.result as Record<string, any> | null;
+    const completedCount = (result?.completedFirmIds as string[])?.length ?? 0;
+    const totalCount = result?.total ?? payload?.firmCount ?? 0;
+
+    // Reset status to pending so the orchestrator picks it back up
+    await db
+      .update(backgroundJobs)
+      .set({ status: "pending", lastError: null })
+      .where(eq(backgroundJobs.id, resumeJobId));
+
+    // Re-trigger with the same jobId — the orchestrator will load completedFirmIds
+    // from the job record and skip already-processed firms
+    await inngest.send({
+      name: "enrich/backfill-all-firms" as string,
+      data: {
+        firmIds: payload?.firmIds ?? null,
+        skipCompleted: payload?.skipCompleted ?? true,
+        jobId: resumeJobId,
+        mode: payload?.mode ?? "incremental",
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      resumed: true,
+      jobId: resumeJobId,
+      message: `Resumed job ${resumeJobId}. ${completedCount}/${totalCount} firms already completed — will continue from where it left off.`,
+      completedSoFar: completedCount,
+      totalFirms: totalCount,
+    });
+  }
 
   // Resolve firms
   let firms;

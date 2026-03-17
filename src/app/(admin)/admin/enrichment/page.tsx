@@ -209,6 +209,28 @@ function FullSystemEnrichmentSection() {
     return () => clearInterval(interval);
   }, [jobId]);
 
+  async function resumeJob() {
+    if (!jobId) return;
+    if (!window.confirm("Resume this job from where it left off?")) return;
+    setRunning(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/enrich/backfill-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeJobId: jobId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      // Reset polling — job is running again
+      setJobStatus(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Resume failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
   function toggleFirm(firmId: string) {
     setSelectedFirms((prev) => {
       const next = new Set(prev);
@@ -338,19 +360,33 @@ function FullSystemEnrichmentSection() {
       {/* Job progress */}
       {jobId && (
         <div className="rounded-cos-lg border border-cos-electric/20 bg-cos-electric/5 p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-cos-electric">
-            {jobStatus?.status === "done" ? (
-              <CheckCircle2 className="h-4 w-4" />
-            ) : jobStatus?.status === "failed" ? (
-              <XCircle className="h-4 w-4 text-cos-ember" />
-            ) : (
-              <Loader2 className="h-4 w-4 animate-spin" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-cos-electric">
+              {jobStatus?.status === "done" ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : jobStatus?.status === "failed" ? (
+                <XCircle className="h-4 w-4 text-cos-ember" />
+              ) : (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              {jobStatus?.status === "done"
+                ? "Enrichment complete!"
+                : jobStatus?.status === "failed"
+                ? `Enrichment failed at ${jobStatus?.result?.processed ?? 0}/${jobStatus?.result?.total ?? "?"} firms`
+                : `Running ${jobStatus?.result?.mode ?? mode} enrichment... ${jobStatus?.result?.processed ?? 0}/${jobStatus?.result?.total ?? "?"}`}
+            </div>
+            {jobStatus?.status === "failed" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={resumeJob}
+                disabled={running}
+                className="text-xs border-cos-electric text-cos-electric hover:bg-cos-electric/10"
+              >
+                {running ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Rocket className="mr-1.5 h-3.5 w-3.5" />}
+                Resume from checkpoint
+              </Button>
             )}
-            {jobStatus?.status === "done"
-              ? "Enrichment complete!"
-              : jobStatus?.status === "failed"
-              ? "Enrichment failed"
-              : `Running ${jobStatus?.result?.mode ?? mode} enrichment... ${jobStatus?.result?.processed ?? 0}/${jobStatus?.result?.total ?? "?"}`}
           </div>
           {jobStatus?.result && (
             <>

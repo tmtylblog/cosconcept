@@ -8,22 +8,23 @@
  *   re-abstraction, skip nothing. Used for periodic full-platform refresh.
  * - **incremental** (default): Skip already-completed steps to save credits.
  *
- * Steps run in dependency order:
+ * RESILIENCE:
+ * - Each step is an Inngest `step.run()` with a unique ID per firm — on retry,
+ *   completed steps replay instantly from memoization (no re-execution, no double spend).
+ * - After each firm completes, its ID is persisted to `backgroundJobs.result.completedFirmIds`.
+ *   On retry or manual resume, these firms are skipped entirely.
+ * - Downstream jobs (deep-crawl, team-ingest, expert-linkedin, case-study-ingest) are
+ *   independent Inngest functions with their own retries — they survive orchestrator crashes.
+ * - All DB writes are additive with dedup checks — a crash cannot lose data.
+ * - Retries: 3 (Inngest retries the whole function, but memoized steps skip forward).
  *
+ * Steps per firm:
  * 1. Deep Crawl (PDL company + website crawl + classify + graph + services + case studies)
  * 2. Team Roster Import (PDL people search, autoEnrichLimit: -1 in full-system mode)
  * 3. [Async cascades: expert enrichment + case study ingestion run via downstream triggers]
  * 4. Graph Sync (ensure all PG data is mirrored to Neo4j)
- * 5. Skill Strength Recomputation
+ * 5. Skill Strength Recomputation (full-system only)
  * 6. Abstraction Profile Generation (AI summary + embedding)
- *
- * Skip logic (incremental mode only):
- * - Deep Crawl: skip if firmServices > 0 AND firmCaseStudies > 0 AND has classifier audit
- * - Team Roster: skip if expertProfiles > 3 AND last import < 30 days
- * - Expert Enrichment: handled by downstream triggers (skip if pdlEnrichedAt < 6 months)
- * - Case Studies: handled by downstream triggers (skip if status = "active")
- * - Graph Sync: skip if firm has recent deep_crawl audit entry
- * - Abstraction: skip if lastEnrichedAt < 7 days old
  */
 
 import { inngest } from "../client";
@@ -57,7 +58,7 @@ export const backfillAllFirms = inngest.createFunction(
   {
     id: "enrich-backfill-all-firms",
     name: "Full System Enrichment",
-    retries: 1,
+    retries: 3,
     concurrency: [{ limit: 2 }],
   },
   { event: "enrich/backfill-all-firms" },
@@ -103,6 +104,23 @@ export const backfillAllFirms = inngest.createFunction(
         .from(serviceFirms);
     });
 
+    // Step 2: Load previously completed firm IDs from the job record.
+    // This is the key resume mechanism — on retry or manual resume,
+    // firms already processed are skipped entirely (no re-execution).
+    const alreadyCompleted = await step.run("load-completed-firms", async () => {
+      if (!jobId) return new Set<string>();
+      const [job] = await db
+        .select({ result: backgroundJobs.result })
+        .from(backgroundJobs)
+        .where(eq(backgroundJobs.id, jobId));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = job?.result as Record<string, any> | null;
+      const ids: string[] = result?.completedFirmIds ?? [];
+      return new Set(ids);
+    });
+    // Convert to a plain Set (Inngest serialization returns arrays)
+    const completedFirmIds = new Set(alreadyCompleted);
+
     // Update job status to running
     if (jobId) {
       await step.run("mark-job-running", async () => {
@@ -114,10 +132,23 @@ export const backfillAllFirms = inngest.createFunction(
     }
 
     const results: BackfillProgress[] = [];
-    let processed = 0;
+    let processed = completedFirmIds.size;
     const total = firms.length;
 
     for (const firm of firms) {
+      // ── Resume gate: skip firms already completed in a previous run ──
+      if (completedFirmIds.has(firm.id)) {
+        results.push({
+          firmId: firm.id,
+          firmName: firm.name,
+          stepsCompleted: ["(resumed — already complete)"],
+          stepsSkipped: [],
+          stepsFailed: [],
+          currentStep: null,
+        });
+        continue;
+      }
+
       const progress: BackfillProgress = {
         firmId: firm.id,
         firmName: firm.name,
@@ -131,9 +162,6 @@ export const backfillAllFirms = inngest.createFunction(
       const enrichmentData = firm.enrichmentData as Record<string, any> | null;
 
       // ── Phase 1: Deep Crawl ──────────────────────────────
-      // Includes: PDL company enrichment (with fallback), website crawl,
-      // AI classification, graph write, services + case study bulk insert,
-      // queues case study ingestion + expert enrichment for discovered team
       const needsDeepCrawl = await step.run(`check-deep-crawl-${firm.id}`, async () => {
         if (!effectiveSkip) return true;
         if (!enrichmentData?.companyData?.employeeCount) return true;
@@ -232,10 +260,6 @@ export const backfillAllFirms = inngest.createFunction(
         progress.stepsSkipped.push("team-ingest (enough experts)");
       }
 
-      // Phases 3-4 (expert enrichment + case study ingestion) are triggered
-      // automatically by deep-crawl and team-ingest downstream cascades.
-      // Client stub enrichment runs via hourly cron (company-enrich-stub).
-
       // ── Phase 4: Graph Sync ──────────────────────────────
       const needsGraphSync = await step.run(`check-graph-sync-${firm.id}`, async () => {
         if (!effectiveSkip) return true;
@@ -275,7 +299,6 @@ export const backfillAllFirms = inngest.createFunction(
       }
 
       // ── Phase 5: Skill Strength Recomputation ────────────
-      // Always run in full-system mode to recalculate weights
       if (isFullSystem) {
         progress.currentStep = "skill-strength";
         try {
@@ -295,7 +318,7 @@ export const backfillAllFirms = inngest.createFunction(
 
       // ── Phase 6: Abstraction Profile ─────────────────────
       const needsAbstraction = await step.run(`check-abstraction-${firm.id}`, async () => {
-        if (!effectiveSkip) return true; // full-system always re-abstracts
+        if (!effectiveSkip) return true;
         const [row] = await db
           .select({ cnt: count(), lastEnrichedAt: abstractionProfiles.lastEnrichedAt })
           .from(abstractionProfiles)
@@ -361,10 +384,13 @@ export const backfillAllFirms = inngest.createFunction(
       progress.currentStep = null;
       results.push(progress);
       processed++;
+      completedFirmIds.add(firm.id);
 
-      // Update job progress
+      // ── Persist progress checkpoint to DB ─────────────────
+      // This is the durable resume point. On retry or manual resume,
+      // `load-completed-firms` reads this back and skips these firms.
       if (jobId) {
-        await step.run(`update-progress-${firm.id}`, async () => {
+        await step.run(`checkpoint-${firm.id}`, async () => {
           await db
             .update(backgroundJobs)
             .set({
@@ -374,6 +400,19 @@ export const backfillAllFirms = inngest.createFunction(
                 mode,
                 currentFirm: firm.name,
                 lastUpdate: new Date().toISOString(),
+                completedFirmIds: Array.from(completedFirmIds),
+                firmResults: results.map((r) => ({
+                  firmId: r.firmId,
+                  firmName: r.firmName,
+                  completed: r.stepsCompleted.length,
+                  skipped: r.stepsSkipped.length,
+                  failed: r.stepsFailed.length,
+                  steps: {
+                    completed: r.stepsCompleted,
+                    skipped: r.stepsSkipped,
+                    failed: r.stepsFailed,
+                  },
+                })),
               },
             })
             .where(eq(backgroundJobs.id, jobId));
@@ -398,6 +437,7 @@ export const backfillAllFirms = inngest.createFunction(
               processed,
               total,
               mode,
+              completedFirmIds: Array.from(completedFirmIds),
               results: results.map((r) => ({
                 firmId: r.firmId,
                 firmName: r.firmName,
