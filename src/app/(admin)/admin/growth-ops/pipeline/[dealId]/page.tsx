@@ -442,16 +442,22 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
                 <User className="h-3.5 w-3.5" /> Contact
               </h3>
               <p className="text-sm font-medium text-cos-midnight">{contact.firstName} {contact.lastName}</p>
-              {contact.email && (
+              {contact.email && !contact.email.includes("@placeholder.local") && (
                 <p className="text-xs text-cos-slate flex items-center gap-1.5 mt-1">
                   <Mail className="h-3 w-3" /> {contact.email}
                 </p>
               )}
               {contact.linkedinUrl && (
-                <a href={contact.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 flex items-center gap-1.5 mt-1 hover:underline">
+                <a href={contact.linkedinUrl.startsWith("http") ? contact.linkedinUrl : `https://${contact.linkedinUrl}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 flex items-center gap-1.5 mt-1 hover:underline">
                   <Linkedin className="h-3 w-3" /> LinkedIn Profile
                 </a>
               )}
+              <Link
+                href={`/admin/growth-ops/crm/people/ac_${contact.id}`}
+                className="text-xs text-cos-electric flex items-center gap-1 mt-2 hover:underline"
+              >
+                View in CRM &rarr;
+              </Link>
             </div>
           )}
 
@@ -465,6 +471,12 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
               {company.domain && <p className="text-xs text-cos-slate mt-0.5">{company.domain}</p>}
               {company.industry && <p className="text-xs text-cos-slate mt-0.5">{company.industry}</p>}
               {company.sizeEstimate && <p className="text-xs text-cos-slate mt-0.5">{company.sizeEstimate} employees</p>}
+              <Link
+                href={`/admin/growth-ops/crm/companies/acq_${company.id}`}
+                className="text-xs text-cos-electric flex items-center gap-1 mt-2 hover:underline"
+              >
+                View in CRM &rarr;
+              </Link>
             </div>
           )}
 
