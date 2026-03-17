@@ -128,43 +128,32 @@ export default function DataQualityPage() {
     setDeleting(true);
     setDeleteResult(null);
 
-    // Delete one at a time to avoid Vercel timeout
-    let deleted = 0;
-    let failedCount = 0;
-
-    for (let i = 0; i < orgIds.length; i++) {
-      setDeleteResult(`Deleting ${i + 1} of ${orgIds.length}...`);
-      try {
-        const res = await fetch("/api/admin/data-quality/delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orgIds: [orgIds[i]] }),
-        });
-        if (res.ok) {
-          deleted++;
-        } else {
-          const errBody = await res.json().catch(() => ({}));
-          console.error(`Delete failed for org ${orgIds[i]}:`, errBody);
-          setDeleteResult(`Failed on org ${i + 1}: ${errBody.detail || errBody.error || res.status}`);
-          failedCount++;
-        }
-      } catch (err) {
-        console.error(`Delete network error for org ${orgIds[i]}:`, err);
-        failedCount++;
-      }
+    // Send all org IDs to the API — it queues them as Inngest background jobs
+    try {
+      const res = await fetch("/api/admin/data-quality/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgIds }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error ?? `HTTP ${res.status}`);
+      setDeleteResult(
+        `Queued ${orgIds.length} organization(s) for deletion. Processing in background — refresh in ~30 seconds to see updated list.`
+      );
+      setSelected(new Set());
+    } catch (err) {
+      setDeleteResult(`Error: ${err instanceof Error ? err.message : "Delete failed"}`);
     }
 
-    setDeleteResult(
-      `Deleted ${deleted} of ${orgIds.length} organizations.${failedCount > 0 ? ` ${failedCount} failed.` : ""}`
-    );
-    setSelected(new Set());
     setDeleting(false);
 
-    // Refresh data
-    try {
-      const refreshRes = await fetch("/api/admin/data-quality");
-      if (refreshRes.ok) setData(await refreshRes.json());
-    } catch { /* ignore */ }
+    // Auto-refresh after 30 seconds
+    setTimeout(async () => {
+      try {
+        const refreshRes = await fetch("/api/admin/data-quality");
+        if (refreshRes.ok) setData(await refreshRes.json());
+      } catch { /* ignore */ }
+    }, 30000);
   }
 
   const filtered = getFilteredFirms();

@@ -37,3 +37,4 @@ export { assessFit } from "./assess-client-fit";
 export { extractOpportunitiesJob } from "./extract-opportunities";
 export { syncPreferences } from "./sync-preferences";
 export { backfillHasClientEdges } from "./backfill-has-client-edges";
+export { deleteOrganization } from "./delete-organization";
