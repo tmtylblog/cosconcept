@@ -16,10 +16,11 @@ import {
   serviceFirms,
   abstractionProfiles,
 } from "@/lib/db/schema";
-import { eq, inArray, sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { getNeo4jDriver } from "@/lib/neo4j";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 120; // 2 minutes — cascade deletes can be slow
 
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -53,34 +54,43 @@ export async function POST(req: NextRequest) {
         .where(inArray(abstractionProfiles.entityId, firmIds));
     }
 
-    // 3. Delete organizations (cascades to members, subscriptions, serviceFirms,
-    //    and all 23 FK-cascaded tables from serviceFirms)
+    // 3. Delete all organizations in a single SQL statement (much faster than one-by-one)
     let deleted = 0;
     const failed: string[] = [];
 
-    for (const orgId of orgIds) {
-      try {
-        await db.execute(sql`DELETE FROM organizations WHERE id = ${orgId}`);
-        deleted++;
-      } catch (err) {
-        console.error(`[DataQuality] Failed to delete org ${orgId}:`, err);
-        failed.push(orgId);
+    try {
+      await db.execute(
+        sql`DELETE FROM organizations WHERE id IN ${orgIds}`
+      );
+      deleted = orgIds.length;
+    } catch (err) {
+      // If bulk fails, fall back to one-by-one to identify which ones fail
+      console.error("[DataQuality] Bulk delete failed, trying one-by-one:", err);
+      for (const orgId of orgIds) {
+        try {
+          await db.execute(sql`DELETE FROM organizations WHERE id = ${orgId}`);
+          deleted++;
+        } catch (innerErr) {
+          console.error(`[DataQuality] Failed to delete org ${orgId}:`, innerErr);
+          failed.push(orgId);
+        }
       }
     }
 
-    // 4. Clean up Neo4j ServiceFirm nodes
+    // 4. Clean up Neo4j ServiceFirm nodes (batch query — much faster)
     let neo4jCleaned = 0;
     if (firmIds.length > 0) {
       try {
         const neo4jSession = getNeo4jDriver().session();
         try {
-          for (const firmId of firmIds) {
-            await neo4jSession.run(
-              `MATCH (f:Company:ServiceFirm {id: $firmId}) DETACH DELETE f`,
-              { firmId }
-            );
-            neo4jCleaned++;
-          }
+          const result = await neo4jSession.run(
+            `UNWIND $firmIds AS fid
+             MATCH (f:Company:ServiceFirm {id: fid})
+             DETACH DELETE f
+             RETURN count(f) AS deleted`,
+            { firmIds }
+          );
+          neo4jCleaned = result.records[0]?.get("deleted")?.toNumber?.() ?? firmIds.length;
         } finally {
           await neo4jSession.close();
         }
