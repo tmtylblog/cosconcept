@@ -20,7 +20,7 @@
 
 import { inngest } from "../client";
 import { neo4jWrite } from "@/lib/neo4j";
-import { enrichCompany } from "@/lib/enrichment/pdl";
+import { enrichCompanyWithFallback } from "@/lib/enrichment/company-enrichment";
 
 const BATCH_SIZE = 20;
 
@@ -60,11 +60,12 @@ export const companyEnrichStub = inngest.createFunction(
     for (const stub of stubs) {
       await step.run(`enrich-${stub.nodeId}`, async () => {
         try {
-          const pdl = await enrichCompany(
+          const enrichResult = await enrichCompanyWithFallback(
             stub.domain
               ? { website: stub.domain }
               : { name: stub.name }
           );
+          const pdl = enrichResult.company;
 
           if (!pdl) {
             // PDL has no data — mark as enriched with whatever we have

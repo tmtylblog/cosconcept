@@ -11,7 +11,7 @@ import { inngest } from "../client";
 import { db } from "@/lib/db";
 import { companyResearch, enrichmentCache } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { enrichCompany } from "@/lib/enrichment/pdl";
+import { enrichCompanyWithFallback } from "@/lib/enrichment/company-enrichment";
 import { scrapeFirmWebsite } from "@/lib/enrichment/jina-scraper";
 import { classifyFirm } from "@/lib/enrichment/ai-classifier";
 import { writeResearchedCompanyToGraph } from "@/lib/enrichment/graph-writer";
@@ -83,7 +83,8 @@ export const researchCompany = inngest.createFunction(
         return { data: (cached.enrichCacheData.companyData as Record<string, unknown>) ?? null, skipped: true };
       }
       try {
-        const pdl = await enrichCompany({ website: domain });
+        const result = await enrichCompanyWithFallback({ website: domain });
+        const pdl = result.company;
         if (!pdl) return { data: null, skipped: false };
         return {
           data: {
@@ -98,7 +99,7 @@ export const researchCompany = inngest.createFunction(
           skipped: false,
         };
       } catch (err) {
-        console.error("[research/company] PDL failed:", err);
+        console.error("[research/company] Company enrichment failed:", err);
         return { data: null, skipped: false };
       }
     });

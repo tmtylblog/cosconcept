@@ -12,7 +12,7 @@
  */
 
 import { inngest } from "../client";
-import { enrichPerson } from "@/lib/enrichment/pdl";
+import { enrichPersonWithFallback } from "@/lib/enrichment/person-enrichment";
 import { generateSpecialistProfiles } from "@/lib/enrichment/specialist-generator";
 import { writeExpertToGraph, writeSpecialistProfileToGraph } from "@/lib/enrichment/graph-writer";
 import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
@@ -48,9 +48,9 @@ export const expertLinkedIn = inngest.createFunction(
       importedContactId,
     } = event.data;
 
-    // Step 1: PDL person enrichment
-    const pdlPerson = await step.run("pdl-enrich", async () => {
-      const result = await enrichPerson({
+    // Step 1: Person enrichment (EnrichLayer → PDL fallback)
+    const enrichResult = await step.run("person-enrich", async () => {
+      const result = await enrichPersonWithFallback({
         name: fullName,
         linkedinUrl,
         companyName,
@@ -61,21 +61,24 @@ export const expertLinkedIn = inngest.createFunction(
         firmId,
         userId: expertId,
         phase: "linkedin",
-        source: "api.peopledatalabs.com",
-        rawInput: `name=${fullName}, company=${companyName}`,
-        extractedData: result
+        source: result.provider === "enrichlayer" ? "enrichlayer.com" : "api.peopledatalabs.com",
+        rawInput: `name=${fullName}, company=${companyName}, provider=${result.provider ?? "none"}${result.fallbackReason ? `, fallback=${result.fallbackReason}` : ""}`,
+        extractedData: result.person
           ? {
-              fullName: result.fullName,
-              headline: result.headline,
-              skills: result.skills.length,
-              experience: result.experience.length,
+              fullName: result.person.fullName,
+              headline: result.person.headline,
+              skills: result.person.skills.length,
+              experience: result.person.experience.length,
+              provider: result.provider,
             }
           : null,
-        status: result ? "success" : "skipped",
+        status: result.person ? "success" : "skipped",
       });
 
       return result;
     });
+
+    const pdlPerson = enrichResult.person;
 
     if (!pdlPerson) {
       return { expertId, status: "not_found", fullName };

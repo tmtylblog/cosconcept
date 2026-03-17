@@ -523,6 +523,43 @@ All functions are registered in the serve handler at `/api/inngest`.
 
 ---
 
+### 20. `enrich-backfill-all-firms` — Full System Enrichment
+
+| Property | Value |
+|---|---|
+| **File** | `src/inngest/functions/backfill-all-firms.ts` |
+| **Event** | `enrich/backfill-all-firms` |
+| **Retries** | 1 |
+| **Concurrency** | 2 |
+| **Durable** | Yes (dynamic steps per firm) |
+| **Status** | Working |
+
+**Purpose:** Orchestrates the full enrichment pipeline for all firms (or a subset). Supports two modes:
+- **incremental** (default): Skips already-completed steps, autoEnrichLimit=10
+- **full-system**: Pro treatment — enriches ALL experts (autoEnrichLimit=-1), forces re-abstraction, skips nothing, runs skill strength recomputation
+
+**Steps per firm:**
+1. Deep Crawl (triggers `enrich/deep-crawl`, which uses company enrichment with PDL→Jina+AI fallback)
+2. Team Roster Import (triggers `enrich/team-ingest`, autoEnrichLimit=-1 in full-system mode)
+3. [Async cascades: expert enrichment (EnrichLayer→PDL) + case study ingestion triggered by steps 1-2]
+4. Graph Sync (triggers `graph/sync-firm`)
+5. Skill Strength Recomputation (triggers `graph/skill-compute-strength`, full-system only)
+6. Abstraction Profile (triggers `enrich/firm-abstraction`)
+7. Logo fallback (logo.dev if no PDL logo)
+
+**Skip logic (incremental mode):**
+- Deep Crawl: skip if firmServices > 0 AND firmCaseStudies > 0 AND has classifier audit entry
+- Team Roster: skip if expertProfiles >= 3
+- Graph Sync: skip if has graphNodeId or deep_crawl audit entry
+- Abstraction: skip if lastEnrichedAt < 7 days
+
+**Input:** `{ firmIds?: string[], skipCompleted: boolean, jobId: string, mode: "full-system" | "incremental" }`
+**Output:** `{ processed, total, mode, results[] }`
+
+**Triggered by:** `POST /api/admin/enrich/backfill-all`
+
+---
+
 ## Cron Schedule Summary
 
 | Function | Schedule | Description |

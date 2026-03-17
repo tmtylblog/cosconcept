@@ -45,6 +45,7 @@ const envSchema = z.object({
   DEEPGRAM_API_KEY: z.string().optional(),
   JINA_API_KEY: z.string().optional(),
   PDL_API_KEY: z.string().optional(),
+  ENRICHLAYER_API_KEY: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
 });
 

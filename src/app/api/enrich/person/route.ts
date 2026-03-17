@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { enrichPerson } from "@/lib/enrichment/pdl";
+import { enrichPersonWithFallback } from "@/lib/enrichment/person-enrichment";
 import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +40,8 @@ export async function POST(req: Request) {
       `[Enrich] Person enrichment: ${body.name || body.linkedinUrl || body.email}`
     );
 
-    const person = await enrichPerson(body);
+    const result = await enrichPersonWithFallback(body);
+    const person = result.person;
 
     if (!person) {
       return NextResponse.json(
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
     }
 
     console.log(
-      `[Enrich] Person found: ${person.fullName}, ` +
+      `[Enrich] Person found via ${result.provider}: ${person.fullName}, ` +
         `${person.experience.length} jobs, ${person.skills.length} skills`
     );
 
@@ -80,6 +81,7 @@ export async function POST(req: Request) {
         })),
       },
       likelihood: person.likelihood,
+      provider: result.provider,
     });
   } catch (error) {
     console.error("[Enrich] Person enrichment error:", error);

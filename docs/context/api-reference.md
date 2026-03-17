@@ -233,7 +233,10 @@ All admin routes require `superadmin` role unless noted. Prefix: `/api/admin/`.
 | POST | `/api/admin/abstractions/[firmId]` | Triggers `generateFirmAbstraction()` to regenerate the abstraction profile. Returns the newly generated profile. | superadmin |
 | POST | `/api/admin/enrich/backfill-abstractions` | Queues `firm-abstraction` jobs for all enriched firms missing abstraction profiles. Body: `{ force?: boolean }`. | superadmin |
 | POST | `/api/admin/enrich/backfill-deep-crawl` | Queues `enrich-deep-crawl` jobs for firms missing a classifier audit log entry, staggered 30s apart. | superadmin |
+| POST | `/api/admin/enrich/backfill-all` | Full System Enrichment pipeline. Body: `{ mode?: "full-system"\|"incremental", dryRun?, skipCompleted?, firmIds? }`. Full-system mode: Pro treatment, enrich all experts, force re-abstraction. Incremental: skip completed steps. Returns jobId for polling. | admin |
+| GET | `/api/admin/enrich/backfill-all?jobId=X` | Poll enrichment job progress. Returns status, processed/total counts, mode, per-firm results with step details. | admin |
 | POST | `/api/admin/enrich/fix-customer-profiles` | One-time cleanup: hydrates customer `service_firms` from `enrichment_cache`. Looks up domain from owner email, applies enrichment data, queues abstraction. Body: `{ dryRun?: boolean, force?: boolean }`. | superadmin |
+| GET | `/api/admin/neo4j/health` | Graph health dashboard: node/edge counts by type, client stub stats, stale data detection, ServiceFirm count. | admin |
 
 ### Organizations
 

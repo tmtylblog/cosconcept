@@ -393,6 +393,49 @@ async function checkNeonDB(): Promise<ApiHealthCheck> {
   }
 }
 
+async function checkEnrichLayer(): Promise<ApiHealthCheck> {
+  const start = Date.now();
+  const name = "EnrichLayer";
+  try {
+    const key = process.env.ENRICHLAYER_API_KEY;
+    if (!key) return notConfigured(name, "ENRICHLAYER_API_KEY", "Phase 3");
+
+    // Test lookup with a non-existent person — 404 is expected and free
+    const res = await fetch(
+      `https://enrichlayer.com/api/v2/person/enrich?name=test_nonexistent_xyz&use_cache=if-recent`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    const latencyMs = Date.now() - start;
+
+    if (res.status === 404) {
+      // Expected — means the API is reachable and key is valid
+      return { name, status: "healthy", latencyMs, message: "Connected", phase: "Phase 3", checkedAt: new Date().toISOString() };
+    }
+
+    if (res.status === 403) {
+      return { name, status: "error", latencyMs, message: "No credits remaining (403)", phase: "Phase 3", checkedAt: new Date().toISOString() };
+    }
+
+    if (res.status === 429) {
+      return { name, status: "warning", latencyMs, message: "Rate limited (429)", phase: "Phase 3", checkedAt: new Date().toISOString() };
+    }
+
+    if (res.status === 401) {
+      return { name, status: "error", latencyMs, message: "Invalid API key (401)", phase: "Phase 3", checkedAt: new Date().toISOString() };
+    }
+
+    return { name, status: "healthy", latencyMs, message: `Connected (HTTP ${res.status})`, phase: "Phase 3", checkedAt: new Date().toISOString() };
+  } catch (err) {
+    return { name, status: "error", latencyMs: Date.now() - start, message: String(err), phase: "Phase 3", checkedAt: new Date().toISOString() };
+  }
+}
+
 // ─── Main Handler ─────────────────────────────────────
 
 export async function GET() {
@@ -406,6 +449,7 @@ export async function GET() {
   const results = await Promise.all([
     withTimeout(checkOpenRouter),
     withTimeout(checkPDL),
+    withTimeout(checkEnrichLayer),
     withTimeout(checkJina),
     withTimeout(checkDeepgram),
     withTimeout(checkElevenLabs),

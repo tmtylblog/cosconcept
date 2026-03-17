@@ -1,6 +1,6 @@
 # 6. Enrichment Pipeline
 
-> Last updated: 2026-03-12 (updated: services/case-study auto-seeding with cache fallback)
+> Last updated: 2026-03-16 (added: EnrichLayer provider, person/company enrichment orchestrators, Full System Enrichment mode)
 
 ## Overview
 
@@ -61,7 +61,7 @@ All modules live in `src/lib/enrichment/`.
 - **Bot protection:** Exports `isBlockedContent(content)` — detects Cloudflare challenge pages, access denied, and suspiciously short responses. Used by both jina-scraper and deep-crawler to skip blocked pages rather than storing junk.
 - **Crawl pacing:** Case study URL scraping is sequential with 5–10 second jitter delay between requests (was parallel) to avoid triggering CF behavioral bot detection on case-study-heavy sites.
 
-### pdl.ts — People Data Labs
+### pdl.ts — People Data Labs (raw API client)
 
 - **Purpose:** Structured firmographic and person data from external API
 - **Two endpoints:**
@@ -69,6 +69,35 @@ All modules live in `src/lib/enrichment/`.
   - `enrichPerson({name?, companyName?, linkedinUrl?, email?})` -> `PdlPerson | null` — job history, skills, education, headline
 - **Cost:** 1 PDL credit per successful match (~$0.03-0.10). 404 = free (no charge)
 - **Input:** At least one identifier (website/name/profile for company; name+company/LinkedIn/email for person)
+- **Note:** Consumers should use `person-enrichment.ts` or `company-enrichment.ts` orchestrators instead of calling `pdl.ts` directly.
+
+### enrichlayer.ts — EnrichLayer (cheaper person enrichment)
+
+- **Purpose:** Primary provider for person enrichment (work history, skills, education) at ~$0.02/lookup vs PDL's ~$0.28
+- **Base URL:** `https://enrichlayer.com/api/v2`
+- **Auth:** `Authorization: Bearer <ENRICHLAYER_API_KEY>` (env var)
+- **Functions:**
+  - `enrichLayerPerson({linkedinUrl?, name?, company?})` → raw EnrichLayer response or null on 404
+  - `normalizeToEnrichedPerson(raw)` → `PdlPerson` (maps to standard interface)
+  - `checkEnrichLayerHealth()` → health check for api-health endpoint
+- **Error handling:** Throws `EnrichLayerNoCreditsError` (403), `EnrichLayerRateLimitError` (429)
+- **Cost:** ~$0.02 per successful lookup. 404 = no charge. 403 = no charge (no credits).
+
+### person-enrichment.ts — Person Enrichment Orchestrator
+
+- **Purpose:** Provider-agnostic person enrichment with automatic fallback
+- **Chain:** EnrichLayer (primary, cheap) → PDL (fallback, expensive) → null
+- **Function:** `enrichPersonWithFallback(params)` → `PersonEnrichmentResult { person, provider, fallbackReason }`
+- **Fallback triggers:** EnrichLayer 404, 403 (no credits), 429 (rate limit), not configured, or error
+- **Used by:** `expert-linkedin.ts`, `/api/enrich/person/route.ts`
+
+### company-enrichment.ts — Company Enrichment Orchestrator
+
+- **Purpose:** Provider-agnostic company enrichment with automatic fallback
+- **Chain:** PDL (primary, structured data) → Jina scrape + Gemini Flash extraction (fallback, partial data) → null
+- **Function:** `enrichCompanyWithFallback(params)` → `CompanyEnrichmentResult { company, provider, fallbackReason }`
+- **Jina+AI fallback:** Scrapes company website, then uses Gemini Flash to extract name, industry, size, summary, headline, location, founded year. Cannot determine employeeCount, funding, revenue.
+- **Used by:** `deep-crawl.ts`, `company-enrich-stub.ts`, `research-company.ts`, `client-research.ts`
 
 ### deep-crawler.ts — Enhanced Multi-Page Crawl
 

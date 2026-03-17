@@ -16,7 +16,7 @@ import { z } from "zod/v4";
 import { db } from "@/lib/db";
 import { companyResearch, enrichmentCache } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { enrichCompany } from "./pdl";
+import { enrichCompanyWithFallback } from "./company-enrichment";
 import { scrapeFirmWebsite } from "./jina-scraper";
 import { classifyFirm } from "./ai-classifier";
 import { writeResearchedCompanyToGraph } from "./graph-writer";
@@ -357,12 +357,12 @@ export async function researchCompany(
   } else {
     // Phase 1: Fresh data gathering
     console.warn(`[ClientResearch] Cache MISS — running PDL + Jina for ${domain}`);
-    const [pdlResult, jinaResult] = await Promise.allSettled([
-      enrichCompany({ website: domain }),
+    const [companyResult, jinaResult] = await Promise.allSettled([
+      enrichCompanyWithFallback({ website: domain }),
       scrapeFirmWebsite(`https://${domain}`),
     ]);
 
-    const pdl = pdlResult.status === "fulfilled" ? pdlResult.value : null;
+    const pdl = companyResult.status === "fulfilled" ? companyResult.value.company : null;
     const jina = jinaResult.status === "fulfilled" ? jinaResult.value : null;
 
     if (pdl) {

@@ -21,7 +21,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { firmCaseStudies, firmServices } from "@/lib/db/schema";
 import { intelligentCrawlWebsite } from "@/lib/enrichment/intelligent-crawler";
-import { enrichCompany } from "@/lib/enrichment/pdl";
+import { enrichCompanyWithFallback } from "@/lib/enrichment/company-enrichment";
 import { classifyFirm } from "@/lib/enrichment/ai-classifier";
 import { writeFirmToGraph } from "@/lib/enrichment/graph-writer";
 import { logEnrichmentStep } from "@/lib/enrichment/audit-logger";
@@ -48,26 +48,27 @@ export const deepCrawl = inngest.createFunction(
       return intelligentCrawlWebsite({ firmId, website, firmName });
     });
 
-    // Step 2: PDL company enrichment
-    const pdlData = await step.run("pdl-enrich", async () => {
-      console.log(`[DeepCrawl] PDL enrichment for ${website}...`);
-      const result = await enrichCompany({ website });
+    // Step 2: Company enrichment (PDL → Jina+AI fallback)
+    const pdlData = await step.run("company-enrich", async () => {
+      console.log(`[DeepCrawl] Company enrichment for ${website}...`);
+      const result = await enrichCompanyWithFallback({ website });
       await logEnrichmentStep({
         firmId,
         phase: "pdl",
-        source: "api.peopledatalabs.com",
-        rawInput: `website=${website}`,
-        extractedData: result
+        source: result.provider === "jina+ai" ? "jina+ai" : "api.peopledatalabs.com",
+        rawInput: `website=${website}, provider=${result.provider ?? "none"}${result.fallbackReason ? `, fallback=${result.fallbackReason}` : ""}`,
+        extractedData: result.company
           ? {
-              name: result.displayName,
-              industry: result.industry,
-              size: result.size,
-              employeeCount: result.employeeCount,
+              name: result.company.displayName,
+              industry: result.company.industry,
+              size: result.company.size,
+              employeeCount: result.company.employeeCount,
+              provider: result.provider,
             }
           : null,
-        status: result ? "success" : "skipped",
+        status: result.company ? "success" : "skipped",
       });
-      return result;
+      return result.company;
     });
 
     // Step 3: AI classification against COS taxonomy

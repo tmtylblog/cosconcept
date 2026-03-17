@@ -90,8 +90,8 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 ### 9. Neo4j Administration
 - **Route:** `/admin/neo4j`
 - **File:** `src/app/(admin)/admin/neo4j/page.tsx`
-- **Purpose:** Neo4j graph database management. Two actions: Seed Taxonomy (creates schema constraints/indexes and seeds categories, skills L1-L3, firm relationships, markets, languages, firm types, industries) and Legacy Migration (migrates JSON data files into Neo4j). Both require an admin secret input.
-- **API:** `POST /api/admin/neo4j/seed`, `POST /api/admin/neo4j/migrate` (both via `x-admin-secret` header)
+- **Purpose:** Neo4j graph database management. Three sections: (1) **Graph Health Dashboard** — live node/edge counts by type, client stub stats (stubs vs enriched, coverage %), stale data detection (30d+), ServiceFirm total. (2) **Seed Taxonomy** — creates schema constraints/indexes and seeds categories, skills L1-L3, firm relationships, markets, languages, firm types, industries (requires admin secret). (3) **Re-sync All Firms** — triggers full enrichment pipeline for all firms via Inngest backfill job.
+- **API:** `GET /api/admin/neo4j/health`, `POST /api/admin/neo4j/seed` (via `x-admin-secret` header)
 
 ### 10. External APIs
 - **Route:** `/admin/apis`
@@ -99,11 +99,11 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 - **Purpose:** Public API endpoint documentation and health monitoring. Shows cards for Taxonomy, Experts, Case Studies, and Firms Directory APIs with status, latency, record counts, query params, and examples. Includes integration guide (CORS, caching, rate limits, pagination).
 - **API:** `GET /api/public/health`
 
-### 11. Enrichment Audit
+### 11. Enrichment (Full System Enrichment + Audit)
 - **Route:** `/admin/enrichment`
 - **File:** `src/app/(admin)/admin/enrichment/page.tsx`
-- **Purpose:** Inspect enrichment pipeline results for any firm by ID. Shows firm header with stats (entries, cost, first/last enriched), phase badges (jina, classifier, pdl, linkedin, case_study, onboarding, memory, deep_crawl), and expandable audit trail entries with raw input/output, extracted data, errors, and confidence scores. Also includes a **Backfill Services/Case Studies** tool — triggers `seedServicesIfEmpty()` and `seedCaseStudiesIfEmpty()` for a firm by ID, useful when a firm's offering/experience pages are empty despite enrichment data being present.
-- **API:** `GET /api/admin/enrichment/[firmId]`
+- **Purpose:** Two sections: (1) **Full System Enrichment** — unified enrichment control panel with mode selector (Incremental vs Full System/Pro), provider health status inline (EnrichLayer, PDL, Jina, OpenRouter), preview with per-firm step breakdown and cost estimates, firm selection checkboxes with select-all, expandable step details per firm, real-time progress bar with phase indicators. Full System mode: Pro treatment (enrich ALL experts, force re-abstraction, run skill strength recomputation). (2) **Enrichment Audit Trail** — firm ID search, firm header with stats/phase badges, expandable audit entries with raw I/O, extracted data, provider info, errors, confidence.
+- **API:** `GET /api/admin/enrichment/[firmId]`, `POST /api/admin/enrich/backfill-all` (supports `mode: "full-system" | "incremental"`), `GET /api/admin/enrich/backfill-all?jobId=X`, `GET /api/admin/api-health` (for provider status)
 
 ### 12. Onboarding Funnel
 - **Route:** `/admin/onboarding`
@@ -366,7 +366,7 @@ Knowledge Graph tab components:
 | **Partnerships** | `/admin/partnerships` | Pipeline flow, status filters, intro email triggers |
 | **Neo4j Admin** | `/admin/neo4j` | Taxonomy seeding, legacy migration |
 | **External APIs** | `/admin/apis` | Public API docs, health, integration guide |
-| **Enrichment Audit** | `/admin/enrichment` | Per-firm enrichment trail, raw I/O, costs |
+| **Enrichment** | `/admin/enrichment` | Full System Enrichment (incremental/full-system modes), provider health, per-firm audit trail |
 | **Onboarding Funnel** | `/admin/onboarding` | Conversion funnel, cache/enrichment metrics, question completion, session table with "View" links |
 | **Onboarding Session** | `/admin/onboarding/sessions/[domain]` | Per-domain event timeline, cache banner, enrichment audit, interview answers, firm profile JSON |
 | **Search Test Tool** | `/admin/search` | 3-layer cascade debug, per-layer candidates, abstraction profile management |
