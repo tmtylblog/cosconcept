@@ -22,6 +22,7 @@ import {
 import { validateUnipileWebhook, resolveMessageDirection } from "@/lib/growth-ops/UnipileClient";
 import { classifyResponseSentiment } from "@/lib/growth-ops/sentiment";
 import { queueDealFromResponse } from "@/lib/growth-ops/auto-deal";
+import { ensureContactAndCompany, logLinkedInMessageEvent } from "@/lib/growth-ops/auto-create-contact";
 import { eq, and, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -172,14 +173,15 @@ export async function POST(req: NextRequest) {
             ),
           );
 
-        // ── Auto-deal detection: inbound messages from campaign targets ──
+        // ── Auto-create contact + company from inbound messages ──
         if (!isOutbound && text.trim().length > 0) {
+          // Auto-create Person + Company from the conversation participant
           try {
-            // Check if the participant is an invite target (campaign prospect)
-            const convo = await db
+            const convoForCreate = await db
               .select({
                 participantName: growthOpsConversations.participantName,
-                participantLinkedinUrl: growthOpsConversations.participantLinkedinUrl,
+                participantHeadline: growthOpsConversations.participantHeadline,
+                participantProfileUrl: growthOpsConversations.participantProfileUrl,
                 participantProviderId: growthOpsConversations.participantProviderId,
               })
               .from(growthOpsConversations)
@@ -191,7 +193,44 @@ export async function POST(req: NextRequest) {
               )
               .limit(1);
 
-            const linkedinUrl = convo[0]?.participantLinkedinUrl;
+            if (convoForCreate.length > 0) {
+              const p = convoForCreate[0];
+              const createResult = await ensureContactAndCompany({
+                name: p.participantName,
+                headline: p.participantHeadline,
+                profileUrl: p.participantProfileUrl,
+                providerId: p.participantProviderId,
+              });
+
+              // Log to prospect timeline if we have a contact
+              if (createResult.contactId) {
+                const email = `linkedin+${p.participantProviderId || "unknown"}@placeholder.local`;
+                await logLinkedInMessageEvent(email, p.participantName);
+              }
+            }
+          } catch (e) {
+            console.error("[unipile-webhook] auto-create contact error:", e);
+            // Non-critical — don't fail the webhook
+          }
+
+          // ── Auto-deal detection: inbound messages from campaign targets ──
+          try {
+            const convo = await db
+              .select({
+                participantName: growthOpsConversations.participantName,
+                participantProfileUrl: growthOpsConversations.participantProfileUrl,
+                participantProviderId: growthOpsConversations.participantProviderId,
+              })
+              .from(growthOpsConversations)
+              .where(
+                and(
+                  eq(growthOpsConversations.linkedinAccountId, acctDbId),
+                  eq(growthOpsConversations.chatId, chatId),
+                ),
+              )
+              .limit(1);
+
+            const linkedinUrl = convo[0]?.participantProfileUrl;
             const providerId = convo[0]?.participantProviderId;
 
             // Check if this person is in any invite campaign
