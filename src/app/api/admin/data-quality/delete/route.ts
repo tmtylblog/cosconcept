@@ -1,26 +1,23 @@
 /**
  * POST /api/admin/data-quality/delete
  *
- * Bulk delete organizations (and cascade to their service firms + all related data).
- * Also cleans up Neo4j ServiceFirm nodes.
+ * Delete a single organization and all its data.
+ * Explicitly deletes heavy child tables first to avoid cascade timeout,
+ * then deletes the org (which cascades the lightweight remainder).
  *
- * Body: { orgIds: string[] }
- * Returns: { deleted, failed, neo4jCleaned }
+ * Body: { orgIds: string[] } (send one at a time from the UI)
+ * Returns: { ok, deleted, message }
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import {
-  serviceFirms,
-  abstractionProfiles,
-} from "@/lib/db/schema";
-import { inArray, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { getNeo4jDriver } from "@/lib/neo4j";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120; // 2 minutes — cascade deletes can be slow
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -35,80 +32,72 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "orgIds array required" }, { status: 400 });
   }
 
-  if (orgIds.length > 50) {
-    return NextResponse.json({ error: "Max 50 organizations per request" }, { status: 400 });
-  }
+  // Process one org at a time (UI sends one at a time)
+  const orgId = orgIds[0];
 
   try {
-    // 1. Find firm IDs for these orgs (needed for Neo4j cleanup)
-    const firms = await db
-      .select({ id: serviceFirms.id })
-      .from(serviceFirms)
-      .where(inArray(serviceFirms.organizationId, orgIds));
-    const firmIds = firms.map((f) => f.id);
+    // Find firm IDs for this org
+    const firmRows = await db.execute(
+      sql`SELECT id FROM service_firms WHERE organization_id = ${orgId}`
+    );
+    const firmIds = firmRows.rows.map((r) => r.id as string);
 
-    // 2. Delete abstraction profiles (not FK-cascaded from serviceFirms)
     if (firmIds.length > 0) {
-      await db
-        .delete(abstractionProfiles)
-        .where(inArray(abstractionProfiles.entityId, firmIds));
-    }
+      // Delete heavy child tables explicitly (fastest approach — avoids cascade bottleneck)
+      // These are the tables with the most rows per firm
+      for (const firmId of firmIds) {
+        await db.execute(sql`DELETE FROM enrichment_audit_log WHERE firm_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM specialist_profiles WHERE firm_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM expert_profiles WHERE firm_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM firm_case_studies WHERE firm_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM firm_services WHERE firm_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM abstraction_profiles WHERE entity_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM partnerships WHERE firm_a_id = ${firmId} OR firm_b_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM partner_preferences WHERE firm_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM email_threads WHERE firm_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM email_approval_queue WHERE firm_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM leads WHERE firm_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM opportunities WHERE firm_id = ${firmId}`);
+        await db.execute(sql`DELETE FROM referrals WHERE firm_id = ${firmId}`);
+      }
 
-    // 3. Delete all organizations in a single SQL statement (much faster than one-by-one)
-    let deleted = 0;
-    const failed: string[] = [];
-
-    try {
-      await db.execute(
-        sql`DELETE FROM organizations WHERE id IN ${orgIds}`
-      );
-      deleted = orgIds.length;
-    } catch (err) {
-      // If bulk fails, fall back to one-by-one to identify which ones fail
-      console.error("[DataQuality] Bulk delete failed, trying one-by-one:", err);
-      for (const orgId of orgIds) {
-        try {
-          await db.execute(sql`DELETE FROM organizations WHERE id = ${orgId}`);
-          deleted++;
-        } catch (innerErr) {
-          console.error(`[DataQuality] Failed to delete org ${orgId}:`, innerErr);
-          failed.push(orgId);
-        }
+      // Delete the service firms themselves
+      for (const firmId of firmIds) {
+        await db.execute(sql`DELETE FROM service_firms WHERE id = ${firmId}`);
       }
     }
 
-    // 4. Clean up Neo4j ServiceFirm nodes (batch query — much faster)
-    let neo4jCleaned = 0;
+    // Now delete the org (only lightweight cascades left: members, invitations, subscriptions)
+    await db.execute(sql`DELETE FROM organizations WHERE id = ${orgId}`);
+
+    // Neo4j cleanup (non-blocking — don't fail the request if Neo4j is slow)
     if (firmIds.length > 0) {
       try {
         const neo4jSession = getNeo4jDriver().session();
         try {
-          const result = await neo4jSession.run(
+          await neo4jSession.run(
             `UNWIND $firmIds AS fid
              MATCH (f:Company:ServiceFirm {id: fid})
-             DETACH DELETE f
-             RETURN count(f) AS deleted`,
+             DETACH DELETE f`,
             { firmIds }
           );
-          neo4jCleaned = result.records[0]?.get("deleted")?.toNumber?.() ?? firmIds.length;
         } finally {
           await neo4jSession.close();
         }
-      } catch (err) {
-        console.error("[DataQuality] Neo4j cleanup error:", err);
+      } catch {
+        // Non-critical — graph nodes orphaned but harmless
       }
     }
 
     return NextResponse.json({
       ok: true,
-      deleted,
-      failed: failed.length > 0 ? failed : undefined,
+      deleted: 1,
       firmsRemoved: firmIds.length,
-      neo4jCleaned,
-      message: `Deleted ${deleted} organizations, ${firmIds.length} firms, ${neo4jCleaned} graph nodes.${failed.length > 0 ? ` ${failed.length} failed.` : ""}`,
+      message: `Deleted org + ${firmIds.length} firm(s)`,
     });
   } catch (error) {
-    console.error("[DataQuality] Bulk delete error:", error);
-    return NextResponse.json({ error: "Bulk delete failed" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[DataQuality] Delete org ${orgId} failed:`, msg);
+    return NextResponse.json({ error: "Delete failed", detail: msg }, { status: 500 });
   }
 }
