@@ -2054,24 +2054,49 @@ export default function CustomerDetailPage() {
                 {/* Enrichment Data */}
                 {firm.enrichmentData && (
                   <>
-                    {/* Services */}
-                    {(firm.enrichmentData as Record<string, unknown>)?.services && (
-                      <Section title="Services" icon={<Sparkles className="h-4 w-4 text-cos-electric" />}>
-                        <div className="space-y-2">
-                          {(
-                            (firm.enrichmentData as Record<string, unknown>)
-                              .services as { name: string; description?: string }[]
-                          )?.map((svc, i) => (
-                            <div key={i} className="rounded-cos bg-cos-cloud/50 px-3 py-2">
-                              <p className="text-sm font-medium text-cos-midnight">{svc.name}</p>
-                              {svc.description && (
-                                <p className="mt-0.5 text-xs text-cos-slate">{svc.description}</p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </Section>
-                    )}
+                    {/* Services — check both top-level and extracted.services */}
+                    {(() => {
+                      const ed = firm.enrichmentData as { services?: { name: string; description?: string }[]; extracted?: { services?: string[] } } | null;
+                      const structured = ed?.services; // structured format {name, description}
+                      const extracted = ed?.extracted?.services; // string[] format
+                      if (!structured?.length && !extracted?.length) return null;
+                      return (
+                        <Section title={`Services (${structured?.length || extracted?.length || 0})`} icon={<Sparkles className="h-4 w-4 text-cos-electric" />}>
+                          <div className="space-y-2">
+                            {structured?.length ? structured.map((svc, i) => (
+                              <div key={i} className="rounded-cos bg-cos-cloud/50 px-3 py-2">
+                                <p className="text-sm font-medium text-cos-midnight">{svc.name}</p>
+                                {svc.description && (
+                                  <p className="mt-0.5 text-xs text-cos-slate">{svc.description}</p>
+                                )}
+                              </div>
+                            )) : extracted?.map((svc, i) => (
+                              <div key={i} className="rounded-cos bg-cos-cloud/50 px-3 py-2">
+                                <p className="text-sm font-medium text-cos-midnight">{svc}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </Section>
+                      );
+                    })()}
+
+                    {/* Clients */}
+                    {(() => {
+                      const ed = firm.enrichmentData as { extracted?: { clients?: string[] } } | null;
+                      const clients = ed?.extracted?.clients;
+                      if (!clients?.length) return null;
+                      return (
+                        <Section title={`Clients (${clients.length})`} icon={<UserCheck className="h-4 w-4 text-cos-signal" />}>
+                          <div className="flex flex-wrap gap-1.5">
+                            {clients.map((c: string) => (
+                              <span key={c} className="rounded-cos-pill border border-cos-border bg-white px-2.5 py-0.5 text-xs text-cos-midnight">
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                        </Section>
+                      );
+                    })()}
 
                     {/* Taxonomy (skills, industries, markets) */}
                     {(() => {
@@ -2150,27 +2175,40 @@ export default function CustomerDetailPage() {
                       );
                     })()}
 
-                    {/* Case Studies */}
-                    {(firm.enrichmentData as Record<string, unknown>)?.caseStudies && (
-                      <Section title="Case Studies" icon={<FileText className="h-4 w-4 text-cos-warm" />}>
-                        <div className="space-y-3">
-                          {(
-                            (firm.enrichmentData as Record<string, unknown>)
-                              .caseStudies as { title: string; client?: string; outcome?: string }[]
-                          )?.map((cs, i) => (
-                            <div key={i} className="rounded-cos bg-cos-cloud/50 p-3">
-                              <p className="text-sm font-medium text-cos-midnight">{cs.title}</p>
-                              {cs.client && (
-                                <p className="mt-0.5 text-xs text-cos-slate">Client: {cs.client}</p>
-                              )}
-                              {cs.outcome && (
-                                <p className="mt-1 text-xs text-cos-slate">{cs.outcome}</p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </Section>
-                    )}
+                    {/* Case Studies — check both top-level and extracted.caseStudyUrls */}
+                    {(() => {
+                      const ed = firm.enrichmentData as {
+                        caseStudies?: { title: string; client?: string; outcome?: string }[];
+                        extracted?: { caseStudyUrls?: string[] };
+                      } | null;
+                      const structured = ed?.caseStudies;
+                      const urls = ed?.extracted?.caseStudyUrls;
+                      if (!structured?.length && !urls?.length) return null;
+                      return (
+                        <Section title={`Case Studies (${structured?.length || urls?.length || 0})`} icon={<FileText className="h-4 w-4 text-cos-warm" />}>
+                          <div className="space-y-3">
+                            {structured?.length ? structured.map((cs, i) => (
+                              <div key={i} className="rounded-cos bg-cos-cloud/50 p-3">
+                                <p className="text-sm font-medium text-cos-midnight">{cs.title}</p>
+                                {cs.client && (
+                                  <p className="mt-0.5 text-xs text-cos-slate">Client: {cs.client}</p>
+                                )}
+                                {cs.outcome && (
+                                  <p className="mt-1 text-xs text-cos-slate">{cs.outcome}</p>
+                                )}
+                              </div>
+                            )) : urls?.map((url, i) => (
+                              <div key={i} className="rounded-cos bg-cos-cloud/50 p-3">
+                                <a href={url} target="_blank" rel="noopener noreferrer" className="text-sm text-cos-electric hover:underline flex items-center gap-1.5">
+                                  <ExternalLink className="h-3 w-3" />
+                                  {url}
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                        </Section>
+                      );
+                    })()}
                   </>
                 )}
 

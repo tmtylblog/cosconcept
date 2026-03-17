@@ -40,7 +40,9 @@ export async function GET(
 
     const org = orgResult.rows[0];
 
-    // 2. Service Firm linked to this org
+    // 2. Service Firm linked to this org — pick the best record when multiple exist.
+    // Multiple firms can exist (auto-created "Collective OS" + enriched real firm).
+    // Score by data richness: clients > services > enriched status > real website.
     const firmResult = await db.execute(sql`
       SELECT
         id, name, website, description, firm_type AS "firmType",
@@ -51,11 +53,32 @@ export async function GET(
         created_at AS "createdAt", updated_at AS "updatedAt"
       FROM service_firms
       WHERE organization_id = ${orgId}
-      ORDER BY created_at ASC
+        AND id NOT LIKE 'firm_leg_%'
+      ORDER BY
+        CASE WHEN jsonb_array_length(COALESCE(enrichment_data->'extracted'->'clients', '[]'::jsonb)) > 0 THEN 100 ELSE 0 END
+        + CASE WHEN jsonb_array_length(COALESCE(enrichment_data->'extracted'->'services', '[]'::jsonb)) > 0 THEN 50 ELSE 0 END
+        + CASE WHEN enrichment_status = 'enriched' THEN 30 ELSE 0 END
+        + CASE WHEN website IS NOT NULL AND website NOT LIKE '%joincollectiveos.com%' THEN 20 ELSE 0 END
+        DESC
       LIMIT 1
     `);
 
-    const firm = firmResult.rows[0] ?? null;
+    // Fallback: any firm for this org (including legacy)
+    const firm = firmResult.rows[0]
+      ?? (await db.execute(sql`
+        SELECT
+          id, name, website, description, firm_type AS "firmType",
+          size_band AS "sizeBand", profile_completeness AS "profileCompleteness",
+          enrichment_data AS "enrichmentData", enrichment_status AS "enrichmentStatus",
+          graph_node_id AS "graphNodeId", is_cos_customer AS "isCosCustomer",
+          entity_type AS "entityType",
+          created_at AS "createdAt", updated_at AS "updatedAt"
+        FROM service_firms
+        WHERE organization_id = ${orgId}
+        ORDER BY created_at ASC
+        LIMIT 1
+      `)).rows[0]
+      ?? null;
 
     // 3. Subscription
     const subResult = await db.execute(sql`
