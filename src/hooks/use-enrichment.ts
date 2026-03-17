@@ -250,21 +250,34 @@ export function EnrichmentProvider({
       // Always try DB fetch when orgId is available (DB is authoritative)
       if (!organizationId || dbFetchedRef.current) return;
       dbFetchedRef.current = true;
+      console.log("[Enrichment] DB hydration: fetching firm data for org", organizationId);
       try {
         const res = await fetch(`/api/enrich/firm?organizationId=${organizationId}`);
-        if (!res.ok || cancelled) return;
+        if (!res.ok || cancelled) {
+          console.log("[Enrichment] DB hydration: fetch failed or cancelled", res.status);
+          return;
+        }
         const data = await res.json();
-        if (cancelled || !data.enrichmentData) return;
+        if (cancelled || !data.enrichmentData) {
+          console.log("[Enrichment] DB hydration: no enrichmentData returned", { cancelled, hasData: !!data.enrichmentData });
+          return;
+        }
 
         const enrichmentData = data.enrichmentData as EnrichmentResult;
+        const clientCount = enrichmentData.extracted?.clients?.length ?? 0;
+        console.log(
+          `[Enrichment] DB hydration: got "${data.name}" — ` +
+          `${clientCount} clients, ${enrichmentData.extracted?.services?.length ?? 0} services, ` +
+          `website: ${data.website}`
+        );
         setResult(enrichmentData);
         setEnrichedUrl(enrichmentData.url);
         setContextForOssy(buildContextForOssy(enrichmentData));
         setStatus("done");
         setStages({ overall: "done", pdl: "done", scrape: "done", classify: "done" });
         persistedRef.current = true; // DB data is already persisted
-      } catch {
-        // Silently ignore hydration failures
+      } catch (err) {
+        console.warn("[Enrichment] DB hydration failed:", err);
       }
     }
 
