@@ -2202,3 +2202,19 @@ export const prospectTimeline = pgTable("prospect_timeline", {
   eventAt: timestamp("event_at").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// ─── CRM Annotations (sales notes, tags, follow-ups) ────
+export const crmAnnotations = pgTable("crm_annotations", {
+  id: text("id").primaryKey(),
+  entityType: text("entity_type").notNull(), // "company" | "person"
+  entityId: text("entity_id").notNull(),     // synthetic CRM ID (e.g. sf_xxx, ep_xxx)
+  tags: jsonb("tags").$type<string[]>().default([]),
+  notes: text("notes"),
+  assignedTo: text("assigned_to").references(() => users.id, { onDelete: "set null" }),
+  lastContactedAt: timestamp("last_contacted_at"),
+  nextFollowUpAt: timestamp("next_follow_up_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("crm_annotations_entity_unique").on(t.entityType, t.entityId),
+]);

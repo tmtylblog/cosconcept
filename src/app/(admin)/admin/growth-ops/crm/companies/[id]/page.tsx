@@ -15,6 +15,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import CrmAnnotationsPanel from "@/components/admin/crm-annotations-panel";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -160,8 +161,9 @@ export default function CompanyDetailPage() {
         })}
       </div>
 
-      {/* Tab Content */}
-      <div className="rounded-cos-lg border border-cos-border bg-cos-surface p-6 min-h-[300px]">
+      {/* Tab Content + Annotations Sidebar */}
+      <div className="flex gap-6">
+      <div className="flex-1 rounded-cos-lg border border-cos-border bg-cos-surface p-6 min-h-[300px]">
         {/* ─── Overview ─── */}
         {activeTab === "overview" && (
           <div className="space-y-4">
@@ -385,6 +387,15 @@ export default function CompanyDetailPage() {
             </div>
           )
         )}
+      </div>
+
+      {/* Annotations Sidebar */}
+      <div className="w-72 shrink-0 hidden lg:block">
+        <div className="rounded-cos-lg border border-cos-border bg-cos-surface p-4 sticky top-4">
+          <h3 className="text-sm font-heading font-semibold text-cos-midnight mb-3">Sales Notes</h3>
+          <CrmAnnotationsPanel entityType="company" entityId={data.id} />
+        </div>
+      </div>
       </div>
     </div>
   );
