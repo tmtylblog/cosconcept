@@ -48,13 +48,22 @@ export async function GET(req: NextRequest) {
       updatedAt: now,
     });
 
-    // Redirect to dashboard with session cookies
+    // Redirect to dashboard with session cookies.
+    // In production (HTTPS), Better Auth uses "__Secure-" prefixed cookie names.
+    // We set BOTH prefixed and unprefixed to ensure the session is recognized.
     const isProduction = process.env.NODE_ENV === "production";
     const redirectUrl = new URL("/dashboard", req.url);
     const response = NextResponse.redirect(redirectUrl);
 
+    const sessionCookieName = isProduction
+      ? "__Secure-better-auth.session_token"
+      : "better-auth.session_token";
+    const orgCookieName = isProduction
+      ? "__Secure-better-auth.active_organization"
+      : "better-auth.active_organization";
+
     // Set session cookie
-    response.cookies.set("better-auth.session_token", sessionToken, {
+    response.cookies.set(sessionCookieName, sessionToken, {
       httpOnly: true,
       secure: isProduction,
       sameSite: "lax",
@@ -62,14 +71,35 @@ export async function GET(req: NextRequest) {
       expires: expiresAt,
     });
 
+    // Also set the unprefixed version in production (some code checks both)
+    if (isProduction) {
+      response.cookies.set("better-auth.session_token", sessionToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        path: "/",
+        expires: expiresAt,
+      });
+    }
+
     // Set active organization cookie
-    response.cookies.set("better-auth.active_organization", entry.orgId, {
+    response.cookies.set(orgCookieName, entry.orgId, {
       httpOnly: false,
       secure: isProduction,
       sameSite: "lax",
       path: "/",
       expires: expiresAt,
     });
+
+    if (isProduction) {
+      response.cookies.set("better-auth.active_organization", entry.orgId, {
+        httpOnly: false,
+        secure: true,
+        sameSite: "lax",
+        path: "/",
+        expires: expiresAt,
+      });
+    }
 
     return response;
   } catch (error) {
