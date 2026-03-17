@@ -109,7 +109,7 @@ export interface CrmPersonFilters {
   search?: string;
   entityClass?: PersonEntityClass | "all";
   companyDomain?: string;
-  sort?: "name" | "created" | "activity" | "deals";
+  sort?: "name" | "title" | "company" | "created" | "activity" | "deals";
   sortDir?: "asc" | "desc";
   page?: number;
   limit?: number;

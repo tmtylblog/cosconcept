@@ -464,6 +464,12 @@ export async function getUnifiedPeople(
       case "name":
         cmp = a.fullName.localeCompare(b.fullName);
         break;
+      case "title":
+        cmp = (a.title ?? "").localeCompare(b.title ?? "");
+        break;
+      case "company":
+        cmp = (a.companyName ?? a.companyDomain ?? "").localeCompare(b.companyName ?? b.companyDomain ?? "");
+        break;
       case "created":
         cmp = (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
         break;

@@ -32,7 +32,7 @@ interface UnifiedPerson {
   createdAt: string | null;
 }
 
-type SortKey = "name" | "created" | "activity";
+type SortKey = "name" | "title" | "company";
 type SortDir = "asc" | "desc";
 
 export default function CrmPeoplePage() {
@@ -105,7 +105,6 @@ export default function CrmPeoplePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-heading font-bold text-cos-midnight flex items-center gap-2">
           <Users className="h-6 w-6 text-cos-electric" />
@@ -161,18 +160,23 @@ export default function CrmPeoplePage() {
                     onClick={() => toggleSort("name")}
                   >
                     <span className="inline-flex items-center">
-                      Person <SortIcon column="name" />
+                      Name <SortIcon column="name" />
                     </span>
                   </th>
-                  <th className="px-4 py-3 font-medium text-cos-slate-dim">Title</th>
-                  <th className="px-4 py-3 font-medium text-cos-slate-dim">Email</th>
-                  <th className="px-4 py-3 font-medium text-cos-slate-dim">Company</th>
                   <th
                     className="px-4 py-3 font-medium text-cos-slate-dim cursor-pointer hover:text-cos-midnight select-none"
-                    onClick={() => toggleSort("created")}
+                    onClick={() => toggleSort("title")}
                   >
                     <span className="inline-flex items-center">
-                      Added <SortIcon column="created" />
+                      Title <SortIcon column="title" />
+                    </span>
+                  </th>
+                  <th
+                    className="px-4 py-3 font-medium text-cos-slate-dim cursor-pointer hover:text-cos-midnight select-none"
+                    onClick={() => toggleSort("company")}
+                  >
+                    <span className="inline-flex items-center">
+                      Company <SortIcon column="company" />
                     </span>
                   </th>
                   <th className="px-4 py-3 font-medium text-cos-slate-dim text-right">Actions</th>
@@ -212,11 +216,7 @@ export default function CrmPeoplePage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-cos-slate">{p.title || "-"}</td>
-                      <td className="px-4 py-3 text-cos-slate text-xs">{p.email && !p.email.includes("@placeholder.local") ? p.email : "-"}</td>
                       <td className="px-4 py-3 text-cos-slate">{p.companyName || p.companyDomain || "-"}</td>
-                      <td className="px-4 py-3 text-cos-slate text-xs">
-                        {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "-"}
-                      </td>
                       <td className="px-4 py-3 text-right">
                         {p.linkedinUrl && (
                           <Button
@@ -240,27 +240,16 @@ export default function CrmPeoplePage() {
           </div>
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-cos-border bg-cos-cloud/30">
             <span className="text-sm text-cos-slate">
               {total.toLocaleString()} people &middot; Page {page} of {totalPages}
             </span>
             <div className="flex gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-              >
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-              >
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
