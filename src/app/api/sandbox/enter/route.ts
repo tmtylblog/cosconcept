@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing token" }, { status: 400 });
   }
 
-  const entry = consumeToken(token);
+  const entry = await consumeToken(token);
   if (!entry) {
     return NextResponse.json(
       { error: "Invalid or expired token. Go back to the sandbox page and click Launch again." },

@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No org found for user" }, { status: 404 });
     }
 
-    const token = createToken(userId, membership.orgId);
+    const token = await createToken(userId, membership.orgId);
     const loginUrl = `/api/sandbox/enter?token=${token}`;
 
     return NextResponse.json({ success: true, loginUrl });

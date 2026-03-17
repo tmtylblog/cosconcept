@@ -1,45 +1,54 @@
 /**
- * In-memory one-time token store for sandbox session handoff.
+ * DB-backed one-time token store for sandbox session handoff.
  *
- * Tokens expire after 60 seconds. This avoids a DB migration and works
- * because create + consume happen within seconds on the same deployment.
+ * Uses the existing Better Auth `verifications` table to store tokens.
+ * Tokens expire after 5 minutes. This works across Vercel serverless
+ * instances (unlike an in-memory Map).
  */
 
 import crypto from "crypto";
+import { db } from "@/lib/db";
+import { verifications } from "@/lib/db/schema";
+import { eq, and, gt } from "drizzle-orm";
 
-interface TokenEntry {
-  userId: string;
-  orgId: string;
-  expiresAt: number;
-}
-
-const tokens = new Map<string, TokenEntry>();
-
-/** Prune expired tokens (called on every create/consume) */
-function prune() {
-  const now = Date.now();
-  for (const [key, entry] of tokens) {
-    if (entry.expiresAt < now) tokens.delete(key);
-  }
-}
+const IDENTIFIER = "sandbox-login-token";
+const TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /** Create a one-time login token. Returns the token string. */
-export function createToken(userId: string, orgId: string): string {
-  prune();
+export async function createToken(userId: string, orgId: string): Promise<string> {
   const token = crypto.randomBytes(32).toString("hex");
-  tokens.set(token, {
-    userId,
-    orgId,
-    expiresAt: Date.now() + 60_000, // 60 seconds
+  const now = new Date();
+
+  await db.insert(verifications).values({
+    id: token,
+    identifier: IDENTIFIER,
+    value: JSON.stringify({ userId, orgId }),
+    expiresAt: new Date(Date.now() + TOKEN_TTL_MS),
+    createdAt: now,
+    updatedAt: now,
   });
+
   return token;
 }
 
 /** Consume a one-time token. Returns the entry if valid, null if expired/missing. */
-export function consumeToken(token: string): { userId: string; orgId: string } | null {
-  prune();
-  const entry = tokens.get(token);
-  if (!entry) return null;
-  tokens.delete(token);
-  return { userId: entry.userId, orgId: entry.orgId };
+export async function consumeToken(token: string): Promise<{ userId: string; orgId: string } | null> {
+  const [row] = await db
+    .select({ value: verifications.value, expiresAt: verifications.expiresAt })
+    .from(verifications)
+    .where(
+      and(
+        eq(verifications.id, token),
+        eq(verifications.identifier, IDENTIFIER),
+        gt(verifications.expiresAt, new Date())
+      )
+    )
+    .limit(1);
+
+  if (!row) return null;
+
+  // Delete the token (one-time use)
+  await db.delete(verifications).where(eq(verifications.id, token));
+
+  return JSON.parse(row.value) as { userId: string; orgId: string };
 }

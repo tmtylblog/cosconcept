@@ -56,6 +56,10 @@ export default function SandboxPage() {
 
   async function handleLaunch() {
     setLaunching(true);
+
+    // Open blank tab synchronously (in click handler) to avoid popup blocker
+    const newTab = window.open("about:blank", "_blank");
+
     try {
       const res = await fetch("/api/sandbox/create-session", {
         method: "POST",
@@ -69,18 +73,25 @@ export default function SandboxPage() {
 
       if (!res.ok) {
         const err = await res.json();
+        newTab?.close();
         alert(`Launch failed: ${err.error}`);
         return;
       }
 
       const data = await res.json();
 
-      // Open the login URL in a new tab
-      window.open(data.loginUrl, "_blank");
+      // Navigate the already-open tab to the login URL
+      if (newTab) {
+        newTab.location.href = data.loginUrl;
+      } else {
+        // Fallback if popup was still blocked
+        window.open(data.loginUrl, "_blank");
+      }
 
       // Refresh session list
       await fetchSessions();
     } catch (err) {
+      newTab?.close();
       alert(`Launch failed: ${err}`);
     } finally {
       setLaunching(false);
@@ -89,6 +100,10 @@ export default function SandboxPage() {
 
   async function handleResume(userId: string) {
     setDeleting(userId); // reuse loading state for button disable
+
+    // Open blank tab synchronously to avoid popup blocker
+    const newTab = window.open("about:blank", "_blank");
+
     try {
       const res = await fetch("/api/sandbox/resume", {
         method: "POST",
@@ -98,13 +113,19 @@ export default function SandboxPage() {
 
       if (!res.ok) {
         const err = await res.json();
+        newTab?.close();
         alert(`Resume failed: ${err.error}`);
         return;
       }
 
       const data = await res.json();
-      window.open(data.loginUrl, "_blank");
+      if (newTab) {
+        newTab.location.href = data.loginUrl;
+      } else {
+        window.open(data.loginUrl, "_blank");
+      }
     } catch (err) {
+      newTab?.close();
       alert(`Resume failed: ${err}`);
     } finally {
       setDeleting(null);
