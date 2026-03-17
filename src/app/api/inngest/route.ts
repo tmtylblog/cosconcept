@@ -25,6 +25,13 @@ import {
   extractOpportunitiesJob,
   syncPreferences,
   backfillHasClientEdges,
+  backfillAllFirms,
+  migrateClientNodesToCompany,
+  migratePartnershipPrefsToEdges,
+  skillComputeStrength,
+  preferenceUpdateRevealed,
+  companyEnrichStub,
+  deleteOrganization,
 } from "@/inngest/functions";
 
 /**
@@ -58,5 +65,12 @@ export const { GET, POST, PUT } = serve({
     extractOpportunitiesJob,
     syncPreferences,
     backfillHasClientEdges,
+    backfillAllFirms,
+    migrateClientNodesToCompany,
+    migratePartnershipPrefsToEdges,
+    skillComputeStrength,
+    preferenceUpdateRevealed,
+    companyEnrichStub,
+    deleteOrganization,
   ],
 });

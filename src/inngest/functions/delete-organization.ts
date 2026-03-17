@@ -88,10 +88,14 @@ export const deleteOrganization = inngest.createFunction(
     }
 
     // Step 3: Delete the organization
+    // This cascade can be slow on Neon even with zero child rows (FK checks across 20+ tables)
+    // but Inngest has no timeout — it just takes a minute or so
     await step.run("delete-org", async () => {
       await db.execute(sql`DELETE FROM organizations WHERE id = ${orgId}`);
       return { orgId, status: "org_deleted" };
     });
+
+    console.warn(`[DeleteOrg] Successfully deleted org ${orgId} with ${firmIds.length} firm(s)`);
 
     // Step 4: Neo4j cleanup
     if (firmIds.length > 0) {
