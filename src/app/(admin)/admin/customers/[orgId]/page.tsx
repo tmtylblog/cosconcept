@@ -50,6 +50,7 @@ import { FirmOverviewTab } from "./components/firm-overview-tab";
 import { FirmOfferingTab } from "./components/firm-offering-tab";
 import { FirmExperienceTab } from "./components/firm-experience-tab";
 import { FirmPreferencesTab } from "./components/firm-preferences-tab";
+import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
 import {
   ExpertProfileCard,
   type ExpertProfileData,
@@ -422,6 +423,22 @@ export default function CustomerDetailPage() {
   const [activityFilter, setActivityFilter] = useState("all");
   const [activityView, setActivityView] = useState<"timeline" | "conversations">("timeline");
   const [firmSubTab, setFirmSubTab] = useState<"overview" | "offering" | "experts" | "experience" | "preferences">("overview");
+
+  // Pagination state for all tables
+  const [usersPage, setUsersPage] = useState(1);
+  const [activityPage, setActivityPage] = useState(1);
+  const [convsPage, setConvsPage] = useState(1);
+  const [partnershipsPage, setPartnershipsPage] = useState(1);
+  const [oppsPage, setOppsPage] = useState(1);
+  const [leadsPage, setLeadsPage] = useState(1);
+  const [billingEventsPage, setBillingEventsPage] = useState(1);
+
+  // Paginated views (hooks must be called unconditionally)
+  const membersPag = usePaginated(data?.members ?? [], usersPage);
+  const billingEventsPag = usePaginated(billingData?.billingEvents ?? [], billingEventsPage);
+  const partnershipsPag = usePaginated(partnershipData?.partnerships ?? [], partnershipsPage);
+  const oppsPag = usePaginated(partnershipData?.opportunities ?? [], oppsPage);
+  const leadsPag = usePaginated(partnershipData?.leads ?? [], leadsPage);
 
   const [partnershipData, setPartnershipData] = useState<{
     partnerships: PartnershipRow[];
@@ -1031,7 +1048,6 @@ export default function CustomerDetailPage() {
   ];
 
   // Expert Roster inline component (captures parent state)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function ExpertRosterInline() {
     return (
       <Section
@@ -1906,6 +1922,7 @@ export default function CustomerDetailPage() {
               {members.length === 0 ? (
                 <p className="text-xs text-cos-slate-light">No platform users in this organization</p>
               ) : (
+                <>
                 <div className="overflow-hidden rounded-cos-lg border border-cos-border">
                   <table className="w-full text-left text-sm">
                     <thead>
@@ -1919,7 +1936,7 @@ export default function CustomerDetailPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-cos-border/60">
-                      {members.map((m) => {
+                      {membersPag.pageItems.map((m) => {
                         // Check if this user is linked to any expert
                         const linkedExpert = experts.find((e) => e.userId === m.userId);
                         // Unlinked experts this user could be linked to (match by email)
@@ -2024,6 +2041,8 @@ export default function CustomerDetailPage() {
                     </tbody>
                   </table>
                 </div>
+                <PaginationFooter page={membersPag.safePage} totalPages={membersPag.totalPages} total={membersPag.total} onPageChange={setUsersPage} />
+                </>
               )}
             </Section>
 
@@ -2155,7 +2174,7 @@ export default function CustomerDetailPage() {
               });
 
               // Merge + sort for "all", filter to just CIO for "email"
-              const displayEvents: ActivityEvent[] =
+              const allDisplayEvents: ActivityEvent[] =
                 activityFilter === "email"
                   ? cioEvents
                   : activityFilter === "all"
@@ -2163,6 +2182,10 @@ export default function CustomerDetailPage() {
                       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
                     )
                   : activityEvents;
+
+              const actTotalPages = Math.max(1, Math.ceil(allDisplayEvents.length / 100));
+              const actSafePage = Math.min(activityPage, actTotalPages);
+              const displayEvents = allDisplayEvents.slice((actSafePage - 1) * 100, actSafePage * 100);
 
               return (
                 <>
@@ -2226,6 +2249,7 @@ export default function CustomerDetailPage() {
                           </span>
                         </div>
                       ))}
+                      <PaginationFooter page={actSafePage} totalPages={actTotalPages} total={allDisplayEvents.length} onPageChange={setActivityPage} />
                     </div>
                   )}
                 </>
@@ -2272,7 +2296,7 @@ export default function CustomerDetailPage() {
                           <p className="mt-2 text-sm text-cos-slate">No conversations found</p>
                         </div>
                       ) : (
-                        conversations.map((conv) => (
+                        conversations.slice((convsPage - 1) * 100, convsPage * 100).map((conv) => (
                           <button
                             key={conv.id}
                             onClick={() => loadThread(conv.id)}
@@ -2305,6 +2329,7 @@ export default function CustomerDetailPage() {
                           </button>
                         ))
                       )}
+                      <PaginationFooter page={convsPage} totalPages={Math.max(1, Math.ceil(conversations.length / 100))} total={conversations.length} onPageChange={setConvsPage} />
                     </div>
 
                     {/* Message thread */}
@@ -2584,7 +2609,7 @@ export default function CustomerDetailPage() {
                 {(billingData.billingEvents?.length ?? 0) > 0 && (
                   <Section title="Billing History" icon={<Clock className="h-4 w-4 text-cos-slate" />}>
                     <div className="space-y-2">
-                      {billingData.billingEvents.map((evt) => (
+                      {billingEventsPag.pageItems.map((evt) => (
                         <div
                           key={evt.id}
                           className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-4 py-2.5"
@@ -2597,6 +2622,7 @@ export default function CustomerDetailPage() {
                           <span className="text-xs text-cos-slate">{formatDate(evt.createdAt)}</span>
                         </div>
                       ))}
+                      <PaginationFooter page={billingEventsPag.safePage} totalPages={billingEventsPag.totalPages} total={billingEventsPag.total} onPageChange={setBillingEventsPage} />
                     </div>
                   </Section>
                 )}
@@ -2625,7 +2651,7 @@ export default function CustomerDetailPage() {
                     <p className="text-xs text-cos-slate-light">No partnerships yet</p>
                   ) : (
                     <div className="space-y-2">
-                      {partnershipData.partnerships.map((p) => (
+                      {partnershipsPag.pageItems.map((p) => (
                         <div key={p.id} className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-4 py-3">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-cos-midnight">{p.partnerFirmName}</p>
@@ -2652,6 +2678,7 @@ export default function CustomerDetailPage() {
                           <span className="text-xs text-cos-slate-light">{formatDate(p.createdAt)}</span>
                         </div>
                       ))}
+                      <PaginationFooter page={partnershipsPag.safePage} totalPages={partnershipsPag.totalPages} total={partnershipsPag.total} onPageChange={setPartnershipsPage} />
                     </div>
                   )}
                 </Section>
@@ -2662,7 +2689,7 @@ export default function CustomerDetailPage() {
                     <p className="text-xs text-cos-slate-light">No opportunities yet</p>
                   ) : (
                     <div className="space-y-2">
-                      {partnershipData.opportunities.map((opp) => (
+                      {oppsPag.pageItems.map((opp) => (
                         <a
                           key={opp.id}
                           href={`/admin/opportunities/${opp.id}`}
@@ -2697,6 +2724,7 @@ export default function CustomerDetailPage() {
                           )}
                         </a>
                       ))}
+                      <PaginationFooter page={oppsPag.safePage} totalPages={oppsPag.totalPages} total={oppsPag.total} onPageChange={setOppsPage} />
                     </div>
                   )}
                 </Section>
@@ -2707,7 +2735,7 @@ export default function CustomerDetailPage() {
                     <p className="text-xs text-cos-slate-light">No leads yet</p>
                   ) : (
                     <div className="space-y-2">
-                      {partnershipData.leads.map((lead) => (
+                      {leadsPag.pageItems.map((lead) => (
                         <div key={lead.id} className="flex items-center gap-3 rounded-cos bg-cos-cloud/50 px-4 py-3">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-cos-midnight">{lead.title}</p>
@@ -2727,6 +2755,7 @@ export default function CustomerDetailPage() {
                           <span className="text-xs text-cos-slate-light">{formatDate(lead.createdAt)}</span>
                         </div>
                       ))}
+                      <PaginationFooter page={leadsPag.safePage} totalPages={leadsPag.totalPages} total={leadsPag.total} onPageChange={setLeadsPage} />
                     </div>
                   )}
                 </Section>

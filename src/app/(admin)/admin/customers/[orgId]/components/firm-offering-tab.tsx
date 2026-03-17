@@ -12,6 +12,7 @@ import {
   Check,
   X,
 } from "lucide-react";
+import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
 
 interface ServiceRow {
   id: string;
@@ -32,6 +33,8 @@ export function FirmOfferingTab({ orgId }: { orgId: string }) {
   const [editingDesc, setEditingDesc] = useState<string | null>(null);
   const [descDraft, setDescDraft] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
+
+  const [svcPage, setSvcPage] = useState(1);
 
   // Add form
   const [showAdd, setShowAdd] = useState(false);
@@ -109,6 +112,10 @@ export function FirmOfferingTab({ orgId }: { orgId: string }) {
     }
   };
 
+  const visible = showHidden ? services : services.filter((s) => !s.isHidden);
+  const hiddenCount = services.filter((s) => s.isHidden).length;
+  const svcPag = usePaginated(visible, svcPage);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -116,9 +123,6 @@ export function FirmOfferingTab({ orgId }: { orgId: string }) {
       </div>
     );
   }
-
-  const visible = showHidden ? services : services.filter((s) => !s.isHidden);
-  const hiddenCount = services.filter((s) => s.isHidden).length;
 
   return (
     <div className="space-y-4">
@@ -185,7 +189,7 @@ export function FirmOfferingTab({ orgId }: { orgId: string }) {
       {visible.length === 0 ? (
         <p className="py-8 text-center text-sm text-cos-slate-light italic">No services found</p>
       ) : (
-        visible.map((svc) => (
+        svcPag.pageItems.map((svc) => (
           <div
             key={svc.id}
             className={`rounded-cos-lg border p-4 ${svc.isHidden ? "border-cos-slate-light/30 bg-cos-cloud/30 opacity-60" : "border-cos-border bg-white"}`}
@@ -263,6 +267,7 @@ export function FirmOfferingTab({ orgId }: { orgId: string }) {
           </div>
         ))
       )}
+      <PaginationFooter page={svcPag.safePage} totalPages={svcPag.totalPages} total={svcPag.total} onPageChange={setSvcPage} />
     </div>
   );
 }

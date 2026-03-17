@@ -30,6 +30,7 @@ import { useTeamDiscovery } from "@/hooks/use-team-discovery";
 import { useOssyContext } from "@/hooks/use-ossy-context";
 import { emitOssyEvent } from "@/lib/ossy-events";
 import { Button } from "@/components/ui/button";
+import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
 import { TeamDiscoveryProgress } from "@/components/firm/team-discovery-progress";
 import type { Expert } from "@/types/cos-data";
 
@@ -157,11 +158,18 @@ export default function FirmExpertsPage() {
   const [selectedForBatch, setSelectedForBatch] = useState<Set<string>>(new Set());
   const [batchEnriching, setBatchEnriching] = useState(false);
 
-  // Per-section pagination
-  const SECTION_PAGE_SIZE = 25;
+  // Per-section pagination (100 rows per page via shared hook)
   const [expertPage, setExpertPage] = useState(1);
   const [potentialPage, setPotentialPage] = useState(1);
   const [otherPage, setOtherPage] = useState(1);
+  const [deactivatedPage, setDeactivatedPage] = useState(1);
+  const [incorrectPage, setIncorrectPage] = useState(1);
+
+  const expertPg = usePaginated(tierExperts, expertPage);
+  const potentialPg = usePaginated(tierPotential, potentialPage);
+  const otherPg = usePaginated(tierOther, otherPage);
+  const deactivatedPg = usePaginated(deactivated, deactivatedPage);
+  const incorrectPg = usePaginated(incorrect, incorrectPage);
 
   // ── Enrichment polling state ───────────────────────────────────────────────
   const [enrichingExperts, setEnrichingExperts] = useState<Set<string>>(new Set());
@@ -868,10 +876,7 @@ export default function FirmExpertsPage() {
       ) : dbExperts.length > 0 ? (
         <div className="space-y-4">
           {/* Experts section */}
-          {tierExperts.length > 0 && (() => {
-            const totalPages = Math.ceil(tierExperts.length / SECTION_PAGE_SIZE);
-            const paginated = tierExperts.slice((expertPage - 1) * SECTION_PAGE_SIZE, expertPage * SECTION_PAGE_SIZE);
-            return (
+          {tierExperts.length > 0 && (
               <div className="overflow-hidden rounded-cos-lg border border-emerald-200">
                 <div className="flex items-center justify-between bg-emerald-50 px-4 py-2.5">
                   <div className="flex items-center gap-2">
@@ -883,26 +888,16 @@ export default function FirmExpertsPage() {
                   <span className="text-[10px] text-emerald-600/70">Client-facing specialists</span>
                 </div>
                 <div className="divide-y divide-emerald-100">
-                  {paginated.map((expert) => renderExpertRow(expert))}
+                  {expertPg.pageItems.map((expert) => renderExpertRow(expert))}
                 </div>
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-emerald-100 px-4 py-2">
-                    <span className="text-[10px] text-emerald-600/70">{(expertPage - 1) * SECTION_PAGE_SIZE + 1}&ndash;{Math.min(expertPage * SECTION_PAGE_SIZE, tierExperts.length)} of {tierExperts.length}</span>
-                    <div className="flex gap-1">
-                      <button disabled={expertPage <= 1} onClick={() => setExpertPage(p => p - 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">Prev</button>
-                      <button disabled={expertPage >= totalPages} onClick={() => setExpertPage(p => p + 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">Next</button>
-                    </div>
-                  </div>
-                )}
+                <div className="border-t border-emerald-100 px-4 py-2">
+                  <PaginationFooter page={expertPg.safePage} totalPages={expertPg.totalPages} total={expertPg.total} onPageChange={setExpertPage} />
+                </div>
               </div>
-            );
-          })()}
+          )}
 
           {/* Potential Experts section */}
-          {tierPotential.length > 0 && (() => {
-            const totalPages = Math.ceil(tierPotential.length / SECTION_PAGE_SIZE);
-            const paginated = tierPotential.slice((potentialPage - 1) * SECTION_PAGE_SIZE, potentialPage * SECTION_PAGE_SIZE);
-            return (
+          {tierPotential.length > 0 && (
               <div className="overflow-hidden rounded-cos-lg border border-amber-200">
                 <div className="flex items-center justify-between bg-amber-50 px-4 py-2.5">
                   <div className="flex items-center gap-2">
@@ -914,26 +909,16 @@ export default function FirmExpertsPage() {
                   <span className="text-[10px] text-amber-600/70">May be client-facing</span>
                 </div>
                 <div className="divide-y divide-amber-100">
-                  {paginated.map((expert) => renderExpertRow(expert))}
+                  {potentialPg.pageItems.map((expert) => renderExpertRow(expert))}
                 </div>
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-amber-100 px-4 py-2">
-                    <span className="text-[10px] text-amber-600/70">{(potentialPage - 1) * SECTION_PAGE_SIZE + 1}&ndash;{Math.min(potentialPage * SECTION_PAGE_SIZE, tierPotential.length)} of {tierPotential.length}</span>
-                    <div className="flex gap-1">
-                      <button disabled={potentialPage <= 1} onClick={() => setPotentialPage(p => p - 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-40">Prev</button>
-                      <button disabled={potentialPage >= totalPages} onClick={() => setPotentialPage(p => p + 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-40">Next</button>
-                    </div>
-                  </div>
-                )}
+                <div className="border-t border-amber-100 px-4 py-2">
+                  <PaginationFooter page={potentialPg.safePage} totalPages={potentialPg.totalPages} total={potentialPg.total} onPageChange={setPotentialPage} />
+                </div>
               </div>
-            );
-          })()}
+          )}
 
           {/* Unclassified / manually added section */}
-          {tierOther.length > 0 && (() => {
-            const totalPages = Math.ceil(tierOther.length / SECTION_PAGE_SIZE);
-            const paginated = tierOther.slice((otherPage - 1) * SECTION_PAGE_SIZE, otherPage * SECTION_PAGE_SIZE);
-            return (
+          {tierOther.length > 0 && (
               <div className="overflow-hidden rounded-cos-lg border border-cos-border/60">
                 <div className="flex items-center justify-between bg-cos-cloud/50 px-4 py-2.5">
                   <div className="flex items-center gap-2">
@@ -945,20 +930,13 @@ export default function FirmExpertsPage() {
                   <span className="text-[10px] text-cos-slate/70">Manually added or unclassified</span>
                 </div>
                 <div className="divide-y divide-cos-border/30">
-                  {paginated.map((expert) => renderExpertRow(expert))}
+                  {otherPg.pageItems.map((expert) => renderExpertRow(expert))}
                 </div>
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-cos-border/30 px-4 py-2">
-                    <span className="text-[10px] text-cos-slate/70">{(otherPage - 1) * SECTION_PAGE_SIZE + 1}&ndash;{Math.min(otherPage * SECTION_PAGE_SIZE, tierOther.length)} of {tierOther.length}</span>
-                    <div className="flex gap-1">
-                      <button disabled={otherPage <= 1} onClick={() => setOtherPage(p => p - 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-cos-slate hover:bg-cos-cloud disabled:opacity-40">Prev</button>
-                      <button disabled={otherPage >= totalPages} onClick={() => setOtherPage(p => p + 1)} className="rounded px-2 py-0.5 text-[10px] font-medium text-cos-slate hover:bg-cos-cloud disabled:opacity-40">Next</button>
-                    </div>
-                  </div>
-                )}
+                <div className="border-t border-cos-border/30 px-4 py-2">
+                  <PaginationFooter page={otherPg.safePage} totalPages={otherPg.totalPages} total={otherPg.total} onPageChange={setOtherPage} />
+                </div>
               </div>
-            );
-          })()}
+          )}
 
           {/* Show nothing-classified note when all are unclassified */}
           {tierExperts.length === 0 && tierPotential.length === 0 && tierOther.length > 0 && (
@@ -986,7 +964,10 @@ export default function FirmExpertsPage() {
                     <span className="text-[10px] text-cos-slate/70">Former team members</span>
                   </div>
                   <div className="divide-y divide-cos-border/30">
-                    {deactivated.map((expert) => renderExpertRow(expert))}
+                    {deactivatedPg.pageItems.map((expert) => renderExpertRow(expert))}
+                  </div>
+                  <div className="border-t border-cos-border/30 px-4 py-2">
+                    <PaginationFooter page={deactivatedPg.safePage} totalPages={deactivatedPg.totalPages} total={deactivatedPg.total} onPageChange={setDeactivatedPage} />
                   </div>
                 </div>
               )}
@@ -1005,7 +986,10 @@ export default function FirmExpertsPage() {
               {showIncorrect && (
                 <div className="mt-2 overflow-hidden rounded-cos-lg border border-red-200/40 opacity-60">
                   <div className="divide-y divide-red-100/30">
-                    {incorrect.map((expert) => renderExpertRow(expert))}
+                    {incorrectPg.pageItems.map((expert) => renderExpertRow(expert))}
+                  </div>
+                  <div className="border-t border-red-100/30 px-4 py-2">
+                    <PaginationFooter page={incorrectPg.safePage} totalPages={incorrectPg.totalPages} total={incorrectPg.total} onPageChange={setIncorrectPage} />
                   </div>
                 </div>
               )}

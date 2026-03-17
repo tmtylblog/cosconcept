@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
 import {
   Phone,
   Upload,
@@ -46,6 +47,8 @@ export default function CallsPage() {
   const [error, setError] = useState<string | null>(null);
   const [calls, setCalls] = useState<ScheduledCall[]>([]);
   const [loadingCalls, setLoadingCalls] = useState(false);
+  const [page, setPage] = useState(1);
+  const { pageItems, totalPages, total, safePage } = usePaginated(calls, page);
 
   useEffect(() => {
     if (!activeOrg?.id) return;
@@ -144,7 +147,7 @@ export default function CallsPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {calls.map((call) => {
+              {pageItems.map((call) => {
                 const style = STATUS_STYLES[call.status] ?? STATUS_STYLES.pending;
                 const scoreColor =
                   call.coaching?.overallScore
@@ -203,6 +206,12 @@ export default function CallsPage() {
               })}
             </div>
           )}
+          <PaginationFooter
+            page={safePage}
+            totalPages={totalPages}
+            total={total}
+            onPageChange={setPage}
+          />
         </div>
       ) : null}
 

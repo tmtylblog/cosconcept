@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
 import {
   Users, UserPlus, Crown, Shield, User, Loader2,
   ArrowUpRight, Mail, Check, Clock, Link2, Copy,
@@ -130,6 +131,10 @@ export default function TeamSettingsPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ ok?: boolean; error?: string } | null>(null);
 
+  // Pagination
+  const [membersPage, setMembersPage] = useState(1);
+  const [expertsPage, setExpertsPage] = useState(1);
+
   // Expert actions
   const [expertActionLoading, setExpertActionLoading] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -214,6 +219,9 @@ export default function TeamSettingsPage() {
       setExpertActionLoading(null);
     }
   }
+
+  const membersPag = usePaginated(members, membersPage);
+  const expertsPag = usePaginated(experts, expertsPage);
 
   // Smart link suggestion: member whose email matches an unclaimed expert
   function getSuggestedExpert(member: TeamMember): Expert | null {
@@ -337,7 +345,7 @@ export default function TeamSettingsPage() {
               <span className="text-xs text-cos-slate-light">— login access to COS</span>
             </div>
 
-            {members.map((m) => {
+            {membersPag.pageItems.map((m) => {
               const isMe = m.userId === session?.user?.id;
               const suggested = getSuggestedExpert(m);
               const linked = experts.find((e) => e.userId === m.userId);
@@ -375,6 +383,12 @@ export default function TeamSettingsPage() {
                 </div>
               );
             })}
+            <PaginationFooter
+              page={membersPag.safePage}
+              totalPages={membersPag.totalPages}
+              total={membersPag.total}
+              onPageChange={setMembersPage}
+            />
           </section>
 
           {/* ── Expert Roster ── */}
@@ -388,7 +402,7 @@ export default function TeamSettingsPage() {
                 </div>
               </div>
 
-              {experts.map((e) => {
+              {expertsPag.pageItems.map((e) => {
                 const displayName = e.fullName ?? (`${e.firstName ?? ""} ${e.lastName ?? ""}`.trim() || "Unnamed");
                 const isCopied = copiedId === e.id;
                 const isActing = expertActionLoading === e.id || expertActionLoading === `copy-${e.id}`;
@@ -452,6 +466,12 @@ export default function TeamSettingsPage() {
                   </div>
                 );
               })}
+              <PaginationFooter
+                page={expertsPag.safePage}
+                totalPages={expertsPag.totalPages}
+                total={expertsPag.total}
+                onPageChange={setExpertsPage}
+              />
             </section>
           )}
         </>

@@ -17,6 +17,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
 
 interface FirmEnrichment {
   firm: {
@@ -129,6 +130,11 @@ function FullSystemEnrichmentSection() {
   const [mode, setMode] = useState<"incremental" | "full-system">("incremental");
   const [providers, setProviders] = useState<ProviderHealth[]>([]);
   const [expandedFirm, setExpandedFirm] = useState<string | null>(null);
+  const [previewPage, setPreviewPage] = useState(1);
+  const [resultsPage, setResultsPage] = useState(1);
+
+  const previewFirmsPaginated = usePaginated(preview?.firms ?? [], previewPage);
+  const jobResultsPaginated = usePaginated(jobStatus?.result?.results ?? [], resultsPage);
 
   // Load provider health on mount
   useEffect(() => {
@@ -158,6 +164,7 @@ function FullSystemEnrichmentSection() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
       setPreview(data);
+      setPreviewPage(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
     } finally {
@@ -414,7 +421,7 @@ function FullSystemEnrichmentSection() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-cos-border/60">
-                      {jobStatus.result.results.map((r) => (
+                      {jobResultsPaginated.pageItems.map((r) => (
                         <>
                           <tr key={r.firmId} className="hover:bg-cos-electric/[0.02]">
                             <td className="px-3 py-1.5 text-cos-midnight font-medium">{r.firmName}</td>
@@ -464,6 +471,12 @@ function FullSystemEnrichmentSection() {
                       ))}
                     </tbody>
                   </table>
+                  <PaginationFooter
+                    page={jobResultsPaginated.safePage}
+                    totalPages={jobResultsPaginated.totalPages}
+                    total={jobResultsPaginated.total}
+                    onPageChange={setResultsPage}
+                  />
                 </div>
               )}
             </>
@@ -529,7 +542,7 @@ function FullSystemEnrichmentSection() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cos-border/60">
-                  {preview.firms.map((f) => (
+                  {previewFirmsPaginated.pageItems.map((f) => (
                     <>
                       <tr key={f.firmId} className={`hover:bg-cos-electric/[0.02] ${selectedFirms.has(f.firmId) ? "bg-cos-electric/5" : ""}`}>
                         <td className="px-3 py-2">
@@ -596,6 +609,12 @@ function FullSystemEnrichmentSection() {
                   ))}
                 </tbody>
               </table>
+              <PaginationFooter
+                page={previewFirmsPaginated.safePage}
+                totalPages={previewFirmsPaginated.totalPages}
+                total={previewFirmsPaginated.total}
+                onPageChange={setPreviewPage}
+              />
             </div>
           )}
 
@@ -620,6 +639,9 @@ export default function AdminEnrichmentPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
+  const [entriesPage, setEntriesPage] = useState(1);
+
+  const entriesPaginated = usePaginated(data?.entries ?? [], entriesPage);
 
   const fetchEnrichment = useCallback(
     async (id: string) => {
@@ -633,6 +655,7 @@ export default function AdminEnrichmentPage() {
           throw new Error(body.error || `HTTP ${res.status}`);
         }
         setData(await res.json());
+        setEntriesPage(1);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load");
         setData(null);
@@ -774,7 +797,7 @@ export default function AdminEnrichmentPage() {
             <h3 className="font-heading text-base font-semibold text-cos-midnight">
               Audit Trail ({data.entries.length} entries)
             </h3>
-            {data.entries.map((entry) => (
+            {entriesPaginated.pageItems.map((entry) => (
               <div
                 key={entry.id}
                 className="rounded-cos-xl border border-cos-border bg-cos-surface"
@@ -876,6 +899,12 @@ export default function AdminEnrichmentPage() {
                 )}
               </div>
             ))}
+            <PaginationFooter
+              page={entriesPaginated.safePage}
+              totalPages={entriesPaginated.totalPages}
+              total={entriesPaginated.total}
+              onPageChange={setEntriesPage}
+            />
             {data.entries.length === 0 && (
               <div className="rounded-cos-xl border border-dashed border-cos-border py-8 text-center text-sm text-cos-slate">
                 No enrichment entries found for this firm.

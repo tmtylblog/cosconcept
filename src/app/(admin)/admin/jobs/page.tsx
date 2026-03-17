@@ -14,6 +14,7 @@ import {
   Timer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
 
 interface InngestFunction {
   id: string;
@@ -89,7 +90,9 @@ export default function AdminJobsPage() {
   const [data, setData] = useState<JobsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [cleaning, setCleaning] = useState(false);
+  const [jobsPage, setJobsPage] = useState(1);
   const [cleanResult, setCleanResult] = useState<string | null>(null);
+  const pag = usePaginated(data?.recentJobs ?? [], jobsPage);
 
   const fetchData = useCallback(async () => {
     try {
@@ -223,7 +226,7 @@ export default function AdminJobsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-cos-border">
-                {data.recentJobs.map((job) => (
+                {pag.pageItems.map((job) => (
                   <tr key={job.id} className="hover:bg-cos-bg">
                     <td className="px-4 py-2 font-mono text-xs">{job.type}</td>
                     <td className="px-4 py-2"><StatusBadge status={job.status} /></td>
@@ -234,6 +237,9 @@ export default function AdminJobsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="px-4 pb-3">
+            <PaginationFooter page={pag.safePage} totalPages={pag.totalPages} total={pag.total} onPageChange={setJobsPage} />
           </div>
         </div>
       )}

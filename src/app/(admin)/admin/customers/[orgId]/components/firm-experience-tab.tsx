@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Image,
 } from "lucide-react";
+import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
 
 interface CaseStudyRow {
   id: string;
@@ -41,6 +42,7 @@ export function FirmExperienceTab({ orgId }: { orgId: string }) {
   const [caseStudies, setCaseStudies] = useState<CaseStudyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [csPage, setCsPage] = useState(1);
 
   // Add form
   const [showAdd, setShowAdd] = useState(false);
@@ -104,6 +106,10 @@ export function FirmExperienceTab({ orgId }: { orgId: string }) {
     }
   };
 
+  const activeCount = caseStudies.filter((cs) => cs.status === "active").length;
+  const pendingCount = caseStudies.filter((cs) => cs.status === "pending").length;
+  const csPag = usePaginated(caseStudies, csPage);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -111,9 +117,6 @@ export function FirmExperienceTab({ orgId }: { orgId: string }) {
       </div>
     );
   }
-
-  const activeCount = caseStudies.filter((cs) => cs.status === "active").length;
-  const pendingCount = caseStudies.filter((cs) => cs.status === "pending").length;
 
   return (
     <div className="space-y-4">
@@ -175,7 +178,7 @@ export function FirmExperienceTab({ orgId }: { orgId: string }) {
       {caseStudies.length === 0 ? (
         <p className="py-8 text-center text-sm text-cos-slate-light italic">No case studies found</p>
       ) : (
-        caseStudies.map((cs) => {
+        csPag.pageItems.map((cs) => {
           const statusCfg = STATUS_CONFIG[cs.status] ?? STATUS_CONFIG.pending;
           return (
             <div
@@ -267,6 +270,7 @@ export function FirmExperienceTab({ orgId }: { orgId: string }) {
           );
         })
       )}
+      <PaginationFooter page={csPag.safePage} totalPages={csPag.totalPages} total={csPag.total} onPageChange={setCsPage} />
     </div>
   );
 }
