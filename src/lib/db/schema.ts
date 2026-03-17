@@ -1984,6 +1984,7 @@ export const acqPipelineStages = pgTable("acq_pipeline_stages", {
   displayOrder: integer("display_order").notNull().default(0),
   isClosedWon: boolean("is_closed_won").notNull().default(false),
   isClosedLost: boolean("is_closed_lost").notNull().default(false),
+  parentStageId: text("parent_stage_id").references((): AnyPgColumn => acqPipelineStages.id, { onDelete: "cascade" }),
   hubspotStageId: text("hubspot_stage_id"), // maps to HubSpot stage for sync
   color: text("color").notNull().default("#6366f1"), // stage color for UI
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -2024,6 +2025,14 @@ export const acqDealActivities = pgTable("acq_deal_activities", {
   activityType: text("activity_type").notNull(), // stage_change | note_added | email_replied | linkedin_message | hubspot_sync | auto_created | sentiment_analyzed
   description: text("description"),
   metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const acqDealContacts = pgTable("acq_deal_contacts", {
+  id: text("id").primaryKey(),
+  dealId: text("deal_id").notNull().references(() => acqDeals.id, { onDelete: "cascade" }),
+  contactId: text("contact_id").notNull().references(() => acqContacts.id, { onDelete: "cascade" }),
+  role: text("role"), // "primary" | "participant" | null
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

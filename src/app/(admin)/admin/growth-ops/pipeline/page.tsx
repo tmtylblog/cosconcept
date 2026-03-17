@@ -29,6 +29,7 @@ interface Stage {
   isClosedWon: boolean;
   isClosedLost: boolean;
   hubspotStageId: string | null;
+  parentStageId: string | null;
 }
 
 interface Deal {
@@ -134,12 +135,17 @@ export default function PipelinePage() {
       const d: Deal[] = data.deals ?? [];
       setStages(s);
 
-      // Build columns
-      const cols: Column[] = s
+      // Build substage map: substageId -> parentStageId
+      const substageToParent: Record<string, string> = {};
+      s.filter((st) => st.parentStageId).forEach((st) => { substageToParent[st.id] = st.parentStageId!; });
+
+      // Build columns only from parent stages
+      const parentStages = s.filter((st) => !st.parentStageId);
+      const cols: Column[] = parentStages
         .sort((a, b) => a.displayOrder - b.displayOrder)
         .map((stage) => ({
           stage,
-          deals: d.filter((deal) => deal.stageId === stage.id),
+          deals: d.filter((deal) => deal.stageId === stage.id || substageToParent[deal.stageId ?? ""] === stage.id),
         }));
 
       // Deals without a stage go in a special "Unassigned" bucket
@@ -554,6 +560,12 @@ export default function PipelinePage() {
                           <p className="text-[10px] text-cos-slate mt-0.5 truncate">{deal.companyName}</p>
                         )}
                         <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                          {/* Substage label */}
+                          {deal.stageId && stages.find((st) => st.id === deal.stageId)?.parentStageId && (
+                            <span className="rounded-full bg-cos-electric/10 px-1.5 py-0.5 text-[9px] font-medium text-cos-electric">
+                              {stages.find((st) => st.id === deal.stageId)?.label}
+                            </span>
+                          )}
                           {sourceIcon(deal.source, deal.sourceChannel)}
                           {deal.dealValue && (
                             <span className="flex items-center gap-0.5 text-[10px] text-cos-signal font-medium">
@@ -636,6 +648,9 @@ export default function PipelinePage() {
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: deal._stageColor }} />
                           {deal._stageLabel}
                         </span>
+                        {deal.stageId && stages.find((st) => st.id === deal.stageId)?.parentStageId && (
+                          <span className="ml-1.5 text-[10px] text-cos-electric">{stages.find((st) => st.id === deal.stageId)?.label}</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">{sourceIcon(deal.source, deal.sourceChannel)}</td>
                       <td className="px-4 py-3 text-right tabular-nums">

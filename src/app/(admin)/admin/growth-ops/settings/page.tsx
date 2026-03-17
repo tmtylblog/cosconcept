@@ -33,6 +33,7 @@ interface Stage {
   isClosedWon: boolean;
   isClosedLost: boolean;
   hubspotStageId: string | null;
+  parentStageId: string | null;
 }
 
 interface DealSource {
@@ -164,7 +165,7 @@ function PipelineSettings({
   const [stages, setStages] = useState<Stage[]>([]);
   const [editingStage, setEditingStage] = useState<Stage | null>(null);
   const [newStage, setNewStage] = useState(false);
-  const [stageForm, setStageForm] = useState({ label: "", color: "#6366f1", isClosedWon: false, isClosedLost: false });
+  const [stageForm, setStageForm] = useState({ label: "", color: "#6366f1", isClosedWon: false, isClosedLost: false, parentStageId: null as string | null });
 
   // Sources
   const [sources, setSources] = useState<DealSource[]>([]);
@@ -198,21 +199,25 @@ function PipelineSettings({
         await fetch("/api/admin/growth-ops/pipeline/settings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "updateStage", stageId: editingStage.id, label: stageForm.label, color: stageForm.color, isClosedWon: stageForm.isClosedWon, isClosedLost: stageForm.isClosedLost }),
+          body: JSON.stringify({ action: "updateStage", stageId: editingStage.id, label: stageForm.label, color: stageForm.color, isClosedWon: stageForm.isClosedWon, isClosedLost: stageForm.isClosedLost, parentStageId: stageForm.parentStageId }),
         });
         flash("Stage updated");
       } else {
-        const maxOrder = stages.reduce((m, s) => Math.max(m, s.displayOrder), -1);
+        // For substages, get max order within the parent; for parent stages, among other parents
+        const relevantStages = stageForm.parentStageId
+          ? stages.filter((s) => s.parentStageId === stageForm.parentStageId)
+          : stages.filter((s) => !s.parentStageId);
+        const maxOrder = relevantStages.reduce((m, s) => Math.max(m, s.displayOrder), -1);
         await fetch("/api/admin/growth-ops/pipeline/settings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "createStage", label: stageForm.label, color: stageForm.color, displayOrder: maxOrder + 1, isClosedWon: stageForm.isClosedWon, isClosedLost: stageForm.isClosedLost }),
+          body: JSON.stringify({ action: "createStage", label: stageForm.label, color: stageForm.color, displayOrder: maxOrder + 1, isClosedWon: stageForm.isClosedWon, isClosedLost: stageForm.isClosedLost, parentStageId: stageForm.parentStageId }),
         });
-        flash("Stage created");
+        flash(stageForm.parentStageId ? "Substage created" : "Stage created");
       }
       setEditingStage(null);
       setNewStage(false);
-      setStageForm({ label: "", color: "#6366f1", isClosedWon: false, isClosedLost: false });
+      setStageForm({ label: "", color: "#6366f1", isClosedWon: false, isClosedLost: false, parentStageId: null });
       await loadData();
     } catch (e) {
       setError(String(e));
@@ -249,13 +254,18 @@ function PipelineSettings({
   function startEditStage(stage: Stage) {
     setEditingStage(stage);
     setNewStage(false);
-    setStageForm({ label: stage.label, color: stage.color, isClosedWon: stage.isClosedWon, isClosedLost: stage.isClosedLost });
+    setStageForm({ label: stage.label, color: stage.color, isClosedWon: stage.isClosedWon, isClosedLost: stage.isClosedLost, parentStageId: stage.parentStageId });
   }
 
-  function startNewStage() {
+  function startNewStage(parentStageId?: string) {
     setNewStage(true);
     setEditingStage(null);
-    setStageForm({ label: "", color: "#6366f1", isClosedWon: false, isClosedLost: false });
+    if (parentStageId) {
+      const parent = stages.find((s) => s.id === parentStageId);
+      setStageForm({ label: "", color: parent?.color ?? "#6366f1", isClosedWon: false, isClosedLost: parent?.isClosedLost ?? false, parentStageId });
+    } else {
+      setStageForm({ label: "", color: "#6366f1", isClosedWon: false, isClosedLost: false, parentStageId: null });
+    }
   }
 
   // ── Source actions ────────────────────────────────────
@@ -314,40 +324,67 @@ function PipelineSettings({
       <div className="rounded-cos-xl border border-cos-border bg-white p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-cos-midnight">Pipeline Stages</h2>
-          <button onClick={startNewStage} className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-1.5 text-xs font-medium text-white hover:bg-cos-electric-hover transition-colors">
+          <button onClick={() => startNewStage()} className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-1.5 text-xs font-medium text-white hover:bg-cos-electric-hover transition-colors">
             <Plus className="h-3 w-3" /> Add Stage
           </button>
         </div>
 
         <div className="space-y-2">
-          {stages.map((stage, idx) => (
-            <div key={stage.id} className="flex items-center gap-3 rounded-cos-lg border border-cos-border p-3 hover:bg-cos-cloud/30 transition-colors">
-              <div className="flex flex-col gap-0.5">
-                <button onClick={() => moveStage(stage.id, "up")} disabled={idx === 0} className="text-cos-slate-dim hover:text-cos-midnight disabled:opacity-20 text-[10px]">&uarr;</button>
-                <GripVertical className="h-3.5 w-3.5 text-cos-slate-dim" />
-                <button onClick={() => moveStage(stage.id, "down")} disabled={idx === stages.length - 1} className="text-cos-slate-dim hover:text-cos-midnight disabled:opacity-20 text-[10px]">&darr;</button>
-              </div>
-              <div className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-cos-midnight">{stage.label}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  {stage.isClosedWon && <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700">Won</span>}
-                  {stage.isClosedLost && <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-medium text-red-700">Lost</span>}
-                  {stage.hubspotStageId && <span className="text-[10px] text-cos-slate-dim">HS: {stage.hubspotStageId.slice(0, 12)}&hellip;</span>}
-                  <span className="text-[10px] text-cos-slate-dim">Order: {stage.displayOrder}</span>
+          {stages.filter((s) => !s.parentStageId).map((stage, idx, parentArr) => {
+            const substages = stages.filter((s) => s.parentStageId === stage.id).sort((a, b) => a.displayOrder - b.displayOrder);
+            return (
+              <div key={stage.id}>
+                <div className="flex items-center gap-3 rounded-cos-lg border border-cos-border p-3 hover:bg-cos-cloud/30 transition-colors">
+                  <div className="flex flex-col gap-0.5">
+                    <button onClick={() => moveStage(stage.id, "up")} disabled={idx === 0} className="text-cos-slate-dim hover:text-cos-midnight disabled:opacity-20 text-[10px]">&uarr;</button>
+                    <GripVertical className="h-3.5 w-3.5 text-cos-slate-dim" />
+                    <button onClick={() => moveStage(stage.id, "down")} disabled={idx === parentArr.length - 1} className="text-cos-slate-dim hover:text-cos-midnight disabled:opacity-20 text-[10px]">&darr;</button>
+                  </div>
+                  <div className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-cos-midnight">{stage.label}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {stage.isClosedWon && <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-medium text-emerald-700">Won</span>}
+                      {stage.isClosedLost && <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-medium text-red-700">Lost</span>}
+                      {stage.hubspotStageId && <span className="text-[10px] text-cos-slate-dim">HS: {stage.hubspotStageId.slice(0, 12)}&hellip;</span>}
+                      {substages.length > 0 && <span className="text-[10px] text-cos-slate-dim">{substages.length} substage{substages.length !== 1 ? "s" : ""}</span>}
+                    </div>
+                  </div>
+                  <button onClick={() => startNewStage(stage.id)} className="text-[10px] text-cos-electric hover:underline" title="Add substage">+ Sub</button>
+                  <button onClick={() => startEditStage(stage)} className="text-xs text-cos-electric hover:underline">Edit</button>
+                  <button onClick={() => deleteStage(stage.id)} className="text-cos-slate-dim hover:text-red-500 transition-colors">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
+
+                {/* Substages indented */}
+                {substages.length > 0 && (
+                  <div className="ml-8 mt-1 mb-1 space-y-1">
+                    {substages.map((sub) => (
+                      <div key={sub.id} className="flex items-center gap-3 rounded-cos-md border border-cos-border/60 bg-cos-cloud/20 p-2.5 hover:bg-cos-cloud/50 transition-colors">
+                        <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: sub.color }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-cos-midnight">{sub.label}</p>
+                          {sub.isClosedLost && <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-medium text-red-700">Lost</span>}
+                        </div>
+                        <button onClick={() => startEditStage(sub)} className="text-[10px] text-cos-electric hover:underline">Edit</button>
+                        <button onClick={() => deleteStage(sub.id)} className="text-cos-slate-dim hover:text-red-500 transition-colors">
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <button onClick={() => startEditStage(stage)} className="text-xs text-cos-electric hover:underline">Edit</button>
-              <button onClick={() => deleteStage(stage.id)} className="text-cos-slate-dim hover:text-red-500 transition-colors">
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {(newStage || editingStage) && (
           <div className="mt-4 rounded-cos-lg border border-cos-electric/30 bg-cos-electric/5 p-4">
-            <h3 className="text-sm font-semibold text-cos-midnight mb-3">{editingStage ? `Edit: ${editingStage.label}` : "New Stage"}</h3>
+            <h3 className="text-sm font-semibold text-cos-midnight mb-3">
+              {editingStage ? `Edit: ${editingStage.label}` : stageForm.parentStageId ? `New Substage under "${stages.find((s) => s.id === stageForm.parentStageId)?.label}"` : "New Stage"}
+            </h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-cos-slate mb-1 block">Label</label>
@@ -361,23 +398,30 @@ function PipelineSettings({
                   ))}
                 </div>
               </div>
-              <div className="col-span-2 flex items-center gap-6">
-                <label className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={stageForm.isClosedWon} onChange={(e) => setStageForm({ ...stageForm, isClosedWon: e.target.checked, isClosedLost: e.target.checked ? false : stageForm.isClosedLost })} className="rounded border-cos-border" />
-                  <span className="text-cos-midnight">Closed Won (deal is won at this stage)</span>
-                </label>
-                <label className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={stageForm.isClosedLost} onChange={(e) => setStageForm({ ...stageForm, isClosedLost: e.target.checked, isClosedWon: e.target.checked ? false : stageForm.isClosedWon })} className="rounded border-cos-border" />
-                  <span className="text-cos-midnight">Closed Lost (deal is lost at this stage)</span>
-                </label>
-              </div>
+              {!stageForm.parentStageId && (
+                <div className="col-span-2 flex items-center gap-6">
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={stageForm.isClosedWon} onChange={(e) => setStageForm({ ...stageForm, isClosedWon: e.target.checked, isClosedLost: e.target.checked ? false : stageForm.isClosedLost })} className="rounded border-cos-border" />
+                    <span className="text-cos-midnight">Closed Won (deal is won at this stage)</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={stageForm.isClosedLost} onChange={(e) => setStageForm({ ...stageForm, isClosedLost: e.target.checked, isClosedWon: e.target.checked ? false : stageForm.isClosedWon })} className="rounded border-cos-border" />
+                    <span className="text-cos-midnight">Closed Lost (deal is lost at this stage)</span>
+                  </label>
+                </div>
+              )}
+              {stageForm.parentStageId && (
+                <div className="col-span-2">
+                  <p className="text-[10px] text-cos-slate-dim">Substages inherit won/lost status from their parent stage.</p>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 mt-4">
               <button onClick={saveStage} disabled={saving || !stageForm.label.trim()} className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-4 py-1.5 text-xs font-medium text-white hover:bg-cos-electric-hover disabled:opacity-50 transition-colors">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                 {editingStage ? "Update Stage" : "Create Stage"}
               </button>
-              <button onClick={() => { setNewStage(false); setEditingStage(null); }} className="rounded-cos-lg border border-cos-border px-4 py-1.5 text-xs font-medium text-cos-slate hover:text-cos-midnight transition-colors">Cancel</button>
+              <button onClick={() => { setNewStage(false); setEditingStage(null); setStageForm({ label: "", color: "#6366f1", isClosedWon: false, isClosedLost: false, parentStageId: null }); }} className="rounded-cos-lg border border-cos-border px-4 py-1.5 text-xs font-medium text-cos-slate hover:text-cos-midnight transition-colors">Cancel</button>
             </div>
           </div>
         )}

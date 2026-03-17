@@ -9,8 +9,10 @@ import {
   acqCompanies,
   acqPipelineStages,
   attributionTouchpoints,
+  acqDealContacts,
+  acqDealQueue,
 } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +106,41 @@ export async function GET(
         .orderBy(desc(attributionTouchpoints.touchpointAt));
     }
 
+    // Get all linked contacts via junction table
+    const dealContactRows = await db
+      .select({
+        id: acqContacts.id,
+        firstName: acqContacts.firstName,
+        lastName: acqContacts.lastName,
+        email: acqContacts.email,
+        linkedinUrl: acqContacts.linkedinUrl,
+        companyId: acqContacts.companyId,
+        role: acqDealContacts.role,
+      })
+      .from(acqDealContacts)
+      .innerJoin(acqContacts, eq(acqDealContacts.contactId, acqContacts.id))
+      .where(eq(acqDealContacts.dealId, dealId));
+
+    // Get original queue message if deal was created from queue
+    let queueMessage: string | null = null;
+    if (deal.sourceMessageId) {
+      const [queueItem] = await db
+        .select({ messageText: acqDealQueue.messageText })
+        .from(acqDealQueue)
+        .where(eq(acqDealQueue.sourceMessageId, deal.sourceMessageId))
+        .limit(1);
+      queueMessage = queueItem?.messageText ?? null;
+    }
+    // Also check by createdDealId
+    if (!queueMessage) {
+      const [queueItem] = await db
+        .select({ messageText: acqDealQueue.messageText })
+        .from(acqDealQueue)
+        .where(eq(acqDealQueue.createdDealId, dealId))
+        .limit(1);
+      queueMessage = queueItem?.messageText ?? null;
+    }
+
     return NextResponse.json({
       deal,
       contact,
@@ -111,6 +148,8 @@ export async function GET(
       stages,
       activities,
       touchpoints,
+      dealContacts: dealContactRows,
+      queueMessage,
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -17,14 +17,20 @@ import {
   ChevronDown,
   Save,
   Trash2,
+  Search,
+  X,
+  Plus,
+  FileText,
 } from "lucide-react";
 
-interface Stage { id: string; label: string; displayOrder: number; color: string; isClosedWon: boolean; isClosedLost: boolean; }
-interface Deal { id: string; name: string; stageId: string | null; stageLabel: string; dealValue: string | null; status: string; source: string; sourceChannel: string | null; sourceCampaignName: string | null; notes: string | null; priority: string; lastActivityAt: string | null; sentimentScore: number | null; hubspotDealId: string | null; closedAt: string | null; createdAt: string; updatedAt: string; }
+interface Stage { id: string; label: string; displayOrder: number; color: string; isClosedWon: boolean; isClosedLost: boolean; parentStageId: string | null; }
+interface Deal { id: string; name: string; stageId: string | null; stageLabel: string; dealValue: string | null; status: string; source: string; sourceChannel: string | null; sourceCampaignName: string | null; sourceMessageId: string | null; notes: string | null; priority: string; lastActivityAt: string | null; sentimentScore: number | null; hubspotDealId: string | null; closedAt: string | null; createdAt: string; updatedAt: string; }
 interface Contact { id: string; email: string; firstName: string; lastName: string; linkedinUrl: string | null; companyId: string | null; }
+interface DealContact { id: string; email: string; firstName: string; lastName: string; linkedinUrl: string | null; companyId: string | null; role: string | null; }
 interface Company { id: string; name: string; domain: string | null; industry: string | null; sizeEstimate: string | null; }
 interface Activity { id: string; activityType: string; description: string | null; metadata: Record<string, unknown> | null; createdAt: string; }
 interface Touchpoint { id: string; channel: string; sourceName: string | null; touchpointAt: string; interactionType: string; }
+interface SearchResult { id: string; name?: string; domain?: string; industry?: string; firstName?: string; lastName?: string; email?: string; linkedinUrl?: string; }
 
 function activityIcon(type: string) {
   switch (type) {
@@ -33,6 +39,7 @@ function activityIcon(type: string) {
     case "email_replied": return <Mail className="h-3.5 w-3.5 text-orange-500" />;
     case "linkedin_message": return <Linkedin className="h-3.5 w-3.5 text-blue-600" />;
     case "auto_created": return <Globe className="h-3.5 w-3.5 text-emerald-500" />;
+    case "company_linked": return <Building2 className="h-3.5 w-3.5 text-indigo-500" />;
     default: return <Clock className="h-3.5 w-3.5 text-cos-slate" />;
   }
 }
@@ -50,6 +57,8 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
   const [stages, setStages] = useState<Stage[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [touchpoints, setTouchpoints] = useState<Touchpoint[]>([]);
+  const [dealContacts, setDealContacts] = useState<DealContact[]>([]);
+  const [queueMessage, setQueueMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -59,7 +68,20 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
   const [editName, setEditName] = useState("");
   const [editValue, setEditValue] = useState("");
   const [editPriority, setEditPriority] = useState("normal");
-  const [savingField, setSavingField] = useState<string | null>(null);
+  const [, setSavingField] = useState<string | null>(null);
+
+  // Search states
+  const [companySearch, setCompanySearch] = useState("");
+  const [companyResults, setCompanyResults] = useState<SearchResult[]>([]);
+  const [searchingCompany, setSearchingCompany] = useState(false);
+  const [showCompanySearch, setShowCompanySearch] = useState(false);
+  const [contactSearch, setContactSearch] = useState("");
+  const [contactResults, setContactResults] = useState<SearchResult[]>([]);
+  const [searchingContact, setSearchingContact] = useState(false);
+  const [showContactSearch, setShowContactSearch] = useState(false);
+
+  const companySearchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const contactSearchTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -80,6 +102,8 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
         setStages(data.stages ?? []);
         setActivities(data.activities ?? []);
         setTouchpoints(data.touchpoints ?? []);
+        setDealContacts(data.dealContacts ?? []);
+        setQueueMessage(data.queueMessage ?? null);
         setNotes(data.deal?.notes ?? "");
         setEditName(data.deal?.name ?? "");
         setEditValue(data.deal?.dealValue ?? "");
@@ -98,9 +122,13 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
     const data = await res.json();
     if (!data.error) {
       setDeal(data.deal);
+      setContact(data.contact);
+      setCompany(data.company);
       setStages(data.stages ?? []);
       setActivities(data.activities ?? []);
       setTouchpoints(data.touchpoints ?? []);
+      setDealContacts(data.dealContacts ?? []);
+      setQueueMessage(data.queueMessage ?? null);
     }
   }
 
@@ -157,6 +185,82 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
     }
   }
 
+  // Company search
+  function handleCompanySearch(q: string) {
+    setCompanySearch(q);
+    clearTimeout(companySearchTimer.current);
+    if (q.length < 2) { setCompanyResults([]); return; }
+    companySearchTimer.current = setTimeout(async () => {
+      setSearchingCompany(true);
+      try {
+        const res = await fetch("/api/admin/growth-ops/pipeline", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "searchCompanies", query: q }),
+        });
+        const data = await res.json();
+        setCompanyResults(data.results ?? []);
+      } catch { /* silent */ }
+      setSearchingCompany(false);
+    }, 300);
+  }
+
+  async function linkCompany(companyId: string) {
+    if (!deal) return;
+    await fetch("/api/admin/growth-ops/pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "linkCompany", dealId: deal.id, companyId }),
+    });
+    setShowCompanySearch(false);
+    setCompanySearch("");
+    setCompanyResults([]);
+    await reload();
+  }
+
+  // Contact search
+  function handleContactSearch(q: string) {
+    setContactSearch(q);
+    clearTimeout(contactSearchTimer.current);
+    if (q.length < 2) { setContactResults([]); return; }
+    contactSearchTimer.current = setTimeout(async () => {
+      setSearchingContact(true);
+      try {
+        const res = await fetch("/api/admin/growth-ops/pipeline", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "searchContacts", query: q }),
+        });
+        const data = await res.json();
+        setContactResults(data.results ?? []);
+      } catch { /* silent */ }
+      setSearchingContact(false);
+    }, 300);
+  }
+
+  async function linkContact(contactId: string) {
+    if (!deal) return;
+    await fetch("/api/admin/growth-ops/pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "linkContact", dealId: deal.id, contactId }),
+    });
+    setShowContactSearch(false);
+    setContactSearch("");
+    setContactResults([]);
+    await reload();
+  }
+
+  async function unlinkContact(contactId: string) {
+    if (!deal) return;
+    await fetch("/api/admin/growth-ops/pipeline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "unlinkContact", dealId: deal.id, contactId }),
+    });
+    await reload();
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -177,11 +281,31 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
     );
   }
 
+  // Separate parent stages vs substages
+  const parentStages = stages.filter((s) => !s.parentStageId);
+  const substagesMap: Record<string, Stage[]> = {};
+  stages.filter((s) => s.parentStageId).forEach((s) => {
+    if (!substagesMap[s.parentStageId!]) substagesMap[s.parentStageId!] = [];
+    substagesMap[s.parentStageId!].push(s);
+  });
+
+  // Current stage and its parent (if substage)
   const currentStage = stages.find((s) => s.id === deal.stageId);
+  const currentParentStage = currentStage?.parentStageId
+    ? stages.find((s) => s.id === currentStage.parentStageId)
+    : currentStage;
+  const currentSubstages = currentParentStage ? substagesMap[currentParentStage.id] ?? [] : [];
+
   const timeline = [
     ...activities.map((a) => ({ type: "activity" as const, date: a.createdAt, data: a })),
     ...touchpoints.map((t) => ({ type: "touchpoint" as const, date: t.touchpointAt, data: t })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // All contacts: from junction + primary (deduplicated)
+  const allContacts: DealContact[] = [...dealContacts];
+  if (contact && !allContacts.some((c) => c.id === contact.id)) {
+    allContacts.unshift({ ...contact, role: "primary" });
+  }
 
   return (
     <div>
@@ -202,9 +326,9 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
           />
           <div className="flex items-center gap-3 mt-1.5">
             {currentStage && (
-              <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" style={{ backgroundColor: currentStage.color + "1a", color: currentStage.color }}>
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: currentStage.color }} />
-                {currentStage.label}
+              <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium" style={{ backgroundColor: (currentParentStage?.color ?? currentStage.color) + "1a", color: currentParentStage?.color ?? currentStage.color }}>
+                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: currentParentStage?.color ?? currentStage.color }} />
+                {currentParentStage && currentStage.parentStageId ? `${currentParentStage.label} / ${currentStage.label}` : currentStage.label}
               </span>
             )}
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${deal.status === "won" ? "bg-emerald-100 text-emerald-700" : deal.status === "lost" ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
@@ -237,32 +361,146 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ─── Left Column ─── */}
-        <div className="lg:col-span-1 space-y-4">
-          {/* Stage selector */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* ─── Left Column — Associations ─── */}
+        <div className="lg:col-span-3 space-y-4">
+          {/* Company card */}
           <div className="rounded-cos-xl border border-cos-border bg-white p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Stage</h3>
-            <div className="flex flex-wrap gap-1.5">
-              {stages.map((stage) => (
-                <button
-                  key={stage.id}
-                  onClick={() => changeStage(stage.id)}
-                  disabled={stage.id === deal.stageId}
-                  className={`rounded-cos-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${stage.id === deal.stageId ? "ring-2 ring-offset-1" : "hover:opacity-80"}`}
-                  style={{
-                    backgroundColor: stage.id === deal.stageId ? stage.color + "20" : stage.color + "10",
-                    color: stage.color,
-                    ...(stage.id === deal.stageId ? { ringColor: stage.color } : {}),
-                  }}
-                >
-                  {stage.label}
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3 flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" /> Company
+            </h3>
+            {company ? (
+              <>
+                <p className="text-sm font-medium text-cos-midnight">{company.name}</p>
+                {company.domain && <p className="text-xs text-cos-slate mt-0.5">{company.domain}</p>}
+                {company.industry && <p className="text-xs text-cos-slate mt-0.5">{company.industry}</p>}
+                {company.sizeEstimate && <p className="text-xs text-cos-slate mt-0.5">{company.sizeEstimate} employees</p>}
+                <Link href={`/admin/growth-ops/crm/companies/acq_${company.id}`} className="text-xs text-cos-electric flex items-center gap-1 mt-2 hover:underline">
+                  View in CRM &rarr;
+                </Link>
+              </>
+            ) : (
+              <>
+                {!showCompanySearch ? (
+                  <button onClick={() => setShowCompanySearch(true)} className="flex items-center gap-1.5 text-xs text-cos-electric hover:underline">
+                    <Search className="h-3 w-3" /> Link Company
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={companySearch}
+                        onChange={(e) => handleCompanySearch(e.target.value)}
+                        placeholder="Search by name or domain..."
+                        className="w-full rounded-cos-lg border border-cos-border px-3 py-1.5 text-xs focus:border-cos-electric focus:outline-none pr-7"
+                        autoFocus
+                      />
+                      <button onClick={() => { setShowCompanySearch(false); setCompanySearch(""); setCompanyResults([]); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-cos-slate-dim hover:text-cos-midnight">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                    {searchingCompany && <Loader2 className="h-3 w-3 animate-spin text-cos-electric mx-auto" />}
+                    {companyResults.length > 0 && (
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {companyResults.map((r) => (
+                          <button key={r.id} onClick={() => linkCompany(r.id)} className="w-full text-left rounded-cos-md px-2 py-1.5 text-xs hover:bg-cos-cloud transition-colors">
+                            <p className="font-medium text-cos-midnight">{r.name}</p>
+                            {r.domain && <p className="text-[10px] text-cos-slate">{r.domain}</p>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {companySearch.length >= 2 && !searchingCompany && companyResults.length === 0 && (
+                      <p className="text-[10px] text-cos-slate-dim text-center py-1">No companies found</p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Contacts card */}
+          <div className="rounded-cos-xl border border-cos-border bg-white p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3 flex items-center gap-1.5">
+              <User className="h-3.5 w-3.5" /> Contacts ({allContacts.length})
+            </h3>
+            {allContacts.length > 0 ? (
+              <div className="space-y-3">
+                {allContacts.map((c) => (
+                  <div key={c.id} className="group">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-cos-midnight">
+                          {c.firstName} {c.lastName}
+                          {c.role === "primary" && <span className="ml-1.5 text-[9px] rounded-full bg-cos-electric/10 text-cos-electric px-1.5 py-0.5">Primary</span>}
+                        </p>
+                        {c.email && !c.email.includes("@placeholder.local") && (
+                          <p className="text-xs text-cos-slate flex items-center gap-1 mt-0.5">
+                            <Mail className="h-2.5 w-2.5" /> {c.email}
+                          </p>
+                        )}
+                        {c.linkedinUrl && (
+                          <a href={c.linkedinUrl.startsWith("http") ? c.linkedinUrl : `https://${c.linkedinUrl}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 flex items-center gap-1 mt-0.5 hover:underline">
+                            <Linkedin className="h-2.5 w-2.5" /> LinkedIn
+                          </a>
+                        )}
+                        <Link href={`/admin/growth-ops/crm/people/ac_${c.id}`} className="text-[10px] text-cos-electric hover:underline mt-0.5 inline-block">
+                          View in CRM &rarr;
+                        </Link>
+                      </div>
+                      <button onClick={() => unlinkContact(c.id)} className="opacity-0 group-hover:opacity-100 text-cos-slate-dim hover:text-red-500 transition-all" title="Unlink contact">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-cos-slate-dim">No contacts linked</p>
+            )}
+
+            {/* Add contact */}
+            <div className="mt-3 pt-3 border-t border-cos-border/50">
+              {!showContactSearch ? (
+                <button onClick={() => setShowContactSearch(true)} className="flex items-center gap-1.5 text-xs text-cos-electric hover:underline">
+                  <Plus className="h-3 w-3" /> Add Contact
                 </button>
-              ))}
+              ) : (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={contactSearch}
+                      onChange={(e) => handleContactSearch(e.target.value)}
+                      placeholder="Search by name or email..."
+                      className="w-full rounded-cos-lg border border-cos-border px-3 py-1.5 text-xs focus:border-cos-electric focus:outline-none pr-7"
+                      autoFocus
+                    />
+                    <button onClick={() => { setShowContactSearch(false); setContactSearch(""); setContactResults([]); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-cos-slate-dim hover:text-cos-midnight">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                  {searchingContact && <Loader2 className="h-3 w-3 animate-spin text-cos-electric mx-auto" />}
+                  {contactResults.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {contactResults.map((r) => (
+                        <button key={r.id} onClick={() => linkContact(r.id)} className="w-full text-left rounded-cos-md px-2 py-1.5 text-xs hover:bg-cos-cloud transition-colors">
+                          <p className="font-medium text-cos-midnight">{r.firstName} {r.lastName}</p>
+                          {r.email && <p className="text-[10px] text-cos-slate">{r.email}</p>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {contactSearch.length >= 2 && !searchingContact && contactResults.length === 0 && (
+                    <p className="text-[10px] text-cos-slate-dim text-center py-1">No contacts found</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Inline deal fields */}
+          {/* Deal metadata */}
           <div className="rounded-cos-xl border border-cos-border bg-white p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Deal Details</h3>
             <div className="space-y-3">
@@ -312,50 +550,11 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
               )}
             </div>
           </div>
-
-          {/* Contact card */}
-          {contact && (
-            <div className="rounded-cos-xl border border-cos-border bg-white p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3 flex items-center gap-1.5">
-                <User className="h-3.5 w-3.5" /> Contact
-              </h3>
-              <p className="text-sm font-medium text-cos-midnight">{contact.firstName} {contact.lastName}</p>
-              {contact.email && !contact.email.includes("@placeholder.local") && (
-                <p className="text-xs text-cos-slate flex items-center gap-1.5 mt-1">
-                  <Mail className="h-3 w-3" /> {contact.email}
-                </p>
-              )}
-              {contact.linkedinUrl && (
-                <a href={contact.linkedinUrl.startsWith("http") ? contact.linkedinUrl : `https://${contact.linkedinUrl}`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 flex items-center gap-1.5 mt-1 hover:underline">
-                  <Linkedin className="h-3 w-3" /> LinkedIn Profile
-                </a>
-              )}
-              <Link href={`/admin/growth-ops/crm/people/ac_${contact.id}`} className="text-xs text-cos-electric flex items-center gap-1 mt-2 hover:underline">
-                View in CRM &rarr;
-              </Link>
-            </div>
-          )}
-
-          {/* Company card */}
-          {company && (
-            <div className="rounded-cos-xl border border-cos-border bg-white p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3 flex items-center gap-1.5">
-                <Building2 className="h-3.5 w-3.5" /> Company
-              </h3>
-              <p className="text-sm font-medium text-cos-midnight">{company.name}</p>
-              {company.domain && <p className="text-xs text-cos-slate mt-0.5">{company.domain}</p>}
-              {company.industry && <p className="text-xs text-cos-slate mt-0.5">{company.industry}</p>}
-              {company.sizeEstimate && <p className="text-xs text-cos-slate mt-0.5">{company.sizeEstimate} employees</p>}
-              <Link href={`/admin/growth-ops/crm/companies/acq_${company.id}`} className="text-xs text-cos-electric flex items-center gap-1 mt-2 hover:underline">
-                View in CRM &rarr;
-              </Link>
-            </div>
-          )}
         </div>
 
-        {/* ─── Right Column ─── */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Notes — inline */}
+        {/* ─── Center Column — Activity & Notes ─── */}
+        <div className="lg:col-span-6 space-y-4">
+          {/* Notes */}
           <div className="rounded-cos-xl border border-cos-border bg-white p-4">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Notes</h3>
             <textarea
@@ -376,6 +575,18 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
               </button>
             </div>
           </div>
+
+          {/* Original Message */}
+          {queueMessage && (
+            <div className="rounded-cos-xl border border-cos-border bg-white p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3 flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5" /> Original Message
+              </h3>
+              <div className="rounded-cos-lg bg-cos-cloud/50 border border-cos-border/50 px-3 py-2">
+                <p className="text-sm text-cos-midnight whitespace-pre-wrap">{queueMessage}</p>
+              </div>
+            </div>
+          )}
 
           {/* Activity Timeline */}
           <div className="rounded-cos-xl border border-cos-border bg-white p-4">
@@ -417,6 +628,94 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
               </div>
             )}
           </div>
+        </div>
+
+        {/* ─── Right Column — Stage Management ─── */}
+        <div className="lg:col-span-3 space-y-4">
+          <div className="rounded-cos-xl border border-cos-border bg-white p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">Stage Pipeline</h3>
+            <div className="space-y-1">
+              {parentStages.sort((a, b) => a.displayOrder - b.displayOrder).map((stage) => {
+                const isCurrentParent = currentParentStage?.id === stage.id;
+                const subs = substagesMap[stage.id] ?? [];
+                const isCurrentStage = deal.stageId === stage.id;
+                return (
+                  <div key={stage.id}>
+                    <button
+                      onClick={() => changeStage(stage.id)}
+                      disabled={isCurrentStage}
+                      className={`w-full text-left rounded-cos-lg px-3 py-2 text-xs font-medium transition-colors flex items-center gap-2 ${
+                        isCurrentParent
+                          ? "ring-2 ring-offset-1"
+                          : "hover:opacity-80"
+                      }`}
+                      style={{
+                        backgroundColor: isCurrentParent ? stage.color + "20" : stage.color + "08",
+                        color: stage.color,
+                        ...(isCurrentParent ? { ringColor: stage.color } : {}),
+                      }}
+                    >
+                      <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
+                      {stage.label}
+                      {stage.isClosedWon && <span className="ml-auto text-[9px] opacity-60">Won</span>}
+                      {stage.isClosedLost && <span className="ml-auto text-[9px] opacity-60">Lost</span>}
+                    </button>
+
+                    {/* Show substages if this is current parent or always show them */}
+                    {subs.length > 0 && isCurrentParent && (
+                      <div className="ml-4 mt-1 mb-1 space-y-0.5">
+                        {subs.sort((a, b) => a.displayOrder - b.displayOrder).map((sub) => {
+                          const isCurrentSub = deal.stageId === sub.id;
+                          return (
+                            <button
+                              key={sub.id}
+                              onClick={() => changeStage(sub.id)}
+                              disabled={isCurrentSub}
+                              className={`w-full text-left rounded-cos-md px-2.5 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-1.5 ${
+                                isCurrentSub
+                                  ? "bg-cos-electric/10 text-cos-electric ring-1 ring-cos-electric/30"
+                                  : "text-cos-slate hover:bg-cos-cloud hover:text-cos-midnight"
+                              }`}
+                            >
+                              <span className={`h-1.5 w-1.5 rounded-full ${isCurrentSub ? "bg-cos-electric" : "bg-cos-slate-dim"}`} />
+                              {sub.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Substage quick-select pills (if current parent has substages) */}
+          {currentSubstages.length > 0 && (
+            <div className="rounded-cos-xl border border-cos-border bg-white p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim mb-3">
+                {currentParentStage?.label} Substage
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {currentSubstages.sort((a, b) => a.displayOrder - b.displayOrder).map((sub) => {
+                  const isActive = deal.stageId === sub.id;
+                  return (
+                    <button
+                      key={sub.id}
+                      onClick={() => changeStage(sub.id)}
+                      className={`rounded-cos-pill px-3 py-1 text-xs font-medium transition-colors ${
+                        isActive
+                          ? "bg-cos-electric text-white"
+                          : "bg-cos-cloud text-cos-slate hover:bg-cos-electric/10 hover:text-cos-electric"
+                      }`}
+                    >
+                      {sub.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

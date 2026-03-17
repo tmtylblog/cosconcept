@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   try {
     // ── Stage CRUD ──────────────────────────────────────────────
     if (body.action === "createStage") {
-      const { label, displayOrder, color, isClosedWon, isClosedLost } = body;
+      const { label, displayOrder, color, isClosedWon, isClosedLost, parentStageId } = body;
       const id = randomId();
       await db.insert(acqPipelineStages).values({
         id,
@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
         color: color || "#6366f1",
         isClosedWon: isClosedWon ?? false,
         isClosedLost: isClosedLost ?? false,
+        parentStageId: parentStageId || null,
       });
       return NextResponse.json({ id });
     }
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
       if (color !== undefined) updateData.color = color;
       if (isClosedWon !== undefined) updateData.isClosedWon = isClosedWon;
       if (isClosedLost !== undefined) updateData.isClosedLost = isClosedLost;
+      if (body.parentStageId !== undefined) updateData.parentStageId = body.parentStageId || null;
       await db.update(acqPipelineStages).set(updateData).where(eq(acqPipelineStages.id, stageId));
       return NextResponse.json({ ok: true });
     }

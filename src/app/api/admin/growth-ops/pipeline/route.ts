@@ -9,8 +9,9 @@ import {
   acqContacts,
   acqCompanies,
   acqDealSources,
+  acqDealContacts,
 } from "@/lib/db/schema";
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, asc, and, ilike, or } from "drizzle-orm";
 export const dynamic = "force-dynamic";
 
 async function checkAdmin() {
@@ -228,6 +229,76 @@ export async function POST(req: NextRequest) {
       // Activities cascade-delete via FK
       await db.delete(acqDeals).where(eq(acqDeals.id, dealId));
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "linkCompany") {
+      const { dealId, companyId } = body as { dealId: string; companyId: string };
+      await db.update(acqDeals).set({ companyId, updatedAt: now }).where(eq(acqDeals.id, dealId));
+      await db.insert(acqDealActivities).values({
+        id: randomId(),
+        dealId,
+        activityType: "company_linked",
+        description: "Company linked to deal",
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "linkContact") {
+      const { dealId, contactId, role } = body as { dealId: string; contactId: string; role?: string };
+      // Check if already linked
+      const [existing] = await db.select().from(acqDealContacts)
+        .where(and(eq(acqDealContacts.dealId, dealId), eq(acqDealContacts.contactId, contactId)))
+        .limit(1);
+      if (!existing) {
+        await db.insert(acqDealContacts).values({
+          id: randomId(),
+          dealId,
+          contactId,
+          role: role || null,
+        });
+      }
+      // If deal has no primary contactId, set it
+      const [deal] = await db.select({ contactId: acqDeals.contactId }).from(acqDeals).where(eq(acqDeals.id, dealId)).limit(1);
+      if (deal && !deal.contactId) {
+        await db.update(acqDeals).set({ contactId, updatedAt: now }).where(eq(acqDeals.id, dealId));
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "unlinkContact") {
+      const { dealId, contactId } = body as { dealId: string; contactId: string };
+      await db.delete(acqDealContacts)
+        .where(and(eq(acqDealContacts.dealId, dealId), eq(acqDealContacts.contactId, contactId)));
+      // If this was the primary contact, clear it
+      const [deal] = await db.select({ contactId: acqDeals.contactId }).from(acqDeals).where(eq(acqDeals.id, dealId)).limit(1);
+      if (deal && deal.contactId === contactId) {
+        await db.update(acqDeals).set({ contactId: null, updatedAt: now }).where(eq(acqDeals.id, dealId));
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "searchCompanies") {
+      const { query } = body as { query: string };
+      if (!query || query.length < 2) return NextResponse.json({ results: [] });
+      const results = await db.select({ id: acqCompanies.id, name: acqCompanies.name, domain: acqCompanies.domain, industry: acqCompanies.industry })
+        .from(acqCompanies)
+        .where(or(ilike(acqCompanies.name, `%${query}%`), ilike(acqCompanies.domain, `%${query}%`)))
+        .limit(10);
+      return NextResponse.json({ results });
+    }
+
+    if (body.action === "searchContacts") {
+      const { query } = body as { query: string };
+      if (!query || query.length < 2) return NextResponse.json({ results: [] });
+      const results = await db.select({ id: acqContacts.id, firstName: acqContacts.firstName, lastName: acqContacts.lastName, email: acqContacts.email, linkedinUrl: acqContacts.linkedinUrl })
+        .from(acqContacts)
+        .where(or(
+          ilike(acqContacts.firstName, `%${query}%`),
+          ilike(acqContacts.lastName, `%${query}%`),
+          ilike(acqContacts.email, `%${query}%`),
+        ))
+        .limit(10);
+      return NextResponse.json({ results });
     }
 
     if (body.action === "configureStages") {
