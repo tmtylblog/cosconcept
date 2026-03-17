@@ -53,7 +53,7 @@ export async function createSandboxUser(opts: {
   const name = opts.name || `Sandbox ${randomWord(RANDOM_ADJECTIVES)} ${randomWord(RANDOM_NOUNS)}`;
 
   // Normalize domain — strip protocol, trailing slashes, www prefix
-  let domain = domain?.trim() || undefined;
+  let domain = opts.domain?.trim() || undefined;
   if (domain) {
     domain = domain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   }
