@@ -80,6 +80,16 @@ export default function CompanyDetailPage() {
   const conversations: any[] = data.conversations || [];
   const research: any = data.research;
 
+  const services: any[] = data.services || [];
+  const caseStudies: any[] = data.caseStudies || [];
+  const categories: string[] = data.categories || [];
+  const skills: string[] = data.skills || [];
+  const industries: string[] = data.industries || [];
+  const markets: string[] = data.markets || [];
+  const clients: any[] = data.clients || [];
+  const abstraction: any = data.abstraction;
+  const preferences: any = data.preferences;
+
   const tabs: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }>; count?: number }[] = [
     { key: "overview", label: "Overview", icon: Building2 },
     { key: "people", label: "People", icon: Users, count: people.length },
@@ -166,42 +176,139 @@ export default function CompanyDetailPage() {
       <div className="flex-1 rounded-cos-lg border border-cos-border bg-cos-surface p-6 min-h-[300px]">
         {/* ─── Overview ─── */}
         {activeTab === "overview" && (
-          <div className="space-y-4">
-            {data.description && (
+          <div className="space-y-6">
+            {/* AI Narrative */}
+            {abstraction?.hiddenNarrative && (
+              <div>
+                <h3 className="text-sm font-medium text-cos-slate-dim mb-1">AI Summary</h3>
+                <p className="text-sm text-cos-midnight leading-relaxed">{abstraction.hiddenNarrative}</p>
+              </div>
+            )}
+
+            {data.description && !abstraction?.hiddenNarrative && (
               <div>
                 <h3 className="text-sm font-medium text-cos-slate-dim mb-1">Description</h3>
                 <p className="text-sm text-cos-midnight">{data.description}</p>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h3 className="text-sm font-medium text-cos-slate-dim mb-1">Enrichment Status</h3>
-                <p className="text-sm text-cos-midnight">{data.enrichmentStatus || "Not enriched"}</p>
-              </div>
-              {data.firmType && (
-                <div>
-                  <h3 className="text-sm font-medium text-cos-slate-dim mb-1">Firm Type</h3>
-                  <p className="text-sm text-cos-midnight">{data.firmType}</p>
-                </div>
-              )}
-              {data.profileCompleteness != null && (
-                <div>
-                  <h3 className="text-sm font-medium text-cos-slate-dim mb-1">Profile Completeness</h3>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-2 rounded-full bg-cos-cloud">
-                      <div className="h-2 rounded-full bg-cos-electric" style={{ width: `${Math.round(data.profileCompleteness * 100)}%` }} />
-                    </div>
-                    <span className="text-xs text-cos-slate">{Math.round(data.profileCompleteness * 100)}%</span>
-                  </div>
-                </div>
-              )}
-              {data.graphNodeId && (
-                <div>
-                  <h3 className="text-sm font-medium text-cos-slate-dim mb-1">Knowledge Graph</h3>
-                  <p className="text-sm text-green-600">Connected</p>
-                </div>
-              )}
+
+            {/* Firmographics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {data.firmType && <InfoCell label="Firm Type" value={data.firmType.replace(/_/g, " ")} />}
+              {data.employeeCount && <InfoCell label="Employees" value={String(data.employeeCount)} />}
+              {data.sizeEstimate && !data.employeeCount && <InfoCell label="Size" value={data.sizeEstimate.replace(/_/g, " ")} />}
+              {data.foundedYear && <InfoCell label="Founded" value={String(data.foundedYear)} />}
+              {data.location && <InfoCell label="Location" value={data.location} />}
+              <InfoCell label="Enrichment" value={data.enrichmentStatus || "Not enriched"} />
+              {data.classificationConfidence != null && <InfoCell label="Confidence" value={`${Math.round(data.classificationConfidence * 100)}%`} />}
+              {data.graphNodeId && <InfoCell label="Knowledge Graph" value="Connected" className="text-green-600" />}
             </div>
+
+            {data.profileCompleteness != null && (
+              <div>
+                <h3 className="text-sm font-medium text-cos-slate-dim mb-1">Profile Completeness</h3>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 rounded-full bg-cos-cloud">
+                    <div className="h-2 rounded-full bg-cos-electric" style={{ width: `${Math.round(data.profileCompleteness * 100)}%` }} />
+                  </div>
+                  <span className="text-xs text-cos-slate">{Math.round(data.profileCompleteness * 100)}%</span>
+                </div>
+              </div>
+            )}
+
+            {/* Taxonomy Tags */}
+            {categories.length > 0 && (
+              <TagSection label="Categories" tags={categories} color="bg-cos-electric/10 text-cos-electric" />
+            )}
+            {skills.length > 0 && (
+              <TagSection label="Skills" tags={skills} color="bg-blue-100 text-blue-700" />
+            )}
+            {industries.length > 0 && (
+              <TagSection label="Industries" tags={industries} color="bg-purple-100 text-purple-700" />
+            )}
+            {markets.length > 0 && (
+              <TagSection label="Markets" tags={markets} color="bg-amber-100 text-amber-700" />
+            )}
+
+            {/* Extracted Clients */}
+            {clients.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-cos-slate-dim mb-2">Known Clients</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {clients.map((c: any, i: number) => (
+                    <span key={i} className="text-xs bg-green-50 text-green-700 border border-green-200 rounded-full px-2.5 py-1">
+                      {typeof c === "string" ? c : c.name}
+                      {c.confidence != null && <span className="text-green-400 ml-1">{Math.round(c.confidence * 100)}%</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Services */}
+            {services.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-cos-slate-dim mb-2">Services ({services.length})</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {services.slice(0, 10).map((s: any) => (
+                    <div key={s.id} className="p-2.5 rounded-cos-md bg-cos-cloud/50 border border-cos-border/50">
+                      <div className="text-sm font-medium text-cos-midnight">{s.name}</div>
+                      {s.description && <div className="text-xs text-cos-slate mt-0.5 line-clamp-2">{s.description}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Case Studies */}
+            {caseStudies.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-cos-slate-dim mb-2">Case Studies ({caseStudies.length})</h3>
+                <div className="space-y-2">
+                  {caseStudies.slice(0, 8).map((cs: any) => (
+                    <div key={cs.id} className="p-2.5 rounded-cos-md bg-cos-cloud/50 border border-cos-border/50">
+                      <div className="text-sm font-medium text-cos-midnight">{cs.title || "Untitled"}</div>
+                      {cs.summary && <div className="text-xs text-cos-slate mt-0.5 line-clamp-2">{cs.summary}</div>}
+                      {cs.autoTags && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {(cs.autoTags.skills || []).slice(0, 3).map((t: string) => (
+                            <span key={t} className="text-[10px] bg-blue-50 text-blue-600 rounded px-1.5 py-0.5">{t}</span>
+                          ))}
+                          {cs.autoTags.clientName && (
+                            <span className="text-[10px] bg-green-50 text-green-600 rounded px-1.5 py-0.5">{cs.autoTags.clientName}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Partner Preferences */}
+            {preferences && (
+              <div>
+                <h3 className="text-sm font-medium text-cos-slate-dim mb-2">Partner Preferences</h3>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  {preferences.growthGoals && (
+                    <div className="col-span-2">
+                      <span className="font-medium text-cos-slate">Growth Goals:</span>{" "}
+                      <span className="text-cos-midnight">{preferences.growthGoals}</span>
+                    </div>
+                  )}
+                  {preferences.preferredFirmTypes?.length > 0 && (
+                    <div><span className="font-medium text-cos-slate">Preferred Types:</span> <span className="text-cos-midnight">{preferences.preferredFirmTypes.join(", ")}</span></div>
+                  )}
+                  {preferences.partnershipModels?.length > 0 && (
+                    <div><span className="font-medium text-cos-slate">Models:</span> <span className="text-cos-midnight">{preferences.partnershipModels.join(", ")}</span></div>
+                  )}
+                  {preferences.dealBreakers?.length > 0 && (
+                    <div className="col-span-2"><span className="font-medium text-red-500">Deal Breakers:</span> <span className="text-cos-midnight">{preferences.dealBreakers.join(", ")}</span></div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Quick stats */}
             <div className="flex gap-6 pt-4 border-t border-cos-border/50">
               <div className="text-center">
@@ -215,6 +322,14 @@ export default function CompanyDetailPage() {
               <div className="text-center">
                 <div className="text-lg font-bold text-cos-midnight">{conversations.length}</div>
                 <div className="text-xs text-cos-slate">Conversations</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-cos-midnight">{services.length}</div>
+                <div className="text-xs text-cos-slate">Services</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-cos-midnight">{caseStudies.length}</div>
+                <div className="text-xs text-cos-slate">Case Studies</div>
               </div>
             </div>
           </div>
@@ -396,6 +511,28 @@ export default function CompanyDetailPage() {
           <CrmAnnotationsPanel entityType="company" entityId={data.id} />
         </div>
       </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoCell({ label, value, className = "text-cos-midnight" }: { label: string; value: string; className?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] font-medium text-cos-slate-light uppercase tracking-wide">{label}</div>
+      <div className={`text-sm font-medium ${className}`}>{value}</div>
+    </div>
+  );
+}
+
+function TagSection({ label, tags, color }: { label: string; tags: string[]; color: string }) {
+  return (
+    <div>
+      <h3 className="text-sm font-medium text-cos-slate-dim mb-2">{label}</h3>
+      <div className="flex flex-wrap gap-1.5">
+        {tags.map((t: string) => (
+          <span key={t} className={`text-xs rounded-full px-2.5 py-1 ${color}`}>{t}</span>
+        ))}
       </div>
     </div>
   );

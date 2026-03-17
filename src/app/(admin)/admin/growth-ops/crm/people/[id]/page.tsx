@@ -85,7 +85,10 @@ export default function PersonDetailPage() {
   const timeline: any[] = data.timeline || [];
   const conversations: any[] = data.conversations || [];
   const skills: string[] = data.topSkills || [];
+  const allSkills: string[] = data.allSkills || [];
   const industries: string[] = data.topIndustries || [];
+  const experience: any[] = data.experience || [];
+  const education: any[] = data.education || [];
 
   const tabs: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }>; count?: number }[] = [
     { key: "profile", label: "Profile", icon: Briefcase },
@@ -209,10 +212,21 @@ export default function PersonDetailPage() {
 
             {skills.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium text-cos-slate-dim mb-2">Skills</h3>
+                <h3 className="text-sm font-medium text-cos-slate-dim mb-2">Top Skills</h3>
                 <div className="flex flex-wrap gap-1.5">
                   {skills.map((s: string) => (
                     <span key={s} className="text-xs bg-cos-electric/10 text-cos-electric rounded-full px-2.5 py-1">{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {allSkills.length > skills.length && (
+              <div>
+                <h3 className="text-sm font-medium text-cos-slate-dim mb-2">All Skills ({allSkills.length})</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {allSkills.map((s: string) => (
+                    <span key={s} className="text-xs bg-cos-cloud text-cos-slate-dim rounded-full px-2.5 py-1">{s}</span>
                   ))}
                 </div>
               </div>
@@ -224,6 +238,58 @@ export default function PersonDetailPage() {
                 <div className="flex flex-wrap gap-1.5">
                   {industries.map((i: string) => (
                     <span key={i} className="text-xs bg-purple-100 text-purple-700 rounded-full px-2.5 py-1">{i}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Work History */}
+            {experience.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-cos-slate-dim mb-2">Work History</h3>
+                <div className="space-y-3">
+                  {experience.map((exp: any, i: number) => (
+                    <div key={i} className="flex gap-3">
+                      <div className="flex flex-col items-center pt-1">
+                        <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${exp.isCurrent || exp.is_current ? "bg-cos-electric" : "bg-cos-slate-light"}`} />
+                        {i < experience.length - 1 && <div className="w-px flex-1 bg-cos-border mt-1" />}
+                      </div>
+                      <div className="pb-1">
+                        <div className="text-sm font-medium text-cos-midnight">{exp.title}</div>
+                        <div className="text-xs text-cos-slate">
+                          {typeof exp.company === "object" ? exp.company?.name : exp.company}
+                          {exp.location && <span> &middot; {exp.location}</span>}
+                        </div>
+                        <div className="text-xs text-cos-slate-light">
+                          {exp.startDate || exp.start_date || ""}
+                          {(exp.startDate || exp.start_date) && " — "}
+                          {exp.isCurrent || exp.is_current ? "Present" : exp.endDate || exp.end_date || ""}
+                        </div>
+                        {exp.description && <div className="text-xs text-cos-slate mt-1 line-clamp-2">{exp.description}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Education */}
+            {education.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-cos-slate-dim mb-2">Education</h3>
+                <div className="space-y-2">
+                  {education.map((edu: any, i: number) => (
+                    <div key={i} className="p-2.5 rounded-cos-md bg-cos-cloud/50">
+                      <div className="text-sm font-medium text-cos-midnight">{edu.schoolName || edu.school_name || edu.school}</div>
+                      {(edu.degreeName || edu.degree_name || edu.fieldOfStudy || edu.field_of_study) && (
+                        <div className="text-xs text-cos-slate">
+                          {edu.degreeName || edu.degree_name}{(edu.degreeName || edu.degree_name) && (edu.fieldOfStudy || edu.field_of_study) && " — "}{edu.fieldOfStudy || edu.field_of_study}
+                        </div>
+                      )}
+                      {(edu.graduationDate || edu.graduation_date) && (
+                        <div className="text-xs text-cos-slate-light">{edu.graduationDate || edu.graduation_date}</div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>

@@ -32,7 +32,7 @@ interface UnifiedPerson {
   createdAt: string | null;
 }
 
-type SortKey = "name" | "title" | "company";
+type SortKey = "name" | "title" | "company" | "created";
 type SortDir = "asc" | "desc";
 
 export default function CrmPeoplePage() {
@@ -41,8 +41,8 @@ export default function CrmPeoplePage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [expertOnly, setExpertOnly] = useState(false);
-  const [sort, setSort] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sort, setSort] = useState<SortKey>("created");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);

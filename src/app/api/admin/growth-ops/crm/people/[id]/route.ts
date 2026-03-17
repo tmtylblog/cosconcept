@@ -57,6 +57,12 @@ export async function GET(
         .limit(1);
 
       if (row) {
+        // Extract rich data from pdlData JSONB
+        const pdl = row.pdlData as Record<string, unknown> | null;
+        const experience = (pdl?.experience ?? []) as Record<string, unknown>[];
+        const education = (pdl?.education ?? []) as Record<string, unknown>[];
+        const pdlSkills = (pdl?.skills ?? []) as string[];
+
         person = {
           id,
           sourceTable: "expertProfiles",
@@ -77,7 +83,13 @@ export async function GET(
           topSkills: row.topSkills,
           topIndustries: row.topIndustries,
           division: row.division,
-          pdlData: row.pdlData,
+          enrichmentStatus: row.enrichmentStatus,
+          profileCompleteness: row.profileCompleteness,
+          // Rich PDL data
+          experience,
+          education,
+          allSkills: pdlSkills,
+          pdlEnrichedAt: row.pdlEnrichedAt?.toISOString() ?? null,
           createdAt: row.createdAt?.toISOString() ?? null,
         };
       }

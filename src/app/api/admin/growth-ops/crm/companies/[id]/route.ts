@@ -18,8 +18,12 @@ import {
   acqContacts,
   acqDeals,
   growthOpsConversations,
+  firmServices,
+  firmCaseStudies,
+  abstractionProfiles,
+  partnerPreferences,
 } from "@/lib/db/schema";
-import { eq, ilike, or, desc } from "drizzle-orm";
+import { eq, ilike, or, desc, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -66,17 +70,28 @@ export async function GET(
         .limit(1);
 
       if (row) {
-        // Try to fetch research by domain
         const domain = normalizeDomain(row.website);
-        let research = null;
-        if (domain) {
-          const [r] = await db
-            .select()
-            .from(companyResearch)
-            .where(eq(companyResearch.domain, domain))
-            .limit(1);
-          research = r || null;
-        }
+
+        // Extract rich data from enrichmentData JSONB
+        const ed = row.enrichmentData as Record<string, unknown> | null;
+        const companyData = (ed?.companyData ?? {}) as Record<string, unknown>;
+        const classification = (ed?.classification ?? {}) as Record<string, unknown>;
+        const extracted = (ed?.extracted ?? {}) as Record<string, unknown>;
+
+        // Fetch related data in parallel
+        const [research, services, caseStudies, abstraction, preferences] = await Promise.all([
+          domain
+            ? db.select().from(companyResearch).where(eq(companyResearch.domain, domain)).limit(1).then(r => r[0] || null)
+            : Promise.resolve(null),
+          db.select({ id: firmServices.id, name: firmServices.name, description: firmServices.description, sourceUrl: firmServices.sourceUrl, subServices: firmServices.subServices })
+            .from(firmServices).where(eq(firmServices.firmId, row.id)).orderBy(firmServices.displayOrder),
+          db.select({ id: firmCaseStudies.id, title: firmCaseStudies.title, summary: firmCaseStudies.summary, sourceUrl: firmCaseStudies.sourceUrl, status: firmCaseStudies.status, autoTags: firmCaseStudies.autoTags })
+            .from(firmCaseStudies).where(and(eq(firmCaseStudies.firmId, row.id), eq(firmCaseStudies.status, "active"))),
+          db.select({ hiddenNarrative: abstractionProfiles.hiddenNarrative, topServices: abstractionProfiles.topServices, topSkills: abstractionProfiles.topSkills, topIndustries: abstractionProfiles.topIndustries, confidenceScores: abstractionProfiles.confidenceScores, evidenceSources: abstractionProfiles.evidenceSources })
+            .from(abstractionProfiles).where(and(eq(abstractionProfiles.entityId, row.id), eq(abstractionProfiles.entityType, "firm"))).limit(1).then(r => r[0] || null),
+          db.select({ preferredFirmTypes: partnerPreferences.preferredFirmTypes, preferredIndustries: partnerPreferences.preferredIndustries, preferredMarkets: partnerPreferences.preferredMarkets, partnershipModels: partnerPreferences.partnershipModels, dealBreakers: partnerPreferences.dealBreakers, growthGoals: partnerPreferences.growthGoals })
+            .from(partnerPreferences).where(eq(partnerPreferences.firmId, row.id)).limit(1).then(r => r[0] || null),
+        ]);
 
         company = {
           id,
@@ -84,13 +99,13 @@ export async function GET(
           sourceId,
           name: row.name,
           domain,
-          industry: null,
-          sizeEstimate: row.sizeBand,
-          location: null,
-          logoUrl: null,
-          linkedinUrl: null,
+          industry: (companyData.industry as string) ?? (classification.categories as string[] | undefined)?.[0] ?? null,
+          sizeEstimate: row.sizeBand || (companyData.size as string) || null,
+          location: (companyData.location as string) || null,
+          logoUrl: (ed?.logoUrl as string) || null,
+          linkedinUrl: (companyData.linkedinUrl as string) || null,
           website: row.website,
-          foundedYear: row.foundedYear,
+          foundedYear: row.foundedYear ?? (companyData.founded as number) ?? null,
           description: row.description,
           entityClass: row.isCosCustomer || row.isPlatformMember ? "customer" : "knowledge_graph",
           serviceFirmId: row.id,
@@ -101,8 +116,22 @@ export async function GET(
           enrichmentStatus: row.enrichmentStatus,
           profileCompleteness: row.profileCompleteness,
           firmType: row.firmType,
-          enrichmentData: row.enrichmentData,
+          employeeCount: companyData.employeeCount ?? null,
+          // Classification taxonomy
+          categories: classification.categories ?? [],
+          skills: classification.skills ?? [],
+          industries: classification.industries ?? [],
+          markets: classification.markets ?? [],
+          classificationConfidence: classification.confidence ?? null,
+          // Extracted ground truth
+          clients: extracted.clients ?? [],
+          extractedServices: extracted.services ?? [],
+          // Related entities
           research,
+          services,
+          caseStudies,
+          abstraction,
+          preferences,
           createdAt: row.createdAt?.toISOString() ?? null,
         };
       }
