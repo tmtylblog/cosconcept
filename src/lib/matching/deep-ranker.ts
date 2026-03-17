@@ -19,6 +19,9 @@ import type { MatchCandidate, AbstractionProfile } from "./types";
 import { logUsage } from "@/lib/ai/gateway";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { db } from "@/lib/db";
+import { firmCaseStudies } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 
 // Load symbiotic relationships for partnership context
 let _relationshipsCache: { typeA: string; typeB: string; nature: string; frequency: string }[] | null = null;
@@ -86,6 +89,12 @@ export async function deepRank(input: RankingInput): Promise<MatchCandidate[]> {
 
   if (candidates.length === 0) return [];
 
+  // Enrich firm candidates with case study highlights (only for top 50, cheap)
+  const firmCandidates = candidates.filter((c) => c.entityType === "firm" || !c.entityType);
+  if (firmCandidates.length > 0) {
+    await enrichWithCaseStudyHighlights(firmCandidates.slice(0, 50));
+  }
+
   // Build entity-aware candidate summaries for the LLM
   const candidateSummaries = candidates
     .slice(0, 50)
@@ -132,7 +141,7 @@ Services: ${services?.length ? services.join(", ") : "N/A"}
 Skills: ${c.preview.topSkills.join(", ") || "N/A"}
 Industries: ${c.preview.industries.join(", ") || "N/A"}
 Markets: ${markets?.length ? markets.join(", ") : "N/A"}
-${clientSize ? `Client Segment: ${clientSizeLabel[clientSize] ?? clientSize}\n` : ""}${langs?.length ? `Languages: ${langs.join(", ")}\n` : ""}${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"} (proven work)\n` : "No case studies (unproven)\n"}${teamExp ? `Team Experience: ${teamExp}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
+${clientSize ? `Client Segment: ${clientSizeLabel[clientSize] ?? clientSize}\n` : ""}${langs?.length ? `Languages: ${langs.join(", ")}\n` : ""}${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"} (proven work)\n` : "No case studies (unproven)\n"}${c.preview.caseStudyHighlights?.length ? `Key Outcomes: ${c.preview.caseStudyHighlights.slice(0, 3).join("; ")}\n` : ""}${teamExp ? `Team Experience: ${teamExp}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
     })
     .join("\n\n");
 
@@ -151,15 +160,19 @@ Goals: ${searcherProfile.partnershipReadiness.partnershipGoals.join(", ")}
   let symbioticContext = "";
   const relationships = getSymbioticRelationships();
   if (relationships.length > 0) {
-    // Match against searcher's categories AND services for broader coverage
+    // Match against searcher's categories, services, and industries for broader coverage
     const searcherTerms = [
       ...(searcherProfile?.topServices ?? []),
-      // Also check if candidate categories were passed from the structured filter
+      ...(searcherProfile?.topIndustries ?? []),
+      ...(searcherProfile?.topSkills ?? []).slice(0, 5),
     ];
-    // Add categories from evidenceSources if available
+    // Add categories from evidenceSources or partnershipReadiness
     if (searcherProfile?.evidenceSources) {
       const es = searcherProfile.evidenceSources as Record<string, unknown>;
       if (Array.isArray(es.categories)) searcherTerms.push(...(es.categories as string[]));
+    }
+    if (searcherProfile?.partnershipReadiness?.preferredPartnerTypes) {
+      searcherTerms.push(...searcherProfile.partnershipReadiness.preferredPartnerTypes);
     }
     const relevantRels = searcherTerms.length > 0
       ? relationships.filter((r) =>
@@ -280,5 +293,54 @@ IMPORTANT: Always return results. A partial match with a low score is better tha
     console.error("[DeepRanker] LLM ranking failed:", err);
     // Fall back to Layer 2 scores
     return candidates.slice(0, topK);
+  }
+}
+
+/**
+ * Enrich firm candidates with case study outcome highlights.
+ * Loads cosAnalysis.outcomes from firmCaseStudies for each firm.
+ * Only runs for the top ~50 candidates going into the LLM ranker.
+ */
+async function enrichWithCaseStudyHighlights(candidates: MatchCandidate[]): Promise<void> {
+  const firmIds = candidates.map((c) => c.entityId).filter(Boolean);
+  if (firmIds.length === 0) return;
+
+  try {
+    // Batch query: get top outcomes for all candidate firms
+    const rows = await db
+      .select({
+        firmId: firmCaseStudies.firmId,
+        cosAnalysis: firmCaseStudies.cosAnalysis,
+      })
+      .from(firmCaseStudies)
+      .where(
+        and(
+          eq(firmCaseStudies.status, "active"),
+        )
+      );
+
+    // Build a map of firmId -> outcomes
+    const outcomesByFirm = new Map<string, string[]>();
+    for (const row of rows) {
+      if (!firmIds.includes(row.firmId)) continue;
+      const analysis = row.cosAnalysis as { outcomes?: string[] } | null;
+      if (analysis?.outcomes?.length) {
+        const existing = outcomesByFirm.get(row.firmId) ?? [];
+        existing.push(...analysis.outcomes);
+        outcomesByFirm.set(row.firmId, existing);
+      }
+    }
+
+    // Attach to candidates
+    for (const candidate of candidates) {
+      const outcomes = outcomesByFirm.get(candidate.entityId);
+      if (outcomes?.length) {
+        // Dedupe and take top 5
+        candidate.preview.caseStudyHighlights = [...new Set(outcomes)].slice(0, 5);
+      }
+    }
+  } catch (err) {
+    // Non-critical — don't fail the ranking
+    console.warn("[DeepRanker] Failed to load case study highlights:", err);
   }
 }

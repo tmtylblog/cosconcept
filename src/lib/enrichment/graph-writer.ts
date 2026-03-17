@@ -576,7 +576,7 @@ export async function writeSpecialistProfileToGraph(
       }
     );
 
-    // Link skills from specialist profile
+    // Link skills from specialist profile (both to SpecialistProfile AND Person nodes)
     if (data.skills?.length) {
       await neo4jWrite(
         `MATCH (sp:SpecialistProfile {id: $id})
@@ -587,9 +587,19 @@ export async function writeSpecialistProfileToGraph(
          SET r.source = "specialist_profile"`,
         { id: data.profileId, skills: data.skills }
       );
+      // Also create HAS_EXPERTISE edges from the Person node (used by search)
+      await neo4jWrite(
+        `MATCH (p:Person {id: $expertId})
+         UNWIND $skills AS skillName
+         MERGE (s:Skill {name: skillName})
+         ON CREATE SET s.level = "L2"
+         MERGE (p)-[r:HAS_EXPERTISE]->(s)
+         SET r.source = "specialist_profile"`,
+        { expertId: data.expertId, skills: data.skills }
+      );
     }
 
-    // Link industries
+    // Link industries (both to SpecialistProfile AND Person nodes)
     if (data.industries?.length) {
       await neo4jWrite(
         `MATCH (sp:SpecialistProfile {id: $id})
@@ -598,6 +608,15 @@ export async function writeSpecialistProfileToGraph(
          MERGE (sp)-[r:SERVES_INDUSTRY]->(i)
          SET r.source = "specialist_profile"`,
         { id: data.profileId, industries: data.industries }
+      );
+      // Also create edges from Person node (used by search)
+      await neo4jWrite(
+        `MATCH (p:Person {id: $expertId})
+         UNWIND $industries AS indName
+         MERGE (i:Industry {name: indName})
+         MERGE (p)-[r:EXPERT_IN_INDUSTRY]->(i)
+         SET r.source = "specialist_profile"`,
+        { expertId: data.expertId, industries: data.industries }
       );
     }
 

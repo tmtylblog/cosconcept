@@ -22,7 +22,7 @@ import {
 } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { generateFirmAbstraction } from "@/lib/matching/abstraction-generator";
-import { generateQueryEmbedding } from "@/lib/matching/vector-search";
+import { generateFirmEmbedding } from "@/lib/matching/vector-search";
 
 interface Payload {
   firmId: string;
@@ -52,6 +52,7 @@ export async function handleFirmAbstraction(
       title: firmCaseStudies.title,
       autoTags: firmCaseStudies.autoTags,
       summary: firmCaseStudies.summary,
+      cosAnalysis: firmCaseStudies.cosAnalysis,
     })
     .from(firmCaseStudies)
     .where(
@@ -124,17 +125,19 @@ export async function handleFirmAbstraction(
       (enrichmentData.industries as string[]) ??
       csIndustries,
     markets: (enrichmentData.markets as string[]) ?? [],
-    caseStudies: caseStudies.map((cs) => ({
-      title: cs.title ?? "Untitled case study",
-      clientName:
-        (cs.autoTags as { clientName?: string | null } | null)?.clientName ??
-        undefined,
-      skills:
-        (cs.autoTags as { skills?: string[] } | null)?.skills ?? [],
-      industries:
-        (cs.autoTags as { industries?: string[] } | null)?.industries ?? [],
-      outcomes: [],
-    })),
+    caseStudies: caseStudies.map((cs) => {
+      const tags = cs.autoTags as { skills?: string[]; industries?: string[]; clientName?: string | null; services?: string[] } | null;
+      const analysis = cs.cosAnalysis as { summary?: string; outcomes?: string[]; services?: string[] } | null;
+      return {
+        title: cs.title ?? "Untitled case study",
+        clientName: tags?.clientName ?? undefined,
+        skills: tags?.skills ?? [],
+        industries: tags?.industries ?? [],
+        outcomes: analysis?.outcomes ?? [],
+        summary: analysis?.summary ?? cs.summary ?? undefined,
+        servicesUsed: analysis?.services ?? tags?.services ?? [],
+      };
+    }),
     experts: experts.map((e) => ({
       name: e.fullName ?? "Unknown",
       headline: e.headline ?? undefined,
@@ -167,7 +170,7 @@ export async function handleFirmAbstraction(
     .filter(Boolean)
     .join("\n\n");
 
-  const embedding = await generateQueryEmbedding(embeddingInput);
+  const embedding = await generateFirmEmbedding(embeddingInput);
 
   if (embedding.length > 0) {
     await db

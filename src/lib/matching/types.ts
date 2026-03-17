@@ -139,6 +139,8 @@ export interface MatchCandidate {
     teamExperience?: string;
     /** Firm: what size clients they typically serve */
     clientSizeSegment?: "startup" | "smb" | "mid_market" | "enterprise" | "mixed";
+    /** Firm: top case study outcomes/highlights for LLM ranker context */
+    caseStudyHighlights?: string[];
   };
 }
 

@@ -49,6 +49,8 @@ interface FirmEvidence {
     skills: string[];
     industries: string[];
     outcomes: string[];
+    summary?: string;
+    servicesUsed?: string[];
   }[];
   /** Team members with roles */
   experts: {
@@ -141,10 +143,15 @@ export async function generateFirmAbstraction(
     evidence.caseStudies.length > 0
       ? evidence.caseStudies
           .slice(0, 10)
-          .map(
-            (cs) =>
-              `- ${cs.title}${cs.clientName ? ` (${cs.clientName})` : ""}: skills=${cs.skills.join(",")} industries=${cs.industries.join(",")}`
-          )
+          .map((cs) => {
+            const parts = [`- ${cs.title}${cs.clientName ? ` (client: ${cs.clientName})` : ""}`];
+            if (cs.summary) parts.push(`  Summary: ${cs.summary.slice(0, 150)}`);
+            if (cs.servicesUsed?.length) parts.push(`  Services: ${cs.servicesUsed.join(", ")}`);
+            if (cs.skills.length) parts.push(`  Skills: ${cs.skills.join(", ")}`);
+            if (cs.industries.length) parts.push(`  Industries: ${cs.industries.join(", ")}`);
+            if (cs.outcomes.length) parts.push(`  Outcomes: ${cs.outcomes.join("; ")}`);
+            return parts.join("\n");
+          })
           .join("\n")
       : "No case studies available";
 
@@ -205,6 +212,7 @@ Create a normalized profile that captures:
 6. Partnership readiness signals
 
 Prioritize EVIDENCE over CLAIMS. Case studies and actual work > marketing copy.
+Case study outcomes are the strongest signal of what a firm can deliver — mention specific results when available.
 Team work history is strong signal — a firm with ex-Google, ex-McKinsey talent has deep enterprise/consulting experience even if their own website doesn't emphasize it.
 Be specific and factual. Avoid generic language.`,
     schema: z.object({
@@ -281,7 +289,8 @@ Be specific and factual. Avoid generic language.`,
   };
 
   // Generate embedding for the hidden narrative (powers cosine similarity in Layer 2)
-  const embeddingVector = await generateQueryEmbedding(profile.hiddenNarrative);
+  const embeddingText = `${profile.hiddenNarrative}\n\nServices: ${result.object.topServices.join(", ")}\nSkills: ${result.object.topSkills.join(", ")}\nIndustries: ${result.object.topIndustries.join(", ")}`;
+  const embeddingVector = await generateFirmEmbedding(embeddingText);
 
   // Persist to database (all AI-generated fields + embedding)
   await db
