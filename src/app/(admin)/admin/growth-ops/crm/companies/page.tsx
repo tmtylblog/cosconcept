@@ -31,6 +31,7 @@ interface UnifiedCompany {
   industry: string | null;
   sizeEstimate: string | null;
   location: string | null;
+  logoUrl: string | null;
   website: string | null;
   entityClass: string;
   enrichmentStatus: string | null;
@@ -222,8 +223,19 @@ export default function CrmCompaniesPage() {
                       onClick={() => router.push(`/admin/growth-ops/crm/companies/${encodeURIComponent(c.id)}`)}
                     >
                       <td className="px-4 py-3">
-                        <div className="font-medium text-cos-midnight">{c.name}</div>
-                        <div className="text-xs text-cos-slate-light">{c.domain || "(no domain)"}</div>
+                        <div className="flex items-center gap-2.5">
+                          {c.logoUrl ? (
+                            <img src={c.logoUrl} alt="" className="h-7 w-7 rounded object-contain shrink-0 bg-white" />
+                          ) : (
+                            <div className="h-7 w-7 rounded bg-cos-electric/10 flex items-center justify-center text-xs font-bold text-cos-electric shrink-0">
+                              {c.name.charAt(0)}
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-medium text-cos-midnight">{c.name}</div>
+                            <div className="text-xs text-cos-slate-light">{c.domain || "(no domain)"}</div>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>

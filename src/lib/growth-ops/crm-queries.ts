@@ -83,6 +83,7 @@ export async function getUnifiedCompanies(
         profileCompleteness: serviceFirms.profileCompleteness,
         isCosCustomer: serviceFirms.isCosCustomer,
         isPlatformMember: serviceFirms.isPlatformMember,
+        enrichmentData: serviceFirms.enrichmentData,
         createdAt: serviceFirms.createdAt,
       })
       .from(serviceFirms)
@@ -94,17 +95,22 @@ export async function getUnifiedCompanies(
         r.isCosCustomer || r.isPlatformMember ? "customer" : "knowledge_graph";
       if (entityClass !== "all" && ec !== entityClass) continue;
 
+      // Extract rich data from enrichmentData JSONB
+      const ed = r.enrichmentData as Record<string, unknown> | null;
+      const companyData = (ed?.companyData ?? {}) as Record<string, unknown>;
+      const classification = (ed?.classification ?? {}) as Record<string, unknown>;
+
       results.push({
         id: `sf_${r.id}`,
         sourceTable: "serviceFirms",
         sourceId: r.id,
         name: r.name,
         domain: normalizeDomain(r.website),
-        industry: null,
-        sizeEstimate: r.sizeBand,
-        location: null,
-        logoUrl: null,
-        linkedinUrl: null,
+        industry: (companyData.industry as string) ?? (classification.categories as string[] | undefined)?.[0] ?? null,
+        sizeEstimate: r.sizeBand || (companyData.size as string) || null,
+        location: (companyData.location as string) || null,
+        logoUrl: (ed?.logoUrl as string) || null,
+        linkedinUrl: (companyData.linkedinUrl as string) || null,
         website: r.website,
         foundedYear: r.foundedYear,
         description: r.description,
