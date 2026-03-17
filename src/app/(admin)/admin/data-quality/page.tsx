@@ -121,29 +121,46 @@ export default function DataQualityPage() {
 
   async function handleDelete() {
     if (selected.size === 0) return;
-    const confirmMsg = `Permanently delete ${selected.size} organization(s) and ALL their data (firms, experts, case studies, graph nodes)?\n\nThis cannot be undone.`;
+    const orgIds = Array.from(selected);
+    const confirmMsg = `Permanently delete ${orgIds.length} organization(s) and ALL their data (firms, experts, case studies, graph nodes)?\n\nThis cannot be undone.`;
     if (!window.confirm(confirmMsg)) return;
 
     setDeleting(true);
     setDeleteResult(null);
+
+    // Delete one at a time to avoid Vercel timeout
+    let deleted = 0;
+    let failedCount = 0;
+
+    for (let i = 0; i < orgIds.length; i++) {
+      setDeleteResult(`Deleting ${i + 1} of ${orgIds.length}...`);
+      try {
+        const res = await fetch("/api/admin/data-quality/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orgIds: [orgIds[i]] }),
+        });
+        if (res.ok) {
+          deleted++;
+        } else {
+          failedCount++;
+        }
+      } catch {
+        failedCount++;
+      }
+    }
+
+    setDeleteResult(
+      `Deleted ${deleted} of ${orgIds.length} organizations.${failedCount > 0 ? ` ${failedCount} failed.` : ""}`
+    );
+    setSelected(new Set());
+    setDeleting(false);
+
+    // Refresh data
     try {
-      const res = await fetch("/api/admin/data-quality/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgIds: Array.from(selected) }),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error ?? `HTTP ${res.status}`);
-      setDeleteResult(result.message);
-      setSelected(new Set());
-      // Refresh data
       const refreshRes = await fetch("/api/admin/data-quality");
       if (refreshRes.ok) setData(await refreshRes.json());
-    } catch (err) {
-      setDeleteResult(`Error: ${err instanceof Error ? err.message : "Delete failed"}`);
-    } finally {
-      setDeleting(false);
-    }
+    } catch { /* ignore */ }
   }
 
   const filtered = getFilteredFirms();
