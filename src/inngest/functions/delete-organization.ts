@@ -38,7 +38,7 @@ export const deleteOrganization = inngest.createFunction(
     id: "admin-delete-organization",
     name: "Delete Organization",
     retries: 2,
-    concurrency: [{ limit: 3 }],
+    concurrency: [{ limit: 1 }],
   },
   { event: "admin/delete-organization" },
   async ({ event, step }) => {

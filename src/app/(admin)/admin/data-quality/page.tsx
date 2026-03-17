@@ -56,7 +56,9 @@ export default function DataQualityPage() {
   const [deleteResult, setDeleteResult] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterMode>("flagged");
   const [searchQuery, setSearchQuery] = useState("");
+  const [autoRefresh, setAutoRefresh] = useState(false);
 
+  // Initial load
   useEffect(() => {
     fetch("/api/admin/data-quality")
       .then(async (r) => {
@@ -67,6 +69,21 @@ export default function DataQualityPage() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  // Auto-refresh table every 15s while deletions are processing
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(async () => {
+      try {
+        const r = await fetch("/api/admin/data-quality");
+        if (r.ok) {
+          const newData = await r.json();
+          setData(newData);
+        }
+      } catch { /* ignore */ }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
 
   function toggleSelect(orgId: string) {
     setSelected((prev) => {
@@ -138,22 +155,15 @@ export default function DataQualityPage() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error ?? `HTTP ${res.status}`);
       setDeleteResult(
-        `Queued ${orgIds.length} organization(s) for deletion. Processing in background — refresh in ~30 seconds to see updated list.`
+        `Queued ${orgIds.length} organization(s) for deletion. Table auto-refreshes every 15 seconds.`
       );
       setSelected(new Set());
+      setAutoRefresh(true);
     } catch (err) {
       setDeleteResult(`Error: ${err instanceof Error ? err.message : "Delete failed"}`);
     }
 
     setDeleting(false);
-
-    // Auto-refresh after 30 seconds
-    setTimeout(async () => {
-      try {
-        const refreshRes = await fetch("/api/admin/data-quality");
-        if (refreshRes.ok) setData(await refreshRes.json());
-      } catch { /* ignore */ }
-    }, 30000);
   }
 
   const filtered = getFilteredFirms();
@@ -275,21 +285,31 @@ export default function DataQualityPage() {
         )}
       </div>
 
-      {/* Delete result */}
+      {/* Delete result + auto-refresh indicator */}
       {deleteResult && (
         <div
           className={`flex items-center gap-2 rounded-cos-lg px-3 py-2 text-xs font-medium ${
             deleteResult.startsWith("Error")
               ? "border border-cos-ember/20 bg-cos-ember/5 text-cos-ember"
-              : "border border-cos-signal/20 bg-cos-signal/5 text-cos-signal"
+              : "border border-cos-electric/20 bg-cos-electric/5 text-cos-electric"
           }`}
         >
           {deleteResult.startsWith("Error") ? (
             <XCircle className="h-3.5 w-3.5 shrink-0" />
+          ) : autoRefresh ? (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
           ) : (
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
           )}
-          {deleteResult}
+          <span className="flex-1">{deleteResult}</span>
+          {autoRefresh && (
+            <button
+              onClick={() => { setAutoRefresh(false); setDeleteResult(null); }}
+              className="text-[10px] underline opacity-70 hover:opacity-100"
+            >
+              Stop refreshing
+            </button>
+          )}
         </div>
       )}
 
