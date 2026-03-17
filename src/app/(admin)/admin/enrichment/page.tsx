@@ -15,6 +15,7 @@ import {
   Rocket,
   Zap,
   AlertCircle,
+  Brain,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePaginated, PaginationFooter } from "@/components/ui/pagination-footer";
@@ -630,6 +631,74 @@ function FullSystemEnrichmentSection() {
   );
 }
 
+// ─── Abstraction Section ────────────────────────────────
+
+function AbstractionSection() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function regenerateAll(force: boolean) {
+    const msg = force
+      ? "Regenerate ALL abstraction profiles? This re-processes every enriched firm with fresh AI + embeddings."
+      : "Generate missing abstraction profiles only?";
+    if (!window.confirm(msg)) return;
+
+    setRunning(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/enrich/backfill-abstractions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setResult(data.message ?? `Queued ${data.queued} firms for abstraction.`);
+    } catch (err) {
+      setResult(`Error: ${err instanceof Error ? err.message : "Failed"}`);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-5 space-y-3">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="font-heading text-base font-semibold text-cos-midnight flex items-center gap-2">
+            <Brain className="h-4 w-4 text-cos-signal" />
+            Abstraction Profiles
+          </h2>
+          <p className="mt-1 text-xs text-cos-slate">
+            AI-generated firm profiles with embeddings that power vector search (Layer 2) and LLM ranking (Layer 3).
+            Regenerate after enrichment to incorporate new case study outcomes, expert data, and services.
+          </p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => regenerateAll(false)} disabled={running} className="text-xs">
+            {running ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Brain className="mr-1.5 h-3.5 w-3.5" />}
+            Fill Missing
+          </Button>
+          <Button size="sm" onClick={() => regenerateAll(true)} disabled={running} className="bg-cos-signal hover:bg-cos-signal/90 text-xs">
+            {running ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Brain className="mr-1.5 h-3.5 w-3.5" />}
+            Regenerate All
+          </Button>
+        </div>
+      </div>
+      {result && (
+        <div className={`flex items-center gap-2 rounded-cos-lg px-3 py-2 text-xs font-medium ${
+          result.startsWith("Error")
+            ? "border border-cos-ember/20 bg-cos-ember/5 text-cos-ember"
+            : "border border-cos-signal/20 bg-cos-signal/5 text-cos-signal"
+        }`}>
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          {result}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────
 
 export default function AdminEnrichmentPage() {
@@ -687,6 +756,9 @@ export default function AdminEnrichmentPage() {
 
       {/* Full System Enrichment */}
       <FullSystemEnrichmentSection />
+
+      {/* Abstraction Regeneration */}
+      <AbstractionSection />
 
       {/* Enrichment Audit Trail */}
       <form
