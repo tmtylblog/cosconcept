@@ -156,7 +156,7 @@ export default function CrmPeoplePage() {
               <thead>
                 <tr className="border-b border-cos-border bg-cos-cloud/50 text-left">
                   <th
-                    className="px-4 py-3 font-medium text-cos-slate-dim cursor-pointer hover:text-cos-midnight select-none"
+                    className="px-4 py-3 font-medium text-cos-slate-dim cursor-pointer hover:text-cos-midnight select-none w-[35%]"
                     onClick={() => toggleSort("name")}
                   >
                     <span className="inline-flex items-center">
@@ -164,7 +164,7 @@ export default function CrmPeoplePage() {
                     </span>
                   </th>
                   <th
-                    className="px-4 py-3 font-medium text-cos-slate-dim cursor-pointer hover:text-cos-midnight select-none"
+                    className="px-4 py-3 font-medium text-cos-slate-dim cursor-pointer hover:text-cos-midnight select-none w-[30%]"
                     onClick={() => toggleSort("title")}
                   >
                     <span className="inline-flex items-center">
@@ -172,14 +172,14 @@ export default function CrmPeoplePage() {
                     </span>
                   </th>
                   <th
-                    className="px-4 py-3 font-medium text-cos-slate-dim cursor-pointer hover:text-cos-midnight select-none"
+                    className="px-4 py-3 font-medium text-cos-slate-dim cursor-pointer hover:text-cos-midnight select-none w-[25%]"
                     onClick={() => toggleSort("company")}
                   >
                     <span className="inline-flex items-center">
                       Company <SortIcon column="company" />
                     </span>
                   </th>
-                  <th className="px-4 py-3 font-medium text-cos-slate-dim text-right">Actions</th>
+                  <th className="px-4 py-3 font-medium text-cos-slate-dim text-right w-[10%]">Actions</th>
                 </tr>
               </thead>
               <tbody>
