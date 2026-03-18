@@ -192,6 +192,25 @@
 - `expert_profiles`: 5,899 rows, 910 firms — PDL batch discovery complete
 - `/discover` page fixed: tool access unlocked for discover section, `firmId` optional in `ossy-tools.ts`
 
+**What's done (2026-03-17 additions):**
+- **Discover UX overhaul** — 3-column layout: Nav | Content Feed | Ossy Chat
+  - Center content feed with inline result cards, firm detail blocks, expert detail blocks
+  - Result cards: dismissible (X button), clickable, staggered slide-up animation
+  - Firm detail blocks: tabbed (Overview/Case Studies/Experts/Details), closable
+  - Expert detail blocks: inline with search relevance highlighting, closable
+  - Dedup: clicking same entity twice prevented
+  - Auto-scroll to new detail blocks on click
+- **Ossy consultative behavior** — sharpening follow-ups, conversation continuity, refinement comparisons
+  - `_sharpeningHints` in discover_search tool results (category splits, evidence gaps, etc.)
+  - System prompt enforces: always respond after search, compare refinements, maintain continuity
+  - Contextual commentary when user views profiles — with actual profile data, not just names
+- **Page event system for discover** — `discover_firm_viewed` / `discover_expert_viewed` events
+  - Events include full `dataSummary` (categories, skills, industries, case studies, experts)
+  - Emitted after data loads (not before), 2s polling flush, no per-section limits
+  - `[PAGE_EVENT]` messages hidden from chat UI
+- **Empty result handling** — `search_experts` and `search_case_studies` return `_instruction` on empty results for conversational response
+- **Legacy components deprecated:** `discover-drawer.tsx`, `discover-results.tsx` replaced by inline stream blocks
+
 **What's not done (gaps):**
 - **Abstraction profiles not auto-triggered** — no Inngest job to compute profiles when content changes
 - **Bidirectional matching needs real data** — logic exists but untested at scale

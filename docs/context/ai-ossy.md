@@ -147,6 +147,43 @@ Analyzes which of the user's clients would benefit from a specific partner's cap
 
 General-purpose search across the Collective OS knowledge graph. Searches firms, experts, and case studies via `executeSearch()`. Returns up to 8 candidates with match scores, categories, skills, and a `resultAnalysis` summary for Ossy to ask sharpening follow-ups.
 
+**Enhanced tool result fields (added 2026-03-17):**
+- `_sharpeningHints[]` — specific observations from result data: category splits, evidence gaps, industry variety, skill clusters. Ossy references these in post-search analysis.
+- `_instruction` — explicit instructions with good/bad response examples. Enforces consultant tone.
+- `search_experts` and `search_case_studies` now include `_instruction` on empty results to ensure conversational response (not raw "no results" card).
+
+---
+
+## Ossy Page Events & Contextual Commentary
+
+**Key file:** `src/lib/ossy-events.ts`
+
+### How It Works
+Components emit `cos:page-event` custom events → ChatPanel queues them → polling interval flushes when Ossy is idle → sent as `[PAGE_EVENT]` user messages (hidden from chat UI) → Ossy responds with contextual commentary.
+
+### Two-Effect Pattern (in ChatPanel)
+1. **Listener effect** (no deps on `status`) — just pushes events to queue. Registers once, never re-registers.
+2. **Flush effect** (polls every 2-3s) — checks `status === "ready"`, cooldown, then sends queued events.
+
+This separation prevents stale closure bugs where events get lost during streaming.
+
+### Discover-Specific Events
+| Event Type | Trigger | Data Included |
+|---|---|---|
+| `discover_firm_viewed` | User clicks firm in center panel | Full profile data: categories, skills, industries, case studies, experts, description |
+| `discover_expert_viewed` | User clicks expert | Skills, industries, specialist profiles, case studies, firm name |
+
+**Key difference from general events:** Discover events include `dataSummary` field with actual profile data so Ossy can give real analysis instead of guessing. Events are emitted AFTER data loads from API (not before).
+
+### Discover Throttling
+- 2s cooldown (vs 30s for general events)
+- No "one per section" limit
+- No session dedup
+- 2s polling interval (vs 3s)
+
+### `[PAGE_EVENT]` Message Hiding
+In ChatPanel's message render loop, user messages starting with `[PAGE_EVENT]` are filtered out (`return null`). They still exist in `useChat` state so Ossy has conversation context, but the user never sees them.
+
 ---
 
 ## Memory System

@@ -1,203 +1,302 @@
 # Discover Page
 
-> Last updated: 2026-03-12 (evening — merge conflict resolved, profile page built, search wired)
+> Last updated: 2026-03-17 (unified discover stream, consultative Ossy, inline profiles)
 
 ## Overview
 
 The Discover page (`/discover`) is the ecosystem exploration surface of COS. It lets platform members find partner firms, individual experts, and case studies across the full network — driven entirely through conversation with Ossy.
 
 **Route:** `src/app/(app)/discover/page.tsx`
-**Access:** Authenticated users only. `@joincollectiveos.com` emails are auto-redirected to `/admin` — see [Testing as Admin](#testing-as-admin).
+**Access:** Authenticated users only.
+
+---
+
+## Architecture: 3-Column Layout with Inline Content Feed
+
+```
+┌──────────┬─────────────────────────────┬──────────────────────┐
+│  NavBar  │     Center Content Feed     │  Ossy Chat Panel     │
+│  (left)  │  - Idle state / starters    │  (dark bg, w-96)     │
+│          │  - Result cards             │  - useChat lives here│
+│          │  - Firm detail (inline)     │  - Event flush here  │
+│          │  - Expert detail (inline)   │  - Contextual cmntry │
+│          │  NO chat input here         │                      │
+└──────────┴─────────────────────────────┴──────────────────────┘
+```
+
+### Key Design Decisions
+
+1. **Center panel is content-only** — no `useChat`, no chat input, no message bubbles. It renders search results, firm detail blocks, and expert detail blocks.
+2. **Right panel (ChatPanel) owns the conversation** — Ossy's chat, `useChat` hook, event listener/flush, and all AI interaction lives in the existing `ChatPanel` aside.
+3. **Communication via context + events** — search results flow from ChatPanel → `DiscoverResultsProvider` context → center panel. User clicks in center emit `cos:page-event` custom events → ChatPanel's polling flush sends them to Ossy.
+4. **No modals, no drawers** — firm/expert details expand inline in the center feed. Users dismiss them with X buttons.
+
+### Why This Architecture (Not Unified Stream)
+
+We tried a unified single-stream approach (chat + content interleaved in one column, no right aside). It failed because:
+- The chat and content compete for attention in one column
+- Ossy's conversational flow gets lost between large content blocks
+- The user wants to read Ossy's commentary while simultaneously scanning results — requires two panels
+- The ChatPanel's proven event handling (two-effect listener+flush pattern) breaks when duplicated in a separate component
 
 ---
 
 ## Design Principles
 
-### Search vs Matchmaking
-Discovery and Matchmaking are two distinct features. This page is **Search/Discovery only** — it surfaces the ecosystem. Matchmaking (bidirectional fit scoring, partnership recommendations, proactive suggestions) is a separate phase and is explicitly **out of scope** for this page.
-
 ### Ossy is a Consultant, Not a Search Box
-There is no traditional search bar on this page. Ossy is the sole entry point to discovery. Ossy is designed to:
-- **Listen to problems and challenges**, not just execute keyword queries
-- **Challenge weak or overly broad queries** — if a user asks something vague, Ossy responds with clarifying questions to help them arrive at more relevant, specific results
-- **Design solutions** — she understands the case studies, experts, and partner firms in the network and helps users think through what they actually need
+There is no traditional search bar. Ossy is the sole entry point to discovery. Ossy:
+- **Listens to problems and challenges**, not keyword queries
+- **Challenges weak or overly broad queries** with clarifying questions
+- **Analyzes results** — summarizes patterns, splits, gaps in the data
+- **Asks sharpening follow-ups** — not "want me to narrow?" but "I noticed half are full-service and half are boutiques — which fits your model?"
+- **Maintains full conversation continuity** — references earlier searches, firms viewed, stated preferences
+- **Compares refinements** — when narrowing, says who stayed, who's new, who dropped off
+- **Provides contextual commentary** when user views a firm/expert profile — with real data, connecting to search intent
+- **Suggests next steps** — "Want me to search for case studies?" or "Their lead expert might be worth an intro"
 
-Ossy does not behave like a search engine. She behaves like a knowledgeable consultant who happens to have access to the full network.
+### Critical Ossy Behaviors (Enforced in System Prompt)
+1. MUST always include text after calling `discover_search` — never let tool result be the entire response
+2. On refinement searches, compare to previous results
+3. Maintain full conversation continuity across all interactions
+4. When user views a profile, connect observations to their stated goals
+5. Never describe what user just clicked — tell them what they can't see (how it fits, what to watch for, what to do next)
 
 ---
 
 ## Page States
 
 ### Idle State (no results yet)
-Shown before the user has asked Ossy anything.
-
-**Message framing:** Ossy explains that she understands the case studies, experts, and partner firms in the network and is standing by. She asks the user to tell her about a need they have or a problem they're trying to solve, and she'll do her best to help.
-
-Do **not** frame this as "search for something." Frame it as "tell me about a challenge."
-
-Includes pre-written conversation starters that inject text into Ossy chat (via `window.dispatchEvent(new CustomEvent("cos:inject-chat", ...))`) — these should be problem/challenge-framed, not query-framed.
+- "Discover Your Network" heading + description
+- "Start a conversation with Ossy" CTA → dispatches `cos:inject-chat` event
+- Pre-written conversation starters (challenge-framed, not query-framed)
 
 ### Searching State
-Skeleton cards shown while Ossy is processing.
+- Skeleton loader cards (3 pulsing placeholders)
+- Shown while `discover.searching === true`
+- **Important:** Results are NOT rendered during searching (prevents "No matches found" flash)
 
 ### Results State
-Grid of result cards (see below). Header shows result count and a summary of what Ossy found.
+- Result cards from `useDiscoverResults().results`
+- Header shows count + query text
+- Each card has X dismiss button (lower-right) to remove from list
 
-A "Clear" button resets back to idle state.
+### Detail Blocks
+- Firm/expert detail blocks from `useDiscoverStream().items`
+- Rendered below results when user clicks "View Profile"
+- X close button (upper-right) removes from feed
+- Clicking same entity twice is prevented (dedup via `shownEntitiesRef`)
 
 ---
 
 ## Result Cards
 
-Each card represents one entity (firm, expert, or case study). Cards are surfaced by Ossy — the page renders whatever Ossy returns.
-
 ### Fit Tiers
-Results are grouped into three tiers (not a percentage score):
-
-| Tier | When to use |
-|------|------------|
-| **Strong Fit** | High relevance across multiple dimensions |
-| **Good Fit** | Solid relevance, some gaps |
-| **Worth Exploring** | Peripheral relevance, may be interesting |
-
-The tier label appears as a badge on the card. No numeric match percentage is shown.
+| Tier | Score Range | Badge Color |
+|------|-----------|-------------|
+| **Strong Fit** | ≥75% | Green |
+| **Good Fit** | ≥50% | Electric blue |
+| **Worth Exploring** | <50% | Slate |
 
 ### Card Content
-- Firm name (or expert name / case study title)
-- Entity type indicator (Firm / Expert / Case Study)
-- Fit tier badge
-- A few contextually relevant content snippets — e.g., if the user asked about Shopify, surface Shopify-related skills or a relevant case study title from that firm
-- Categories / headline info (firm type, location if available)
+- Entity icon (Building2/User/BookOpen by type)
+- Display name + categories/firm name
+- Match score % + fit tier badge
+- Explanation text (from search engine, line-clamped to 2 lines)
+- Skill pills (up to 4) + industry pills (up to 2)
+- "View Profile" button
+- X dismiss button (lower-right)
 
-### Card Action
-One action only: **View Profile** → navigates to `/discover/[firmId]` (or equivalent for experts/case studies).
-
-No "Request Partnership" button on cards — matchmaking is out of scope for this phase.
+### Card Actions
+- **Click anywhere on card** → opens inline detail block below
+- **X button** → removes card from results list
+- Cards use `animate-slide-up` with staggered 60ms delays
 
 ---
 
-## Profile Page — `/discover/[firmId]`
+## Firm Detail Block (Inline)
 
-A full-page firm showcase. The purpose is to make the viewer want to meet this firm — think dating profile on a matchmaking service, not a directory listing.
+Tabbed profile rendered in the center feed. Component: `src/components/discover/stream-blocks/firm-detail-block.tsx`
 
-### Design Philosophy
-- **Trust-first content hierarchy** — lead with what establishes credibility: clients served, case studies, notable experts
-- **Dynamic** — sections with no data are hidden entirely. The page adapts to what the firm has.
-- **Contextual** — sections and content within sections reorder based on what the user asked Ossy. If they asked about Shopify expertise, case studies with Shopify skills float to the top. If they asked about APAC presence, markets and APAC-relevant case studies lead.
+### Tabs
+| Tab | Content |
+|-----|---------|
+| Overview | Description, quick facts (website, LinkedIn, size), key experts (clickable), recent case studies, skills preview |
+| Case Studies | Full list of case studies with skill/industry tags |
+| Experts | Full expert list (clickable → opens expert detail) |
+| Details | Categories, skills, industries, markets (full tag clouds) |
 
-The search context from Ossy must be passed to this page (via URL params or navigation state) so the layout can personalize itself.
+### Behavior
+- Loading state: skeleton with pulse animation
+- X close button in upper-right header
+- Max height 500px with internal scroll
+- Clicking an expert opens an expert detail block below
 
-### Content Sections (in default order — reorders contextually)
-1. **Firm overview** — name, website, location, size, firm type, founded year, logo
-2. **What they do** — categories, services (with descriptions)
-3. **Case studies** — the most trust-building section. Show title, client name, skills demonstrated, industry. Link to source. Prioritize case studies most relevant to the search context.
-4. **Notable experts** — team members with public profiles. Name, title, headline, top skills.
-5. **Skills & expertise** — L2 skills, industries served, markets
-6. **Clients** — notable client names if available
-7. **Partnership signals** — open to partnerships, preferred partner types, partnership goals *(shown only if data exists)*
+---
 
-### CTAs
-- **Ask Ossy about them** — opens/focuses Ossy chat panel with the firm pre-loaded as context
-- **Request Partnership** — *deferred, not in scope for this phase*
+## Expert Detail Block (Inline)
 
-### API
-`GET /api/discover/[firmId]` — reads from Postgres. Auth required.
+Expert profile rendered in the center feed. Component: `src/components/discover/stream-blocks/expert-detail-block.tsx`
 
-Returns: firm base data, classification (categories/skills/industries/markets), services, case studies (active, non-hidden), experts (public only), abstraction profile (narrative, typical client profile, partnership readiness).
+### Content
+- "Relevant to your search" section — matching skills/industries highlighted in signal green
+- Firm affiliation with link
+- LinkedIn link + languages
+- Specialist profiles (title, description, skills)
+- Full skills/industries/markets tag clouds
+- Case studies with skill/industry tags
+
+### Behavior
+- X close button in upper-right header
+- Max height 450px with internal scroll
+
+---
+
+## Ossy Contextual Commentary (Page Events)
+
+When a user clicks a firm/expert in the center panel, the system:
+
+1. **Fetches entity data** from `/api/discover/entity`
+2. **After data loads**, builds a data summary (categories, skills, industries, case studies, experts, description)
+3. **Emits `cos:page-event`** with `dataSummary` field containing actual profile data
+4. **ChatPanel's polling flush** (2s interval on discover) picks up the event
+5. **Sends `[PAGE_EVENT]` as user message** to Ossy (hidden from chat UI)
+6. **Ossy responds** with consultative commentary connecting the profile to the user's search goals
+
+### Event Types
+```typescript
+| { type: "discover_firm_viewed"; entityId: string; displayName: string; dataSummary: string }
+| { type: "discover_expert_viewed"; entityId: string; displayName: string; dataSummary: string }
+```
+
+### Throttling (Discover-Specific)
+- **2s cooldown** between discover events (vs 30s for general page events)
+- **No "one per section" limit** — every firm/expert click triggers commentary
+- **No session dedup** — discover events always fire
+- **2s polling interval** (vs 3s for general pages)
+- **[PAGE_EVENT] messages hidden** from chat UI (filtered in ChatPanel render)
 
 ---
 
 ## Data Flow
 
 ```
-User → describes a problem or need to Ossy in chat panel
-  → Ossy asks clarifying questions if query is weak/broad
-  → Ossy runs search_partners / search_experts / search_case_studies tool
-  → Tool calls POST /api/search (three-layer cascade)
-  → Results + fit tiers pushed to useDiscoverResults context
-  → /discover page renders result cards
+User → types in ChatPanel (right aside)
+  → Ossy calls discover_search tool
+  → ChatPanel intercepts tool result via onSearchResults callback
+  → callback calls discover.setResults() via DiscoverResultsProvider context
+  → Center content feed re-renders with result cards
 
-User → clicks "View Profile" on a card
-  → navigates to /discover/[firmId]
-  → search context passed via URL/state
-  → profile page fetches firm data from GET /api/discover/[firmId]
-  → sections ordered by relevance to search context
-  → user clicks "Ask Ossy about them"
-  → Ossy chat opens with firm pre-loaded as context
+User → clicks result card in center
+  → handleViewProfile dispatches by entityType (firm/expert)
+  → pushFirmDetail() or pushExpertDetail() in DiscoverStreamProvider
+  → Detail block appears (skeleton → loaded)
+  → After data loads, cos:page-event emitted with data summary
+  → ChatPanel flush sends [PAGE_EVENT] to Ossy
+  → Ossy responds with contextual commentary in right chat
+
+User → clicks X on result card
+  → Card removed from discover.results via setResults()
+
+User → clicks X on detail block
+  → Block removed from stream.items via removeItem()
+
+User → clicks conversation starter
+  → cos:inject-chat event dispatched
+  → ChatPanel picks it up and sends as user message
 ```
 
 ---
 
-## Entity Types
-
-| Type | Icon color | Standalone card? | Profile page |
-|------|-----------|-----------------|--------------|
-| `firm` | `cos-electric` | Yes | `/discover/[firmId]` |
-| `expert` | `cos-warm` | Yes | TBD (not yet built) |
-| `case_study` | `cos-signal` | Yes | TBD (links to source URL) |
-
----
-
-## Technical State
-
-### Merge Conflict — File Won't Compile
-`src/app/(app)/discover/page.tsx` has an **unresolved git merge conflict** between two versions. Must be resolved before the page works. The correct version to keep is **Option A (Ossy-driven)** — the upstream version. The stashed version (self-contained search bar) should be discarded.
-
-### Components
+## Components
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `src/app/(app)/discover/page.tsx` | Main page — Ossy-driven result display | ✅ Working |
-| `src/hooks/use-discover-results.tsx` | React context — Ossy pushes results here | ✅ Working |
-| `src/components/discover/discover-drawer.tsx` | Side drawer component | Available (unused) |
-| `src/app/(app)/discover/[firmId]/page.tsx` | Firm profile page — trust-first, dynamic | ✅ Built |
+| `src/app/(app)/discover/page.tsx` | Page wrapper — renders DiscoverStream | ✅ Working |
+| `src/components/discover/discover-stream.tsx` | Center content feed — results + detail blocks (NO chat) | ✅ Working |
+| `src/components/discover/stream-blocks/result-cards-block.tsx` | Search result cards with dismiss | ✅ Working |
+| `src/components/discover/stream-blocks/firm-detail-block.tsx` | Tabbed inline firm profile | ✅ Working |
+| `src/components/discover/stream-blocks/expert-detail-block.tsx` | Inline expert profile | ✅ Working |
+| `src/hooks/use-discover-stream.tsx` | Stream state — detail blocks, dedup, data fetch, event emit | ✅ Working |
+| `src/hooks/use-discover-results.tsx` | Search results context (shared between layout + page) | ✅ Working |
+| `src/app/(app)/discover/[firmId]/page.tsx` | Full-page firm profile (separate route) | ✅ Built |
+| `src/components/discover/discover-drawer.tsx` | Legacy side drawer (deprecated — replaced by inline blocks) | Deprecated |
+| `src/components/discover/discover-results.tsx` | Legacy results grid (deprecated — replaced by stream blocks) | Deprecated |
+| `src/components/discover/discover-filters.tsx` | Filter sidebar (future: collapsible bar) | Available |
 
 ### API Endpoints
 
-| Endpoint | File | Purpose | Auth |
-|----------|------|---------|------|
-| `POST /api/search` | `src/app/api/search/route.ts` | Three-layer search cascade | None (needs adding) |
-| `GET /api/discover/entity` | `src/app/api/discover/entity/route.ts` | Neo4j entity detail | None |
-| `GET /api/discover/[firmId]` | `src/app/api/discover/[firmId]/route.ts` | Postgres firm profile | Required |
-
-### Known Issues
-
-| Issue | File | Status | Notes |
-|-------|------|--------|-------|
-| ~~Unresolved merge conflict~~ | `src/app/(app)/discover/page.tsx` | ✅ RESOLVED | Conflict resolved; Ossy-driven architecture kept |
-| ~~No `/discover/[firmId]` page~~ | `src/app/(app)/discover/[firmId]/page.tsx` | ✅ BUILT | Trust-first profile page with sections + Ask Ossy CTA |
-| ~~Fit tier logic not yet implemented~~ | `src/app/(app)/discover/page.tsx` | ✅ DONE | Strong Fit / Good Fit / Worth Exploring tiers |
-| No auth on `POST /api/search` | `src/app/api/search/route.ts` | ⚠️ Open | Needs auth check before production hardening |
-| Firm entity query missing `Company` label | `src/app/api/discover/entity/route.ts:50` | ⚠️ Open | Should be `MATCH (f:Company:ServiceFirm ...)` |
-| Search context not passed to profile page | — | ⚠️ Partial | URL `?context=` param exists but ordering logic not fully wired |
-| Expert profile pages | — | ⚠️ Not built | `/discover/[expertId]` page not yet built |
+| Endpoint | File | Purpose |
+|----------|------|---------|
+| `POST /api/search` | `src/app/api/search/route.ts` | Three-layer search cascade |
+| `GET /api/discover/entity` | `src/app/api/discover/entity/route.ts` | Neo4j entity detail (firm/expert/case_study) |
+| `GET /api/discover/[firmId]` | `src/app/api/discover/[firmId]/route.ts` | Postgres firm profile |
 
 ---
 
-## Testing as Admin
+## Ossy System Prompt — Discover Mode
 
-`@joincollectiveos.com` users are auto-redirected to `/admin` by `src/app/(app)/layout.tsx:104-109`.
+When `firmSection === "discover"`, the system prompt adds ~2000 tokens of discover-specific instructions. Key sections:
 
-**Options to test `/discover`:**
-1. **Impersonation (recommended):** From `/admin` → find a customer → "Impersonate" → navigate to `/discover`. Orange banner appears. Stop impersonating to return.
-2. **Comment out redirect:** Temporarily comment out lines 104-109 in `src/app/(app)/layout.tsx`.
-3. **Use a non-COS email:** Log in with a Gmail or other non-`@joincollectiveos.com` test account.
+### Consultant Mindset
+- Interpret follow-ups in context (not as new searches)
+- Challenge vague requests
+- Probe before searching
+- Synthesize, don't just retrieve
+- Know when NOT to search
+
+### Critical Rules (Post-Search)
+1. Always include text after calling discover_search
+2. Compare refinement searches to previous results (who stayed, who's new)
+3. Maintain full conversation continuity
+4. Never let a tool result be the entire response
+5. Reference `_sharpeningHints` from tool result for analysis
+
+### Contextual Commentary Rules
+- Reference user's original search intent
+- Call out specific strengths from actual data
+- Flag gaps honestly
+- Suggest next steps
+- Never describe what user clicked — tell them what they can't see
+
+### Tool Result Enhancements
+- `discover_search` returns `_sharpeningHints[]` with specific observations (category splits, evidence gaps, industry variety, skill clusters)
+- `discover_search` returns `_instruction` with explicit good/bad response examples
+- `search_experts` / `search_case_studies` return `_instruction` on empty results to ensure conversational response
 
 ---
 
-## What's In Scope (This Phase)
+## Patterns for Derivative Systems (Partnerships)
 
-- Resolve merge conflict → restore Ossy-driven result display
-- Idle state with correct Ossy-as-consultant messaging and challenge-framed conversation starters
-- Result cards with fit tiers (Strong Fit / Good Fit / Worth Exploring), no match %
-- Fit tier bucketing logic (map raw scores to three tiers)
-- Build `/discover/[firmId]` profile page — trust-first, dynamic, contextual
-- Pass search context from Ossy results to profile page for section ordering
+When building the Partnerships page with similar discover-like behavior, replicate these patterns:
 
-## What's Out of Scope (This Phase)
+### Architecture
+1. **Separate content from conversation** — content in center, Ossy chat in right aside
+2. **Use context providers** at layout level for cross-component state sharing
+3. **Emit page events** with actual data (not just entity names) for Ossy commentary
+4. **Two-effect event pattern** in ChatPanel: (1) listener that queues, (2) polling interval that flushes when ready
+5. **Hide system messages** — filter `[PAGE_EVENT]` from chat UI render
 
-- Standalone search bar on the discover page
-- Request Partnership flow
-- Matchmaking / bidirectional fit scoring UI
-- Expert profile pages
-- Case study detail pages
+### Ossy Behavior
+1. **Consultant tone** — always connect observations to user's stated goals
+2. **Sharpening follow-ups** — observe data patterns, suggest strategic directions
+3. **Conversation continuity** — reference everything discussed in the session
+4. **Conversational empty states** — never show raw "no results" UI in chat; always suggest alternatives
+5. **Contextual commentary** — real data analysis, not narration of user actions
+
+### UI Components
+1. **Result cards** — dismissible, clickable, staggered animation
+2. **Detail blocks** — inline expandable, closable, tabbed for complex data
+3. **Dedup** — prevent duplicate detail blocks via ref tracking
+4. **Auto-scroll** — scroll to new detail blocks on click; track `updateCounter` for data load completion
+5. **Skeleton states** — show during search and during detail data load
+
+---
+
+## Known Issues
+
+| Issue | Status | Notes |
+|-------|--------|-------|
+| No auth on `POST /api/search` | ⚠️ Open | Needs auth check |
+| Expert profile pages (`/discover/[expertId]`) | ⚠️ Not built | Only inline detail blocks exist |
+| Collapsible filter bar | 🔮 Planned | Thin bar along left edge, expands on click |
+| Search context not fully passed to `[firmId]` page | ⚠️ Partial | URL `?context=` exists but ordering not wired |
