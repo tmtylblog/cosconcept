@@ -674,6 +674,10 @@ export async function getEvidenceTrace(
     categories: candidateGraph.categories,
     expertCount: candidateGraph.experts.length,
     expertSkills: [...new Set(candidateGraph.experts.flatMap((e) => e.skills))],
+    caseStudyIndustries: [...new Set(candidateGraph.caseStudies.flatMap((cs) => cs.industries))],
+    caseStudySkills: [...new Set(candidateGraph.caseStudies.flatMap((cs) => cs.skills))],
+    expertIndustries: [...new Set(candidateGraph.experts.flatMap((e) => e.industries))],
+    clientIndustries: [], // Not available from evidence-trace's queryFirmGraph (clients don't have industry in that query)
   };
   const graphPrefEdges: GraphPrefEdge[] = prefEdges.map((pe) => ({
     dim: pe.dimension,

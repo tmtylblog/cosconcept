@@ -76,6 +76,14 @@ export interface GraphSignals {
   categories: string[];
   expertCount: number;
   expertSkills: string[];
+  /** Industries proven by case studies (2-hop: firm→CS→IN_INDUSTRY) */
+  caseStudyIndustries: string[];
+  /** Skills proven by case studies (2-hop: firm→CS→DEMONSTRATES_SKILL) */
+  caseStudySkills: string[];
+  /** Expert industry expertise (2-hop: firm←person→SERVES_INDUSTRY) */
+  expertIndustries: string[];
+  /** Client industries (firm→HAS_CLIENT→Company.industry) */
+  clientIndustries: string[];
 }
 
 export interface GraphPrefEdge {
@@ -243,6 +251,10 @@ export async function batchFetchGraphSignals(
       categories: string[];
       expertCount: unknown;
       expertSkills: string[];
+      csIndustries: string[];
+      csSkills: string[];
+      expertIndustries: string[];
+      clientIndustries: string[];
     }>(
       `UNWIND $firmIds AS fid
        MATCH (f:Company:ServiceFirm {id: fid})
@@ -267,7 +279,24 @@ export async function batchFetchGraphSignals(
        OPTIONAL MATCH (f)<-[:CURRENTLY_AT]-(p:Person)-[:HAS_SKILL|HAS_EXPERTISE]->(es:Skill)
        WITH f, skills, services, caseStudyCount, industries, markets, categories,
          count(DISTINCT p) AS expertCount, collect(DISTINCT es.name) AS expertSkills
-       RETURN f.id AS firmId, skills, services, caseStudyCount, industries, markets, categories, expertCount, expertSkills`,
+       // Connected entity traversals (2-hop)
+       OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs2:CaseStudy)-[:IN_INDUSTRY]->(ci:Industry)
+       WHERE cs2.hidden IS NULL OR cs2.hidden = false
+       WITH f, skills, services, caseStudyCount, industries, markets, categories, expertCount, expertSkills,
+         collect(DISTINCT ci.name) AS csIndustries
+       OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs3:CaseStudy)-[:DEMONSTRATES_SKILL]->(csk:Skill)
+       WHERE cs3.hidden IS NULL OR cs3.hidden = false
+       WITH f, skills, services, caseStudyCount, industries, markets, categories, expertCount, expertSkills, csIndustries,
+         collect(DISTINCT csk.name) AS csSkills
+       OPTIONAL MATCH (f)<-[:CURRENTLY_AT]-(p2:Person)-[:SERVES_INDUSTRY]->(ei:Industry)
+       WHERE p2.hidden IS NULL OR p2.hidden = false
+       WITH f, skills, services, caseStudyCount, industries, markets, categories, expertCount, expertSkills, csIndustries, csSkills,
+         collect(DISTINCT ei.name) AS expertIndustries
+       OPTIONAL MATCH (f)-[:HAS_CLIENT]->(cl:Company)
+       WHERE cl.industry IS NOT NULL
+       WITH f, skills, services, caseStudyCount, industries, markets, categories, expertCount, expertSkills, csIndustries, csSkills, expertIndustries,
+         collect(DISTINCT cl.industry) AS clientIndustries
+       RETURN f.id AS firmId, skills, services, caseStudyCount, industries, markets, categories, expertCount, expertSkills, csIndustries, csSkills, expertIndustries, clientIndustries`,
       { firmIds }
     );
 
@@ -290,6 +319,10 @@ export async function batchFetchGraphSignals(
         categories: (row.categories ?? []).filter(Boolean),
         expertCount: toInt(row.expertCount),
         expertSkills: (row.expertSkills ?? []).filter(Boolean),
+        caseStudyIndustries: (row.csIndustries ?? []).filter(Boolean),
+        caseStudySkills: (row.csSkills ?? []).filter(Boolean),
+        expertIndustries: (row.expertIndustries ?? []).filter(Boolean),
+        clientIndustries: (row.clientIndustries ?? []).filter(Boolean),
       });
     }
     return map;
@@ -386,9 +419,21 @@ export function scorePartnerMatches(
     const gPrefs = graphPrefs?.get(c.id);
 
     // Merge PG and graph data — prefer graph when available, fall back to PG
+    // For services/skills, merge direct edges + connected entity data (case study skills, expert skills)
     const cServices = g?.services?.length ? [...new Set([...cData.services, ...g.services.map((s) => s.name)])] : cData.services;
-    const cSkills = g?.skills?.length ? [...new Set([...cData.skills, ...g.skills.map((s) => s.name)])] : cData.skills;
-    const cIndustries = g?.industries?.length ? [...new Set([...cData.industries, ...g.industries])] : cData.industries;
+    const cSkills = g ? [...new Set([
+      ...cData.skills,
+      ...(g.skills?.length ? g.skills.map((s) => s.name) : []),
+      ...(g.caseStudySkills ?? []),  // Skills proven by case studies
+    ])] : cData.skills;
+    // For industries, merge direct SERVES_INDUSTRY + case study IN_INDUSTRY + expert SERVES_INDUSTRY + client industries
+    const cIndustries = g ? [...new Set([
+      ...cData.industries,
+      ...(g.industries ?? []),           // Direct SERVES_INDUSTRY edges
+      ...(g.caseStudyIndustries ?? []),  // 2-hop: case study → IN_INDUSTRY
+      ...(g.expertIndustries ?? []),     // 2-hop: expert → SERVES_INDUSTRY
+      ...(g.clientIndustries ?? []),     // Client company industries
+    ])] : cData.industries;
     const cMarkets = g?.markets?.length ? [...new Set([...cData.markets, ...g.markets])] : cData.markets;
     const cCategory = (
       (g?.categories?.[0] ?? cData.categories[0] ?? String(c.firmType ?? ""))
