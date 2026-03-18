@@ -56,7 +56,15 @@ const navItems: NavItem[] = [
     ],
   },
   { icon: Users, label: "Network", href: "/network" },
-  { icon: Handshake, label: "Partnerships", href: "/partnerships" },
+  {
+    icon: Handshake,
+    label: "Partnerships",
+    href: "/partnerships",
+    children: [
+      { label: "My Partnerships", href: "/partnerships" },
+      { label: "Find Partners", href: "/partner-matching", icon: Sparkles },
+    ],
+  },
   { icon: Settings, label: "Settings", href: "/settings" },
 ];
 

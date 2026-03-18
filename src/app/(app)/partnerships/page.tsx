@@ -1,92 +1,364 @@
-import { Handshake, Share2, TrendingUp, ShieldCheck, ArrowRight } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+"use client";
 
-const UPCOMING_FEATURES = [
-  {
-    icon: Handshake,
-    title: "Formalise partnerships",
-    description:
-      "Turn a great Discovery match into an official partnership. Both firms agree on the relationship type — referral, co-delivery, subcontracting, or white-label.",
-  },
-  {
-    icon: Share2,
-    title: "Share opportunities",
-    description:
-      "When a client need falls outside your sweet spot, pass it to the right partner. Track it from first share to closed deal.",
-  },
-  {
-    icon: TrendingUp,
-    title: "Track referral revenue",
-    description:
-      "See exactly how much pipeline your partnerships generate — in both directions — so you can invest in the relationships that actually pay off.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Trusted inner circle",
-    description:
-      "Only your confirmed partners see the opportunities you share. No spam, no cold approaches — a closed loop built on mutual trust.",
-  },
-];
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import {
+  Handshake,
+  ArrowRight,
+  Loader2,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Send,
+  Users,
+  Sparkles,
+  ExternalLink,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+// ─── Types ──────────────────────────────────────────────────
+
+interface PartnerFirm {
+  id: string;
+  name: string;
+  website?: string;
+  description?: string;
+}
+
+interface Partnership {
+  id: string;
+  firmAId: string;
+  firmBId: string;
+  status: "suggested" | "requested" | "accepted" | "declined" | "inactive";
+  type: string;
+  initiatedBy: string;
+  matchScore: number | null;
+  matchExplanation: string | null;
+  notes: string | null;
+  acceptedAt: string | null;
+  createdAt: string;
+  partnerFirm: PartnerFirm;
+  isInitiator: boolean;
+}
+
+// ─── Stats Bar ──────────────────────────────────────────────
+
+function StatsBar({ partnerships }: { partnerships: Partnership[] }) {
+  const active = partnerships.filter((p) => p.status === "accepted").length;
+  const pendingIncoming = partnerships.filter(
+    (p) => p.status === "requested" && !p.isInitiator
+  ).length;
+  const pendingOutgoing = partnerships.filter(
+    (p) => p.status === "requested" && p.isInitiator
+  ).length;
+  const introsSent = partnerships.filter(
+    (p) => p.status !== "declined" && p.status !== "inactive"
+  ).length;
+
+  const stats = [
+    { label: "Active Partners", value: active, color: "text-cos-signal" },
+    { label: "Incoming Requests", value: pendingIncoming, color: "text-cos-warm" },
+    { label: "Outgoing Requests", value: pendingOutgoing, color: "text-cos-electric" },
+    { label: "Total Introductions", value: introsSent, color: "text-cos-midnight" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {stats.map((s) => (
+        <div
+          key={s.label}
+          className="rounded-cos-xl border border-cos-border bg-cos-surface p-4 text-center"
+        >
+          <p className={cn("font-heading text-2xl font-bold", s.color)}>
+            {s.value}
+          </p>
+          <p className="mt-0.5 text-[11px] text-cos-slate-dim">{s.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Partnership Card ───────────────────────────────────────
+
+function PartnershipCard({
+  partnership,
+  firmId,
+  onAction,
+}: {
+  partnership: Partnership;
+  firmId: string;
+  onAction: () => void;
+}) {
+  const [acting, setActing] = useState(false);
+
+  const statusConfig = {
+    accepted: { icon: CheckCircle2, label: "Active", color: "text-cos-signal bg-cos-signal/10" },
+    requested: { icon: Clock, label: "Pending", color: "text-cos-warm bg-cos-warm/10" },
+    suggested: { icon: Sparkles, label: "Suggested", color: "text-cos-electric bg-cos-electric/10" },
+    declined: { icon: XCircle, label: "Declined", color: "text-cos-slate bg-cos-cloud-dim" },
+    inactive: { icon: XCircle, label: "Inactive", color: "text-cos-slate bg-cos-cloud-dim" },
+  };
+
+  const status = statusConfig[partnership.status];
+  const StatusIcon = status.icon;
+  const isIncoming = partnership.status === "requested" && !partnership.isInitiator;
+
+  const handleAccept = async () => {
+    setActing(true);
+    try {
+      await fetch(`/api/partnerships/${partnership.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "accept" }),
+      });
+      onAction();
+    } catch {
+      // ignore
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const handleDecline = async () => {
+    setActing(true);
+    try {
+      await fetch(`/api/partnerships/${partnership.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "decline" }),
+      });
+      onAction();
+    } catch {
+      // ignore
+    } finally {
+      setActing(false);
+    }
+  };
+
+  return (
+    <div className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h4 className="font-heading text-sm font-semibold text-cos-midnight truncate">
+              {partnership.partnerFirm.name}
+            </h4>
+            {partnership.partnerFirm.website && (
+              <a
+                href={
+                  partnership.partnerFirm.website.startsWith("http")
+                    ? partnership.partnerFirm.website
+                    : `https://${partnership.partnerFirm.website}`
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 text-cos-slate-light hover:text-cos-electric"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+          {partnership.partnerFirm.description && (
+            <p className="mt-0.5 text-xs text-cos-slate line-clamp-1">
+              {partnership.partnerFirm.description}
+            </p>
+          )}
+        </div>
+        <div className={cn("flex items-center gap-1 rounded-cos-lg px-2 py-0.5 text-xs font-medium", status.color)}>
+          <StatusIcon className="h-3 w-3" />
+          {status.label}
+        </div>
+      </div>
+
+      {partnership.matchScore != null && (
+        <div className="flex items-center gap-2 text-xs text-cos-slate-dim">
+          <span>Match: {Math.round(partnership.matchScore)}%</span>
+          {partnership.type && (
+            <>
+              <span>&middot;</span>
+              <span className="capitalize">{partnership.type.replace(/_/g, " ")}</span>
+            </>
+          )}
+        </div>
+      )}
+
+      {partnership.matchExplanation && (
+        <p className="text-xs text-cos-slate leading-relaxed line-clamp-2">
+          {partnership.matchExplanation}
+        </p>
+      )}
+
+      {partnership.acceptedAt && (
+        <p className="text-[10px] text-cos-slate-dim">
+          Accepted {new Date(partnership.acceptedAt).toLocaleDateString()}
+        </p>
+      )}
+
+      {/* Incoming request actions */}
+      {isIncoming && (
+        <div className="flex items-center gap-2 pt-1">
+          <Button
+            size="sm"
+            onClick={handleAccept}
+            disabled={acting}
+          >
+            {acting ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3 w-3" />}
+            Accept
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleDecline}
+            disabled={acting}
+          >
+            Decline
+          </Button>
+        </div>
+      )}
+
+      {/* Outgoing request status */}
+      {partnership.status === "requested" && partnership.isInitiator && (
+        <div className="flex items-center gap-1.5 text-xs text-cos-warm">
+          <Send className="h-3 w-3" />
+          Awaiting response
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ──────────────────────────────────────────────
+
+type Tab = "active" | "pending";
 
 export default function PartnershipsPage() {
+  const [partnerships, setPartnerships] = useState<Partnership[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [firmId, setFirmId] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("active");
+
+  const loadPartnerships = useCallback(async () => {
+    try {
+      // firmId auto-resolved from session when omitted
+      const res = await fetch("/api/partnerships");
+      if (!res.ok) return;
+      const data = await res.json();
+      setPartnerships(data.partnerships ?? []);
+      if (data.firmId) setFirmId(data.firmId);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPartnerships();
+  }, [loadPartnerships]);
+
+  const activePartnerships = partnerships.filter((p) => p.status === "accepted");
+  const pendingPartnerships = partnerships.filter(
+    (p) => p.status === "requested" || p.status === "suggested"
+  );
+
+  const displayedPartnerships = tab === "active" ? activePartnerships : pendingPartnerships;
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-cos-electric" />
+      </div>
+    );
+  }
+
   return (
-    <div className="mx-auto max-w-2xl space-y-10 p-6 py-12">
+    <div className="cos-scrollbar mx-auto max-w-3xl overflow-y-auto p-6 space-y-6">
       {/* Header */}
-      <div className="space-y-3">
-        <span className="inline-flex items-center rounded-cos-full border border-cos-electric/30 bg-cos-electric/5 px-3 py-1 text-xs font-semibold text-cos-electric">
-          Coming soon
-        </span>
-        <h2 className="font-heading text-2xl font-bold text-cos-midnight">
-          Partnerships
-        </h2>
-        <p className="text-base text-cos-slate leading-relaxed">
-          Discovery finds the right firms. Partnerships is where those
-          relationships become a real growth engine — shared opportunities,
-          tracked referrals, and revenue you can measure.
-        </p>
-      </div>
-
-      {/* Feature cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {UPCOMING_FEATURES.map(({ icon: Icon, title, description }) => (
-          <div
-            key={title}
-            className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-5 space-y-3"
-          >
-            <div className="flex h-9 w-9 items-center justify-center rounded-cos-lg bg-cos-electric/10">
-              <Icon className="h-4.5 w-4.5 text-cos-electric" />
-            </div>
-            <div>
-              <h3 className="font-heading text-sm font-semibold text-cos-midnight">
-                {title}
-              </h3>
-              <p className="mt-1 text-xs text-cos-slate leading-relaxed">
-                {description}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* CTA */}
-      <div className="rounded-cos-2xl border border-cos-border bg-cos-surface p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-semibold text-cos-midnight">
-            Find the firms worth partnering with first
-          </p>
-          <p className="mt-0.5 text-xs text-cos-slate">
-            Use Discovery to search 1.5M+ firms and identify your best-fit
-            partners — the partnership tools will be ready when you are.
+          <h2 className="font-heading text-xl font-bold text-cos-midnight">
+            Partnerships
+          </h2>
+          <p className="mt-1 text-sm text-cos-slate">
+            Manage your partner network and track introductions.
           </p>
         </div>
-        <Button asChild size="sm" className="shrink-0">
-          <Link href="/discover">
-            Go to Discovery
-            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+        <Button asChild size="sm">
+          <Link href="/partner-matching">
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+            Find New Partners
           </Link>
         </Button>
       </div>
+
+      {/* Stats */}
+      <StatsBar partnerships={partnerships} />
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 rounded-cos-lg bg-cos-cloud-dim p-1">
+        <button
+          onClick={() => setTab("active")}
+          className={cn(
+            "flex-1 rounded-cos-md px-3 py-1.5 text-xs font-medium transition-colors",
+            tab === "active"
+              ? "bg-white text-cos-midnight shadow-sm"
+              : "text-cos-slate hover:text-cos-midnight"
+          )}
+        >
+          Active ({activePartnerships.length})
+        </button>
+        <button
+          onClick={() => setTab("pending")}
+          className={cn(
+            "flex-1 rounded-cos-md px-3 py-1.5 text-xs font-medium transition-colors",
+            tab === "pending"
+              ? "bg-white text-cos-midnight shadow-sm"
+              : "text-cos-slate hover:text-cos-midnight"
+          )}
+        >
+          Pending ({pendingPartnerships.length})
+        </button>
+      </div>
+
+      {/* Partnership list */}
+      {displayedPartnerships.length > 0 ? (
+        <div className="space-y-3">
+          {displayedPartnerships.map((p) => (
+            <PartnershipCard
+              key={p.id}
+              partnership={p}
+              firmId={firmId!}
+              onAction={loadPartnerships}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="py-16 text-center space-y-4">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-cos-2xl bg-cos-cloud-dim">
+            {tab === "active" ? (
+              <Users className="h-8 w-8 text-cos-slate-light" />
+            ) : (
+              <Clock className="h-8 w-8 text-cos-slate-light" />
+            )}
+          </div>
+          <h3 className="font-heading text-lg font-semibold text-cos-midnight">
+            {tab === "active" ? "No active partnerships yet" : "No pending requests"}
+          </h3>
+          <p className="text-sm text-cos-slate">
+            {tab === "active"
+              ? "Find your first partner and start growing together."
+              : "No partnership requests waiting for action."}
+          </p>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/partner-matching">
+              Find Partners
+              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

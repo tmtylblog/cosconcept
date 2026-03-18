@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { partnerships, partnershipEvents, serviceFirms } from "@/lib/db/schema";
+import { partnerships, partnershipEvents, serviceFirms, members } from "@/lib/db/schema";
 import { eq, or, and, desc } from "drizzle-orm";
 import type { RequestPartnershipInput } from "@/types/partnerships";
 
@@ -20,6 +20,7 @@ function generateId(prefix: string): string {
 /**
  * GET — List partnerships for the current user's firm.
  * Query params: ?status=accepted&type=trusted_partner&firmId=xxx
+ * If firmId is omitted, auto-resolves from session.
  */
 export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -28,14 +29,29 @@ export async function GET(req: NextRequest) {
   }
 
   const url = new URL(req.url);
-  const firmId = url.searchParams.get("firmId");
+  let firmId = url.searchParams.get("firmId");
   const status = url.searchParams.get("status");
 
+  // Auto-resolve firmId from session if not provided
   if (!firmId) {
-    return NextResponse.json({ error: "firmId is required" }, { status: 400 });
+    const [membership] = await db
+      .select({ orgId: members.organizationId })
+      .from(members)
+      .where(eq(members.userId, session.user.id))
+      .limit(1);
+    if (membership) {
+      const firm = await db.query.serviceFirms.findFirst({
+        where: eq(serviceFirms.organizationId, membership.orgId),
+        columns: { id: true },
+      });
+      firmId = firm?.id ?? null;
+    }
+    if (!firmId) {
+      return NextResponse.json({ error: "No firm found for user" }, { status: 404 });
+    }
   }
 
-  // Verify user has access to this firm via organization membership
+  // Verify firm exists
   const firm = await db.query.serviceFirms.findFirst({
     where: eq(serviceFirms.id, firmId),
     columns: { organizationId: true },
@@ -77,7 +93,7 @@ export async function GET(req: NextRequest) {
     })
   );
 
-  return NextResponse.json({ partnerships: enriched });
+  return NextResponse.json({ partnerships: enriched, firmId });
 }
 
 /**
