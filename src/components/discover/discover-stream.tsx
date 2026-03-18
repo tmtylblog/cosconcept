@@ -46,7 +46,7 @@ export function DiscoverStream() {
     }
   }, [streamItemCount, streamUpdateCounter, resultCount]);
 
-  // ─── Handle card clicks — dispatch by entity type ──────────
+  // ─── Handle card clicks — dispatch by entity type + scroll to detail ──
   const handleViewProfile = useCallback(
     (match: DiscoverCandidate) => {
       if (match.entityType === "expert") {
@@ -54,6 +54,8 @@ export function DiscoverStream() {
       } else {
         stream?.pushFirmDetail(match.entityId, discoverSearchQuery, match.displayName);
       }
+      // Force scroll to bottom where the new detail block will appear
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     },
     [stream, discoverSearchQuery]
   );
@@ -61,6 +63,7 @@ export function DiscoverStream() {
   const handleViewExpert = useCallback(
     (legacyId: string, displayName: string) => {
       stream?.pushExpertDetail(legacyId, discoverSearchQuery, displayName);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     },
     [stream, discoverSearchQuery]
   );

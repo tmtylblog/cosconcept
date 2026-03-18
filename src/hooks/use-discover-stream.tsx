@@ -74,7 +74,15 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
     bumpUpdate();
   }, [nextId, bumpUpdate]);
 
+  // Track shown entity IDs to prevent duplicates
+  const shownEntitiesRef = useRef<Set<string>>(new Set());
+
   const pushFirmDetail = useCallback((entityId: string, searchQuery: string, displayName?: string) => {
+    // Prevent duplicate detail blocks for the same entity
+    const key = `firm:${entityId}`;
+    if (shownEntitiesRef.current.has(key)) return;
+    shownEntitiesRef.current.add(key);
+
     const id = nextId("firm");
     const item: StreamItem = {
       type: "firm_detail",
@@ -128,6 +136,11 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
   }, [nextId, bumpUpdate]);
 
   const pushExpertDetail = useCallback((entityId: string, searchQuery: string, displayName?: string) => {
+    // Prevent duplicate detail blocks for the same entity
+    const key = `expert:${entityId}`;
+    if (shownEntitiesRef.current.has(key)) return;
+    shownEntitiesRef.current.add(key);
+
     const id = nextId("expert");
     const item: StreamItem = {
       type: "expert_detail",

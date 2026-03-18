@@ -311,6 +311,13 @@ export function createOssyTools(organizationId: string, firmId?: string) {
             skills,
             limit: limit ?? 10,
           });
+          if (experts.length === 0) {
+            return {
+              experts: [],
+              totalFound: 0,
+              _instruction: `No experts found for "${query}". Don't just say "no results" — suggest alternative searches, broader terms, or ask the user if they'd like to try a different angle. Be helpful and conversational.`,
+            };
+          }
           return { experts, totalFound: experts.length };
         } catch (err) {
           console.error("[Ossy Tools] search_experts failed:", err);
@@ -337,6 +344,13 @@ export function createOssyTools(organizationId: string, firmId?: string) {
             industries,
             limit: limit ?? 10,
           });
+          if (caseStudies.length === 0) {
+            return {
+              caseStudies: [],
+              totalFound: 0,
+              _instruction: `No case studies found for "${query}". Don't just say "no results" — suggest alternative searches or related areas where case studies might exist. Be helpful and conversational.`,
+            };
+          }
           return { caseStudies, totalFound: caseStudies.length };
         } catch (err) {
           console.error("[Ossy Tools] search_case_studies failed:", err);
