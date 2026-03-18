@@ -12,7 +12,7 @@ import { EnrichmentProvider, useEnrichment } from "@/hooks/use-enrichment";
 import { ProfileProvider, useProfile } from "@/hooks/use-profile";
 import { GuestDataProvider, useGuestData } from "@/hooks/use-guest-data";
 import { DiscoverResultsProvider, useDiscoverResults, type DiscoverCandidate } from "@/hooks/use-discover-results";
-import { DiscoverStreamProvider } from "@/hooks/use-discover-stream";
+import { DiscoverStreamProvider, useDiscoverStream } from "@/hooks/use-discover-stream";
 import { OssyContextProvider } from "@/hooks/use-ossy-context";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { authClient, useSession, useActiveOrganization } from "@/lib/auth-client";
@@ -63,6 +63,14 @@ function AppLayoutOuter({
 }) {
   const { data: activeOrg } = useActiveOrganization();
   const { data: session } = useSession();
+  const stream = useDiscoverStream();
+
+  // Set searcher org ID for self-reference in discover detail views
+  useEffect(() => {
+    if (activeOrg?.id && stream) {
+      stream.setSearcherOrgId(activeOrg.id);
+    }
+  }, [activeOrg?.id, stream]);
 
   return (
     <EnrichmentProvider organizationId={activeOrg?.id}>

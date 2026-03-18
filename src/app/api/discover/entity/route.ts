@@ -6,6 +6,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { neo4jRead } from "@/lib/neo4j";
+import { db } from "@/lib/db";
+import { serviceFirms } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
 
@@ -13,16 +16,36 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const entityId = searchParams.get("entityId");
   const entityType = searchParams.get("entityType") as "firm" | "expert" | "case_study" | null;
+  const searcherFirmIdParam = searchParams.get("searcherFirmId");
+  const searcherOrgId = searchParams.get("searcherOrgId");
+
+  // Resolve searcherFirmId from org if needed
+  let searcherFirmId = searcherFirmIdParam;
+  if (!searcherFirmId && searcherOrgId) {
+    try {
+      const [row] = await db.select({ id: serviceFirms.id }).from(serviceFirms).where(eq(serviceFirms.organizationId, searcherOrgId)).limit(1);
+      searcherFirmId = row?.id ?? null;
+    } catch { /* non-critical */ }
+  }
 
   if (!entityId || !entityType) {
     return NextResponse.json({ error: "Missing entityId or entityType" }, { status: 400 });
   }
 
   try {
-    if (entityType === "firm") return NextResponse.json(await fetchFirm(entityId));
-    if (entityType === "expert") return NextResponse.json(await fetchExpert(entityId));
-    if (entityType === "case_study") return NextResponse.json(await fetchCaseStudy(entityId));
-    return NextResponse.json({ error: "Unknown entityType" }, { status: 400 });
+    let result;
+    if (entityType === "firm") result = await fetchFirm(entityId);
+    else if (entityType === "expert") result = await fetchExpert(entityId);
+    else if (entityType === "case_study") result = await fetchCaseStudy(entityId);
+    else return NextResponse.json({ error: "Unknown entityType" }, { status: 400 });
+
+    // Optionally include searcher's firm profile for self-reference context
+    if (searcherFirmId && !("error" in result)) {
+      const sp = await fetchSearcherProfile(searcherFirmId);
+      if (sp) (result as Record<string, unknown>).searcherProfile = sp;
+    }
+
+    return NextResponse.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -222,4 +245,38 @@ async function fetchCaseStudy(legacyId: string) {
 
   if (!records.length) return { error: "Not found" };
   return { entityType: "case_study", data: records[0] };
+}
+
+// ─── Searcher Profile (for self-reference) ───────────────
+
+async function fetchSearcherProfile(firmId: string) {
+  interface SearcherRow {
+    name: string;
+    categories: string[];
+    skills: string[];
+    industries: string[];
+    caseStudyCount: number;
+  }
+
+  const records = await neo4jRead<SearcherRow>(
+    `MATCH (f:Company:ServiceFirm {id: $firmId})
+     RETURN
+       f.name AS name,
+       [(f)-[:IN_CATEGORY]->(c:FirmCategory) | c.name] AS categories,
+       [(f)-[:HAS_SKILL]->(s:Skill) | s.name][0..10] AS skills,
+       [(f)-[:SERVES_INDUSTRY]->(i:Industry) | i.name][0..8] AS industries,
+       size([(f)-[:HAS_CASE_STUDY]->(cs:CaseStudy) | cs]) AS caseStudyCount`,
+    { firmId }
+  );
+
+  if (!records.length) return null;
+  return {
+    firmName: records[0].name,
+    categories: records[0].categories,
+    skills: records[0].skills,
+    industries: records[0].industries,
+    caseStudyCount: typeof records[0].caseStudyCount === "object"
+      ? (records[0].caseStudyCount as unknown as { low: number }).low ?? 0
+      : records[0].caseStudyCount ?? 0,
+  };
 }

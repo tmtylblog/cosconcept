@@ -181,6 +181,7 @@ export function DiscoverStream() {
                     error={si.error}
                     searchQuery={si.searchQuery}
                     matchContext={si.matchContext}
+                    searcherProfile={si.searcherProfile}
                     onViewExpert={handleViewExpert}
                     onClose={() => handleCloseDetail(si.id)}
                   />

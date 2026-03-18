@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { FirmDetailData, MatchContext } from "@/hooks/use-discover-stream";
+import type { FirmDetailData, MatchContext, SearcherProfile } from "@/hooks/use-discover-stream";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -25,6 +25,7 @@ interface FirmDetailBlockProps {
   error: string | null;
   searchQuery: string;
   matchContext?: MatchContext;
+  searcherProfile?: SearcherProfile;
   onViewExpert?: (legacyId: string, displayName: string) => void;
   onClose?: () => void;
 }
@@ -128,6 +129,7 @@ export function FirmDetailBlock({
   error,
   searchQuery,
   matchContext,
+  searcherProfile,
   onViewExpert,
   onClose,
 }: FirmDetailBlockProps) {
@@ -194,6 +196,17 @@ export function FirmDetailBlock({
   const tier = matchContext ? getFitTier(matchContext.matchScore) : null;
   const tierStyle = tier ? FIT_TIER_STYLE[tier] : null;
 
+  // Compute searcher's relevant overlap (skills + industries in common with this firm)
+  const searcherOverlap = searcherProfile && data ? (() => {
+    const firmSkills = new Set(data.skills.map(s => s.toLowerCase()));
+    const firmIndustries = new Set(data.industries.map(i => i.toLowerCase()));
+    const overlappingSkills = searcherProfile.skills.filter(s => firmSkills.has(s.toLowerCase()));
+    const overlappingIndustries = searcherProfile.industries.filter(i => firmIndustries.has(i.toLowerCase()));
+    const totalSearcher = searcherProfile.skills.length + searcherProfile.industries.length;
+    const overlapScore = totalSearcher > 0 ? (overlappingSkills.length + overlappingIndustries.length) / totalSearcher : 0;
+    return overlapScore >= 0.15 ? { skills: overlappingSkills, industries: overlappingIndustries, score: overlapScore } : null;
+  })() : null;
+
   return (
     <div className="animate-slide-up rounded-cos-2xl border border-cos-border bg-white shadow-sm overflow-hidden">
       {/* Header */}
@@ -228,6 +241,20 @@ export function FirmDetailBlock({
         <div className="border-b border-cos-border/50 bg-cos-electric/5 px-5 py-3">
           <p className="text-xs leading-relaxed text-cos-midnight/80">
             {matchContext.explanation}
+          </p>
+        </div>
+      )}
+
+      {/* Your relevant experience (searcher self-reference) */}
+      {searcherOverlap && searcherProfile && (
+        <div className="border-b border-cos-border/50 bg-cos-warm/5 px-5 py-3">
+          <p className="text-[11px] font-semibold text-cos-warm mb-1.5">Your Relevant Experience</p>
+          <p className="text-[11px] text-cos-midnight/70 leading-relaxed">
+            {searcherProfile.firmName} shares common ground here
+            {searcherOverlap.skills.length > 0 && <> in <strong>{searcherOverlap.skills.slice(0, 3).join(", ")}</strong></>}
+            {searcherOverlap.industries.length > 0 && <>{searcherOverlap.skills.length > 0 ? " and" : " in"} the <strong>{searcherOverlap.industries.slice(0, 2).join(", ")}</strong> {searcherOverlap.industries.length === 1 ? "industry" : "industries"}</>}
+            {searcherProfile.caseStudyCount > 0 && <> — you have {searcherProfile.caseStudyCount} case {searcherProfile.caseStudyCount === 1 ? "study" : "studies"} backing this up</>}
+            .
           </p>
         </div>
       )}

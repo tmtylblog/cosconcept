@@ -15,6 +15,15 @@ export interface MatchContext {
   caseStudyCount?: number;
 }
 
+/** Searcher's own firm profile for self-reference in detail views */
+export interface SearcherProfile {
+  firmName: string;
+  categories: string[];
+  skills: string[];
+  industries: string[];
+  caseStudyCount: number;
+}
+
 interface FirmDetailData {
   name: string;
   website: string | null;
@@ -65,8 +74,8 @@ interface ExpertDetailData {
 
 export type StreamItem =
   | { type: "results"; results: DiscoverCandidate[]; query: string; id: string; timestamp: number }
-  | { type: "firm_detail"; entityId: string; matchContext?: MatchContext; data: FirmDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number }
-  | { type: "expert_detail"; entityId: string; displayName: string; data: ExpertDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number };
+  | { type: "firm_detail"; entityId: string; matchContext?: MatchContext; searcherProfile?: SearcherProfile; data: FirmDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number }
+  | { type: "expert_detail"; entityId: string; displayName: string; searcherProfile?: SearcherProfile; data: ExpertDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number };
 
 export type { FirmDetailData, ExpertDetailData };
 
@@ -80,6 +89,8 @@ interface DiscoverStreamContextValue {
   /** Remove a stream item by ID (for closing detail blocks) */
   removeItem: (id: string) => void;
   lastResultsId: string | null;
+  /** Set the current user's org ID for self-reference in detail views */
+  setSearcherOrgId: (orgId: string) => void;
 }
 
 const DiscoverStreamContext = createContext<DiscoverStreamContextValue | null>(null);
@@ -92,6 +103,8 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
   const bumpUpdate = useCallback(() => setUpdateCounter((c) => c + 1), []);
   const lastResultsIdRef = useRef<string | null>(null);
   const idCounter = useRef(0);
+  const searcherOrgIdRef = useRef<string | null>(null);
+  const setSearcherOrgId = useCallback((orgId: string) => { searcherOrgIdRef.current = orgId; }, []);
 
   const nextId = useCallback((prefix: string) => {
     idCounter.current++;
@@ -145,7 +158,8 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
     setItems((prev) => [...prev, item]);
 
     // Fetch firm detail, then emit enriched event for Ossy
-    fetch(`/api/discover/entity?entityId=${encodeURIComponent(entityId)}&entityType=firm`)
+    const sfp = searcherOrgIdRef.current ? `&searcherOrgId=${encodeURIComponent(searcherOrgIdRef.current)}` : "";
+    fetch(`/api/discover/entity?entityId=${encodeURIComponent(entityId)}&entityType=firm${sfp}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) {
@@ -164,7 +178,8 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
             data = { ...data, industries: matchContext.industries };
           }
 
-          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, data } as StreamItem : i));
+          const searcherProfile = d.searcherProfile as SearcherProfile | undefined;
+          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, data, ...(searcherProfile ? { searcherProfile } : {}) } as StreamItem : i));
 
           // Emit enriched event with actual data for Ossy commentary
           if (typeof window !== "undefined" && data) {
@@ -216,14 +231,16 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
     setItems((prev) => [...prev, item]);
 
     // Fetch expert detail, then emit enriched event for Ossy
-    fetch(`/api/discover/entity?entityId=${encodeURIComponent(entityId)}&entityType=expert`)
+    const sfpE = searcherOrgIdRef.current ? `&searcherOrgId=${encodeURIComponent(searcherOrgIdRef.current)}` : "";
+    fetch(`/api/discover/entity?entityId=${encodeURIComponent(entityId)}&entityType=expert${sfpE}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) {
           setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, error: d.error } as StreamItem : i));
         } else {
           const data = d.data as ExpertDetailData;
-          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, data, displayName: data?.displayName ?? displayName ?? "Expert" } as StreamItem : i));
+          const searcherProfileE = d.searcherProfile as SearcherProfile | undefined;
+          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, data, displayName: data?.displayName ?? displayName ?? "Expert", ...(searcherProfileE ? { searcherProfile: searcherProfileE } : {}) } as StreamItem : i));
 
           // Emit enriched event with actual data for Ossy commentary
           if (typeof window !== "undefined" && data) {
@@ -266,6 +283,7 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
         pushExpertDetail,
         removeItem,
         lastResultsId: lastResultsIdRef.current,
+        setSearcherOrgId,
       }}
     >
       {children}
