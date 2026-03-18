@@ -250,23 +250,41 @@ export async function GET() {
   // ─── Scoring ────────────────────────────────────────────────
 
   const relationships = getSymbioticRelationships();
-  const userServices = asArr(userConfirmed.services);
-  const userSkills = asArr(userConfirmed.skills);
-  const userIndustries = asArr(userConfirmed.industries);
+
+  // Helper: read firm data from confirmed first, then fall back to enrichment classification/extracted
+  function getFirmData(enrichment: Record<string, unknown>) {
+    const confirmed = (enrichment.confirmed as Record<string, unknown>) ?? {};
+    const classification = (enrichment.classification as Record<string, unknown>) ?? {};
+    const extracted = (enrichment.extracted as Record<string, unknown>) ?? {};
+    return {
+      services: asArr(confirmed.services).length > 0 ? asArr(confirmed.services) : asArr(extracted.services),
+      skills: asArr(confirmed.skills).length > 0 ? asArr(confirmed.skills) : asArr(classification.skills),
+      industries: asArr(confirmed.industries).length > 0 ? asArr(confirmed.industries) : asArr(classification.industries),
+      markets: asArr(confirmed.markets).length > 0 ? asArr(confirmed.markets) : asArr(classification.markets),
+      categories: asArr(confirmed.firmCategory ? [confirmed.firmCategory] : []).length > 0
+        ? asArr([confirmed.firmCategory])
+        : asArr(classification.categories),
+    };
+  }
+
+  const userData = getFirmData(userEnrichment);
+  const userServices = userData.services;
+  const userSkills = userData.skills;
+  const userIndustries = userData.industries;
   const userCapGaps = asArr(userPrefs.capabilityGaps);
   const userPrefTypes = asArr(userPrefs.preferredPartnerTypes);
   const userGeo = String(userPrefs.geographyPreference ?? "").toLowerCase();
   const userDealBreaker = String(userPrefs.dealBreaker ?? "").toLowerCase();
-  const userCategory = String(userConfirmed.firmCategory ?? userFirm.firmType ?? "").toLowerCase();
+  const userCategory = (userData.categories[0] ?? String(userFirm.firmType ?? "")).toLowerCase();
 
   const scored = candidates.map((c) => {
     const cEnrichment = c.enrichmentData ?? {};
-    const cConfirmed = (cEnrichment.confirmed as Record<string, unknown>) ?? {};
-    const cServices = asArr(cConfirmed.services);
-    const cSkills = asArr(cConfirmed.skills);
-    const cIndustries = asArr(cConfirmed.industries);
-    const cMarkets = asArr(cConfirmed.markets);
-    const cCategory = String(cConfirmed.firmCategory ?? c.firmType ?? "").toLowerCase();
+    const cData = getFirmData(cEnrichment);
+    const cServices = cData.services;
+    const cSkills = cData.skills;
+    const cIndustries = cData.industries;
+    const cMarkets = cData.markets;
+    const cCategory = (cData.categories[0] ?? String(c.firmType ?? "")).toLowerCase();
     const cCapGaps = asArr(c.prefs.capabilityGaps);
     const cPrefTypes = asArr(c.prefs.preferredPartnerTypes);
 
@@ -333,6 +351,15 @@ export async function GET() {
       cIndustries.some((ci) => fuzzyMatch(ci, i))
     ).length;
     score += Math.min(industryOverlap * 2, 5);
+
+    // Data richness bonus (0-5) — firms with more data are better candidates
+    const dataPoints = cServices.length + cSkills.length + cIndustries.length;
+    score += Math.min(dataPoints, 5);
+
+    // Preference completeness bonus — heavily weight firms that have set preferences
+    if (cCapGaps.length > 0 || cPrefTypes.length > 0) {
+      score += 10;
+    }
 
     // Normalize to 0-100
     score = Math.max(0, Math.min(100, score));

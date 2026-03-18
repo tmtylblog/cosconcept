@@ -656,6 +656,35 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     }
   }, [isGuest, enrichmentStatus, status, sendMessage]);
 
+  // ─── Auto-trigger Ossy on partner-matching page with incomplete prefs ──
+  const partnerMatchingNudgeSentRef = useRef(false);
+  useEffect(() => {
+    // Reset when leaving partner-matching page
+    if (firmSection !== "partner-matching") {
+      partnerMatchingNudgeSentRef.current = false;
+      return;
+    }
+    // Only fire once, when Ossy is ready, and page context shows incomplete prefs
+    if (
+      !isGuest &&
+      !isOnboarding &&
+      firmSection === "partner-matching" &&
+      pageContext?.page === "partner-matching" &&
+      !pageContext.prefsComplete &&
+      pageContext.missingFields.length > 0 &&
+      !partnerMatchingNudgeSentRef.current &&
+      status === "ready"
+    ) {
+      partnerMatchingNudgeSentRef.current = true;
+      const timer = setTimeout(() => {
+        sendMessage({
+          text: `I'm on the Partner Matching page and I need to set up my partner preferences before I can see matches. The missing fields are: ${pageContext.missingFields.join(", ")}. Can you help me fill these in?`,
+        });
+      }, 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [isGuest, isOnboarding, firmSection, pageContext, status, sendMessage]);
+
   useEffect(() => {
     if (scrollRef.current && isNearBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
