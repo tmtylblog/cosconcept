@@ -343,3 +343,46 @@ export async function GET(
     );
   }
 }
+
+/** PATCH /api/admin/growth-ops/crm/companies/:id — Update an acq_company */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const headersList = await headers();
+    const session = await auth.api.getSession({ headers: headersList });
+    if (!session?.user || !ALLOWED_ROLES.includes(session.user.role as string)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { id: rawId } = await params;
+    // Only acq_companies (acq_ prefix) are editable
+    if (!rawId.startsWith("acq_")) {
+      return NextResponse.json({ error: "Only prospect companies can be edited" }, { status: 400 });
+    }
+    const realId = rawId.slice(4);
+    const body = await req.json();
+    const allowedFields = ["name", "domain", "website", "industry", "sizeEstimate", "location", "linkedinUrl", "description", "notes"] as const;
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    for (const field of allowedFields) {
+      if (field in body) {
+        updates[field] = typeof body[field] === "string" ? body[field].trim() || null : body[field];
+      }
+    }
+    // name must stay non-null
+    if ("name" in updates && !updates.name) {
+      return NextResponse.json({ error: "Company name cannot be empty" }, { status: 400 });
+    }
+
+    await db.update(acqCompanies).set(updates).where(eq(acqCompanies.id, realId));
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[CRM] Company update error:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
+  }
+}

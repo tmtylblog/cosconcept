@@ -13,8 +13,13 @@ export default function NewCompanyPage() {
 
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
+  const [website, setWebsite] = useState("");
   const [industry, setIndustry] = useState("");
   const [sizeEstimate, setSizeEstimate] = useState("");
+  const [location, setLocation] = useState("");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [description, setDescription] = useState("");
+  const [notes, setNotes] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,8 +33,13 @@ export default function NewCompanyPage() {
         body: JSON.stringify({
           name: name.trim(),
           domain: domain.trim() || undefined,
+          website: website.trim() || undefined,
           industry: industry.trim() || undefined,
           sizeEstimate: sizeEstimate || undefined,
+          location: location.trim() || undefined,
+          linkedinUrl: linkedinUrl.trim() || undefined,
+          description: description.trim() || undefined,
+          notes: notes.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -44,6 +54,8 @@ export default function NewCompanyPage() {
       setSaving(false);
     }
   }
+
+  const inputClass = "w-full rounded-cos-lg border border-cos-border px-3 py-2.5 text-sm focus:border-cos-electric focus:outline-none";
 
   return (
     <div className="max-w-xl mx-auto">
@@ -61,46 +73,28 @@ export default function NewCompanyPage() {
       <form onSubmit={handleSubmit} className="space-y-4 rounded-cos-xl border border-cos-border bg-white p-6">
         <div>
           <label className="text-xs font-medium text-cos-slate mb-1.5 block">Company Name *</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Acme Corp"
-            className="w-full rounded-cos-lg border border-cos-border px-3 py-2.5 text-sm focus:border-cos-electric focus:outline-none"
-            autoFocus
-            required
-          />
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Corp" className={inputClass} autoFocus required />
         </div>
 
-        <div>
-          <label className="text-xs font-medium text-cos-slate mb-1.5 block">Domain</label>
-          <input
-            type="text"
-            value={domain}
-            onChange={(e) => setDomain(e.target.value)}
-            placeholder="acme.com"
-            className="w-full rounded-cos-lg border border-cos-border px-3 py-2.5 text-sm focus:border-cos-electric focus:outline-none"
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-medium text-cos-slate mb-1.5 block">Domain</label>
+            <input type="text" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="acme.com" className={inputClass} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-cos-slate mb-1.5 block">Website</label>
+            <input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://acme.com" className={inputClass} />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-xs font-medium text-cos-slate mb-1.5 block">Industry</label>
-            <input
-              type="text"
-              value={industry}
-              onChange={(e) => setIndustry(e.target.value)}
-              placeholder="e.g. SaaS, FinTech, Healthcare"
-              className="w-full rounded-cos-lg border border-cos-border px-3 py-2.5 text-sm focus:border-cos-electric focus:outline-none"
-            />
+            <input type="text" value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. SaaS, FinTech, Healthcare" className={inputClass} />
           </div>
           <div>
             <label className="text-xs font-medium text-cos-slate mb-1.5 block">Size</label>
-            <select
-              value={sizeEstimate}
-              onChange={(e) => setSizeEstimate(e.target.value)}
-              className="w-full rounded-cos-lg border border-cos-border px-3 py-2.5 text-sm focus:border-cos-electric focus:outline-none"
-            >
+            <select value={sizeEstimate} onChange={(e) => setSizeEstimate(e.target.value)} className={inputClass}>
               <option value="">Unknown</option>
               <option value="1-10">1-10 employees</option>
               <option value="11-50">11-50 employees</option>
@@ -110,6 +104,27 @@ export default function NewCompanyPage() {
               <option value="1001+">1001+ employees</option>
             </select>
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-medium text-cos-slate mb-1.5 block">Location</label>
+            <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="San Francisco, CA" className={inputClass} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-cos-slate mb-1.5 block">LinkedIn URL</label>
+            <input type="url" value={linkedinUrl} onChange={(e) => setLinkedinUrl(e.target.value)} placeholder="https://linkedin.com/company/acme" className={inputClass} />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-cos-slate mb-1.5 block">Description</label>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Brief description of what this company does..." className={`${inputClass} resize-none`} />
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-cos-slate mb-1.5 block">Notes</label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Internal notes..." className={`${inputClass} resize-none`} />
         </div>
 
         <div className="flex items-center justify-end gap-3 pt-2">

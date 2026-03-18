@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Building2,
   ArrowLeft,
@@ -13,6 +14,8 @@ import {
   FileText,
   MessageSquare,
   ExternalLink,
+  Pencil,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CrmAnnotationsPanel from "@/components/admin/crm-annotations-panel";
@@ -41,6 +44,8 @@ export default function CompanyDetailPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [editing, setEditing] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -146,9 +151,63 @@ export default function CompanyDetailPage() {
                 <Linkedin className="h-4 w-4 mr-1" /> LinkedIn
               </Button>
             )}
+            {data.entityClass === "prospect" && (
+              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+              </Button>
+            )}
+            <Link href={`/admin/growth-ops/pipeline/new?companyId=${data.rawId ?? ""}&companyName=${encodeURIComponent(data.name ?? "")}`}>
+              <Button variant="outline" size="sm">
+                <Plus className="h-3.5 w-3.5 mr-1" /> New Deal
+              </Button>
+            </Link>
           </div>
         </div>
       </div>
+
+      {/* Inline Edit */}
+      {editing && data.entityClass === "prospect" && (
+        <div className="rounded-cos-lg border border-cos-electric/30 bg-cos-electric/5 p-5 space-y-3">
+          <h3 className="text-sm font-semibold text-cos-midnight">Edit Company</h3>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            setEditSaving(true);
+            const form = e.target as HTMLFormElement;
+            const fd = new FormData(form);
+            const updates: Record<string, string> = {};
+            for (const [k, v] of fd.entries()) updates[k] = v as string;
+            try {
+              const res = await fetch(`/api/admin/growth-ops/crm/companies/${encodeURIComponent(id as string)}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(updates),
+              });
+              if (res.ok) {
+                setEditing(false);
+                const r = await fetch(`/api/admin/growth-ops/crm/companies/${encodeURIComponent(id as string)}`);
+                if (r.ok) setData(await r.json());
+              }
+            } catch { /* ignore */ }
+            finally { setEditSaving(false); }
+          }} className="grid grid-cols-2 gap-3 text-sm">
+            <input name="name" defaultValue={data.name ?? ""} placeholder="Company Name" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="domain" defaultValue={data.domain ?? ""} placeholder="Domain" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="website" defaultValue={data.website ?? ""} placeholder="Website URL" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="industry" defaultValue={data.industry ?? ""} placeholder="Industry" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="sizeEstimate" defaultValue={data.sizeEstimate ?? ""} placeholder="Size (e.g. 51-200)" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="location" defaultValue={data.location ?? ""} placeholder="Location" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="linkedinUrl" defaultValue={data.linkedinUrl ?? ""} placeholder="LinkedIn URL" className="col-span-2 rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <textarea name="description" defaultValue={data.description ?? ""} placeholder="Description" rows={2} className="col-span-2 rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none resize-none" />
+            <textarea name="notes" defaultValue={data.notes ?? ""} placeholder="Notes" rows={2} className="col-span-2 rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none resize-none" />
+            <div className="col-span-2 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditing(false)} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs text-cos-slate hover:text-cos-midnight">Cancel</button>
+              <button type="submit" disabled={editSaving} className="rounded-cos-md bg-cos-electric px-3 py-1.5 text-xs font-medium text-white hover:bg-cos-electric-hover disabled:opacity-50">
+                {editSaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-cos-border overflow-x-auto">

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Users,
   ArrowLeft,
@@ -13,6 +14,8 @@ import {
   TrendingUp,
   Clock,
   ExternalLink,
+  Pencil,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CrmAnnotationsPanel from "@/components/admin/crm-annotations-panel";
@@ -47,6 +50,8 @@ export default function PersonDetailPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("profile");
+  const [editing, setEditing] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -144,9 +149,63 @@ export default function PersonDetailPage() {
                 <Linkedin className="h-4 w-4 mr-1" /> LinkedIn
               </Button>
             )}
+            {data.entityClass === "prospect_contact" && (
+              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+                <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+              </Button>
+            )}
+            <Link href={`/admin/growth-ops/pipeline/new?contactId=${data.rawId ?? ""}&contactName=${encodeURIComponent(data.fullName ?? "")}`}>
+              <Button variant="outline" size="sm">
+                <Plus className="h-3.5 w-3.5 mr-1" /> New Deal
+              </Button>
+            </Link>
           </div>
         </div>
       </div>
+
+      {/* Inline Edit */}
+      {editing && data.entityClass === "prospect_contact" && (
+        <div className="rounded-cos-lg border border-cos-electric/30 bg-cos-electric/5 p-5 space-y-3">
+          <h3 className="text-sm font-semibold text-cos-midnight">Edit Contact</h3>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            setEditSaving(true);
+            const form = e.target as HTMLFormElement;
+            const fd = new FormData(form);
+            const updates: Record<string, string> = {};
+            for (const [k, v] of fd.entries()) updates[k] = v as string;
+            try {
+              const res = await fetch(`/api/admin/growth-ops/crm/people/${encodeURIComponent(id as string)}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(updates),
+              });
+              if (res.ok) {
+                setEditing(false);
+                // Reload
+                const r = await fetch(`/api/admin/growth-ops/crm/people/${encodeURIComponent(id as string)}`);
+                if (r.ok) setData(await r.json());
+              }
+            } catch { /* ignore */ }
+            finally { setEditSaving(false); }
+          }} className="grid grid-cols-2 gap-3 text-sm">
+            <input name="firstName" defaultValue={data.firstName ?? ""} placeholder="First Name" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="lastName" defaultValue={data.lastName ?? ""} placeholder="Last Name" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="email" defaultValue={data.email ?? ""} placeholder="Email" type="email" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="title" defaultValue={data.title ?? ""} placeholder="Title / Role" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="phone" defaultValue={data.phone ?? ""} placeholder="Phone" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="location" defaultValue={data.location ?? ""} placeholder="Location" className="rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <input name="linkedinUrl" defaultValue={data.linkedinUrl ?? ""} placeholder="LinkedIn URL" className="col-span-2 rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none" />
+            <textarea name="notes" defaultValue={data.notes ?? ""} placeholder="Notes" rows={2} className="col-span-2 rounded-cos-md border border-cos-border px-3 py-2 focus:border-cos-electric focus:outline-none resize-none" />
+            <div className="col-span-2 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditing(false)} className="rounded-cos-md border border-cos-border px-3 py-1.5 text-xs text-cos-slate hover:text-cos-midnight">Cancel</button>
+              <button type="submit" disabled={editSaving} className="rounded-cos-md bg-cos-electric px-3 py-1.5 text-xs font-medium text-white hover:bg-cos-electric-hover disabled:opacity-50">
+                {editSaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-cos-border overflow-x-auto">

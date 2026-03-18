@@ -63,13 +63,17 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { firstName, lastName, email, linkedinUrl, companyName, companyDomain } = body as {
+    const { firstName, lastName, email, title, phone, location, linkedinUrl, companyName, companyDomain, notes } = body as {
       firstName: string;
       lastName: string;
       email: string;
+      title?: string;
+      phone?: string;
+      location?: string;
       linkedinUrl?: string;
       companyName?: string;
       companyDomain?: string;
+      notes?: string;
     };
 
     if (!email?.trim()) {
@@ -108,6 +112,10 @@ export async function POST(req: NextRequest) {
       email: email.trim().toLowerCase(),
       firstName: firstName?.trim() ?? "",
       lastName: lastName?.trim() ?? "",
+      title: title?.trim() ?? null,
+      phone: phone?.trim() ?? null,
+      location: location?.trim() ?? null,
+      notes: notes?.trim() ?? null,
       linkedinUrl: linkedinUrl?.trim() ?? null,
       companyId,
     });
