@@ -9,6 +9,7 @@ import {
   acqPipelineStages,
   growthOpsInviteQueue,
   attributionEvents,
+  organizations,
 } from "@/lib/db/schema";
 import { eq, gte, desc, asc, sql, count } from "drizzle-orm";
 import Stripe from "stripe";
@@ -216,11 +217,20 @@ export async function GET(req: NextRequest) {
       createdAt: a.createdAt?.toISOString() ?? null,
     }));
 
-    // ── Stripe Revenue Data ─────────────────────────────────
+    // ── Stripe Revenue Data (filtered to real customers) ────
     let stripeData = null;
     if (process.env.STRIPE_SECRET_KEY) {
       try {
         const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+        // Load all org names for cross-referencing
+        const allOrgs = await db.select({ name: organizations.name }).from(organizations);
+        const orgNameSet = new Set(allOrgs.map((o) => o.name.toLowerCase().trim()));
+
+        function isRealCustomer(name: string | null | undefined): boolean {
+          if (!name) return false;
+          return orgNameSet.has(name.toLowerCase().trim());
+        }
 
         // Get all active subscriptions
         const activeSubs: Stripe.Subscription[] = [];
@@ -234,39 +244,44 @@ export async function GET(req: NextRequest) {
           canceledSubs.push(sub);
         }
 
-        // Calculate MRR from active subscriptions
+        // Calculate MRR only from real customers
         let mrr = 0;
         const activeCustomers: { name: string; plan: string; mrr: number; since: string }[] = [];
         for (const sub of activeSubs) {
           const item = sub.items.data[0];
           if (!item?.price) continue;
+          const cust = typeof sub.customer === "object" ? sub.customer as Stripe.Customer : null;
+          const custName = cust?.name || cust?.email || null;
+          if (!isRealCustomer(custName)) continue;
+
           const amount = item.price.unit_amount ?? 0;
           const interval = item.price.recurring?.interval;
           const monthlyAmount = interval === "year" ? amount / 12 : amount;
           mrr += monthlyAmount;
-          const cust = typeof sub.customer === "object" ? sub.customer as Stripe.Customer : null;
           activeCustomers.push({
-            name: cust?.name || cust?.email || "Unknown",
+            name: custName!,
             plan: item.price.nickname || item.price.id,
             mrr: Math.round(monthlyAmount) / 100,
             since: new Date(sub.created * 1000).toISOString().slice(0, 10),
           });
         }
 
-        // Churned customers
+        // Churned customers (only real ones)
         const churned: { name: string; canceledAt: string }[] = [];
         for (const sub of canceledSubs) {
           const cust = typeof sub.customer === "object" ? sub.customer as Stripe.Customer : null;
+          const custName = cust?.name || cust?.email || null;
+          if (!isRealCustomer(custName)) continue;
           churned.push({
-            name: cust?.name || cust?.email || "Unknown",
+            name: custName!,
             canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString().slice(0, 10) : "",
           });
         }
 
         stripeData = {
           mrr: Math.round(mrr) / 100,
-          activeSubscriptions: activeSubs.length,
-          canceledSubscriptions: canceledSubs.length,
+          activeSubscriptions: activeCustomers.length,
+          canceledSubscriptions: churned.length,
           activeCustomers: activeCustomers.sort((a, b) => b.mrr - a.mrr),
           churned: churned.sort((a, b) => b.canceledAt.localeCompare(a.canceledAt)),
         };
