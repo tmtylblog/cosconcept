@@ -120,6 +120,7 @@ async function fetchFirm(firmId: string) {
   const records = await neo4jRead<FirmRow>(
     `MATCH (f:Company:ServiceFirm {id: $firmId})
      OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs:CaseStudy)
+       WHERE cs.hidden IS NULL OR cs.hidden = false
      OPTIONAL MATCH (exp:Person)-[:CURRENTLY_AT|WORKS_AT]->(f)
      WHERE "expert" IN exp.personTypes
      WITH f,

@@ -826,12 +826,12 @@ async function caseStudyFilter(
     params.industries = filters.industries;
   }
 
-  // Always require a summary — summaryless case studies add noise to results
-  const summaryCondition = "cs.summary IS NOT NULL AND trim(cs.summary) <> ''";
+  // Exclude hidden case studies (no summary, synthetic, junk scrapes)
+  const qualityCondition = "(cs.hidden IS NULL OR cs.hidden = false)";
   const whereClause =
     conditions.length > 0
-      ? `WHERE ${summaryCondition} AND (${conditions.join(" OR ")})`
-      : `WHERE ${summaryCondition}`;
+      ? `WHERE ${qualityCondition} AND (${conditions.join(" OR ")})`
+      : `WHERE ${qualityCondition}`;
 
   const query = `
     MATCH (cs:CaseStudy)
