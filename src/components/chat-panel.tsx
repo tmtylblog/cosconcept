@@ -393,13 +393,13 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     }
   }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id, isBrandDetected, firmSection, pageContext]);
 
-  // Load greeting on mount — clean slate every session.
-  // In onboarding mode: hardcoded onboarding welcome (skip greeting endpoint).
-  // Post-onboarding: returning users get personalized greeting; new users get default.
-  const loadGreeting = useCallback(async () => {
+  // Load conversation history on mount for authenticated users.
+  // If a recent conversation exists (< 24h), restore it so follow-ups have context.
+  // Otherwise fall back to personalized greeting or default welcome.
+  const loadHistory = useCallback(async () => {
     if (isGuest) return;
 
-    // Authenticated onboarding phase — skip the greeting API, use dynamic welcome
+    // Authenticated onboarding phase — skip history, use dynamic welcome
     if (isOnboarding) {
       setInitialMessages(onboardingWelcomeMessages);
       setHistoryLoaded(true);
@@ -409,12 +409,32 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     try {
       const orgParam = activeOrg?.id ? `?organizationId=${activeOrg.id}` : "";
 
-      // Try to get personalized greeting for returning users
+      // Try to load recent conversation history
+      const convRes = await fetch(`/api/conversations${orgParam}`);
+      if (convRes.ok) {
+        const data = await convRes.json();
+        if (data.conversation && data.messages?.length > 0) {
+          // Sync conversation ID from server — fixes duplicate conversation bug
+          conversationIdRef.current = data.conversation.id;
+
+          // Convert DB messages to UIMessage[] format for useChat
+          const restored: UIMessage[] = data.messages.map((m: { id: string; role: string; content: string }) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            parts: [{ type: "text" as const, text: m.content }],
+          }));
+
+          setInitialMessages(restored);
+          setHistoryLoaded(true);
+          return;
+        }
+      }
+
+      // No recent conversation — try personalized greeting for returning users
       const greetingRes = await fetch(`/api/chat/greeting${orgParam}`);
       if (greetingRes.ok) {
         const { isReturning, greeting } = await greetingRes.json();
         if (isReturning && greeting) {
-          // Clean slate with personalized greeting
           setInitialMessages([
             {
               id: "greeting",
@@ -429,7 +449,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
       // Not a returning user — keep the authWelcomeMessages set synchronously
     } catch (err) {
-      console.error("[ChatPanel] Failed to load greeting:", err);
+      console.error("[ChatPanel] Failed to load history:", err);
     } finally {
       setHistoryLoaded(true);
     }
@@ -437,9 +457,9 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
   useEffect(() => {
     if (!historyLoaded) {
-      loadGreeting();
+      loadHistory();
     }
-  }, [historyLoaded, loadGreeting]);
+  }, [historyLoaded, loadHistory]);
 
   const { messages, sendMessage, status, error } = useChat({
     messages: initialMessages,

@@ -404,6 +404,7 @@ export const conversations = pgTable("conversations", {
   }),
   title: text("title"),
   mode: text("mode").notNull().default("general"), // general | onboarding
+  activeThreadId: text("active_thread_id"), // no FK to avoid circular dep with conversationThreads
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -415,6 +416,32 @@ export const messages = pgTable("messages", {
     .references(() => conversations.id, { onDelete: "cascade" }),
   role: text("role").notNull(), // user | assistant
   content: text("content").notNull(),
+  threadId: text("thread_id").references(() => conversationThreads.id, {
+    onDelete: "set null",
+  }),
+  isPivot: boolean("is_pivot").notNull().default(false),
+  pivotConfidence: real("pivot_confidence"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ─── Conversation Threads ───────────────────────────────
+
+export const conversationThreads = pgTable("conversation_threads", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
+  title: text("title"),
+  topic: text("topic").notNull().default("general"),
+  status: text("status").notNull().default("active"),
+  messageCount: integer("message_count").notNull().default(0),
+  lastMessageAt: timestamp("last_message_at").defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
