@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Handshake,
   ArrowRight,
@@ -9,6 +10,7 @@ import {
   Users,
   DollarSign,
   Mail,
+  Sparkles,
 } from "lucide-react";
 
 interface Partnership {
@@ -113,13 +115,22 @@ export default function AdminPartnershipsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
-          Partnerships & Referrals
-        </h1>
-        <p className="mt-1 text-sm text-cos-slate">
-          Platform-wide partnership activity and referral tracking.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
+            Partnerships & Referrals
+          </h1>
+          <p className="mt-1 text-sm text-cos-slate">
+            Platform-wide partnership activity and referral tracking.
+          </p>
+        </div>
+        <Link
+          href="/admin/partnerships/simulator"
+          className="flex items-center gap-2 rounded-cos-lg bg-cos-electric/10 px-4 py-2.5 text-sm font-semibold text-cos-electric transition-colors hover:bg-cos-electric hover:text-white"
+        >
+          <Sparkles className="h-4 w-4" />
+          Partnership Simulator
+        </Link>
       </div>
 
       {/* Stats */}

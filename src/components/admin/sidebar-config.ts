@@ -69,6 +69,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { href: "/admin/finance", label: "AI Costs", icon: Cpu },
       { href: "/admin/api-health", label: "API Health", icon: Activity },
       { href: "/admin/partnerships", label: "Partnerships", icon: Handshake },
+      { href: "/admin/partnerships/simulator", label: "Partner Simulator", icon: Sparkles },
     ],
   },
   {
