@@ -484,6 +484,10 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   useEffect(() => {
     if (isGuest || isOnboarding) return;
 
+    // On discover page, poll faster (2s) for responsive commentary
+    const isDiscover = firmSection === "discover";
+    const pollMs = isDiscover ? 2000 : 3000;
+
     const interval = setInterval(() => {
       const queue = eventQueueRef.current;
       if (queue.length === 0) return;
@@ -491,30 +495,38 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       // Don't send if Ossy is busy (streaming/submitted)
       if (status === "submitted" || status === "streaming") return;
 
-      // Don't send within 30s of the last proactive message
-      if (Date.now() - lastProactiveRef.current < 30_000) return;
+      // Check if queue has discover navigation events (these get priority treatment)
+      const hasDiscoverNavEvent = queue.some(
+        (e) => e.type === "discover_firm_viewed" || e.type === "discover_expert_viewed"
+      );
 
-      // Only one proactive comment per page visit
-      const currentSection = firmSection ?? "unknown";
-      if (proactiveFiredForSectionRef.current === currentSection) {
-        eventQueueRef.current = [];
-        return;
+      // Cooldown: 2s for discover nav events, 30s for general page events
+      const cooldown = hasDiscoverNavEvent ? 2000 : 30_000;
+      if (Date.now() - lastProactiveRef.current < cooldown) return;
+
+      // For non-discover events: only one proactive comment per page visit
+      if (!hasDiscoverNavEvent) {
+        const currentSection = firmSection ?? "unknown";
+        if (proactiveFiredForSectionRef.current === currentSection) {
+          eventQueueRef.current = [];
+          return;
+        }
       }
 
-      // Check session dedup
-      const eventTypes = queue.map((e) => e.type);
-      const allShown = eventTypes.every((t) => (sessionTipsShownRef.current as Set<string>).has(t));
-      if (allShown) {
-        eventQueueRef.current = [];
-        return;
+      // For non-discover events: check session dedup
+      if (!hasDiscoverNavEvent) {
+        const eventTypes = queue.map((e) => e.type);
+        const allShown = eventTypes.every((t) => (sessionTipsShownRef.current as Set<string>).has(t));
+        if (allShown) {
+          eventQueueRef.current = [];
+          return;
+        }
       }
 
-      // Don't interrupt mid-conversation (recent user messages within 10s)
-      // Simple heuristic: if there are more than initial messages, user is active
-      if (messages.length > 3) {
+      // For non-discover events: don't interrupt mid-conversation
+      if (!hasDiscoverNavEvent && messages.length > 3) {
         const lastMsg = messages[messages.length - 1];
         if (lastMsg?.role === "user") {
-          // User just sent something — hold events
           return;
         }
       }
@@ -525,22 +537,26 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
       const eventMessage = formatEventsForOssy(eventsToSend);
       lastProactiveRef.current = Date.now();
-      proactiveFiredForSectionRef.current = currentSection;
 
-      // Track shown tips in session
-      for (const e of eventsToSend) {
-        (sessionTipsShownRef.current as Set<string>).add(e.type);
+      if (!hasDiscoverNavEvent) {
+        const currentSection = firmSection ?? "unknown";
+        proactiveFiredForSectionRef.current = currentSection;
+
+        // Track shown tips in session (only for non-discover events)
+        for (const e of eventsToSend) {
+          (sessionTipsShownRef.current as Set<string>).add(e.type);
+        }
+        try {
+          sessionStorage.setItem(
+            "cos_ossy_tips_shown",
+            JSON.stringify([...(sessionTipsShownRef.current as Set<string>)])
+          );
+        } catch { /* ignore */ }
       }
-      try {
-        sessionStorage.setItem(
-          "cos_ossy_tips_shown",
-          JSON.stringify([...(sessionTipsShownRef.current as Set<string>)])
-        );
-      } catch { /* ignore */ }
 
       // Auto-send as a user message (Ossy will respond naturally)
       sendMessage({ text: eventMessage });
-    }, 3000); // Check every 3s
+    }, pollMs);
 
     return () => clearInterval(interval);
   }, [isGuest, isOnboarding, status, firmSection, messages, sendMessage]);
@@ -1011,6 +1027,10 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         <div className="space-y-2">
         {messages.map((message, idx) => {
           const text = getMessageText(message);
+
+          // Hide [PAGE_EVENT] messages from user view — they're system context for Ossy
+          if (message.role === "user" && text.startsWith("[PAGE_EVENT]")) return null;
+
           // Show messages that have text OR tool parts (tool-only messages show
           // the in-progress search indicator while discover_search is running).
           // Without this, the loading spinner disappears as soon as the model

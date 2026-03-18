@@ -11,7 +11,8 @@ import { AuthOnboardingPanel } from "@/components/auth-onboarding-panel";
 import { EnrichmentProvider, useEnrichment } from "@/hooks/use-enrichment";
 import { ProfileProvider, useProfile } from "@/hooks/use-profile";
 import { GuestDataProvider, useGuestData } from "@/hooks/use-guest-data";
-import { DiscoverResultsProvider } from "@/hooks/use-discover-results";
+import { DiscoverResultsProvider, useDiscoverResults, type DiscoverCandidate } from "@/hooks/use-discover-results";
+import { DiscoverStreamProvider } from "@/hooks/use-discover-stream";
 import { OssyContextProvider } from "@/hooks/use-ossy-context";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { authClient, useSession, useActiveOrganization } from "@/lib/auth-client";
@@ -44,9 +45,11 @@ export default function AppLayout({
   return (
     <GuestDataProvider>
       <DiscoverResultsProvider>
-        <OssyContextProvider>
-          <AppLayoutOuter>{children}</AppLayoutOuter>
-        </OssyContextProvider>
+        <DiscoverStreamProvider>
+          <OssyContextProvider>
+            <AppLayoutOuter>{children}</AppLayoutOuter>
+          </OssyContextProvider>
+        </DiscoverStreamProvider>
       </DiscoverResultsProvider>
     </GuestDataProvider>
   );
@@ -315,6 +318,12 @@ function AppLayoutInner({
     : pathname === "/network" ? "network"
     : pathname.startsWith("/calls") ? "calls"
     : null;
+
+  // ─── Discover results context ────────────────────────────────
+  const discover = useDiscoverResults();
+  const handleSearchResults = (results: DiscoverCandidate[], query: string) => {
+    discover?.setResults(results, query);
+  };
 
   // ─── Derive app phase (5 states) ──────────────────────────
   // When admin is impersonating, skip onboarding gate so they can see the real app
@@ -898,28 +907,25 @@ function AppLayoutInner({
               onSimulateNewUser={handleSimulateNewUser}
             />
 
-            {/* Center: Rich content area — on discover, this IS the chat+content stream */}
-            <main className={cn(
-              "relative flex min-w-0 flex-1 flex-col bg-cos-cloud/60",
-              firmSection !== "discover" && "overflow-y-auto"
-            )}>
+            {/* Center: Rich content area */}
+            <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-cos-cloud/60">
               {children}
             </main>
 
-            {/* Right: Chat panel — desktop (hidden on discover page; chat is inline) */}
-            {firmSection !== "discover" && (
-              <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-midnight/20 lg:flex">
-                <ChatPanel
-                  key={`${chatKey}-app`}
-                  isGuest={false}
-                  firmSection={firmSection}
-                  onRequestLogin={handleRequestLogin}
-                />
-              </aside>
-            )}
+            {/* Right: Chat panel — desktop (always visible, including on discover) */}
+            <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-midnight/20 lg:flex">
+              <ChatPanel
+                key={`${chatKey}-${firmSection === "discover" ? "discover" : "app"}`}
+                isGuest={false}
+                firmSection={firmSection}
+                onRequestLogin={handleRequestLogin}
+                onSearchResults={pathname === "/discover" ? handleSearchResults : undefined}
+                onSearchStart={pathname === "/discover" ? () => discover?.setSearching(true) : undefined}
+              />
+            </aside>
 
-            {/* Mobile: Floating Ossy button + full-screen chat overlay (hidden on discover; chat is inline) */}
-            {firmSection !== "discover" && !mobileChat && (
+            {/* Mobile: Floating Ossy button + full-screen chat overlay */}
+            {!mobileChat && (
               <button
                 onClick={() => setMobileChat(true)}
                 className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-cos-electric text-white shadow-lg transition-transform hover:scale-105 lg:hidden"
@@ -928,7 +934,7 @@ function AppLayoutInner({
                 <MessageCircle className="h-5 w-5" />
               </button>
             )}
-            {firmSection !== "discover" && mobileChat && (
+            {mobileChat && (
               <div className="fixed inset-0 z-50 flex flex-col bg-cos-cloud lg:hidden">
                 <div className="flex h-12 items-center justify-end border-b border-cos-border/30 px-4">
                   <button
@@ -940,10 +946,12 @@ function AppLayoutInner({
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <ChatPanel
-                    key={`${chatKey}-app`}
+                    key={`${chatKey}-${firmSection === "discover" ? "discover" : "app"}`}
                     isGuest={false}
                     firmSection={firmSection}
                     onRequestLogin={handleRequestLogin}
+                    onSearchResults={pathname === "/discover" ? handleSearchResults : undefined}
+                    onSearchStart={pathname === "/discover" ? () => discover?.setSearching(true) : undefined}
                   />
                 </div>
               </div>
