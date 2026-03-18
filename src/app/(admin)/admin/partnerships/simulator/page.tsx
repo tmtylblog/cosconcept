@@ -78,6 +78,7 @@ interface ScoreBreakdown {
   dataRichness: number;
   preferenceCompleteness: number;
   evidenceDepth: number;
+  sharedClientBonus: number;
   total: number;
 }
 
@@ -396,9 +397,9 @@ function DeepEvidenceModal({
               <Shield className="h-3.5 w-3.5 text-cos-warm" /> Data Source for This Dimension
             </h3>
             <p className="text-[11px] text-cos-slate leading-relaxed">
-              The partner scorer reads from <SourceLabel source="pg" /> PostgreSQL <code className="bg-cos-midnight/5 px-1 rounded text-[10px]">enrichmentData</code> JSONB ({lineage.scorerUsed.source} layer).
-              It does <strong>not</strong> query <SourceLabel source="neo4j" /> Neo4j directly.
-              The knowledge graph has richer data that is currently invisible to scoring.
+              The partner scorer reads from <strong>both</strong> <SourceLabel source="pg" /> PostgreSQL <code className="bg-cos-midnight/5 px-1 rounded text-[10px]">enrichmentData</code> JSONB ({lineage.scorerUsed.source} layer)
+              and <SourceLabel source="neo4j" /> Neo4j graph signals (skills, services, case studies, expert data, preferences).
+              Graph data is merged with PG data before scoring — skills backed by case studies or experts receive up to 1.5x evidence multipliers.
             </p>
           </div>
 
@@ -1170,6 +1171,9 @@ function MatchCard({
               <ScoreBar label="Has Prefs" value={match.scoreBreakdown.preferenceCompleteness} max={10} onClick={() => openDimensionModal("preferenceCompleteness")} />
               {match.scoreBreakdown.evidenceDepth > 0 && (
                 <ScoreBar label="Evidence" value={match.scoreBreakdown.evidenceDepth} max={5} onClick={() => openDimensionModal("dataRichness")} />
+              )}
+              {match.scoreBreakdown.sharedClientBonus > 0 && (
+                <ScoreBar label="Shared Clients" value={match.scoreBreakdown.sharedClientBonus} max={5} onClick={() => openDimensionModal("dataRichness")} />
               )}
             </div>
           )}

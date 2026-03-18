@@ -5,8 +5,8 @@
  * /api/partner-matching/route.ts so it can be shared by the
  * admin simulator and any future matching surfaces.
  *
- * Scoring dimensions (max ~115 raw, normalized to 0-100):
- * 1. Capability gap match (0-30) — enhanced with Neo4j evidence weighting
+ * Scoring dimensions (max ~120 raw, normalized to 0-100):
+ * 1. Capability gap match (0-30) — enhanced with Neo4j evidence weighting + skill hierarchy
  * 2. Reverse match (0-20) — enhanced with expert skills from graph
  * 3. Firm type preference (0-20: 15 forward + 5 reverse)
  * 4. Geography overlap (0-10) — uses graph OPERATES_IN when available
@@ -16,6 +16,7 @@
  * 8. Data richness (0-5) — uses graph node counts for richer signal
  * 9. Preference completeness (0-10) — checks PREFERS edges
  * 10. Evidence depth bonus (0-5) — case study count from graph
+ * 11. Shared client bonus (0-5) — firms that served the same clients
  */
 
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -49,6 +50,7 @@ export interface ScoreBreakdown {
   dataRichness: number; // 0-5
   preferenceCompleteness: number; // 0-10
   evidenceDepth: number; // 0-5 (case study count from graph)
+  sharedClientBonus: number; // 0-5 (firms that served the same clients)
   total: number; // 0-100 normalized
 }
 
@@ -101,6 +103,7 @@ export interface ScoredMatch {
   cServices: string[];
   cIndustries: string[];
   cSkills: string[];
+  sharedClients: string[];
 }
 
 export interface PartnerMatch {
@@ -365,6 +368,98 @@ export async function batchFetchPrefEdges(
   }
 }
 
+// ─── Skill Hierarchy Expansion ───────────────────────────────
+
+/**
+ * Expand gap terms through the Neo4j skill taxonomy (BELONGS_TO edges).
+ * For each gap string, returns related skill names (parent, children, siblings).
+ * One Neo4j call regardless of candidate count — runs once per search.
+ */
+export async function expandGapHierarchy(
+  gaps: string[]
+): Promise<Map<string, string[]>> {
+  if (gaps.length === 0) return new Map();
+
+  try {
+    const rows = await neo4jRead<{
+      gap: string;
+      parents: string[];
+      siblings: string[];
+      children: string[];
+    }>(
+      `UNWIND $gaps AS gap
+       OPTIONAL MATCH (s:Skill)
+         WHERE toLower(s.name) = toLower(gap)
+       WITH gap, collect(s) AS directSkills
+       UNWIND CASE WHEN size(directSkills) > 0 THEN directSkills ELSE [null] END AS s
+       OPTIONAL MATCH (s)-[:BELONGS_TO]->(parent)
+       OPTIONAL MATCH (parent)<-[:BELONGS_TO]-(sibling:Skill)
+       WHERE sibling <> s
+       OPTIONAL MATCH (s)<-[:BELONGS_TO]-(child:Skill)
+       WITH gap,
+         collect(DISTINCT parent.name) AS parents,
+         collect(DISTINCT sibling.name) AS siblings,
+         collect(DISTINCT child.name) AS children
+       RETURN gap, parents, siblings, children`,
+      { gaps }
+    );
+
+    const map = new Map<string, string[]>();
+    for (const row of rows) {
+      const related = [
+        ...(row.parents ?? []),
+        ...(row.siblings ?? []),
+        ...(row.children ?? []),
+      ].filter(Boolean);
+      if (related.length > 0) {
+        map.set(row.gap, [...new Set(related)]);
+      }
+    }
+    return map;
+  } catch (err) {
+    console.error("[PartnerScoring] Skill hierarchy expansion failed:", err);
+    return new Map();
+  }
+}
+
+// ─── Shared Client Detection ─────────────────────────────────
+
+/**
+ * Find clients shared between the source firm and candidate firms.
+ * Returns Map<candidateFirmId, sharedClientNames[]>.
+ * Single efficient Cypher query using the HAS_CLIENT edges.
+ */
+export async function batchFetchSharedClients(
+  sourceFirmId: string,
+  candidateIds: string[]
+): Promise<Map<string, string[]>> {
+  if (candidateIds.length === 0) return new Map();
+
+  try {
+    const rows = await neo4jRead<{
+      firmId: string;
+      sharedClients: string[];
+    }>(
+      `MATCH (source:Company:ServiceFirm {id: $sourceFirmId})-[:HAS_CLIENT]->(client:Company)<-[:HAS_CLIENT]-(cand:Company:ServiceFirm)
+       WHERE cand.id IN $candidateIds
+       RETURN cand.id AS firmId, collect(DISTINCT client.name) AS sharedClients`,
+      { sourceFirmId, candidateIds }
+    );
+
+    const map = new Map<string, string[]>();
+    for (const row of rows) {
+      const clients = (row.sharedClients ?? []).filter(Boolean);
+      if (clients.length > 0) {
+        map.set(row.firmId, clients);
+      }
+    }
+    return map;
+  } catch (err) {
+    console.error("[PartnerScoring] Shared client fetch failed:", err);
+    return new Map();
+  }
+}
+
 // ─── Scoring Engine ─────────────────────────────────────────
 
 export interface ScorePartnerMatchesOpts {
@@ -380,6 +475,10 @@ export interface ScorePartnerMatchesOpts {
   graphData?: Map<string, GraphSignals>;
   /** Pre-fetched PREFERS edges per firm. Optional. */
   graphPrefs?: Map<string, GraphPrefEdge[]>;
+  /** Pre-expanded skill hierarchy for capability gap terms. Optional. */
+  hierarchyExpansion?: Map<string, string[]>;
+  /** Pre-fetched shared clients between source firm and candidates. Optional. */
+  sharedClients?: Map<string, string[]>;
 }
 
 /**
@@ -391,7 +490,7 @@ export interface ScorePartnerMatchesOpts {
 export function scorePartnerMatches(
   opts: ScorePartnerMatchesOpts
 ): ScoredMatch[] {
-  const { sourceFirm, preferences, candidates, graphData, graphPrefs } = opts;
+  const { sourceFirm, preferences, candidates, graphData, graphPrefs, hierarchyExpansion, sharedClients } = opts;
   const relationships = getSymbioticRelationships();
 
   const userData = getFirmData(sourceFirm.enrichmentData);
@@ -454,11 +553,12 @@ export function scorePartnerMatches(
       dataRichness: 0,
       preferenceCompleteness: 0,
       evidenceDepth: 0,
+      sharedClientBonus: 0,
       total: 0,
     };
 
     // 1. Capability gap match: their services/skills fill your gaps (0-30)
-    //    Enhanced: apply evidence multiplier from graph when available
+    //    Enhanced: evidence multiplier from graph + skill hierarchy traversal
     let gapFillScore = 0;
     if (userCapGaps.length > 0) {
       for (const gap of userCapGaps) {
@@ -477,6 +577,19 @@ export function scorePartnerMatches(
             else if (totalEvidence >= 1) gapScore = 1.2;
           }
           gapFillScore += gapScore;
+        } else if (hierarchyExpansion) {
+          // Hierarchy fallback: check if candidate has skills related via taxonomy
+          // e.g., gap "data analytics" matches firm with "Tableau dashboarding" via BELONGS_TO
+          const relatedSkills = hierarchyExpansion.get(gap);
+          if (relatedSkills) {
+            const hierarchyMatch = relatedSkills.some((rs) =>
+              cSkills.some((cs) => fuzzyMatch(cs, rs))
+            );
+            if (hierarchyMatch) {
+              // Slightly lower score for hierarchy match (0.8 vs 1.0 base)
+              gapFillScore += 0.8;
+            }
+          }
         }
       }
       // Scale: max possible is userCapGaps.length * 1.5, normalize to 30
@@ -575,9 +688,16 @@ export function scorePartnerMatches(
       breakdown.preferenceCompleteness = 7;
     }
 
-    // 10. Evidence depth bonus (0-5) — NEW: case studies are proof of delivery
+    // 10. Evidence depth bonus (0-5) — case studies are proof of delivery
     if (g && g.caseStudyCount > 0) {
       breakdown.evidenceDepth = Math.min(g.caseStudyCount, 5);
+    }
+
+    // 11. Shared client bonus (0-5) — firms that served the same clients
+    const firmSharedClients = sharedClients?.get(c.id) ?? [];
+    if (firmSharedClients.length > 0) {
+      // 1 shared client = 2.5 pts, 2+ = 5 pts (cap)
+      breakdown.sharedClientBonus = Math.min(firmSharedClients.length * 2.5, 5);
     }
 
     // Total (normalized 0-100)
@@ -591,7 +711,8 @@ export function scorePartnerMatches(
       breakdown.industryOverlap +
       breakdown.dataRichness +
       breakdown.preferenceCompleteness +
-      breakdown.evidenceDepth;
+      breakdown.evidenceDepth +
+      breakdown.sharedClientBonus;
     breakdown.total = Math.max(0, Math.min(100, Math.round(raw)));
 
     return {
@@ -603,6 +724,7 @@ export function scorePartnerMatches(
       cServices,
       cIndustries,
       cSkills,
+      sharedClients: firmSharedClients,
     };
   });
 
@@ -648,7 +770,8 @@ Skills: ${m.cSkills.join(", ") || "N/A"}
 Industries: ${m.cIndustries.join(", ") || "N/A"}
 Pre-score: ${m.score}
 ${m.symbioticType ? `Symbiotic: ${m.symbioticType}` : ""}
-Their gaps: ${asArr(m.firm.prefs.capabilityGaps).join(", ") || "N/A"}`
+Their gaps: ${asArr(m.firm.prefs.capabilityGaps).join(", ") || "N/A"}
+${m.sharedClients.length > 0 ? `Shared clients: ${m.sharedClients.join(", ")}` : ""}`
     )
     .join("\n\n");
 

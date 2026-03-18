@@ -17,6 +17,8 @@ import {
   generateMatchExplanations,
   batchFetchGraphSignals,
   batchFetchPrefEdges,
+  expandGapHierarchy,
+  batchFetchSharedClients,
   getFirmData,
   asArr,
   type FirmWithPrefs,
@@ -112,11 +114,14 @@ export async function POST(req: NextRequest) {
     prefs: prefsMap.get(f.id) ?? {},
   }));
 
-  // Batch-fetch Neo4j graph signals for all candidates (one round-trip)
+  // Batch-fetch Neo4j graph signals, hierarchy expansion, and shared clients in parallel
   const candidateIds = candidates.map((c) => c.id);
-  const [graphData, graphPrefs] = await Promise.all([
+  const capGaps = asArr(preferences.capabilityGaps);
+  const [graphData, graphPrefs, hierarchyExpansion, sharedClients] = await Promise.all([
     batchFetchGraphSignals(candidateIds),
     batchFetchPrefEdges(candidateIds),
+    expandGapHierarchy(capGaps),
+    batchFetchSharedClients(sourceFirmId, candidateIds),
   ]);
 
   // Score with graph-enhanced signals
@@ -131,6 +136,8 @@ export async function POST(req: NextRequest) {
     candidates,
     graphData,
     graphPrefs,
+    hierarchyExpansion,
+    sharedClients,
   });
 
   // Take top 15 (already sorted by scorePartnerMatches)

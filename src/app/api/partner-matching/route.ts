@@ -23,6 +23,8 @@ import {
   generateMatchExplanations,
   batchFetchGraphSignals,
   batchFetchPrefEdges,
+  expandGapHierarchy,
+  batchFetchSharedClients,
   getFirmData,
   asArr,
   type FirmWithPrefs,
@@ -162,11 +164,14 @@ export async function GET() {
     prefs: prefsMap.get(f.id) ?? {},
   }));
 
-  // Batch-fetch Neo4j graph signals for all candidates
+  // Batch-fetch Neo4j graph signals, hierarchy expansion, and shared clients in parallel
   const candidateIds = candidates.map((c) => c.id);
-  const [graphData, graphPrefs] = await Promise.all([
+  const userCapGaps = asArr(userPrefs.capabilityGaps);
+  const [graphData, graphPrefs, hierarchyExpansion, sharedClients] = await Promise.all([
     batchFetchGraphSignals(candidateIds),
     batchFetchPrefEdges(candidateIds),
+    expandGapHierarchy(userCapGaps),
+    batchFetchSharedClients(userFirm.id, candidateIds),
   ]);
 
   // Score with graph-enhanced signals
@@ -182,6 +187,8 @@ export async function GET() {
     candidates,
     graphData,
     graphPrefs,
+    hierarchyExpansion,
+    sharedClients,
   });
 
   // Take top 15
