@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 async function checkAdmin() {
   const headersList = await headers();
   const session = await auth.api.getSession({ headers: headersList });
-  if (!session?.user || session.user.role !== "superadmin") return null;
+  if (!session?.user || !["superadmin", "admin", "growth_ops"].includes(session.user.role ?? "")) return null;
   return session;
 }
 
