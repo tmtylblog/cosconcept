@@ -66,6 +66,16 @@ export async function POST(req: NextRequest) {
       ) as string;
       const linkedinUsername = (body.username ?? acctData.username ?? body.linkedin_username ?? null) as string | null;
 
+      // Extract premium/SN contract info from webhook payload if available
+      const connectionParams = (acctData.connection_params ?? body.connection_params ?? {}) as Record<string, unknown>;
+      const im = (connectionParams.im ?? {}) as Record<string, unknown>;
+      const premiumContractId = (im.premiumContractId as string) ?? null;
+      const premiumFeatures = Array.isArray(im.premiumFeatures) ? (im.premiumFeatures as string[]) : [];
+      let accountType = "basic";
+      if (premiumFeatures.includes("sales_navigator")) accountType = "sales_navigator";
+      else if (premiumFeatures.includes("recruiter")) accountType = "recruiter";
+      else if (premiumFeatures.includes("premium")) accountType = "premium";
+
       if (unipileAccountId) {
         // Try update first; if no rows affected, this is a new account — insert it
         const updated = await db
@@ -75,6 +85,8 @@ export async function POST(req: NextRequest) {
             // Always update name/username if we have them — fixes blank-name ghost rows
             ...(displayName ? { displayName } : {}),
             ...(linkedinUsername ? { linkedinUsername } : {}),
+            ...(premiumContractId ? { premiumContractId } : {}),
+            ...(premiumFeatures.length > 0 ? { premiumFeatures, accountType } : {}),
             updatedAt: new Date(),
           })
           .where(eq(growthOpsLinkedInAccounts.unipileAccountId, unipileAccountId));
@@ -89,6 +101,9 @@ export async function POST(req: NextRequest) {
               unipileAccountId,
               displayName: displayName || unipileAccountId,
               linkedinUsername,
+              accountType,
+              premiumContractId,
+              premiumFeatures,
               status: resolvedStatus,
             })
             .onConflictDoNothing();

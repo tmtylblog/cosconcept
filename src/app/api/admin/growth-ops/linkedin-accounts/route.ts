@@ -59,30 +59,32 @@ export async function GET(req: NextRequest) {
         // Always fetch individual account for richest data (list endpoint often returns blank names)
         let displayName = acct.name ?? "";
         let linkedinUsername: string | null = null;
+        let premiumContractId: string | null = null;
+        let premiumFeatures: string[] = [];
+        let accountType = "basic";
         try {
-          const detail = await UnipileClient.getAccount(acct.id) as {
-            name?: string;
-            username?: string;
-            // Unipile sometimes nests profile info under connection_params
-            connection_params?: {
-              username?: string;
-              name?: string;
-              full_name?: string;
-              first_name?: string;
-              last_name?: string;
-            };
-          };
+          const detail = await UnipileClient.getAccount(acct.id);
           const cp = detail.connection_params;
           displayName =
             detail.name ||
             cp?.full_name ||
             cp?.name ||
             ([cp?.first_name, cp?.last_name].filter(Boolean).join(" ")) ||
-            detail.username ||
+            (detail as { username?: string }).username ||
             cp?.username ||
             displayName ||
             "";
-          linkedinUsername = detail.username ?? cp?.username ?? null;
+          linkedinUsername = (detail as { username?: string }).username ?? cp?.username ?? null;
+
+          // Extract premium/Sales Navigator contract info
+          const im = cp?.im;
+          if (im) {
+            premiumContractId = im.premiumContractId ?? null;
+            premiumFeatures = im.premiumFeatures ?? [];
+            if (premiumFeatures.includes("sales_navigator")) accountType = "sales_navigator";
+            else if (premiumFeatures.includes("recruiter")) accountType = "recruiter";
+            else if (premiumFeatures.includes("premium")) accountType = "premium";
+          }
         } catch {
           // Use list-level data if individual fetch fails
         }
@@ -93,6 +95,9 @@ export async function GET(req: NextRequest) {
             unipileAccountId: acct.id,
             displayName: displayName || acct.id,
             linkedinUsername,
+            accountType,
+            premiumContractId,
+            premiumFeatures,
             status: acct.status ?? "OK",
           })
           .onConflictDoUpdate({
@@ -101,6 +106,9 @@ export async function GET(req: NextRequest) {
               status: acct.status ?? "OK",
               displayName: displayName || acct.id,
               ...(linkedinUsername ? { linkedinUsername } : {}),
+              accountType,
+              premiumContractId,
+              premiumFeatures,
               updatedAt: new Date(),
             },
           });

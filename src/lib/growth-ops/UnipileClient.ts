@@ -50,6 +50,19 @@ export interface UnipileAccount {
   status: string;
   name?: string;
   created_at?: string;
+  connection_params?: {
+    im?: {
+      premiumId?: string | null;
+      premiumContractId?: string | null;
+      premiumFeatures?: string[];
+      organizations?: Array<{ organization_urn?: string; mailbox_urn?: string }>;
+    };
+    username?: string;
+    name?: string;
+    full_name?: string;
+    first_name?: string;
+    last_name?: string;
+  };
 }
 
 export interface UnipileChatAttendee {
