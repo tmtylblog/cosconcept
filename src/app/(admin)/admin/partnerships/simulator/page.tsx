@@ -12,11 +12,41 @@ import {
   Handshake,
   RotateCcw,
   X,
-  Plus,
   CheckCircle2,
+  Shuffle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+// ─── Option Constants ────────────────────────────────────────
+
+const PHILOSOPHY_OPTIONS = ["breadth", "depth", "opportunities"] as const;
+
+const FIRM_CATEGORIES = [
+  "Fractional & Embedded Leadership", "Training, Enablement & Professional Coaching",
+  "Outsourcing & Managed Business Services", "Brand Strategy & Positioning",
+  "Creative, Content & Production", "Customer Success & Retention",
+  "Data, Analytics & Business Intelligence", "Market Research & Customer Intelligence",
+  "Finance, Accounting & Tax", "Human Capital & Talent", "People Operations & HR",
+  "Privacy, Risk & Compliance", "Legal", "Growth Marketing & Demand Generation",
+  "Lifecycle, CRM & Marketing Operations", "Public Relations & Communications",
+  "Operations & Process", "Change, Transformation & Reengineering",
+  "Product Strategy & Innovation", "Product Management, UX & Design",
+  "Sales Strategy & Enablement", "Revenue Operations & Go-To-Market",
+  "Strategy & Management Consulting", "Technology Strategy & Digital Transformation",
+  "Systems Integration & Enterprise Platforms", "Software Engineering & Custom Development",
+  "AI, Automation & Intelligent Systems", "IT Infrastructure & Managed Services",
+  "Cybersecurity & Information Security", "Industry & Applied Engineering",
+];
+
+const GEOGRAPHY_OPTIONS = ["Global", "North America", "Latin America", "Europe", "Asia Pacific", "Middle East & Africa", "UK only", "US only"];
+
+const DEAL_BREAKER_OPTIONS = ["None", "Direct competitors", "Firms that poach clients", "Firms under 5 people", "No remote teams", "No offshore teams"];
+
+function pickRandom<T>(arr: readonly T[], count: number): T[] {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -127,48 +157,68 @@ function FirmSelector({
   );
 }
 
-// ─── Tag Input ──────────────────────────────────────────────
+// ─── Multi-Select Dropdown ───────────────────────────────────
 
-function TagInput({
-  tags,
-  onAdd,
-  onRemove,
+function MultiSelect({
+  selected,
+  options,
+  onChange,
   placeholder,
 }: {
-  tags: string[];
-  onAdd: (tag: string) => void;
-  onRemove: (tag: string) => void;
+  selected: string[];
+  options: string[];
+  onChange: (selected: string[]) => void;
   placeholder: string;
 }) {
-  const [input, setInput] = useState("");
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  const available = options.filter((o) =>
+    !selected.includes(o) && o.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
-    <div className="space-y-1.5">
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {tags.map((t) => (
+    <div ref={ref} className="relative">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {selected.map((t) => (
             <span key={t} className="flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2 py-0.5 text-[11px] font-medium text-cos-electric">
               {t}
-              <button onClick={() => onRemove(t)} className="hover:text-cos-ember"><X className="h-2.5 w-2.5" /></button>
+              <button onClick={() => onChange(selected.filter((s) => s !== t))} className="hover:text-cos-ember"><X className="h-2.5 w-2.5" /></button>
             </span>
           ))}
         </div>
       )}
-      <div className="flex gap-1">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && input.trim()) { onAdd(input.trim()); setInput(""); } }}
-          placeholder={placeholder}
-          className="flex-1 rounded-cos-md border border-cos-border bg-white px-2 py-1 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
-        />
-        <button
-          onClick={() => { if (input.trim()) { onAdd(input.trim()); setInput(""); } }}
-          className="rounded-cos-md bg-cos-electric/10 px-2 py-1 text-cos-electric hover:bg-cos-electric/20"
-        >
-          <Plus className="h-3 w-3" />
-        </button>
-      </div>
+      <input
+        type="text"
+        value={filter}
+        onChange={(e) => { setFilter(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder={placeholder}
+        className="w-full rounded-cos-md border border-cos-border bg-white px-2 py-1 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+      />
+      {open && available.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-cos-md border border-cos-border bg-white shadow-lg max-h-40 overflow-y-auto">
+          {available.slice(0, 15).map((o) => (
+            <button
+              key={o}
+              onClick={() => { onChange([...selected, o]); setFilter(""); }}
+              className="w-full px-2 py-1.5 text-left text-[11px] text-cos-midnight hover:bg-cos-electric/5 transition-colors"
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -487,64 +537,86 @@ export default function PartnerSimulatorPage() {
               <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-cos-slate-dim">Preference Overrides</h3>
-                  {result?.preferencesUsed && (
-                    <button onClick={() => resetPrefsToActual(result.preferencesUsed)} className="text-[10px] text-cos-electric hover:underline flex items-center gap-1">
-                      <RotateCcw className="h-2.5 w-2.5" /> Reset
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setPhilosophy(PHILOSOPHY_OPTIONS[Math.floor(Math.random() * PHILOSOPHY_OPTIONS.length)]);
+                        setCapGaps(pickRandom(FIRM_CATEGORIES, 2 + Math.floor(Math.random() * 2)));
+                        setPartnerTypes(pickRandom(FIRM_CATEGORIES, 2 + Math.floor(Math.random() * 2)));
+                        setDealBreaker(DEAL_BREAKER_OPTIONS[Math.floor(Math.random() * DEAL_BREAKER_OPTIONS.length)]);
+                        setGeoPreference(GEOGRAPHY_OPTIONS[Math.floor(Math.random() * GEOGRAPHY_OPTIONS.length)]);
+                      }}
+                      className="text-[10px] text-cos-warm hover:underline flex items-center gap-1"
+                      title="Randomize all preferences"
+                    >
+                      <Shuffle className="h-2.5 w-2.5" /> Randomize
                     </button>
-                  )}
+                    {result?.preferencesUsed && (
+                      <button onClick={() => resetPrefsToActual(result.preferencesUsed)} className="text-[10px] text-cos-electric hover:underline flex items-center gap-1">
+                        <RotateCcw className="h-2.5 w-2.5" /> Reset
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-cos-slate-light">Philosophy</label>
-                  <textarea
+                  <select
                     value={philosophy}
                     onChange={(e) => setPhilosophy(e.target.value)}
-                    rows={2}
-                    placeholder="breadth / depth / opportunities"
-                    className="w-full rounded-cos-md border border-cos-border bg-white px-2 py-1 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
-                  />
+                    className="w-full rounded-cos-md border border-cos-border bg-white px-2 py-1.5 text-xs text-cos-midnight focus:border-cos-electric focus:outline-none"
+                  >
+                    <option value="">Select...</option>
+                    {PHILOSOPHY_OPTIONS.map((o) => (
+                      <option key={o} value={o}>{o.charAt(0).toUpperCase() + o.slice(1)} — {o === "breadth" ? "wider services" : o === "depth" ? "deeper expertise" : "new referrals"}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-cos-slate-light">Capability Gaps</label>
-                  <TagInput
-                    tags={capGaps}
-                    onAdd={(t) => setCapGaps([...capGaps, t])}
-                    onRemove={(t) => setCapGaps(capGaps.filter((g) => g !== t))}
-                    placeholder="Add gap..."
+                  <MultiSelect
+                    selected={capGaps}
+                    options={FIRM_CATEGORIES}
+                    onChange={setCapGaps}
+                    placeholder="Search categories..."
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-cos-slate-light">Partner Types</label>
-                  <TagInput
-                    tags={partnerTypes}
-                    onAdd={(t) => setPartnerTypes([...partnerTypes, t])}
-                    onRemove={(t) => setPartnerTypes(partnerTypes.filter((g) => g !== t))}
-                    placeholder="Add type..."
+                  <MultiSelect
+                    selected={partnerTypes}
+                    options={FIRM_CATEGORIES}
+                    onChange={setPartnerTypes}
+                    placeholder="Search firm types..."
                   />
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-cos-slate-light">Deal Breaker</label>
-                  <input
-                    type="text"
+                  <select
                     value={dealBreaker}
                     onChange={(e) => setDealBreaker(e.target.value)}
-                    placeholder="None"
-                    className="w-full rounded-cos-md border border-cos-border bg-white px-2 py-1 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
-                  />
+                    className="w-full rounded-cos-md border border-cos-border bg-white px-2 py-1.5 text-xs text-cos-midnight focus:border-cos-electric focus:outline-none"
+                  >
+                    {DEAL_BREAKER_OPTIONS.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-cos-slate-light">Geography</label>
-                  <input
-                    type="text"
+                  <select
                     value={geoPreference}
                     onChange={(e) => setGeoPreference(e.target.value)}
-                    placeholder="Global"
-                    className="w-full rounded-cos-md border border-cos-border bg-white px-2 py-1 text-xs text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
-                  />
+                    className="w-full rounded-cos-md border border-cos-border bg-white px-2 py-1.5 text-xs text-cos-midnight focus:border-cos-electric focus:outline-none"
+                  >
+                    {GEOGRAPHY_OPTIONS.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
