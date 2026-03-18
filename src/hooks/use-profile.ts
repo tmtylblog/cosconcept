@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useCallback, useState, useEffect, useMemo } from "react";
+import { createContext, useContext, useCallback, useState, useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import React from "react";
 
@@ -72,11 +72,17 @@ export function ProfileProvider({
 
   // Hydrate from DB on mount. When authenticated but orgId is missing
   // (e.g. hard refresh), the server resolves org from the session.
+  // Only fetches once per organizationId to avoid repeat calls on navigation.
+  const hydratedForOrgRef = useRef<string | null>(null);
   useEffect(() => {
     if (!isAuthenticated) {
       setHydrated(true);
       return;
     }
+    // Skip if already hydrated for this org
+    const orgKey = organizationId ?? "__session__";
+    if (hydratedForOrgRef.current === orgKey) return;
+
     let cancelled = false;
 
     async function hydrate() {
@@ -89,6 +95,7 @@ export function ProfileProvider({
         const profile = await res.json();
         if (cancelled) return;
         setData(profile);
+        hydratedForOrgRef.current = orgKey;
       } catch {
         // Silently ignore hydration failures
       } finally {

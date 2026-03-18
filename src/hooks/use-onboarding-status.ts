@@ -93,8 +93,12 @@ export function useOnboardingStatus(
       return;
     }
 
-    // Reset on org change
-    completedRef.current = false;
+    // If already completed, skip polling entirely — just do one fetch to confirm
+    if (completedRef.current) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
 
     // Initial fetch

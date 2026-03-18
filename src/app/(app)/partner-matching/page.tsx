@@ -529,15 +529,37 @@ export default function PartnerMatchingPage() {
     return () => clearTimeout(timer);
   }, [hydrated, prefsComplete, missingFields]);
 
-  // Load matches when preferences are complete
+  // Load matches when preferences are complete (with session cache to avoid repeat AI calls)
   const matchesNotifiedRef = useRef(false);
+  const CACHE_KEY = "cos_partner_matches";
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
   const loadMatches = useCallback(async () => {
+    // Check session cache first — avoids 2-5s Gemini AI call on revisit
+    try {
+      const cached = sessionStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { data: cachedData, ts } = JSON.parse(cached);
+        if (Date.now() - ts < CACHE_TTL && cachedData.matches?.length > 0) {
+          setMatches(cachedData.matches);
+          setFirmId(cachedData.firmId ?? null);
+          setMessage(cachedData.message ?? null);
+          return;
+        }
+      }
+    } catch { /* ignore cache errors */ }
+
     setLoading(true);
     try {
       const res = await fetch("/api/partner-matching");
       if (!res.ok) throw new Error("Failed to load matches");
       const data = await res.json();
       const loadedMatches: PartnerMatch[] = data.matches ?? [];
+
+      // Cache results to avoid re-calling Gemini on page revisit
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
+      } catch { /* ignore */ }
       setMatches(loadedMatches);
       setFirmId(data.firmId ?? null);
       setMessage(data.message ?? null);
