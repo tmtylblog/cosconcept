@@ -480,10 +480,19 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
   // ─── COS signal listener (nav + action signals) ─────────────
   const signalQueueRef = useRef<CosSignal[]>([]);
+  const pendingNavRef = useRef<{ page: string; ts: number } | null>(null);
   const lastSignalRef = useRef<number>(0);
   const navProactiveFiredRef = useRef<Set<string>>(new Set());
 
-  // Listen for cos:signal events (new unified signal system)
+  // Use refs for volatile values so the event listener doesn't re-register
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  const pageContextRef = useRef(pageContext);
+  pageContextRef.current = pageContext;
+  const sendMessageRef = useRef(sendMessage);
+  sendMessageRef.current = sendMessage;
+
+  // Listen for cos:signal events — stable handler, never re-registers
   useEffect(() => {
     if (isGuest || isOnboarding) return;
 
@@ -492,41 +501,53 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       if (!signal?.kind) return;
 
       if (signal.kind === "nav") {
-        // Nav signals: check if we should send a proactive message
-        const pageMode = signal.page;
-        if (navProactiveFiredRef.current.has(pageMode)) return;
-
-        const proactiveMsg = getProactiveNavMessage(pageMode, pageContext);
-        if (!proactiveMsg) return;
-        if (status === "submitted" || status === "streaming") return;
-
-        // Mark as fired so we don't repeat
-        navProactiveFiredRef.current.add(pageMode);
-
-        // Send as hidden context message after short delay
-        setTimeout(() => {
-          sendMessage({ text: `[CONTEXT_SIGNAL] Navigated to ${pageMode}: ${proactiveMsg}` });
-        }, 500);
+        // Queue nav signal — process on timer so page context can catch up
+        if (!navProactiveFiredRef.current.has(signal.page)) {
+          pendingNavRef.current = { page: signal.page, ts: Date.now() };
+        }
       } else if (signal.kind === "action") {
-        // Action signals: queue for deduplication and cooldown processing
         signalQueueRef.current.push(signal);
       }
     };
 
     window.addEventListener("cos:signal", handler);
     return () => window.removeEventListener("cos:signal", handler);
-  }, [isGuest, isOnboarding, pageContext, status, sendMessage]);
+  }, [isGuest, isOnboarding]); // Stable deps — no re-registration on status/sendMessage changes
 
-  // Process action signal queue — flush with dedup and cooldown
+  // Unified signal processor — handles both nav and action signals on a timer
   useEffect(() => {
     if (isGuest || isOnboarding) return;
 
     const interval = setInterval(() => {
+      const currentStatus = statusRef.current;
+      if (currentStatus === "submitted" || currentStatus === "streaming") return;
+
+      // ── Process pending nav signal ──
+      const pendingNav = pendingNavRef.current;
+      if (pendingNav) {
+        const elapsed = Date.now() - pendingNav.ts;
+        // Wait 1.5s for page context to settle, then send
+        if (elapsed >= 1500) {
+          pendingNavRef.current = null;
+          const pageMode = pendingNav.page;
+
+          if (!navProactiveFiredRef.current.has(pageMode)) {
+            const proactiveMsg = getProactiveNavMessage(
+              pageMode as import("@/lib/cos-signal").PageMode,
+              pageContextRef.current,
+            );
+            if (proactiveMsg) {
+              navProactiveFiredRef.current.add(pageMode);
+              sendMessageRef.current({ text: `[CONTEXT_SIGNAL] Navigated to ${pageMode}: ${proactiveMsg}` });
+              return; // One message per tick to avoid flooding
+            }
+          }
+        }
+      }
+
+      // ── Process action signal queue ──
       const queue = signalQueueRef.current;
       if (queue.length === 0) return;
-
-      // Don't send if Ossy is busy
-      if (status === "submitted" || status === "streaming") return;
 
       // Cooldown: 2s for discover, 5s for others
       const isDiscover = queue.some((s) => s.kind === "action" && s.page === "discover");
@@ -557,11 +578,11 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         return parts.join(": ");
       }).filter(Boolean);
 
-      sendMessage({ text: `[CONTEXT_SIGNAL] ${lines.join("; ")}` });
-    }, 2000);
+      sendMessageRef.current({ text: `[CONTEXT_SIGNAL] ${lines.join("; ")}` });
+    }, 1000);
 
     return () => clearInterval(interval);
-  }, [isGuest, isOnboarding, status, sendMessage]);
+  }, [isGuest, isOnboarding]); // Stable deps — reads current values from refs
 
   // ─── Ossy page event listener + auto-send (legacy) ─────────
   const eventQueueRef = useRef<OssyPageEvent[]>([]);
@@ -1174,8 +1195,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         {messages.map((message, idx) => {
           const text = getMessageText(message);
 
-          // Hide [PAGE_EVENT] messages from user view — they're system context for Ossy
-          if (message.role === "user" && text.startsWith("[PAGE_EVENT]")) return null;
+          // Hide [PAGE_EVENT] and [CONTEXT_SIGNAL] messages from user view — they're system context for Ossy
+          if (message.role === "user" && (text.startsWith("[PAGE_EVENT]") || text.startsWith("[CONTEXT_SIGNAL]"))) return null;
 
           // Show messages that have text OR tool parts (tool-only messages show
           // the in-progress search indicator while discover_search is running).

@@ -158,40 +158,57 @@ export function getProactiveNavMessage(
   const config = PAGE_MODE_CONFIG[pageMode];
   if (!config) return null;
 
-  // Dynamic overrides based on page context
-  if (pageMode === "firm-overview" && ctx?.page === "overview") {
-    if (ctx.completeness < 80) {
-      return `Your profile is ${ctx.completeness}% complete. ${ctx.completeness < 50 ? "Adding more details would help partners find you." : "Almost there — a few more fields would strengthen your matches."}`;
+  // Dynamic overrides based on page context.
+  // If ctx hasn't loaded yet (null or wrong page), use a brief static fallback
+  // for firm pages so the nav signal still fires reliably.
+  if (pageMode === "firm-overview") {
+    if (ctx?.page === "overview") {
+      if (ctx.completeness < 80) {
+        return `Your profile is ${ctx.completeness}% complete. ${ctx.completeness < 50 ? "Adding more details would help partners find you." : "Almost there — a few more fields would strengthen your matches."}`;
+      }
+      return null; // Silent if profile is healthy
     }
-    return null; // Silent if profile is healthy
+    return "This is your firm overview — your public profile, categories, skills, and industries.";
   }
 
-  if (pageMode === "firm-offering" && ctx?.page === "offering") {
-    if (ctx.withoutDescription > 0) {
-      return `${ctx.serviceCount} services, ${ctx.withoutDescription} need descriptions.`;
+  if (pageMode === "firm-offering") {
+    if (ctx?.page === "offering") {
+      if (ctx.withoutDescription > 0) {
+        return `${ctx.serviceCount} services, ${ctx.withoutDescription} need descriptions.`;
+      }
+      return null;
     }
-    return null;
+    return "Your services and solutions — what you offer to clients and partners.";
   }
 
-  if (pageMode === "firm-experts" && ctx?.page === "experts") {
-    if (ctx.expertCount === 0) {
-      return "Adding team members strengthens your matches.";
+  if (pageMode === "firm-experts") {
+    if (ctx?.page === "experts") {
+      if (ctx.expertCount === 0) {
+        return "Adding team members strengthens your matches.";
+      }
+      return null;
     }
-    return null;
+    return "Your team — the experts whose experience powers your matching.";
   }
 
-  if (pageMode === "firm-experience" && ctx?.page === "experience") {
-    if (ctx.caseStudyCount < 3) {
-      return "Case studies are your strongest matching signal.";
+  if (pageMode === "firm-experience") {
+    if (ctx?.page === "experience") {
+      if (ctx.caseStudyCount < 3) {
+        return "Case studies are your strongest matching signal.";
+      }
+      return null;
     }
-    return null;
+    return "Your case studies and project portfolio — proof of what you've delivered.";
   }
 
-  if (pageMode === "firm-preferences" && ctx?.page === "preferences") {
-    if (ctx.completeness < 100) {
-      return `${ctx.completeness}% complete.`;
+  if (pageMode === "firm-preferences") {
+    if (ctx?.page === "preferences") {
+      if (ctx.completeness < 100) {
+        return `Partner preferences are ${ctx.completeness}% complete.`;
+      }
+      return null;
     }
-    return null;
+    return "Your partner preferences — what you're looking for in a partner.";
   }
 
   return config.proactiveOnNav;
