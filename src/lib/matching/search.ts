@@ -66,6 +66,7 @@ export async function executeSearch(params: {
   // Step 2: Layer 1 — Structured filtering (PostgreSQL or Neo4j)
   let layer1Candidates;
   let layer1Count: number;
+  let layer1Source: "neo4j" | "pg" = USE_PG_SEARCH ? "pg" : "neo4j";
   if (USE_PG_SEARCH) {
     layer1Candidates = await pgStructuredFilter(filters, 500, searcherFirmId);
     layer1Count = layer1Candidates.length;
@@ -88,11 +89,13 @@ export async function executeSearch(params: {
         console.warn("[Search] Neo4j returned 0, falling back to PG firms");
         layer1Candidates = await pgStructuredFilter(filters, 500, searcherFirmId);
         layer1Count = layer1Candidates.length;
+        layer1Source = "pg";
       }
     } catch (neo4jErr) {
       console.error("[Search] Neo4j Layer 1 failed, falling back to PG:", neo4jErr);
       layer1Candidates = await pgStructuredFilter(filters, 500, searcherFirmId);
       layer1Count = layer1Candidates.length;
+      layer1Source = "pg";
       console.warn("[Search] PG fallback returned %d candidates", layer1Count);
     }
   }
@@ -133,6 +136,7 @@ export async function executeSearch(params: {
       layer3Ranked: finalCandidates.length,
       totalDurationMs: durationMs,
       estimatedCostUsd,
+      layer1Source,
     },
   };
 

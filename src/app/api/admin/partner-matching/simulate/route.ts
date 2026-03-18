@@ -15,6 +15,8 @@ import { eq, and, ne } from "drizzle-orm";
 import {
   scorePartnerMatches,
   generateMatchExplanations,
+  batchFetchGraphSignals,
+  batchFetchPrefEdges,
   getFirmData,
   asArr,
   type FirmWithPrefs,
@@ -110,7 +112,14 @@ export async function POST(req: NextRequest) {
     prefs: prefsMap.get(f.id) ?? {},
   }));
 
-  // Score
+  // Batch-fetch Neo4j graph signals for all candidates (one round-trip)
+  const candidateIds = candidates.map((c) => c.id);
+  const [graphData, graphPrefs] = await Promise.all([
+    batchFetchGraphSignals(candidateIds),
+    batchFetchPrefEdges(candidateIds),
+  ]);
+
+  // Score with graph-enhanced signals
   const scored = scorePartnerMatches({
     sourceFirm: {
       id: sourceFirm.id,
@@ -120,6 +129,8 @@ export async function POST(req: NextRequest) {
     },
     preferences,
     candidates,
+    graphData,
+    graphPrefs,
   });
 
   // Take top 15 (already sorted by scorePartnerMatches)

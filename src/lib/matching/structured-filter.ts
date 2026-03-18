@@ -38,6 +38,13 @@ interface StructuredCandidate {
   matchedServices: string[];
   structuredScore: number;
   bidirectionalFit?: { theyWantUs: number; weWantThem: number };
+  /** KG evidence: skills with case study/expert backing */
+  skillEvidence?: Array<{ name: string; caseStudyCount: number; expertCount: number; confidence: number }>;
+  /** KG evidence: services with backing */
+  serviceEvidence?: Array<{ name: string; caseStudyCount: number; expertCount: number }>;
+  caseStudyCount?: number;
+  teamRelevance?: number;
+  classifierConfidence?: number;
 }
 
 /**
@@ -357,6 +364,20 @@ export async function structuredFilter(
       matchedMarkets,
       matchedServices,
       structuredScore,
+      skillEvidence: skillMatches.map((s) => ({
+        name: s.name,
+        caseStudyCount: Math.max(0, s.evidence - 0), // evidence = csCount + expCount combined
+        expertCount: 0, // individual counts not available in combined evidence field
+        confidence: s.confidence,
+      })),
+      serviceEvidence: serviceMatches.map((s) => ({
+        name: s.name,
+        caseStudyCount: s.evidence,
+        expertCount: 0,
+      })),
+      caseStudyCount,
+      teamRelevance,
+      classifierConfidence: record.classifierConfidence ?? 0.3,
     };
   });
 
@@ -388,6 +409,11 @@ export function toMatchCandidates(
       topSkills: c.matchedSkills,
       industries: c.matchedIndustries,
       website: c.website,
+      caseStudyCount: c.caseStudyCount,
+      skillEvidence: c.skillEvidence,
+      serviceEvidence: c.serviceEvidence,
+      classifierConfidence: c.classifierConfidence,
+      teamRelevance: c.teamRelevance,
     },
   }));
 }

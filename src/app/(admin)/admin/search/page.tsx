@@ -16,7 +16,11 @@ import {
   Clock,
   DollarSign,
   Filter,
+  FileText,
+  Users,
+  Microscope,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -52,6 +56,7 @@ interface SearchTestResult {
     layer3Ranked: number;
     totalDurationMs: number;
     estimatedCostUsd: number;
+    layer1Source?: "neo4j" | "pg";
   };
 }
 
@@ -302,10 +307,10 @@ export default function AdminSearchPage() {
 
             {/* Layer accordions */}
             <LayerAccordion
-              title="Layer 1 — Structured Filter (Neo4j)"
+              title={`Layer 1 — Structured Filter (${searchResult.stats.layer1Source === "pg" ? "PG Fallback" : "Neo4j"})`}
               icon={<Database className="h-3.5 w-3.5" />}
-              iconColor="text-purple-600"
-              iconBg="bg-purple-50"
+              iconColor={searchResult.stats.layer1Source === "pg" ? "text-amber-600" : "text-purple-600"}
+              iconBg={searchResult.stats.layer1Source === "pg" ? "bg-amber-50" : "bg-purple-50"}
               count={searchResult.layer1.count}
               candidates={searchResult.layer1.topCandidates}
               scoreKey="structuredScore"
@@ -313,6 +318,7 @@ export default function AdminSearchPage() {
               onToggle={() =>
                 setExpandedLayer(expandedLayer === "layer1" ? null : "layer1")
               }
+              showEvidence
             />
             <LayerAccordion
               title="Layer 2 — Vector Re-rank"
@@ -543,6 +549,7 @@ function LayerAccordion({
   candidates,
   scoreKey,
   showExplanation,
+  showEvidence,
   isOpen,
   onToggle,
 }: {
@@ -554,9 +561,12 @@ function LayerAccordion({
   candidates: MatchCandidate[];
   scoreKey: keyof MatchCandidate;
   showExplanation?: boolean;
+  showEvidence?: boolean;
   isOpen: boolean;
   onToggle: () => void;
 }) {
+  const [expandedEvidence, setExpandedEvidence] = useState<string | null>(null);
+
   return (
     <div className="overflow-hidden rounded-cos-xl border border-cos-border bg-cos-surface">
       <button
@@ -588,47 +598,138 @@ function LayerAccordion({
             <div className="divide-y divide-cos-border">
               {candidates.map((c, idx) => {
                 const score = c[scoreKey] as number | undefined;
+                const hasEvidence = showEvidence && (c.preview.skillEvidence?.length || c.preview.serviceEvidence?.length || c.preview.caseStudyCount);
+                const isEvidenceOpen = expandedEvidence === c.firmId;
+
                 return (
-                  <div key={c.firmId} className="flex items-start gap-4 px-5 py-3.5 text-sm">
-                    <span className="mt-0.5 w-5 text-right font-mono text-[11px] text-cos-slate-light">
-                      {idx + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-cos-midnight truncate">{c.firmName}</p>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {c.preview.categories.slice(0, 2).map((cat) => (
-                          <span
-                            key={cat}
-                            className="rounded-cos-pill bg-cos-electric/8 px-2 py-0.5 text-[11px] text-cos-electric"
-                          >
-                            {cat}
-                          </span>
-                        ))}
-                        {c.preview.industries.slice(0, 2).map((ind) => (
-                          <span
-                            key={ind}
-                            className="rounded-cos-pill bg-cos-slate/8 px-2 py-0.5 text-[11px] text-cos-slate"
-                          >
-                            {ind}
-                          </span>
-                        ))}
+                  <div key={c.firmId} className="px-5 py-3.5 text-sm">
+                    <div className="flex items-start gap-4">
+                      <span className="mt-0.5 w-5 text-right font-mono text-[11px] text-cos-slate-light">
+                        {idx + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-cos-midnight truncate">{c.firmName}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {c.preview.categories.slice(0, 2).map((cat) => (
+                            <span key={cat} className="rounded-cos-pill bg-cos-electric/8 px-2 py-0.5 text-[11px] text-cos-electric">
+                              {cat}
+                            </span>
+                          ))}
+                          {c.preview.industries.slice(0, 2).map((ind) => (
+                            <span key={ind} className="rounded-cos-pill bg-cos-slate/8 px-2 py-0.5 text-[11px] text-cos-slate">
+                              {ind}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* Evidence summary bar */}
+                        {showEvidence && (
+                          <div className="mt-1.5 flex items-center gap-2 text-[10px] text-cos-slate-light">
+                            {c.preview.caseStudyCount != null && c.preview.caseStudyCount > 0 && (
+                              <span className="flex items-center gap-0.5">
+                                <FileText className="h-3 w-3" />
+                                {c.preview.caseStudyCount} CS
+                              </span>
+                            )}
+                            {c.preview.teamRelevance != null && c.preview.teamRelevance > 0 && (
+                              <span className="flex items-center gap-0.5">
+                                <Users className="h-3 w-3" />
+                                {c.preview.teamRelevance} team
+                              </span>
+                            )}
+                            {c.preview.skillEvidence && c.preview.skillEvidence.length > 0 && (
+                              <span className="flex items-center gap-0.5">
+                                <Zap className="h-3 w-3" />
+                                {c.preview.skillEvidence.length} skills
+                              </span>
+                            )}
+                            {c.preview.classifierConfidence != null && (
+                              <span className={cn(
+                                "font-mono",
+                                c.preview.classifierConfidence > 0.7 ? "text-cos-signal" :
+                                c.preview.classifierConfidence < 0.3 ? "text-cos-ember" : "text-cos-slate-light"
+                              )}>
+                                conf: {(c.preview.classifierConfidence * 100).toFixed(0)}%
+                              </span>
+                            )}
+                            {hasEvidence && (
+                              <button
+                                onClick={() => setExpandedEvidence(isEvidenceOpen ? null : c.firmId)}
+                                className="flex items-center gap-0.5 text-cos-electric hover:text-cos-electric/80 font-medium"
+                              >
+                                <Microscope className="h-3 w-3" />
+                                {isEvidenceOpen ? "Hide" : "Evidence"}
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {showExplanation && c.matchExplanation && (
+                          <p className="mt-1.5 text-xs text-cos-slate line-clamp-2">
+                            {c.matchExplanation}
+                          </p>
+                        )}
                       </div>
-                      {showExplanation && c.matchExplanation && (
-                        <p className="mt-1.5 text-xs text-cos-slate line-clamp-2">
-                          {c.matchExplanation}
+                      <div className="shrink-0 text-right">
+                        {score != null && (
+                          <p className="font-mono text-sm font-semibold text-cos-midnight">
+                            {(score * 100).toFixed(1)}
+                          </p>
+                        )}
+                        <p className="font-mono text-[11px] text-cos-slate-light">
+                          total: {(c.totalScore * 100).toFixed(1)}
                         </p>
-                      )}
+                      </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      {score != null && (
-                        <p className="font-mono text-sm font-semibold text-cos-midnight">
-                          {(score * 100).toFixed(1)}
-                        </p>
-                      )}
-                      <p className="font-mono text-[11px] text-cos-slate-light">
-                        total: {(c.totalScore * 100).toFixed(1)}
-                      </p>
-                    </div>
+
+                    {/* Expanded evidence panel */}
+                    {isEvidenceOpen && (
+                      <div className="mt-2 ml-9 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/5 p-3 space-y-2 text-[11px]">
+                        {/* Skills with evidence */}
+                        {c.preview.skillEvidence && c.preview.skillEvidence.length > 0 && (
+                          <div>
+                            <p className="font-bold text-cos-midnight mb-1">Matched Skills (HAS_SKILL edges)</p>
+                            <div className="flex flex-wrap gap-1">
+                              {c.preview.skillEvidence.map((sk, i) => (
+                                <span key={i} className={cn(
+                                  "inline-flex items-center gap-1 rounded-cos-pill px-2 py-0.5 text-[10px] font-medium",
+                                  sk.confidence > 0.7 ? "bg-cos-signal/10 text-cos-signal" :
+                                  sk.confidence > 0.3 ? "bg-cos-warm/10 text-cos-warm" :
+                                  "bg-cos-slate/10 text-cos-slate"
+                                )}>
+                                  {sk.name}
+                                  <span className="text-[9px] opacity-70">
+                                    ({sk.caseStudyCount > 0 ? `${sk.caseStudyCount} ev` : "0 ev"}, {(sk.confidence * 100).toFixed(0)}%)
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Services with evidence */}
+                        {c.preview.serviceEvidence && c.preview.serviceEvidence.length > 0 && (
+                          <div>
+                            <p className="font-bold text-cos-midnight mb-1">Matched Services (OFFERS_SERVICE edges)</p>
+                            <div className="flex flex-wrap gap-1">
+                              {c.preview.serviceEvidence.map((svc, i) => (
+                                <span key={i} className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-midnight/5 px-2 py-0.5 text-[10px] font-medium text-cos-slate">
+                                  {svc.name}
+                                  {svc.caseStudyCount > 0 && <span className="text-[9px] opacity-70">({svc.caseStudyCount} ev)</span>}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Summary counts */}
+                        <div className="flex gap-4 pt-1 border-t border-cos-electric/10 text-cos-slate-light">
+                          <span>Case studies: <strong className="text-cos-midnight">{c.preview.caseStudyCount ?? 0}</strong></span>
+                          <span>Team relevance: <strong className="text-cos-midnight">{c.preview.teamRelevance ?? 0}</strong></span>
+                          <span>Classifier: <strong className="text-cos-midnight">{c.preview.classifierConfidence != null ? `${(c.preview.classifierConfidence * 100).toFixed(0)}%` : "—"}</strong></span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

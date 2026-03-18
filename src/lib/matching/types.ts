@@ -141,6 +141,14 @@ export interface MatchCandidate {
     clientSizeSegment?: "startup" | "smb" | "mid_market" | "enterprise" | "mixed";
     /** Firm: top case study outcomes/highlights for LLM ranker context */
     caseStudyHighlights?: string[];
+    /** KG evidence: skills with case study/expert backing from Neo4j HAS_SKILL edges */
+    skillEvidence?: Array<{ name: string; caseStudyCount: number; expertCount: number; confidence: number }>;
+    /** KG evidence: services with evidence from Neo4j OFFERS_SERVICE edges */
+    serviceEvidence?: Array<{ name: string; caseStudyCount: number; expertCount: number }>;
+    /** Enrichment classifier confidence (0-1) */
+    classifierConfidence?: number;
+    /** Team relevance: count of team members with relevant work history */
+    teamRelevance?: number;
   };
 }
 
@@ -153,6 +161,7 @@ export interface SearchResult {
     layer3Ranked: number;
     totalDurationMs: number;
     estimatedCostUsd: number;
+    layer1Source?: "neo4j" | "pg";
   };
   /** Only present when debug: true is passed to executeSearch() */
   debugLayers?: {

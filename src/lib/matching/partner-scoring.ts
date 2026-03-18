@@ -5,22 +5,24 @@
  * /api/partner-matching/route.ts so it can be shared by the
  * admin simulator and any future matching surfaces.
  *
- * Scoring dimensions (max ~110 raw, normalized to 0-100):
- * 1. Capability gap match (0-30)
- * 2. Reverse match (0-20)
+ * Scoring dimensions (max ~115 raw, normalized to 0-100):
+ * 1. Capability gap match (0-30) — enhanced with Neo4j evidence weighting
+ * 2. Reverse match (0-20) — enhanced with expert skills from graph
  * 3. Firm type preference (0-20: 15 forward + 5 reverse)
- * 4. Geography overlap (0-10)
+ * 4. Geography overlap (0-10) — uses graph OPERATES_IN when available
  * 5. Symbiotic relationship bonus (0-10)
  * 6. Deal breaker penalty (0 or -40)
- * 7. Industry overlap (0-5)
- * 8. Data richness (0-5)
- * 9. Preference completeness (0-10)
+ * 7. Industry overlap (0-5) — uses graph SERVES_INDUSTRY when available
+ * 8. Data richness (0-5) — uses graph node counts for richer signal
+ * 9. Preference completeness (0-10) — checks PREFERS edges
+ * 10. Evidence depth bonus (0-5) — case study count from graph
  */
 
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod/v4";
 import { logUsage } from "@/lib/ai/gateway";
+import { neo4jRead } from "@/lib/neo4j";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -46,7 +48,40 @@ export interface ScoreBreakdown {
   industryOverlap: number; // 0-5
   dataRichness: number; // 0-5
   preferenceCompleteness: number; // 0-10
+  evidenceDepth: number; // 0-5 (case study count from graph)
   total: number; // 0-100 normalized
+}
+
+// ─── Neo4j Graph Signal Types ──────────────────────────────
+
+export interface GraphSkillSignal {
+  name: string;
+  csCount: number;
+  expCount: number;
+  conf: number;
+}
+
+export interface GraphServiceSignal {
+  name: string;
+  csCount: number;
+  expCount: number;
+}
+
+export interface GraphSignals {
+  skills: GraphSkillSignal[];
+  services: GraphServiceSignal[];
+  caseStudyCount: number;
+  industries: string[];
+  markets: string[];
+  categories: string[];
+  expertCount: number;
+  expertSkills: string[];
+}
+
+export interface GraphPrefEdge {
+  dim: string;
+  target: string;
+  weight: number;
 }
 
 export interface ScoredMatch {
@@ -179,6 +214,124 @@ export function getSymbioticRelationships() {
   }
 }
 
+// ─── Neo4j Batch Fetch ──────────────────────────────────────
+
+/** Safely convert Neo4j integer (which may be {low, high} object) to number */
+function toInt(val: unknown): number {
+  if (typeof val === "number") return val;
+  if (val && typeof val === "object" && "low" in val) return (val as { low: number }).low ?? 0;
+  return Number(val) || 0;
+}
+
+/**
+ * Batch-fetch graph signals for all candidate firms in ONE Neo4j round-trip.
+ * Returns a Map<firmId, GraphSignals>. Gracefully returns empty map on failure.
+ */
+export async function batchFetchGraphSignals(
+  firmIds: string[]
+): Promise<Map<string, GraphSignals>> {
+  if (firmIds.length === 0) return new Map();
+
+  try {
+    const rows = await neo4jRead<{
+      firmId: string;
+      skills: Array<{ name: string; csCount: unknown; expCount: unknown; conf: unknown }>;
+      services: Array<{ name: string; csCount: unknown; expCount: unknown }>;
+      caseStudyCount: unknown;
+      industries: string[];
+      markets: string[];
+      categories: string[];
+      expertCount: unknown;
+      expertSkills: string[];
+    }>(
+      `UNWIND $firmIds AS fid
+       MATCH (f:Company:ServiceFirm {id: fid})
+       OPTIONAL MATCH (f)-[hs:HAS_SKILL]->(s:Skill)
+       WITH f, collect(DISTINCT {
+         name: s.name, csCount: coalesce(hs.caseStudyCount, 0),
+         expCount: coalesce(hs.expertCount, 0), conf: coalesce(hs.confidence, 0)
+       }) AS skills
+       OPTIONAL MATCH (f)-[os:OFFERS_SERVICE]->(svc:Service)
+       WITH f, skills, collect(DISTINCT {
+         name: svc.name, csCount: coalesce(os.caseStudyCount, 0),
+         expCount: coalesce(os.expertCount, 0)
+       }) AS services
+       OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs:CaseStudy)
+       WITH f, skills, services, count(DISTINCT cs) AS caseStudyCount
+       OPTIONAL MATCH (f)-[:SERVES_INDUSTRY]->(i:Industry)
+       WITH f, skills, services, caseStudyCount, collect(DISTINCT i.name) AS industries
+       OPTIONAL MATCH (f)-[:OPERATES_IN]->(m:Market)
+       WITH f, skills, services, caseStudyCount, industries, collect(DISTINCT m.name) AS markets
+       OPTIONAL MATCH (f)-[:IN_CATEGORY]->(cat:FirmCategory)
+       WITH f, skills, services, caseStudyCount, industries, markets, collect(DISTINCT cat.name) AS categories
+       OPTIONAL MATCH (f)<-[:CURRENTLY_AT]-(p:Person)-[:HAS_SKILL|HAS_EXPERTISE]->(es:Skill)
+       WITH f, skills, services, caseStudyCount, industries, markets, categories,
+         count(DISTINCT p) AS expertCount, collect(DISTINCT es.name) AS expertSkills
+       RETURN f.id AS firmId, skills, services, caseStudyCount, industries, markets, categories, expertCount, expertSkills`,
+      { firmIds }
+    );
+
+    const map = new Map<string, GraphSignals>();
+    for (const row of rows) {
+      // Filter out null-name skills/services from OPTIONAL MATCH producing {name: null}
+      const skills = (row.skills ?? [])
+        .filter((s) => s.name != null)
+        .map((s) => ({ name: s.name, csCount: toInt(s.csCount), expCount: toInt(s.expCount), conf: toInt(s.conf) / (toInt(s.conf) > 1 ? 100 : 1) }));
+      const services = (row.services ?? [])
+        .filter((s) => s.name != null)
+        .map((s) => ({ name: s.name, csCount: toInt(s.csCount), expCount: toInt(s.expCount) }));
+
+      map.set(row.firmId, {
+        skills,
+        services,
+        caseStudyCount: toInt(row.caseStudyCount),
+        industries: (row.industries ?? []).filter(Boolean),
+        markets: (row.markets ?? []).filter(Boolean),
+        categories: (row.categories ?? []).filter(Boolean),
+        expertCount: toInt(row.expertCount),
+        expertSkills: (row.expertSkills ?? []).filter(Boolean),
+      });
+    }
+    return map;
+  } catch (err) {
+    console.error("[PartnerScoring] Neo4j batch fetch failed, scoring with PG only:", err);
+    return new Map();
+  }
+}
+
+/**
+ * Batch-fetch PREFERS edges for candidate firms.
+ */
+export async function batchFetchPrefEdges(
+  firmIds: string[]
+): Promise<Map<string, GraphPrefEdge[]>> {
+  if (firmIds.length === 0) return new Map();
+
+  try {
+    const rows = await neo4jRead<{
+      firmId: string;
+      dim: string;
+      target: string;
+      weight: unknown;
+    }>(
+      `UNWIND $firmIds AS fid
+       MATCH (f:Company {id: fid})-[p:PREFERS]->(t)
+       RETURN f.id AS firmId, p.dimension AS dim, t.name AS target, coalesce(p.weight, 1.0) AS weight`,
+      { firmIds }
+    );
+
+    const map = new Map<string, GraphPrefEdge[]>();
+    for (const row of rows) {
+      const existing = map.get(row.firmId) ?? [];
+      existing.push({ dim: row.dim, target: row.target, weight: toInt(row.weight) });
+      map.set(row.firmId, existing);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
 // ─── Scoring Engine ─────────────────────────────────────────
 
 export interface ScorePartnerMatchesOpts {
@@ -190,16 +343,22 @@ export interface ScorePartnerMatchesOpts {
   };
   preferences: Record<string, unknown>;
   candidates: FirmWithPrefs[];
+  /** Pre-fetched Neo4j graph signals per firm. Optional — scoring falls back to PG-only if absent. */
+  graphData?: Map<string, GraphSignals>;
+  /** Pre-fetched PREFERS edges per firm. Optional. */
+  graphPrefs?: Map<string, GraphPrefEdge[]>;
 }
 
 /**
  * Score candidate firms against a source firm and its preferences.
+ * When graphData is provided, uses Neo4j evidence (case study counts,
+ * expert attestation, PREFERS edges) for higher-quality scoring.
  * Returns ScoredMatch[] sorted by score descending.
  */
 export function scorePartnerMatches(
   opts: ScorePartnerMatchesOpts
 ): ScoredMatch[] {
-  const { sourceFirm, preferences, candidates } = opts;
+  const { sourceFirm, preferences, candidates, graphData, graphPrefs } = opts;
   const relationships = getSymbioticRelationships();
 
   const userData = getFirmData(sourceFirm.enrichmentData);
@@ -221,15 +380,23 @@ export function scorePartnerMatches(
   const scored = candidates.map((c) => {
     const cEnrichment = c.enrichmentData ?? {};
     const cData = getFirmData(cEnrichment);
-    const cServices = cData.services;
-    const cSkills = cData.skills;
-    const cIndustries = cData.industries;
-    const cMarkets = cData.markets;
+
+    // Graph signals for this candidate (may be undefined if Neo4j fetch failed/skipped)
+    const g = graphData?.get(c.id);
+    const gPrefs = graphPrefs?.get(c.id);
+
+    // Merge PG and graph data — prefer graph when available, fall back to PG
+    const cServices = g?.services?.length ? [...new Set([...cData.services, ...g.services.map((s) => s.name)])] : cData.services;
+    const cSkills = g?.skills?.length ? [...new Set([...cData.skills, ...g.skills.map((s) => s.name)])] : cData.skills;
+    const cIndustries = g?.industries?.length ? [...new Set([...cData.industries, ...g.industries])] : cData.industries;
+    const cMarkets = g?.markets?.length ? [...new Set([...cData.markets, ...g.markets])] : cData.markets;
     const cCategory = (
-      cData.categories[0] ?? String(c.firmType ?? "")
+      (g?.categories?.[0] ?? cData.categories[0] ?? String(c.firmType ?? ""))
     ).toLowerCase();
     const cCapGaps = asArr(c.prefs.capabilityGaps);
     const cPrefTypes = asArr(c.prefs.preferredPartnerTypes);
+    // Expert skills from graph (skills attested by actual team members)
+    const cExpertSkills = g?.expertSkills ?? [];
 
     const breakdown: ScoreBreakdown = {
       capabilityGapMatch: 0,
@@ -241,25 +408,46 @@ export function scorePartnerMatches(
       industryOverlap: 0,
       dataRichness: 0,
       preferenceCompleteness: 0,
+      evidenceDepth: 0,
       total: 0,
     };
 
     // 1. Capability gap match: their services/skills fill your gaps (0-30)
-    const gapFillCount = userCapGaps.filter(
-      (gap) =>
-        cServices.some((s) => fuzzyMatch(s, gap)) ||
-        cSkills.some((s) => fuzzyMatch(s, gap))
-    ).length;
-    breakdown.capabilityGapMatch =
-      userCapGaps.length > 0
-        ? Math.round((gapFillCount / userCapGaps.length) * 30 * 10) / 10
-        : 10;
+    //    Enhanced: apply evidence multiplier from graph when available
+    let gapFillScore = 0;
+    if (userCapGaps.length > 0) {
+      for (const gap of userCapGaps) {
+        const serviceMatch = cServices.some((s) => fuzzyMatch(s, gap));
+        const skillMatch = cSkills.some((s) => fuzzyMatch(s, gap));
+        if (serviceMatch || skillMatch) {
+          // Base: 1 point per filled gap
+          let gapScore = 1;
+          // Evidence multiplier from graph: skill backed by case studies/experts scores higher
+          if (g) {
+            const graphSkill = g.skills.find((s) => fuzzyMatch(s.name, gap));
+            const graphSvc = g.services.find((s) => fuzzyMatch(s.name, gap));
+            const totalEvidence = (graphSkill?.csCount ?? 0) + (graphSkill?.expCount ?? 0)
+              + (graphSvc?.csCount ?? 0) + (graphSvc?.expCount ?? 0);
+            if (totalEvidence >= 3) gapScore = 1.5;
+            else if (totalEvidence >= 1) gapScore = 1.2;
+          }
+          gapFillScore += gapScore;
+        }
+      }
+      // Scale: max possible is userCapGaps.length * 1.5, normalize to 30
+      const maxGapScore = userCapGaps.length * 1.5;
+      breakdown.capabilityGapMatch = Math.round((gapFillScore / maxGapScore) * 30 * 10) / 10;
+    } else {
+      breakdown.capabilityGapMatch = 10;
+    }
 
     // 2. Reverse match: your services fill their gaps (0-20)
+    //    Enhanced: also check expert skills from graph
     const reverseGaps = cCapGaps.filter(
       (gap) =>
         userServices.some((s) => fuzzyMatch(s, gap)) ||
-        userSkills.some((s) => fuzzyMatch(s, gap))
+        userSkills.some((s) => fuzzyMatch(s, gap)) ||
+        cExpertSkills.some((s) => fuzzyMatch(s, gap)) // experts who can deliver
     );
     breakdown.reverseMatch =
       cCapGaps.length > 0
@@ -278,7 +466,7 @@ export function scorePartnerMatches(
       }
     }
 
-    // 4. Geography overlap (0-10)
+    // 4. Geography overlap (0-10) — uses graph markets when available
     if (userGeo && cMarkets.length > 0) {
       breakdown.geographyOverlap = cMarkets.some((m) =>
         fuzzyMatch(m, userGeo)
@@ -315,21 +503,36 @@ export function scorePartnerMatches(
       }
     }
 
-    // 7. Industry overlap bonus (0-5)
+    // 7. Industry overlap bonus (0-5) — uses merged PG+graph industries
     const industryOverlapCount = userIndustries.filter((i) =>
       cIndustries.some((ci) => fuzzyMatch(ci, i))
     ).length;
     breakdown.industryOverlap = Math.min(industryOverlapCount * 2, 5);
 
     // 8. Data richness bonus (0-5)
-    breakdown.dataRichness = Math.min(
-      cServices.length + cSkills.length + cIndustries.length,
-      5
-    );
+    //    Enhanced: when graph data available, use richer node counts
+    if (g) {
+      const richness = g.skills.length + g.services.length + g.caseStudyCount + g.expertCount;
+      breakdown.dataRichness = Math.min(Math.round(richness / 2), 5);
+    } else {
+      breakdown.dataRichness = Math.min(
+        cServices.length + cSkills.length + cIndustries.length,
+        5
+      );
+    }
 
     // 9. Preference completeness (0-10)
+    //    Enhanced: also check PREFERS edges from graph
     if (cCapGaps.length > 0 || cPrefTypes.length > 0) {
       breakdown.preferenceCompleteness = 10;
+    } else if (gPrefs && gPrefs.length > 0) {
+      // Firm has PREFERS edges in graph even if PG prefs are empty
+      breakdown.preferenceCompleteness = 7;
+    }
+
+    // 10. Evidence depth bonus (0-5) — NEW: case studies are proof of delivery
+    if (g && g.caseStudyCount > 0) {
+      breakdown.evidenceDepth = Math.min(g.caseStudyCount, 5);
     }
 
     // Total (normalized 0-100)
@@ -342,7 +545,8 @@ export function scorePartnerMatches(
       breakdown.dealBreakerPenalty +
       breakdown.industryOverlap +
       breakdown.dataRichness +
-      breakdown.preferenceCompleteness;
+      breakdown.preferenceCompleteness +
+      breakdown.evidenceDepth;
     breakdown.total = Math.max(0, Math.min(100, Math.round(raw)));
 
     return {
