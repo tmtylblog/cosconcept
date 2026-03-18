@@ -1112,31 +1112,21 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                     const toolName = part.type.slice(5);
 
                     // On the discover page, search results go to the middle panel.
-                    // Show a compact "results in panel" indicator instead of full card list.
+                    // Hide completed result cards (user sees results in center panel).
+                    // Show searching indicator while tool is in progress.
                     if (firmSection === "discover" && (toolName === "discover_search" || toolName === "search_partners")) {
                       if (toolPart.state === "output-available") {
-                        const output = toolPart.output as { candidates?: unknown[]; totalFound?: number } | undefined;
-                        const count = output?.candidates?.length ?? 0;
-                        return (
-                          <div key={partIdx} className="my-2">
-                            <div className="flex items-center gap-1.5 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/5 px-3 py-1.5">
-                              <Sparkles className="h-3.5 w-3.5 text-cos-electric" />
-                              <span className="text-xs font-medium text-cos-electric">
-                                {count > 0 ? `${count} match${count === 1 ? "" : "es"} loaded in panel` : "No matches found"}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      } else {
-                        return (
-                          <div key={partIdx} className="my-2">
-                            <div className="flex items-center gap-2 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/5 px-3 py-2">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-cos-electric" />
-                              <span className="text-xs font-medium text-cos-electric">Searching the network...</span>
-                            </div>
-                          </div>
-                        );
+                        // Results are visible in center panel — don't show anything in chat
+                        return null;
                       }
+                      return (
+                        <div key={partIdx} className="my-2">
+                          <div className="flex items-center gap-2 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/5 px-3 py-2">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-cos-electric" />
+                            <span className="text-xs font-medium text-cos-electric">Searching the network...</span>
+                          </div>
+                        </div>
+                      );
                     }
 
                     return (
