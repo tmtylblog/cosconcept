@@ -17,7 +17,7 @@ import type { FirmDetailData, MatchContext } from "@/hooks/use-discover-stream";
 
 // ─── Types ────────────────────────────────────────────────
 
-type TabId = "overview" | "case_studies" | "experts";
+type TabId = "overview" | "case_studies" | "experts" | "clients";
 
 interface FirmDetailBlockProps {
   data: FirmDetailData | null;
@@ -88,13 +88,36 @@ function synthesizeCaseStudySummary(cs: { skills: string[]; industries: string[]
   return `Project demonstrating ${parts.join(" ")}`;
 }
 
-/** Generate a summary line for an expert */
-function synthesizeExpertSummary(exp: { title: string | null; hiddenSummary?: string | null; skills?: string[]; specialistTitles?: string[] }): string | null {
-  if (exp.hiddenSummary) return exp.hiddenSummary;
+/** Generate a summary line for an expert — prefers specialist title, then work history context */
+function synthesizeExpertSummary(exp: {
+  title: string | null;
+  hiddenSummary?: string | null;
+  skills?: string[];
+  specialistTitles?: string[];
+  workHistory?: Array<{ company: string; title: string; isCurrent: boolean }>;
+}): string | null {
   if (exp.specialistTitles?.length) return exp.specialistTitles[0];
   if (exp.title) return exp.title;
+  // Show top work history titles as context
+  if (exp.workHistory?.length) {
+    const top = exp.workHistory.slice(0, 2).map(wh => `${wh.title} at ${wh.company}`);
+    return top.join("; ");
+  }
   if (exp.skills?.length) return exp.skills.slice(0, 3).join(", ");
   return null;
+}
+
+/** Get relevant work history entries for an expert */
+function getRelevantWorkHistory(
+  workHistory: Array<{ company: string; title: string; isCurrent: boolean }>,
+  queryTerms: string[]
+): Array<{ company: string; title: string; isCurrent: boolean }> {
+  if (!queryTerms.length) return workHistory.slice(0, 3);
+  const relevant = workHistory.filter(wh =>
+    queryTerms.some(t => wh.title.toLowerCase().includes(t) || wh.company.toLowerCase().includes(t))
+  );
+  if (relevant.length > 0) return relevant.slice(0, 3);
+  return workHistory.slice(0, 3);
 }
 
 // ─── Component ────────────────────────────────────────────
@@ -142,6 +165,14 @@ export function FirmDetailBlock({
 
   if (!data) return null;
 
+  // Compute client counts for the Clients tab
+  const caseStudyClients = [...new Set(data.caseStudies.map(cs => cs.clientName).filter(Boolean))] as string[];
+  const expertClients = [...new Set(
+    data.experts.flatMap(exp => (exp.workHistory ?? []).map(wh => wh.company))
+  )].filter(c => c && c !== data.name); // Exclude own firm
+  const totalClients = new Set([...caseStudyClients, ...(data.directClients ?? []).map(c => c.name)]).size;
+  const hasClients = totalClients > 0 || expertClients.length > 0;
+
   // Build tabs — only show tabs with real content
   const tabs: { id: TabId; label: string; count?: number }[] = [
     { id: "overview", label: "Overview" },
@@ -150,6 +181,9 @@ export function FirmDetailBlock({
       : []),
     ...(data.experts.length > 0
       ? [{ id: "experts" as const, label: "Experts", count: data.experts.length }]
+      : []),
+    ...(hasClients
+      ? [{ id: "clients" as const, label: "Clients" }]
       : []),
   ];
 
@@ -232,6 +266,9 @@ export function FirmDetailBlock({
         )}
         {currentTab === "experts" && (
           <ExpertsTab experts={data.experts} searchQuery={searchQuery} onViewExpert={onViewExpert} />
+        )}
+        {currentTab === "clients" && (
+          <ClientsTab data={data} searchQuery={searchQuery} />
         )}
       </div>
     </div>
@@ -396,6 +433,11 @@ function OverviewTab({
                   {relevance && (
                     <p className="mb-1.5 text-[10px] font-medium text-cos-signal">{relevance}</p>
                   )}
+                  {(cs.title || cs.clientName) && (
+                    <p className="text-[11px] font-medium text-cos-midnight mb-1">
+                      {cs.title}{cs.clientName && <span className="text-cos-slate font-normal"> — for {cs.clientName}</span>}
+                    </p>
+                  )}
                   <p className="text-xs text-cos-midnight/80 leading-relaxed line-clamp-2">
                     {displaySummary}
                   </p>
@@ -551,6 +593,11 @@ function CaseStudiesTab({
             {relevance && (
               <p className="mb-1.5 text-[10px] font-medium text-cos-signal">{relevance}</p>
             )}
+            {(cs.title || cs.clientName) && (
+              <p className="text-[11px] font-medium text-cos-midnight mb-1">
+                {cs.title}{cs.clientName && <span className="text-cos-slate font-normal"> — for {cs.clientName}</span>}
+              </p>
+            )}
             <p className="text-xs text-cos-midnight/80 leading-relaxed line-clamp-3">
               {displaySummary}
             </p>
@@ -669,11 +716,152 @@ function ExpertsTab({
                   ))}
                 </div>
               )}
+              {exp.workHistory && exp.workHistory.length > 0 && (
+                <div className="mt-0.5">
+                  {getRelevantWorkHistory(exp.workHistory, queryTerms).slice(0, 2).map((wh, j) => (
+                    <p key={j} className="truncate text-[9px] text-cos-slate-light">
+                      {wh.isCurrent ? "Currently" : "Previously"} {wh.title} at {wh.company}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-cos-slate-light" />
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Clients Tab ─────────────────────────────────────────
+
+function ClientsTab({
+  data,
+  searchQuery,
+}: {
+  data: FirmDetailData;
+  searchQuery: string;
+}) {
+  const queryTerms = getQueryTerms(searchQuery);
+
+  // Direct clients from case studies and HAS_CLIENT edges
+  const directClientNames = new Set<string>();
+  const caseStudyClientDetails: Array<{ name: string; caseStudyTitle?: string; industries: string[] }> = [];
+
+  for (const cs of data.caseStudies) {
+    if (cs.clientName) {
+      if (!directClientNames.has(cs.clientName)) {
+        directClientNames.add(cs.clientName);
+        caseStudyClientDetails.push({
+          name: cs.clientName,
+          caseStudyTitle: cs.title ?? undefined,
+          industries: cs.industries,
+        });
+      }
+    }
+  }
+
+  // Add any HAS_CLIENT entries not already covered by case studies
+  for (const cl of data.directClients ?? []) {
+    if (!directClientNames.has(cl.name)) {
+      directClientNames.add(cl.name);
+      caseStudyClientDetails.push({
+        name: cl.name,
+        industries: cl.industry ? [cl.industry] : [],
+      });
+    }
+  }
+
+  // Client experience through experts (from work history)
+  const expertClientMap = new Map<string, { companies: string[]; expertName: string }>();
+  for (const exp of data.experts) {
+    const companies = (exp.workHistory ?? [])
+      .map(wh => wh.company)
+      .filter(c => c && c !== data.name && !directClientNames.has(c));
+    if (companies.length > 0) {
+      for (const company of companies) {
+        const existing = expertClientMap.get(company);
+        if (existing) {
+          if (!existing.companies.includes(exp.displayName)) {
+            existing.companies.push(exp.displayName);
+          }
+        } else {
+          expertClientMap.set(company, { companies: [exp.displayName], expertName: exp.displayName });
+        }
+      }
+    }
+  }
+  const expertClients = [...expertClientMap.entries()].slice(0, 15);
+
+  if (caseStudyClientDetails.length === 0 && expertClients.length === 0) {
+    return <p className="text-sm italic text-cos-slate py-4 text-center">No client data available.</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Direct clients (from case studies + HAS_CLIENT) */}
+      {caseStudyClientDetails.length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-slate-light">
+            Direct Clients ({caseStudyClientDetails.length})
+          </p>
+          <div className="space-y-1.5">
+            {caseStudyClientDetails.map((cl) => {
+              const isRelevant = queryTerms.some(t =>
+                cl.name.toLowerCase().includes(t) ||
+                cl.industries.some(i => i.toLowerCase().includes(t))
+              );
+              return (
+                <div
+                  key={cl.name}
+                  className={cn(
+                    "rounded-cos-xl border px-3 py-2",
+                    isRelevant ? "border-cos-signal/20 bg-cos-signal/5" : "border-cos-border"
+                  )}
+                >
+                  <p className="text-xs font-medium text-cos-midnight">{cl.name}</p>
+                  {cl.caseStudyTitle && (
+                    <p className="text-[10px] text-cos-slate">Case study: {cl.caseStudyTitle}</p>
+                  )}
+                  {cl.industries.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {cl.industries.slice(0, 3).map((ind) => (
+                        <span key={ind} className="rounded-cos-full bg-cos-warm/10 px-1.5 py-0.5 text-[9px] text-cos-warm">
+                          {ind}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Client experience through experts */}
+      {expertClients.length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-slate-light">
+            Client Experience via Team ({expertClients.length})
+          </p>
+          <p className="mb-2 text-[10px] text-cos-slate-light">
+            Companies where this firm&apos;s experts have previously worked
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {expertClients.map(([company, info]) => (
+              <span
+                key={company}
+                className="rounded-cos-full border border-cos-border bg-cos-cloud px-2.5 py-1 text-[10px] text-cos-slate"
+                title={`Via ${info.companies.join(", ")}`}
+              >
+                {company}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

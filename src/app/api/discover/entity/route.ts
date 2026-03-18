@@ -42,8 +42,25 @@ async function fetchFirm(firmId: string) {
     skills: string[];
     industries: string[];
     markets: string[];
-    caseStudies: Array<{ legacyId: string | null; summary: string | null; sourceUrl: string | null; skills: string[]; industries: string[] }>;
-    experts: Array<{ legacyId: string | null; displayName: string; title: string | null; hiddenSummary: string | null; skills: string[]; specialistTitles: string[] }>;
+    caseStudies: Array<{
+      legacyId: string | null;
+      title: string | null;
+      summary: string | null;
+      sourceUrl: string | null;
+      clientName: string | null;
+      skills: string[];
+      industries: string[];
+    }>;
+    experts: Array<{
+      legacyId: string | null;
+      displayName: string;
+      title: string | null;
+      hiddenSummary: string | null;
+      skills: string[];
+      specialistTitles: string[];
+      workHistory: Array<{ company: string; title: string; isCurrent: boolean }>;
+    }>;
+    directClients: Array<{ name: string; industry: string | null }>;
   }
 
   const records = await neo4jRead<FirmRow>(
@@ -54,8 +71,10 @@ async function fetchFirm(firmId: string) {
      WITH f,
        collect(DISTINCT {
          legacyId: cs.legacyId,
+         title: cs.title,
          summary: cs.summary,
          sourceUrl: cs.sourceUrl,
+         clientName: [(cs)-[:FOR_CLIENT]->(cl:Company) | cl.name][0],
          skills: [(cs)-[:DEMONSTRATES_SKILL]->(s:Skill) | s.name][0..6],
          industries: [(cs)-[:IN_INDUSTRY]->(i:Industry) | i.name][0..4]
        })[0..10] AS caseStudies,
@@ -65,7 +84,8 @@ async function fetchFirm(firmId: string) {
          title: [(exp)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | sp.title][0],
          hiddenSummary: exp.hiddenSummary,
          skills: [(exp)-[:HAS_SKILL]->(s:Skill) | s.name][0..8],
-         specialistTitles: [(exp)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | sp.title][0..3]
+         specialistTitles: [(exp)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | sp.title][0..3],
+         workHistory: [(exp)-[wa:WORKED_AT]->(c:Company) | {company: c.name, title: wa.title, isCurrent: coalesce(wa.isCurrent, false)}][0..5]
        })[0..8] AS experts
      RETURN
        f.name AS name,
@@ -77,6 +97,7 @@ async function fetchFirm(firmId: string) {
        [(f)-[:HAS_SKILL]->(s:Skill) | s.name][0..15] AS skills,
        [(f)-[:SERVES_INDUSTRY]->(i:Industry) | i.name][0..10] AS industries,
        [(f)-[:OPERATES_IN]->(m:Market) | m.name][0..8] AS markets,
+       [(f)-[:HAS_CLIENT]->(cl:Company) | {name: cl.name, industry: cl.industry}][0..20] AS directClients,
        caseStudies,
        experts`,
     { firmId }
@@ -101,6 +122,7 @@ async function fetchExpert(legacyId: string) {
     displayName: string;
     email: string | null;
     linkedinUrl: string | null;
+    hiddenSummary: string | null;
     firmName: string | null;
     firmWebsite: string | null;
     skills: string[];
@@ -108,7 +130,8 @@ async function fetchExpert(legacyId: string) {
     markets: string[];
     languages: string[];
     specialistProfiles: Array<{ title: string | null; description: string | null; skills: string[] }>;
-    caseStudies: Array<{ legacyId: string; summary: string | null; firmName: string | null; skills: string[]; industries: string[] }>;
+    caseStudies: Array<{ legacyId: string; title: string | null; summary: string | null; clientName: string | null; firmName: string | null; skills: string[]; industries: string[] }>;
+    workHistory: Array<{ company: string; title: string; industry: string | null; startDate: string | null; endDate: string | null; isCurrent: boolean }>;
   }
 
   const records = await neo4jRead<ExpertRow>(
@@ -121,6 +144,7 @@ async function fetchExpert(legacyId: string) {
        coalesce(p.fullName, p.firstName + ' ' + p.lastName, p.name, 'Expert') AS displayName,
        p.email AS email,
        p.linkedinUrl AS linkedinUrl,
+       p.hiddenSummary AS hiddenSummary,
        sf.name AS firmName,
        sf.website AS firmWebsite,
        [(p)-[:HAS_SKILL]->(s:Skill) | s.name][0..15] AS skills,
@@ -134,11 +158,21 @@ async function fetchExpert(legacyId: string) {
        }][0..5] AS specialistProfiles,
        [(p)-[:CONTRIBUTED_TO]->(cs:CaseStudy) | {
          legacyId: cs.legacyId,
+         title: cs.title,
          summary: cs.summary,
+         clientName: [(cs)-[:FOR_CLIENT]->(cl:Company) | cl.name][0],
          firmName: [(cs)<-[:HAS_CASE_STUDY]-(sf2:ServiceFirm) | sf2.name][0],
          skills: [(cs)-[:DEMONSTRATES_SKILL]->(s:Skill) | s.name][0..5],
          industries: [(cs)-[:IN_INDUSTRY]->(i:Industry) | i.name][0..3]
-       }][0..8] AS caseStudies`,
+       }][0..8] AS caseStudies,
+       [(p)-[wa:WORKED_AT]->(c:Company) | {
+         company: c.name,
+         title: wa.title,
+         industry: c.industry,
+         startDate: wa.startDate,
+         endDate: wa.endDate,
+         isCurrent: coalesce(wa.isCurrent, false)
+       }][0..10] AS workHistory`,
     { legacyId }
   );
 
@@ -151,9 +185,11 @@ async function fetchExpert(legacyId: string) {
 async function fetchCaseStudy(legacyId: string) {
   interface CaseStudyRow {
     legacyId: string;
+    title: string | null;
     summary: string | null;
     sourceUrl: string | null;
     status: string | null;
+    clientName: string | null;
     firmName: string | null;
     firmWebsite: string | null;
     skills: string[];
@@ -167,9 +203,11 @@ async function fetchCaseStudy(legacyId: string) {
      WITH cs, sf
      RETURN
        cs.legacyId AS legacyId,
+       cs.title AS title,
        cs.summary AS summary,
        cs.sourceUrl AS sourceUrl,
        cs.status AS status,
+       [(cs)-[:FOR_CLIENT]->(cl:Company) | cl.name][0] AS clientName,
        sf.name AS firmName,
        sf.website AS firmWebsite,
        [(cs)-[:DEMONSTRATES_SKILL]->(s:Skill) | s.name][0..15] AS skills,

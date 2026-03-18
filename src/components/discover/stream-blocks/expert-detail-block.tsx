@@ -159,6 +159,13 @@ export function ExpertDetailBlock({
           </div>
         )}
 
+        {/* Hidden Summary (AI-generated from work history) */}
+        {data.hiddenSummary && (
+          <p className="text-xs text-cos-midnight/80 leading-relaxed">
+            {data.hiddenSummary}
+          </p>
+        )}
+
         {/* Firm affiliation */}
         {data.firmName && (
           <div className="flex items-center gap-2 rounded-cos-xl border border-cos-border bg-cos-cloud px-4 py-3">
@@ -270,6 +277,39 @@ export function ExpertDetailBlock({
           </div>
         )}
 
+        {/* Work History */}
+        {data.workHistory && data.workHistory.length > 0 && (
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-slate-light">
+              Work History
+            </p>
+            <div className="space-y-1.5">
+              {data.workHistory.slice(0, 6).map((wh, i) => (
+                <div key={i} className={cn(
+                  "rounded-cos-xl border px-3 py-2",
+                  queryTerms.some(t => wh.title.toLowerCase().includes(t) || wh.company.toLowerCase().includes(t))
+                    ? "border-cos-signal/20 bg-cos-signal/5"
+                    : "border-cos-border"
+                )}>
+                  <p className="text-xs font-medium text-cos-midnight">{wh.title}</p>
+                  <p className="text-[10px] text-cos-slate">
+                    {wh.company}
+                    {wh.isCurrent && <span className="ml-1 text-cos-signal font-medium">Current</span>}
+                    {!wh.isCurrent && wh.startDate && (
+                      <span className="ml-1">{wh.startDate}{wh.endDate ? ` — ${wh.endDate}` : ""}</span>
+                    )}
+                  </p>
+                  {wh.industry && (
+                    <span className="mt-1 inline-block rounded-cos-full bg-cos-warm/10 px-1.5 py-0.5 text-[9px] text-cos-warm">
+                      {wh.industry}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Skills */}
         {data.skills.length > 0 && (
           <div>
@@ -329,7 +369,12 @@ export function ExpertDetailBlock({
                       Relevant: demonstrates {[...cs.csMatchingSkills, ...cs.csMatchingIndustries].join(", ")}
                     </p>
                   )}
-                  {cs.firmName && (
+                  {(cs.title || cs.clientName) && (
+                    <p className="text-[11px] font-medium text-cos-midnight mb-1">
+                      {cs.title}{cs.clientName && <span className="text-cos-slate font-normal"> — for {cs.clientName}</span>}
+                    </p>
+                  )}
+                  {cs.firmName && !cs.title && !cs.clientName && (
                     <p className="mb-1 text-[11px] text-cos-slate">by {cs.firmName}</p>
                   )}
                   {cs.summary ? (

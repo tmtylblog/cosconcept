@@ -25,8 +25,25 @@ interface FirmDetailData {
   skills: string[];
   industries: string[];
   markets: string[];
-  caseStudies: Array<{ legacyId: string; summary: string | null; sourceUrl?: string | null; skills: string[]; industries: string[] }>;
-  experts: Array<{ legacyId: string; displayName: string; title: string | null; hiddenSummary?: string | null; skills?: string[]; specialistTitles?: string[] }>;
+  caseStudies: Array<{
+    legacyId: string;
+    title?: string | null;
+    summary: string | null;
+    sourceUrl?: string | null;
+    clientName?: string | null;
+    skills: string[];
+    industries: string[];
+  }>;
+  experts: Array<{
+    legacyId: string;
+    displayName: string;
+    title: string | null;
+    hiddenSummary?: string | null;
+    skills?: string[];
+    specialistTitles?: string[];
+    workHistory?: Array<{ company: string; title: string; isCurrent: boolean }>;
+  }>;
+  directClients?: Array<{ name: string; industry: string | null }>;
 }
 
 interface ExpertDetailData {
@@ -34,6 +51,7 @@ interface ExpertDetailData {
   displayName: string;
   email: string | null;
   linkedinUrl: string | null;
+  hiddenSummary: string | null;
   firmName: string | null;
   firmWebsite: string | null;
   skills: string[];
@@ -41,7 +59,8 @@ interface ExpertDetailData {
   markets: string[];
   languages: string[];
   specialistProfiles: Array<{ title: string | null; description: string | null; skills: string[] }>;
-  caseStudies: Array<{ legacyId: string; summary: string | null; firmName: string | null; skills: string[]; industries: string[] }>;
+  caseStudies: Array<{ legacyId: string; title?: string | null; summary: string | null; clientName?: string | null; firmName: string | null; skills: string[]; industries: string[] }>;
+  workHistory?: Array<{ company: string; title: string; industry: string | null; startDate: string | null; endDate: string | null; isCurrent: boolean }>;
 }
 
 export type StreamItem =
