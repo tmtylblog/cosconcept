@@ -352,25 +352,31 @@ export default function PartnerSimulatorPage() {
   const [geoPreference, setGeoPreference] = useState("");
   const prefsInitializedRef = useRef(false);
 
-  // Load firms list
+  // Load firms list from admin firms API (platform source = PostgreSQL service_firms)
   useEffect(() => {
-    fetch("/api/admin/customers?limit=2000")
-      .then((r) => r.json())
-      .then((data) => {
-        const users = data.users ?? [];
-        // Dedupe by firmId
-        const seen = new Set<string>();
-        const firmList: FirmOption[] = [];
-        for (const u of users) {
-          if (u.firmId && !seen.has(u.firmId)) {
-            seen.add(u.firmId);
-            firmList.push({ id: u.firmId, name: u.firmName ?? u.orgName ?? "Unknown", firmType: u.firmType ?? null });
+    // Load all pages of platform firms (API caps at 100/page)
+    async function loadAllFirms() {
+      const all: FirmOption[] = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const res = await fetch(`/api/admin/firms?source=platform&limit=100&page=${page}`);
+        const data = await res.json();
+        const rawFirms = data.firms ?? [];
+        for (const f of rawFirms) {
+          if (f.id && f.name) {
+            all.push({ id: f.id as string, name: f.name as string, firmType: (f.firmType as string) ?? null });
           }
         }
-        firmList.sort((a, b) => a.name.localeCompare(b.name));
-        setFirms(firmList);
-      })
-      .catch(console.error);
+        const total = data.total ?? 0;
+        hasMore = page * 100 < total;
+        page++;
+        if (page > 20) break; // Safety cap
+      }
+      all.sort((a, b) => a.name.localeCompare(b.name));
+      setFirms(all);
+    }
+    loadAllFirms().catch(console.error);
   }, []);
 
   const resetPrefsToActual = useCallback((prefs: Record<string, unknown>) => {
