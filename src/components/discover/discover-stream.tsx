@@ -100,33 +100,35 @@ export function DiscoverStream() {
             </div>
           )}
 
-          {/* Search results */}
-          {hasResults && (
+          {/* Searching skeleton */}
+          {searching && (
+            <div className="space-y-3 mb-4">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-4 animate-pulse">
+                  <div className="flex items-start gap-3">
+                    <div className="h-9 w-9 rounded-cos-lg bg-cos-cloud" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-36 rounded bg-cos-cloud" />
+                      <div className="h-3 w-24 rounded bg-cos-cloud" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Search results (only when not actively searching) */}
+          {!searching && results.length > 0 && (
             <div ref={resultsAnchorRef} className="mb-4">
               <ResultCardsBlock
                 results={results}
                 query={searchQuery}
                 onViewProfile={handleViewProfile}
               />
-              {searching && (
-                <div className="space-y-3 mt-3">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-4 animate-pulse">
-                      <div className="flex items-start gap-3">
-                        <div className="h-9 w-9 rounded-cos-lg bg-cos-cloud" />
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 w-36 rounded bg-cos-cloud" />
-                          <div className="h-3 w-24 rounded bg-cos-cloud" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
-          {/* No results */}
+          {/* No results (only after search completes with zero results) */}
           {hasSearched && !searching && results.length === 0 && !error && (
             <div className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-8 text-center mb-4">
               <p className="text-sm font-medium text-cos-midnight">No matches found</p>
