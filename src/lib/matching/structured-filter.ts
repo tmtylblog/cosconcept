@@ -696,7 +696,7 @@ async function expertFilter(
 
   const query = `
     MATCH (p:Person)
-    WHERE p.enrichmentStatus <> "stub"
+    WHERE p.enrichmentStatus <> "stub" AND (p.hidden IS NULL OR p.hidden = false)
     ${whereClause ? "AND (" + whereClause.replace(/^WHERE /, "") + ")" : ""}
     OPTIONAL MATCH (p)-[:CURRENTLY_AT|WORKS_AT]->(sf:Company:ServiceFirm)
     WITH p, sf,

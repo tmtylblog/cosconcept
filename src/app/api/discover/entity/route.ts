@@ -122,7 +122,7 @@ async function fetchFirm(firmId: string) {
      OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs:CaseStudy)
        WHERE cs.hidden IS NULL OR cs.hidden = false
      OPTIONAL MATCH (exp:Person)-[:CURRENTLY_AT|WORKS_AT]->(f)
-     WHERE "expert" IN exp.personTypes
+     WHERE "expert" IN exp.personTypes AND (exp.hidden IS NULL OR exp.hidden = false)
      WITH f,
        collect(DISTINCT {
          legacyId: cs.legacyId,

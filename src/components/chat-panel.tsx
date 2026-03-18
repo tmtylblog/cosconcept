@@ -1070,6 +1070,22 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           const hasToolParts = message.parts.some((p) => p.type.startsWith("tool-"));
           if (!text && !hasToolParts) return null;
 
+          // On discover page, if a message has ONLY completed discover_search tool parts
+          // and no text, skip it entirely — results are in the center panel.
+          // This prevents blank chat bubbles.
+          if (firmSection === "discover" && !text && hasToolParts) {
+            const allPartsHandled = message.parts.every((p) => {
+              if (p.type === "text") return !p.text; // empty text
+              if (p.type.startsWith("tool-")) {
+                const tp = p as unknown as { state: string };
+                const tn = p.type.slice(5);
+                return (tn === "discover_search" || tn === "search_partners") && tp.state === "output-available";
+              }
+              return true;
+            });
+            if (allPartsHandled) return null;
+          }
+
           const prevMessage = idx > 0 ? messages[idx - 1] : null;
           const isNewSpeaker = !prevMessage || prevMessage.role !== message.role;
 
