@@ -1,13 +1,15 @@
 /**
- * GET /api/admin/growth-ops/crm/companies
- *
- * Paginated unified company list across all source tables.
- * Auth: superadmin or growth_ops role.
+ * GET /api/admin/growth-ops/crm/companies — Paginated unified company list.
+ * POST /api/admin/growth-ops/crm/companies — Create a new prospect company.
+ * Auth: superadmin, admin, or growth_ops role.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { acqCompanies } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { getUnifiedCompanies } from "@/lib/growth-ops/crm-queries";
 import type { CompanyEntityClass } from "@/lib/growth-ops/crm-types";
 
@@ -40,6 +42,57 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("[CRM] Companies list error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const headersList = await headers();
+    const session = await auth.api.getSession({ headers: headersList });
+    if (!session?.user || !ALLOWED_ROLES.includes(session.user.role as string)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const { name, domain, industry, sizeEstimate } = body as {
+      name: string;
+      domain?: string;
+      industry?: string;
+      sizeEstimate?: string;
+    };
+
+    if (!name?.trim()) {
+      return NextResponse.json({ error: "Company name is required" }, { status: 400 });
+    }
+
+    // Check for duplicate domain
+    if (domain?.trim()) {
+      const [existing] = await db.select({ id: acqCompanies.id }).from(acqCompanies).where(eq(acqCompanies.domain, domain.trim().toLowerCase())).limit(1);
+      if (existing) {
+        return NextResponse.json({ error: "A company with this domain already exists", existingId: existing.id }, { status: 409 });
+      }
+    }
+
+    const id = crypto.randomUUID();
+    await db.insert(acqCompanies).values({
+      id,
+      name: name.trim(),
+      domain: domain?.trim().toLowerCase() ?? null,
+      industry: industry?.trim() ?? null,
+      sizeEstimate: sizeEstimate?.trim() ?? null,
+    });
+
+    return NextResponse.json({ id });
+  } catch (error) {
+    console.error("[CRM] Create company error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },
       { status: 500 }

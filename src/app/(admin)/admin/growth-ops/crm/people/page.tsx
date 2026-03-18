@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Users,
   Search,
@@ -12,6 +13,7 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -105,14 +107,22 @@ export default function CrmPeoplePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-heading font-bold text-cos-midnight flex items-center gap-2">
-          <Users className="h-6 w-6 text-cos-electric" />
-          People
-        </h1>
-        <p className="text-sm text-cos-slate mt-1">
-          A view of all Prospects, Experts, and Customers in the system.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-cos-midnight flex items-center gap-2">
+            <Users className="h-6 w-6 text-cos-electric" />
+            People
+          </h1>
+          <p className="text-sm text-cos-slate mt-1">
+            All Prospects, Experts, and Customers in the system.
+          </p>
+        </div>
+        <Link
+          href="/admin/growth-ops/crm/people/new"
+          className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-2 text-xs font-medium text-white hover:bg-cos-electric-hover transition-colors shrink-0"
+        >
+          <UserPlus className="h-3.5 w-3.5" /> New Person
+        </Link>
       </div>
 
       {/* Filters + Search */}

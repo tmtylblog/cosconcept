@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Building2,
   Search,
@@ -12,6 +13,7 @@ import {
   TrendingUp,
   ChevronLeft,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -124,14 +126,22 @@ export default function CrmCompaniesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-heading font-bold text-cos-midnight flex items-center gap-2">
-          <Building2 className="h-6 w-6 text-cos-electric" />
-          Companies
-        </h1>
-        <p className="text-sm text-cos-slate mt-1">
-          Every company in the system — customers, prospects, and knowledge graph entities.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-cos-midnight flex items-center gap-2">
+            <Building2 className="h-6 w-6 text-cos-electric" />
+            Companies
+          </h1>
+          <p className="text-sm text-cos-slate mt-1">
+            Every company in the system — customers, prospects, and knowledge graph entities.
+          </p>
+        </div>
+        <Link
+          href="/admin/growth-ops/crm/companies/new"
+          className="flex items-center gap-1.5 rounded-cos-lg bg-cos-electric px-3 py-2 text-xs font-medium text-white hover:bg-cos-electric-hover transition-colors shrink-0"
+        >
+          <Plus className="h-3.5 w-3.5" /> New Company
+        </Link>
       </div>
 
       {/* Stats Cards */}
