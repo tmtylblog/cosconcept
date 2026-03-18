@@ -80,6 +80,12 @@ function computeExpertRelevance(
   return { matchingSkills, matchingTitles };
 }
 
+/** Check if a sourceUrl is a valid external link (not manual: or uploaded: prefix) */
+function isExternalUrl(url: string | null | undefined): url is string {
+  if (!url) return false;
+  return !url.startsWith("manual:") && !url.startsWith("uploaded:");
+}
+
 /** Generate a synthetic summary when a case study has no summary */
 function synthesizeCaseStudySummary(cs: { skills: string[]; industries: string[] }): string {
   const parts: string[] = [];
@@ -201,13 +207,38 @@ export function FirmDetailBlock({
 
   if (!data) return null;
 
-  // Compute client counts for the Clients tab
-  const caseStudyClients = [...new Set(data.caseStudies.map(cs => cs.clientName).filter(Boolean))] as string[];
-  const expertClients = [...new Set(
-    data.experts.flatMap(exp => (exp.workHistory ?? []).map(wh => wh.company))
-  )].filter(c => c && c !== data.name); // Exclude own firm
-  const totalClients = new Set([...caseStudyClients, ...(data.directClients ?? []).map(c => c.name)]).size;
-  const hasClients = totalClients > 0 || expertClients.length > 0;
+  // Compute query-relevant clients for the Clients tab
+  const queryTerms = getQueryTerms(searchQuery);
+  const allClientNames = new Set<string>();
+  // Clients from case studies
+  for (const cs of data.caseStudies) {
+    if (cs.clientName) allClientNames.add(cs.clientName);
+  }
+  // Direct clients
+  for (const cl of data.directClients ?? []) {
+    allClientNames.add(cl.name);
+  }
+  // Count clients relevant to query (by name, industry, or associated case study skills/industries)
+  const relevantClientCount = (() => {
+    if (!queryTerms.length) return allClientNames.size; // No query = show all
+    let count = 0;
+    // Case study clients with query-matching skills/industries
+    for (const cs of data.caseStudies) {
+      if (!cs.clientName) continue;
+      const csMatch = cs.skills.some(s => queryTerms.some(t => s.toLowerCase().includes(t))) ||
+        cs.industries.some(i => queryTerms.some(t => i.toLowerCase().includes(t))) ||
+        queryTerms.some(t => cs.clientName!.toLowerCase().includes(t));
+      if (csMatch) count++;
+    }
+    // Direct clients with query-matching industry
+    for (const cl of data.directClients ?? []) {
+      if (queryTerms.some(t => cl.name.toLowerCase().includes(t) || (cl.industry?.toLowerCase().includes(t) ?? false))) {
+        count++;
+      }
+    }
+    return count;
+  })();
+  const hasClients = relevantClientCount > 0 || allClientNames.size > 0;
 
   // Build tabs — only show tabs with real content
   const tabs: { id: TabId; label: string; count?: number }[] = [
@@ -219,7 +250,7 @@ export function FirmDetailBlock({
       ? [{ id: "experts" as const, label: "Experts", count: data.experts.length }]
       : []),
     ...(hasClients
-      ? [{ id: "clients" as const, label: "Clients" }]
+      ? [{ id: "clients" as const, label: "Clients", count: relevantClientCount > 0 ? relevantClientCount : undefined }]
       : []),
   ];
 
@@ -487,12 +518,13 @@ function OverviewTab({
             {data.caseStudies.slice(0, 2).map((cs, i) => {
               const relevance = computeCaseStudyRelevance(cs, queryTerms);
               const displaySummary = cs.summary || synthesizeCaseStudySummary(cs);
-              const CardWrapper = cs.sourceUrl ? "a" : "div";
-              const cardProps = cs.sourceUrl ? { href: cs.sourceUrl, target: "_blank", rel: "noopener noreferrer" } : {};
+              const hasLink = isExternalUrl(cs.sourceUrl);
+              const CardWrapper = hasLink ? "a" : "div";
+              const cardProps = hasLink ? { href: cs.sourceUrl!, target: "_blank", rel: "noopener noreferrer" } : {};
               return (
                 <CardWrapper key={cs.legacyId ?? i} {...cardProps} className={cn(
                   "block rounded-cos-xl border border-cos-border p-3 transition-colors",
-                  cs.sourceUrl && "hover:border-cos-electric/40 hover:bg-cos-electric/5 cursor-pointer"
+                  hasLink && "hover:border-cos-electric/40 hover:bg-cos-electric/5 cursor-pointer"
                 )}>
                   {relevance && (
                     <p className="mb-1.5 text-[10px] font-medium text-cos-signal">{relevance}</p>
@@ -531,7 +563,7 @@ function OverviewTab({
                         {ind}
                       </span>
                     ))}
-                    {cs.sourceUrl && (
+                    {hasLink && (
                       <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-cos-electric font-medium">
                         View Case Study
                         <ExternalLink className="h-2.5 w-2.5" />
@@ -649,13 +681,14 @@ function CaseStudiesTab({
       {sorted.map((cs, i) => {
         const relevance = computeCaseStudyRelevance(cs, queryTerms);
         const displaySummary = cs.summary || synthesizeCaseStudySummary(cs);
-        const CardWrapper = cs.sourceUrl ? "a" : "div";
-        const cardProps = cs.sourceUrl ? { href: cs.sourceUrl, target: "_blank", rel: "noopener noreferrer" } : {};
+        const hasLink = isExternalUrl(cs.sourceUrl);
+        const CardWrapper = hasLink ? "a" : "div";
+        const cardProps = hasLink ? { href: cs.sourceUrl!, target: "_blank", rel: "noopener noreferrer" } : {};
         return (
           <CardWrapper key={cs.legacyId ?? i} {...cardProps} className={cn(
             "block rounded-cos-xl border p-3 transition-colors",
             relevance ? "border-cos-signal/20 bg-cos-signal/5" : "border-cos-border",
-            cs.sourceUrl && "hover:border-cos-electric/40 cursor-pointer"
+            hasLink && "hover:border-cos-electric/40 cursor-pointer"
           )}>
             {relevance && (
               <p className="mb-1.5 text-[10px] font-medium text-cos-signal">{relevance}</p>
@@ -694,7 +727,7 @@ function CaseStudiesTab({
                   {ind}
                 </span>
               ))}
-              {cs.sourceUrl && (
+              {hasLink && (
                 <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-cos-electric font-medium">
                   View Case Study
                   <ExternalLink className="h-2.5 w-2.5" />

@@ -498,8 +498,8 @@ function CaseStudyDrawerContent({
         )}
       </Section>
 
-      {/* Source link */}
-      {data.sourceUrl && (
+      {/* Source link — only show for real external URLs */}
+      {data.sourceUrl && !data.sourceUrl.startsWith("manual:") && !data.sourceUrl.startsWith("uploaded:") && (
         <a
           href={data.sourceUrl}
           target="_blank"
