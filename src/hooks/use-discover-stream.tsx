@@ -26,7 +26,7 @@ interface FirmDetailData {
   industries: string[];
   markets: string[];
   caseStudies: Array<{ legacyId: string; summary: string | null; sourceUrl?: string | null; skills: string[]; industries: string[] }>;
-  experts: Array<{ legacyId: string; displayName: string; title: string | null; skills?: string[]; specialistTitles?: string[] }>;
+  experts: Array<{ legacyId: string; displayName: string; title: string | null; hiddenSummary?: string | null; skills?: string[]; specialistTitles?: string[] }>;
 }
 
 interface ExpertDetailData {

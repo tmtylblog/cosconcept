@@ -442,6 +442,8 @@ export interface GraphExpertData {
   location?: string;
   skills?: string[];
   industries?: string[];
+  /** Hidden AI-generated summary from work history — not user-editable */
+  hiddenSummary?: string;
   /** PDL seniority levels — stored as Person node property */
   seniorityLevels?: string[];
   /** PDL job title class — stored as Person node property */
@@ -477,6 +479,7 @@ export async function writeExpertToGraph(
            p.jobTitleClass = $jobTitleClass,
            p.enrichmentStatus = "enriched",
            p.source = "pdl",
+           p.hiddenSummary = CASE WHEN $hiddenSummary IS NOT NULL THEN $hiddenSummary ELSE p.hiddenSummary END,
            p.emails = coalesce(p.emails, []),
            p.updatedAt = datetime()
        WITH p
@@ -494,6 +497,7 @@ export async function writeExpertToGraph(
         linkedinUrl: data.linkedinUrl ?? null,
         location: data.location ?? null,
         firmId: data.firmId,
+        hiddenSummary: data.hiddenSummary ?? null,
         seniorityLevels: data.seniorityLevels ?? [],
         jobTitleClass: data.jobTitleClass ?? null,
       }
@@ -638,6 +642,7 @@ export interface GraphCaseStudyData {
   caseStudyId: string;
   firmId: string;
   title: string;
+  summary?: string;
   description?: string;
   clientName?: string;
   sourceUrl?: string;
@@ -660,6 +665,7 @@ export async function writeCaseStudyToGraph(
     await neo4jWrite(
       `MERGE (cs:CaseStudy {id: $id})
        SET cs.title = $title,
+           cs.summary = $summary,
            cs.description = $description,
            cs.sourceUrl = $sourceUrl,
            cs.firmId = $firmId,
@@ -672,6 +678,7 @@ export async function writeCaseStudyToGraph(
       {
         id: data.caseStudyId,
         title: data.title,
+        summary: data.summary ?? null,
         description: data.description ?? null,
         sourceUrl: data.sourceUrl ?? null,
         firmId: data.firmId,

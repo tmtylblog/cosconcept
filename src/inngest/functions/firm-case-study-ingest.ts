@@ -134,6 +134,7 @@ export const firmCaseStudyIngest = inngest.createFunction(
         caseStudyId: graphNodeId,
         firmId,
         title: analysis.title,
+        summary: visibleLayer.summary,
         description: [analysis.challenge, analysis.solution]
           .filter(Boolean)
           .join(" → "),

@@ -89,7 +89,8 @@ function synthesizeCaseStudySummary(cs: { skills: string[]; industries: string[]
 }
 
 /** Generate a summary line for an expert */
-function synthesizeExpertSummary(exp: { title: string | null; skills?: string[]; specialistTitles?: string[] }): string | null {
+function synthesizeExpertSummary(exp: { title: string | null; hiddenSummary?: string | null; skills?: string[]; specialistTitles?: string[] }): string | null {
+  if (exp.hiddenSummary) return exp.hiddenSummary;
   if (exp.specialistTitles?.length) return exp.specialistTitles[0];
   if (exp.title) return exp.title;
   if (exp.skills?.length) return exp.skills.slice(0, 3).join(", ");

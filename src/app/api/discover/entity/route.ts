@@ -43,7 +43,7 @@ async function fetchFirm(firmId: string) {
     industries: string[];
     markets: string[];
     caseStudies: Array<{ legacyId: string | null; summary: string | null; sourceUrl: string | null; skills: string[]; industries: string[] }>;
-    experts: Array<{ legacyId: string | null; displayName: string; title: string | null; skills: string[]; specialistTitles: string[] }>;
+    experts: Array<{ legacyId: string | null; displayName: string; title: string | null; hiddenSummary: string | null; skills: string[]; specialistTitles: string[] }>;
   }
 
   const records = await neo4jRead<FirmRow>(
@@ -63,6 +63,7 @@ async function fetchFirm(firmId: string) {
          legacyId: exp.legacyId,
          displayName: coalesce(exp.fullName, exp.firstName + ' ' + exp.lastName, exp.name, 'Expert'),
          title: [(exp)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | sp.title][0],
+         hiddenSummary: exp.hiddenSummary,
          skills: [(exp)-[:HAS_SKILL]->(s:Skill) | s.name][0..8],
          specialistTitles: [(exp)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | sp.title][0..3]
        })[0..8] AS experts
@@ -129,7 +130,7 @@ async function fetchExpert(legacyId: string) {
        [(p)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | {
          title: sp.title,
          description: sp.description,
-         skills: [(sp)-[:REQUIRES_SKILL]->(sk:Skill) | sk.name][0..6]
+         skills: [(sp)-[:HAS_SKILL]->(sk:Skill) | sk.name][0..6]
        }][0..5] AS specialistProfiles,
        [(p)-[:CONTRIBUTED_TO]->(cs:CaseStudy) | {
          legacyId: cs.legacyId,
