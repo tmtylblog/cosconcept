@@ -9,10 +9,9 @@ import {
   acqPipelineStages,
   growthOpsInviteQueue,
   attributionEvents,
-  organizations,
+  serviceFirms,
 } from "@/lib/db/schema";
 import { eq, gte, desc, asc, sql, count } from "drizzle-orm";
-import Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -217,78 +216,40 @@ export async function GET(req: NextRequest) {
       createdAt: a.createdAt?.toISOString() ?? null,
     }));
 
-    // ── Stripe Revenue Data (filtered to real customers) ────
-    let stripeData = null;
-    if (process.env.STRIPE_SECRET_KEY) {
-      try {
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    // ── Real Customer Data (from service_firms) ────────────
+    const EXCLUDED_DOMAINS = ["joincollectiveos.com", "example.com", "madebyspeak.com"];
 
-        // Load all org names for cross-referencing
-        const allOrgs = await db.select({ name: organizations.name }).from(organizations);
-        const orgNameSet = new Set(allOrgs.map((o) => o.name.toLowerCase().trim()));
+    const cosCustomers = await db
+      .select({
+        name: serviceFirms.name,
+        website: serviceFirms.website,
+        cosCustomerSince: serviceFirms.cosCustomerSince,
+      })
+      .from(serviceFirms)
+      .where(eq(serviceFirms.isCosCustomer, true));
 
-        function isRealCustomer(name: string | null | undefined): boolean {
-          if (!name) return false;
-          return orgNameSet.has(name.toLowerCase().trim());
-        }
-
-        // Get all active subscriptions
-        const activeSubs: Stripe.Subscription[] = [];
-        for await (const sub of stripe.subscriptions.list({ status: "active", expand: ["data.customer"], limit: 100 })) {
-          activeSubs.push(sub);
-        }
-
-        // Get canceled subscriptions
-        const canceledSubs: Stripe.Subscription[] = [];
-        for await (const sub of stripe.subscriptions.list({ status: "canceled", expand: ["data.customer"], limit: 100 })) {
-          canceledSubs.push(sub);
-        }
-
-        // Calculate MRR only from real customers
-        let mrr = 0;
-        const activeCustomers: { name: string; plan: string; mrr: number; since: string }[] = [];
-        for (const sub of activeSubs) {
-          const item = sub.items.data[0];
-          if (!item?.price) continue;
-          const cust = typeof sub.customer === "object" ? sub.customer as Stripe.Customer : null;
-          const custName = cust?.name || cust?.email || null;
-          if (!isRealCustomer(custName)) continue;
-
-          const amount = item.price.unit_amount ?? 0;
-          const interval = item.price.recurring?.interval;
-          const monthlyAmount = interval === "year" ? amount / 12 : amount;
-          mrr += monthlyAmount;
-          activeCustomers.push({
-            name: custName!,
-            plan: item.price.nickname || item.price.id,
-            mrr: Math.round(monthlyAmount) / 100,
-            since: new Date(sub.created * 1000).toISOString().slice(0, 10),
-          });
-        }
-
-        // Churned customers (only real ones)
-        const churned: { name: string; canceledAt: string }[] = [];
-        for (const sub of canceledSubs) {
-          const cust = typeof sub.customer === "object" ? sub.customer as Stripe.Customer : null;
-          const custName = cust?.name || cust?.email || null;
-          if (!isRealCustomer(custName)) continue;
-          churned.push({
-            name: custName!,
-            canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString().slice(0, 10) : "",
-          });
-        }
-
-        stripeData = {
-          mrr: Math.round(mrr) / 100,
-          activeSubscriptions: activeCustomers.length,
-          canceledSubscriptions: churned.length,
-          activeCustomers: activeCustomers.sort((a, b) => b.mrr - a.mrr),
-          churned: churned.sort((a, b) => b.canceledAt.localeCompare(a.canceledAt)),
-        };
-      } catch (stripeErr) {
-        console.error("Stripe fetch error:", stripeErr);
+    // Filter out sandbox/internal entries
+    const realCustomers = cosCustomers.filter((c) => {
+      if (!c.name || c.name.toLowerCase().startsWith("sandbox")) return false;
+      if (c.website) {
+        const domain = c.website.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
+        if (EXCLUDED_DOMAINS.some((ex) => domain.includes(ex))) return false;
       }
-    }
+      return true;
+    });
+
+    const customerData = {
+      totalCustomers: realCustomers.length,
+      recentCustomers: realCustomers
+        .filter((c) => c.cosCustomerSince)
+        .sort((a, b) => new Date(b.cosCustomerSince!).getTime() - new Date(a.cosCustomerSince!).getTime())
+        .slice(0, 30)
+        .map((c) => ({
+          name: c.name,
+          website: c.website,
+          since: c.cosCustomerSince ? new Date(c.cosCustomerSince).toISOString().slice(0, 10) : null,
+        })),
+    };
 
     // ── Timeline event counts (for sparklines / detail views) ─
     const timelineByDay = await db
@@ -309,7 +270,7 @@ export async function GET(req: NextRequest) {
       recentActivity,
       dealsByStage,
       timelineByDay,
-      stripe: stripeData,
+      customers: customerData,
       _meta: {
         period,
         since: since.toISOString(),

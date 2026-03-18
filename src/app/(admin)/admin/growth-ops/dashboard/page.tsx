@@ -35,14 +35,10 @@ interface BySource { instantly: number; linkedinCampaign: number; linkedinOrgani
 interface Activity { id: string; dealId: string; type: string; description: string | null; createdAt: string | null }
 interface DealsByStage { label: string; color: string; count: number }
 
-interface StripeCustomer { name: string; plan: string; mrr: number; since: string }
-interface StripeChurned { name: string; canceledAt: string }
-interface StripeData {
-  mrr: number;
-  activeSubscriptions: number;
-  canceledSubscriptions: number;
-  activeCustomers: StripeCustomer[];
-  churned: StripeChurned[];
+interface RecentCustomer { name: string; website: string | null; since: string | null }
+interface CustomerData {
+  totalCustomers: number;
+  recentCustomers: RecentCustomer[];
 }
 
 interface DashboardData {
@@ -51,7 +47,7 @@ interface DashboardData {
   bySource: BySource;
   recentActivity: Activity[];
   dealsByStage: DealsByStage[];
-  stripe: StripeData | null;
+  customers: CustomerData | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -119,7 +115,7 @@ function OverviewTab() {
   }
   if (!data) return null;
 
-  const { metrics, funnel, bySource, recentActivity, dealsByStage, stripe } = data;
+  const { metrics, funnel, bySource, recentActivity, dealsByStage, customers } = data;
   const funnelMax = Math.max(...funnel.map((f) => f.value), 1);
   const stageMax = Math.max(...dealsByStage.map((s) => s.count), 1);
   const sourceTotal = bySource.instantly + bySource.linkedinCampaign + bySource.linkedinOrganic + bySource.direct || 1;
@@ -264,70 +260,36 @@ function OverviewTab() {
           )}
         </div>
       </div>
-      {/* Stripe Revenue & Subscriptions */}
-      {stripe && (
-        <div className="space-y-4">
-          {/* Revenue KPIs */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="rounded-cos-xl border border-cos-border bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-1">
-                <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-                <span className="text-[10px] font-medium text-cos-slate uppercase tracking-wide">Monthly Recurring Revenue</span>
-              </div>
-              <p className="font-heading text-xl font-bold text-cos-midnight">{formatCurrency(stripe.mrr)}</p>
+      {/* Customers */}
+      {customers && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="rounded-cos-xl border border-cos-border bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <Trophy className="h-3.5 w-3.5 text-green-500" />
+              <span className="text-[10px] font-medium text-cos-slate uppercase tracking-wide">Total Customers</span>
             </div>
-            <div className="rounded-cos-xl border border-cos-border bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-1">
-                <Trophy className="h-3.5 w-3.5 text-green-500" />
-                <span className="text-[10px] font-medium text-cos-slate uppercase tracking-wide">Active Subscriptions</span>
-              </div>
-              <p className="font-heading text-xl font-bold text-cos-midnight">{stripe.activeSubscriptions}</p>
-            </div>
-            <div className="rounded-cos-xl border border-cos-border bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="h-3.5 w-3.5 text-red-400" />
-                <span className="text-[10px] font-medium text-cos-slate uppercase tracking-wide">Churned</span>
-              </div>
-              <p className="font-heading text-xl font-bold text-cos-midnight">{stripe.canceledSubscriptions}</p>
-            </div>
+            <p className="font-heading text-xl font-bold text-cos-midnight">{customers.totalCustomers.toLocaleString()}</p>
           </div>
 
-          {/* Active Customers + Churned side by side */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-cos-xl border border-cos-border bg-white p-5 shadow-sm">
-              <h2 className="text-xs font-semibold text-cos-slate-dim uppercase tracking-wider mb-4">Active Customers (Stripe)</h2>
-              {stripe.activeCustomers.length === 0 ? (
-                <p className="text-sm text-cos-slate-dim">No active subscriptions.</p>
-              ) : (
-                <div className="space-y-1.5 max-h-[320px] overflow-y-auto">
-                  {stripe.activeCustomers.map((c, i) => (
-                    <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-cos-md hover:bg-cos-cloud/50 transition-colors">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-cos-midnight truncate">{c.name}</p>
-                        <p className="text-[10px] text-cos-slate-dim">Since {c.since}</p>
-                      </div>
-                      <span className="text-sm font-medium text-cos-signal shrink-0 ml-3">${c.mrr.toLocaleString()}/mo</span>
+          <div className="lg:col-span-2 rounded-cos-xl border border-cos-border bg-white p-5 shadow-sm">
+            <h2 className="text-xs font-semibold text-cos-slate-dim uppercase tracking-wider mb-4">Recent Customers</h2>
+            {customers.recentCustomers.length === 0 ? (
+              <p className="text-sm text-cos-slate-dim">No customers yet.</p>
+            ) : (
+              <div className="space-y-1.5 max-h-[320px] overflow-y-auto">
+                {customers.recentCustomers.map((c, i) => (
+                  <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-cos-md hover:bg-cos-cloud/50 transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-cos-midnight truncate">{c.name}</p>
+                      {c.website && (
+                        <p className="text-[10px] text-cos-slate-dim truncate">{c.website.replace(/^https?:\/\//, "")}</p>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-cos-xl border border-cos-border bg-white p-5 shadow-sm">
-              <h2 className="text-xs font-semibold text-cos-slate-dim uppercase tracking-wider mb-4">Churned Customers (Stripe)</h2>
-              {stripe.churned.length === 0 ? (
-                <p className="text-sm text-cos-slate-dim">No churned subscriptions.</p>
-              ) : (
-                <div className="space-y-1.5 max-h-[320px] overflow-y-auto">
-                  {stripe.churned.map((c, i) => (
-                    <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-cos-md hover:bg-cos-cloud/50 transition-colors">
-                      <p className="text-sm text-cos-midnight truncate flex-1 min-w-0">{c.name}</p>
-                      <span className="text-xs text-red-400 shrink-0 ml-3">Canceled {c.canceledAt}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    {c.since && <span className="text-xs text-cos-slate shrink-0 ml-3">{c.since}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
