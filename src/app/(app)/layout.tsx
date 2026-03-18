@@ -314,6 +314,7 @@ function AppLayoutInner({
     : pathname === "/discover" || pathname.startsWith("/discover/") ? "discover"
     : pathname === "/dashboard" ? "dashboard"
     : pathname.startsWith("/settings") ? "settings"
+    : pathname === "/partner-matching" ? "partner-matching"
     : pathname === "/partnerships" ? "partnerships"
     : pathname === "/network" ? "network"
     : pathname.startsWith("/calls") ? "calls"

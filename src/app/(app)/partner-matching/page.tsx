@@ -18,135 +18,38 @@ import {
   Send,
 } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
+import { useOssyContext } from "@/hooks/use-ossy-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { PartnerMatch } from "@/app/api/partner-matching/route";
 
-// ─── Preference Gate Form ────────────────────────────────────
+// V2 preference fields required for matching
+const V2_FIELDS = [
+  "partnershipPhilosophy",
+  "capabilityGaps",
+  "preferredPartnerTypes",
+  "dealBreaker",
+  "geographyPreference",
+] as const;
 
-const PREF_QUESTIONS = [
-  {
-    field: "partnershipPhilosophy",
-    label: "Partnership Philosophy",
-    description: "How do you approach partnerships? What makes a great partner relationship for you?",
-    placeholder: "e.g., We believe in deep, long-term partnerships where both sides actively refer work...",
-    type: "textarea" as const,
-  },
-  {
-    field: "capabilityGaps",
-    label: "Capability Gaps",
-    description: "What services or skills do you wish you had in-house? These are what partners would fill.",
-    placeholder: "e.g., SEO, paid media, data engineering",
-    type: "tags" as const,
-  },
-  {
-    field: "preferredPartnerTypes",
-    label: "Preferred Partner Types",
-    description: "What types of firms would make ideal partners?",
-    placeholder: "e.g., Creative agency, Development shop, Analytics firm",
-    type: "tags" as const,
-  },
-  {
-    field: "dealBreaker",
-    label: "Deal Breaker",
-    description: "Is there anything that would make a partner an absolute no-go?",
-    placeholder: "e.g., Direct competitors, firms that poach clients...",
-    type: "textarea" as const,
-  },
-  {
-    field: "geographyPreference",
-    label: "Geography Preference",
-    description: "Do you prefer partners in specific regions, or are you open to global partnerships?",
-    placeholder: "e.g., North America preferred, open to UK/EU",
-    type: "textarea" as const,
-  },
-];
+const V2_LABELS: Record<string, string> = {
+  partnershipPhilosophy: "Partnership Philosophy",
+  capabilityGaps: "Capability Gaps",
+  preferredPartnerTypes: "Partner Types",
+  dealBreaker: "Deal Breaker",
+  geographyPreference: "Geography",
+};
 
-function PreferenceGateForm({
-  onComplete,
+// ─── Preference Incomplete State ─────────────────────────────
+// Shows what's missing and prompts the user to talk to Ossy
+
+function PreferenceIncompleteState({
+  filledFields,
+  missingFields,
 }: {
-  onComplete: () => void;
+  filledFields: string[];
+  missingFields: string[];
 }) {
-  const { data: profile, updateField } = useProfile();
-  const [currentStep, setCurrentStep] = useState(0);
-  const [tagInput, setTagInput] = useState("");
-  const [textInputs, setTextInputs] = useState<Record<string, string>>({});
-  const [tagValues, setTagValues] = useState<Record<string, string[]>>({});
-  const [saving, setSaving] = useState(false);
-
-  const currentQ = PREF_QUESTIONS[currentStep];
-  const isLastStep = currentStep === PREF_QUESTIONS.length - 1;
-
-  // Initialize from existing profile data
-  useEffect(() => {
-    const texts: Record<string, string> = {};
-    const tags: Record<string, string[]> = {};
-    for (const q of PREF_QUESTIONS) {
-      const val = (profile as Record<string, unknown>)[q.field];
-      if (q.type === "textarea" && typeof val === "string") {
-        texts[q.field] = val;
-      } else if (q.type === "tags" && Array.isArray(val)) {
-        tags[q.field] = val;
-      }
-    }
-    setTextInputs(texts);
-    setTagValues(tags);
-  }, [profile]);
-
-  const currentValue = currentQ.type === "textarea"
-    ? textInputs[currentQ.field] ?? ""
-    : tagValues[currentQ.field] ?? [];
-
-  const isCurrentFilled = currentQ.type === "textarea"
-    ? (textInputs[currentQ.field] ?? "").trim().length > 0
-    : (tagValues[currentQ.field] ?? []).length > 0;
-
-  const saveField = useCallback(async (field: string, value: string | string[]) => {
-    updateField(field, value);
-    try {
-      await fetch("/api/profile/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field, value }),
-      });
-    } catch {
-      // Non-critical — local state is updated
-    }
-  }, [updateField]);
-
-  const handleNext = async () => {
-    if (!isCurrentFilled) return;
-    setSaving(true);
-    await saveField(currentQ.field, currentValue);
-    setSaving(false);
-
-    if (isLastStep) {
-      onComplete();
-    } else {
-      setCurrentStep((s) => s + 1);
-    }
-  };
-
-  const addTag = () => {
-    if (!tagInput.trim()) return;
-    const field = currentQ.field;
-    const existing = tagValues[field] ?? [];
-    if (existing.some((t) => t.toLowerCase() === tagInput.trim().toLowerCase())) {
-      setTagInput("");
-      return;
-    }
-    setTagValues({ ...tagValues, [field]: [...existing, tagInput.trim()] });
-    setTagInput("");
-  };
-
-  const removeTag = (tag: string) => {
-    const field = currentQ.field;
-    setTagValues({
-      ...tagValues,
-      [field]: (tagValues[field] ?? []).filter((t) => t !== tag),
-    });
-  };
-
   return (
     <div className="mx-auto max-w-xl space-y-8 p-6 py-12">
       {/* Header */}
@@ -155,114 +58,75 @@ function PreferenceGateForm({
           <Sparkles className="h-6 w-6 text-cos-electric" />
         </div>
         <h2 className="font-heading text-2xl font-bold text-cos-midnight">
-          Set Up Partner Matching
+          Partner Matching
         </h2>
         <p className="text-sm text-cos-slate leading-relaxed">
-          Answer 5 quick questions so Ossy can find your best-fit partners.
-          This takes about 2 minutes.
+          Before I can find your best-fit partners, Ossy needs to understand what
+          you&apos;re looking for. Answer 5 quick questions in the chat panel and
+          your matches will appear here automatically.
         </p>
       </div>
 
-      {/* Progress */}
-      <div className="flex items-center gap-1.5">
-        {PREF_QUESTIONS.map((_, i) => (
-          <div
-            key={i}
-            className={cn(
-              "h-1.5 flex-1 rounded-full transition-colors",
-              i <= currentStep ? "bg-cos-electric" : "bg-cos-border"
-            )}
-          />
-        ))}
+      {/* Progress indicator */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-medium text-cos-midnight">
+            {filledFields.length} of {V2_FIELDS.length} preferences set
+          </span>
+          <span className="text-cos-slate-dim">
+            {Math.round((filledFields.length / V2_FIELDS.length) * 100)}%
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {V2_FIELDS.map((f) => (
+            <div
+              key={f}
+              className={cn(
+                "h-2 flex-1 rounded-full transition-colors",
+                filledFields.includes(f) ? "bg-cos-signal" : "bg-cos-border"
+              )}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* Current question */}
-      <div className="rounded-cos-2xl border border-cos-border bg-cos-surface p-6 space-y-4">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wider text-cos-electric">
-            Question {currentStep + 1} of {PREF_QUESTIONS.length}
-          </p>
-          <h3 className="font-heading text-lg font-semibold text-cos-midnight">
-            {currentQ.label}
-          </h3>
-          <p className="text-sm text-cos-slate">{currentQ.description}</p>
-        </div>
-
-        {currentQ.type === "textarea" ? (
-          <textarea
-            value={textInputs[currentQ.field] ?? ""}
-            onChange={(e) =>
-              setTextInputs({ ...textInputs, [currentQ.field]: e.target.value })
-            }
-            placeholder={currentQ.placeholder}
-            rows={3}
-            className="w-full rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
-          />
-        ) : (
-          <div className="space-y-3">
-            {(tagValues[currentQ.field] ?? []).length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {(tagValues[currentQ.field] ?? []).map((tag) => (
-                  <span
-                    key={tag}
-                    className="flex items-center gap-1 rounded-cos-pill bg-cos-electric/10 px-2.5 py-1 text-xs font-medium text-cos-electric"
-                  >
-                    {tag}
-                    <button
-                      onClick={() => removeTag(tag)}
-                      className="ml-0.5 rounded-full p-0.5 hover:bg-cos-electric/20"
-                    >
-                      &times;
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addTag();
-                  }
-                }}
-                placeholder={currentQ.placeholder}
-                className="flex-1 rounded-cos-lg border border-cos-border bg-white px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none focus:ring-1 focus:ring-cos-electric/30"
-              />
-              <Button size="sm" variant="outline" onClick={addTag}>
-                Add
-              </Button>
+      {/* Field status list */}
+      <div className="rounded-cos-2xl border border-cos-border bg-cos-surface p-5 space-y-3">
+        {V2_FIELDS.map((f) => {
+          const filled = filledFields.includes(f);
+          return (
+            <div key={f} className="flex items-center gap-3">
+              {filled ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-cos-signal" />
+              ) : (
+                <div className="h-4 w-4 shrink-0 rounded-full border-2 border-cos-border" />
+              )}
+              <span
+                className={cn(
+                  "text-sm",
+                  filled ? "text-cos-midnight" : "text-cos-slate"
+                )}
+              >
+                {V2_LABELS[f]}
+              </span>
+              {filled && (
+                <span className="ml-auto text-[10px] font-medium text-cos-signal">Done</span>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })}
+      </div>
 
-        <div className="flex items-center justify-between pt-2">
-          {currentStep > 0 ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCurrentStep((s) => s - 1)}
-            >
-              Back
-            </Button>
-          ) : (
-            <div />
-          )}
-          <Button
-            size="sm"
-            onClick={handleNext}
-            disabled={!isCurrentFilled || saving}
-          >
-            {saving ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : null}
-            {isLastStep ? "Find My Partners" : "Next"}
-            {!isLastStep && <ArrowRight className="ml-1.5 h-3.5 w-3.5" />}
-          </Button>
-        </div>
+      {/* Ossy prompt */}
+      <div className="rounded-cos-2xl border border-cos-electric/20 bg-cos-electric/5 p-5 text-center space-y-3">
+        <MessageCircle className="mx-auto h-6 w-6 text-cos-electric" />
+        <p className="text-sm font-medium text-cos-midnight">
+          Talk to Ossy in the chat panel
+        </p>
+        <p className="text-xs text-cos-slate">
+          Ossy will ask you about your partnership goals, capability gaps,
+          and preferences. Your answers appear here in real-time as you chat.
+        </p>
       </div>
     </div>
   );
@@ -333,7 +197,6 @@ function MatchCard({
       });
 
       if (!introRes.ok) {
-        // Partnership was created, just note the intro failed
         console.warn("Intro email queue failed, partnership still created");
       }
 
@@ -622,52 +485,84 @@ function PreferencesSummary({ profile }: { profile: Record<string, unknown> }) {
 
 export default function PartnerMatchingPage() {
   const { data: profile, hydrated } = useProfile();
+  const { setPageContext } = useOssyContext();
   const [matches, setMatches] = useState<PartnerMatch[]>([]);
   const [firmId, setFirmId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [prefsComplete, setPrefsComplete] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // Compute V2 preference completeness from profile data
+  const profileData = profile as Record<string, unknown>;
+  const filledFields = V2_FIELDS.filter((f) => {
+    const val = profileData[f];
+    if (Array.isArray(val)) return val.length > 0;
+    return !!val;
+  });
+  const missingFields = V2_FIELDS.filter((f) => !filledFields.includes(f));
+  const prefsComplete = missingFields.length === 0;
+
+  // Register page context for Ossy
+  useEffect(() => {
+    if (!hydrated) return;
+    setPageContext({
+      page: "partner-matching",
+      prefsComplete,
+      missingFields: [...missingFields],
+      matchCount: matches.length,
+    });
+    return () => setPageContext(null);
+  }, [hydrated, prefsComplete, missingFields.length, matches.length, setPageContext, missingFields]);
+
+  // Load matches when preferences are complete
   const loadMatches = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/partner-matching");
       if (!res.ok) throw new Error("Failed to load matches");
       const data = await res.json();
-      setPrefsComplete(data.preferencesComplete);
       setMatches(data.matches ?? []);
       setFirmId(data.firmId ?? null);
       setMessage(data.message ?? null);
     } catch (err) {
       console.error("Failed to load partner matches:", err);
-      setPrefsComplete(null);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (hydrated) {
+    if (hydrated && prefsComplete) {
       loadMatches();
     }
-  }, [hydrated, loadMatches]);
+  }, [hydrated, prefsComplete, loadMatches]);
 
   // Loading state
-  if (!hydrated || loading) {
+  if (!hydrated) {
     return (
       <div className="flex h-96 flex-col items-center justify-center gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-cos-electric" />
-        <p className="text-sm text-cos-slate">
-          {loading ? "Finding your best-fit partners..." : "Loading profile..."}
-        </p>
+        <p className="text-sm text-cos-slate">Loading profile...</p>
       </div>
     );
   }
 
-  // Preferences not complete — show gate form
-  if (prefsComplete === false) {
+  // Preferences not complete — show status + prompt to use Ossy
+  if (!prefsComplete) {
     return (
-      <PreferenceGateForm onComplete={loadMatches} />
+      <PreferenceIncompleteState
+        filledFields={[...filledFields]}
+        missingFields={[...missingFields]}
+      />
+    );
+  }
+
+  // Loading matches
+  if (loading) {
+    return (
+      <div className="flex h-96 flex-col items-center justify-center gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-cos-electric" />
+        <p className="text-sm text-cos-slate">Finding your best-fit partners...</p>
+      </div>
     );
   }
 
@@ -705,7 +600,7 @@ export default function PartnerMatchingPage() {
             No matches yet
           </h3>
           <p className="text-sm text-cos-slate">
-            {message ?? "We couldn&apos;t find strong matches right now. Try broadening your partner preferences or check back as more firms join the platform."}
+            {message ?? "We couldn\u0027t find strong matches right now. Try broadening your partner preferences or check back as more firms join the platform."}
           </p>
           <Button asChild size="sm" variant="outline">
             <Link href="/firm/preferences">Update Preferences</Link>
@@ -716,7 +611,7 @@ export default function PartnerMatchingPage() {
           {/* Left sidebar — preferences summary */}
           <div className="hidden w-72 shrink-0 lg:block">
             <div className="sticky top-6">
-              <PreferencesSummary profile={profile as Record<string, unknown>} />
+              <PreferencesSummary profile={profileData} />
             </div>
           </div>
 
@@ -731,7 +626,7 @@ export default function PartnerMatchingPage() {
                 match={match}
                 firmId={firmId!}
                 onIntroRequested={() => {
-                  // Could refresh to update button state for duplicate prevention
+                  // Could refresh to update button state
                 }}
               />
             ))}

@@ -316,6 +316,7 @@ The \`discover_search\` result includes \`_searcherProfile\` with the user's own
       partnerships: "their Partnerships page — active and potential partnerships. Help them manage partnership requests or discuss partnership strategy.",
       network: "their Network page — connections and relationship map. Help them explore their professional network and find collaboration opportunities.",
       calls: "their Calls page — meeting recordings and transcripts. Help them review call insights or prepare for upcoming meetings.",
+      "partner-matching": "the Partner Matching page — AI-powered partner recommendations. If their V2 preferences (partnershipPhilosophy, capabilityGaps, preferredPartnerTypes, dealBreaker, geographyPreference) are incomplete, START the preference interview immediately. Ask the 5 questions one at a time using update_profile to save answers. The page updates live as preferences are saved. Once all 5 are complete, partner matches load automatically.",
     };
 
     const description = sectionDescriptions[context.firmSection] || "their firm profile";

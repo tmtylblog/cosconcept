@@ -15,7 +15,8 @@ export type PageContextSnapshot =
   | { page: "discover" }
   | { page: "dashboard"; enrichmentStage: string }
   | { page: "calls"; callCount: number; pendingAnalysis: number }
-  | { page: "settings"; subpage: string };
+  | { page: "settings"; subpage: string }
+  | { page: "partner-matching"; prefsComplete: boolean; missingFields: string[]; matchCount: number };
 
 interface OssyContextValue {
   pageContext: PageContextSnapshot | null;

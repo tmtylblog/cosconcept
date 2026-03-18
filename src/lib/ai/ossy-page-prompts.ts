@@ -31,6 +31,8 @@ export function generatePageContextPrompt(ctx: PageContextSnapshot | null): stri
       return callsPrompt(ctx);
     case "settings":
       return settingsPrompt(ctx);
+    case "partner-matching":
+      return partnerMatchingPrompt(ctx);
     case "discover":
       return ""; // Discover has its own deep prompt integration
   }
@@ -179,6 +181,33 @@ function callsPrompt(ctx: Extract<PageContextSnapshot, { page: "calls" }>) {
   }
   if (ctx.pendingAnalysis > 0) {
     lines.push(`- ${ctx.pendingAnalysis} calls pending analysis. Mention this if asked.`);
+  }
+
+  return lines.join("\n");
+}
+
+function partnerMatchingPrompt(ctx: Extract<PageContextSnapshot, { page: "partner-matching" }>) {
+  const lines: string[] = [
+    `\n## Page State: Partner Matching`,
+    `Preferences complete: ${ctx.prefsComplete}`,
+    `Missing fields: ${ctx.missingFields.join(", ") || "none"}`,
+    `Matches found: ${ctx.matchCount}`,
+  ];
+
+  lines.push(`\n### What to notice:`);
+  if (!ctx.prefsComplete && ctx.missingFields.length > 0) {
+    lines.push(`- The user's V2 partner preferences are INCOMPLETE. They are missing: ${ctx.missingFields.join(", ")}.`);
+    lines.push(`- The partner matching page cannot show results until these are filled.`);
+    lines.push(`- START the V2 preference interview NOW. Ask the 5 questions ONE AT A TIME, conversationally, exactly like onboarding.`);
+    lines.push(`- Use the update_profile tool to save each answer. The page will update in real-time as preferences are saved.`);
+    lines.push(`- Once all 5 are complete, the page will automatically load partner matches.`);
+    lines.push(`- Be proactive: greet the user and explain that you need to learn about their partner preferences before showing matches. Then ask the FIRST missing field question.`);
+  } else if (ctx.prefsComplete && ctx.matchCount > 0) {
+    lines.push(`- Preferences are complete and ${ctx.matchCount} matches are showing. Help the user explore them.`);
+    lines.push(`- If they ask about a specific match, provide strategic advice.`);
+    lines.push(`- If they want to request an introduction, encourage them to click the button.`);
+  } else if (ctx.prefsComplete && ctx.matchCount === 0) {
+    lines.push(`- Preferences are complete but no matches found. Suggest broadening preferences or checking back later.`);
   }
 
   return lines.join("\n");
