@@ -89,23 +89,57 @@ function synthesizeCaseStudySummary(cs: { skills: string[]; industries: string[]
   return `Project demonstrating ${parts.join(" ")}`;
 }
 
-/** Generate a summary line for an expert — prefers specialist title, then work history context */
-function synthesizeExpertSummary(exp: {
-  title: string | null;
-  hiddenSummary?: string | null;
-  skills?: string[];
-  specialistTitles?: string[];
-  workHistory?: Array<{ company: string; title: string; isCurrent: boolean }>;
-}): string | null {
+/** Generate a relevance blurb explaining WHY this expert matters for the search */
+function generateExpertRelevanceBlurb(
+  exp: {
+    title: string | null;
+    hiddenSummary?: string | null;
+    skills?: string[];
+    specialistTitles?: string[];
+    workHistory?: Array<{ company: string; title: string; isCurrent: boolean }>;
+  },
+  queryTerms: string[],
+  searchQuery: string
+): string {
+  // 1. Matching specialist titles — strongest signal
+  const matchingTitles = (exp.specialistTitles ?? []).filter(t =>
+    queryTerms.some(q => t.toLowerCase().includes(q))
+  );
+  if (matchingTitles.length > 0) {
+    return `Specialist in ${matchingTitles[0]} — directly relevant to your search for "${searchQuery}"`;
+  }
+
+  // 2. Matching skills
+  const matchingSkills = (exp.skills ?? []).filter(s =>
+    queryTerms.some(q => s.toLowerCase().includes(q))
+  );
+  if (matchingSkills.length > 0) {
+    return `Brings ${matchingSkills.slice(0, 3).join(", ")} experience to the table`;
+  }
+
+  // 3. Relevant work history
+  const relevantWork = (exp.workHistory ?? []).filter(wh =>
+    queryTerms.some(q => wh.title.toLowerCase().includes(q) || wh.company.toLowerCase().includes(q))
+  );
+  if (relevantWork.length > 0) {
+    const wh = relevantWork[0];
+    return `${wh.isCurrent ? "Currently" : "Previously"} ${wh.title} at ${wh.company}`;
+  }
+
+  // 4. Hidden summary with query term overlap
+  if (exp.hiddenSummary && queryTerms.some(q => exp.hiddenSummary!.toLowerCase().includes(q))) {
+    return exp.hiddenSummary.length > 120 ? exp.hiddenSummary.slice(0, 117) + "..." : exp.hiddenSummary;
+  }
+
+  // 5. Fallback: title or specialist role
   if (exp.specialistTitles?.length) return exp.specialistTitles[0];
   if (exp.title) return exp.title;
-  // Show top work history titles as context
   if (exp.workHistory?.length) {
     const top = exp.workHistory.slice(0, 2).map(wh => `${wh.title} at ${wh.company}`);
     return top.join("; ");
   }
-  if (exp.skills?.length) return exp.skills.slice(0, 3).join(", ");
-  return null;
+  if (exp.skills?.length) return `Expertise in ${exp.skills.slice(0, 3).join(", ")}`;
+  return "Senior team member";
 }
 
 /** Get relevant work history entries for an expert */
@@ -419,7 +453,7 @@ function OverviewTab({
           </p>
           <div className="space-y-1.5">
             {data.experts.slice(0, 3).map((exp) => {
-              const summary = synthesizeExpertSummary(exp);
+              const blurb = generateExpertRelevanceBlurb(exp, queryTerms, searchQuery);
               return (
                 <button
                   key={exp.legacyId}
@@ -433,9 +467,7 @@ function OverviewTab({
                     <p className="truncate text-xs font-medium text-cos-midnight">
                       {exp.displayName}
                     </p>
-                    {summary && (
-                      <p className="truncate text-[10px] italic text-cos-slate">{summary}</p>
-                    )}
+                    <p className="text-[11px] text-cos-midnight/70 leading-snug line-clamp-2">{blurb}</p>
                   </div>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-cos-slate-light" />
                 </button>
@@ -455,14 +487,24 @@ function OverviewTab({
             {data.caseStudies.slice(0, 2).map((cs, i) => {
               const relevance = computeCaseStudyRelevance(cs, queryTerms);
               const displaySummary = cs.summary || synthesizeCaseStudySummary(cs);
+              const CardWrapper = cs.sourceUrl ? "a" : "div";
+              const cardProps = cs.sourceUrl ? { href: cs.sourceUrl, target: "_blank", rel: "noopener noreferrer" } : {};
               return (
-                <div key={cs.legacyId ?? i} className="rounded-cos-xl border border-cos-border p-3">
+                <CardWrapper key={cs.legacyId ?? i} {...cardProps} className={cn(
+                  "block rounded-cos-xl border border-cos-border p-3 transition-colors",
+                  cs.sourceUrl && "hover:border-cos-electric/40 hover:bg-cos-electric/5 cursor-pointer"
+                )}>
                   {relevance && (
                     <p className="mb-1.5 text-[10px] font-medium text-cos-signal">{relevance}</p>
                   )}
-                  {(cs.title || cs.clientName) && (
+                  {cs.clientName && (
+                    <p className="text-[11px] font-semibold text-cos-electric mb-0.5">
+                      for {cs.clientName}
+                    </p>
+                  )}
+                  {cs.title && (
                     <p className="text-[11px] font-medium text-cos-midnight mb-1">
-                      {cs.title}{cs.clientName && <span className="text-cos-slate font-normal"> — for {cs.clientName}</span>}
+                      {cs.title}
                     </p>
                   )}
                   <p className="text-xs text-cos-midnight/80 leading-relaxed line-clamp-2">
@@ -490,18 +532,13 @@ function OverviewTab({
                       </span>
                     ))}
                     {cs.sourceUrl && (
-                      <a
-                        href={cs.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-auto inline-flex items-center gap-1 text-[10px] text-cos-electric hover:underline"
-                      >
-                        View
+                      <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-cos-electric font-medium">
+                        View Case Study
                         <ExternalLink className="h-2.5 w-2.5" />
-                      </a>
+                      </span>
                     )}
                   </div>
-                </div>
+                </CardWrapper>
               );
             })}
           </div>
@@ -612,17 +649,25 @@ function CaseStudiesTab({
       {sorted.map((cs, i) => {
         const relevance = computeCaseStudyRelevance(cs, queryTerms);
         const displaySummary = cs.summary || synthesizeCaseStudySummary(cs);
+        const CardWrapper = cs.sourceUrl ? "a" : "div";
+        const cardProps = cs.sourceUrl ? { href: cs.sourceUrl, target: "_blank", rel: "noopener noreferrer" } : {};
         return (
-          <div key={cs.legacyId ?? i} className={cn(
-            "rounded-cos-xl border p-3",
-            relevance ? "border-cos-signal/20 bg-cos-signal/5" : "border-cos-border"
+          <CardWrapper key={cs.legacyId ?? i} {...cardProps} className={cn(
+            "block rounded-cos-xl border p-3 transition-colors",
+            relevance ? "border-cos-signal/20 bg-cos-signal/5" : "border-cos-border",
+            cs.sourceUrl && "hover:border-cos-electric/40 cursor-pointer"
           )}>
             {relevance && (
               <p className="mb-1.5 text-[10px] font-medium text-cos-signal">{relevance}</p>
             )}
-            {(cs.title || cs.clientName) && (
+            {cs.clientName && (
+              <p className="text-[11px] font-semibold text-cos-electric mb-0.5">
+                for {cs.clientName}
+              </p>
+            )}
+            {cs.title && (
               <p className="text-[11px] font-medium text-cos-midnight mb-1">
-                {cs.title}{cs.clientName && <span className="text-cos-slate font-normal"> — for {cs.clientName}</span>}
+                {cs.title}
               </p>
             )}
             <p className="text-xs text-cos-midnight/80 leading-relaxed line-clamp-3">
@@ -650,18 +695,13 @@ function CaseStudiesTab({
                 </span>
               ))}
               {cs.sourceUrl && (
-                <a
-                  href={cs.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto inline-flex items-center gap-1 text-[10px] text-cos-electric hover:underline"
-                >
+                <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-cos-electric font-medium">
                   View Case Study
                   <ExternalLink className="h-2.5 w-2.5" />
-                </a>
+                </span>
               )}
             </div>
-          </div>
+          </CardWrapper>
         );
       })}
       {hasNonRelevant && searchQuery && (
@@ -709,7 +749,7 @@ function ExpertsTab({
       {sorted.map((exp) => {
         const rel = computeExpertRelevance(exp, queryTerms);
         const isRelevant = rel.matchingSkills.length > 0 || rel.matchingTitles.length > 0;
-        const summary = synthesizeExpertSummary(exp);
+        const blurb = generateExpertRelevanceBlurb(exp, queryTerms, searchQuery);
         return (
           <button
             key={exp.legacyId}
@@ -731,24 +771,13 @@ function ExpertsTab({
               <p className="truncate text-xs font-medium text-cos-midnight">
                 {exp.displayName}
               </p>
-              {summary && (
-                <p className="truncate text-[10px] italic text-cos-slate">{summary}</p>
-              )}
+              <p className="text-[11px] text-cos-midnight/70 leading-snug line-clamp-2">{blurb}</p>
               {rel.matchingSkills.length > 0 && (
                 <div className="mt-0.5 flex flex-wrap gap-0.5">
                   {rel.matchingSkills.slice(0, 3).map((s) => (
                     <span key={s} className="rounded-cos-full bg-cos-signal/10 px-1.5 py-0.5 text-[9px] text-cos-signal">
                       {s}
                     </span>
-                  ))}
-                </div>
-              )}
-              {exp.workHistory && exp.workHistory.length > 0 && (
-                <div className="mt-0.5">
-                  {getRelevantWorkHistory(exp.workHistory, queryTerms).slice(0, 2).map((wh, j) => (
-                    <p key={j} className="truncate text-[9px] text-cos-slate-light">
-                      {wh.isCurrent ? "Currently" : "Previously"} {wh.title} at {wh.company}
-                    </p>
                   ))}
                 </div>
               )}

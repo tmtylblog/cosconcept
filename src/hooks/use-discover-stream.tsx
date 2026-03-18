@@ -112,7 +112,16 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const removeItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
+    setItems((prev) => {
+      const item = prev.find((i) => i.id === id);
+      // Clean up shownEntitiesRef so the entity can be re-opened
+      if (item) {
+        const key = item.type === "firm_detail" ? `firm:${item.entityId}` :
+                    item.type === "expert_detail" ? `expert:${item.entityId}` : null;
+        if (key) shownEntitiesRef.current.delete(key);
+      }
+      return prev.filter((i) => i.id !== id);
+    });
     bumpUpdate();
   }, [bumpUpdate]);
 

@@ -7,8 +7,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neo4jRead } from "@/lib/neo4j";
 import { db } from "@/lib/db";
-import { serviceFirms } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { serviceFirms, members } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 
 export const runtime = "nodejs";
 
@@ -19,13 +21,34 @@ export async function GET(req: NextRequest) {
   const searcherFirmIdParam = searchParams.get("searcherFirmId");
   const searcherOrgId = searchParams.get("searcherOrgId");
 
-  // Resolve searcherFirmId from org if needed
+  // Auth check: require session when searcherOrgId is provided
+  const session = await auth.api.getSession({ headers: await headers() });
+
+  // Resolve searcherFirmId from org if needed — validate org membership
   let searcherFirmId = searcherFirmIdParam;
   if (!searcherFirmId && searcherOrgId) {
-    try {
-      const [row] = await db.select({ id: serviceFirms.id }).from(serviceFirms).where(eq(serviceFirms.organizationId, searcherOrgId)).limit(1);
-      searcherFirmId = row?.id ?? null;
-    } catch { /* non-critical */ }
+    // Validate the authenticated user belongs to this org
+    if (!session?.user) {
+      // Silently ignore searcherOrgId for unauthenticated requests
+      searcherFirmId = null;
+    } else {
+      try {
+        const [memberRow] = await db
+          .select({ id: members.id })
+          .from(members)
+          .where(and(eq(members.organizationId, searcherOrgId), eq(members.userId, session.user.id)))
+          .limit(1);
+        if (memberRow) {
+          const [row] = await db.select({ id: serviceFirms.id }).from(serviceFirms).where(eq(serviceFirms.organizationId, searcherOrgId)).limit(1);
+          searcherFirmId = row?.id ?? null;
+        } else {
+          // User is not a member of this org — ignore searcherOrgId silently
+          searcherFirmId = null;
+        }
+      } catch (err) {
+        console.warn("[entity API] Failed to resolve searcherFirmId from org:", err);
+      }
+    }
   }
 
   if (!entityId || !entityType) {
@@ -33,16 +56,24 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    let result;
-    if (entityType === "firm") result = await fetchFirm(entityId);
-    else if (entityType === "expert") result = await fetchExpert(entityId);
-    else if (entityType === "case_study") result = await fetchCaseStudy(entityId);
-    else return NextResponse.json({ error: "Unknown entityType" }, { status: 400 });
+    // Fetch entity + searcher profile in parallel when possible
+    const entityPromise =
+      entityType === "firm" ? fetchFirm(entityId) :
+      entityType === "expert" ? fetchExpert(entityId) :
+      entityType === "case_study" ? fetchCaseStudy(entityId) :
+      null;
 
-    // Optionally include searcher's firm profile for self-reference context
-    if (searcherFirmId && !("error" in result)) {
-      const sp = await fetchSearcherProfile(searcherFirmId);
-      if (sp) (result as Record<string, unknown>).searcherProfile = sp;
+    if (!entityPromise) {
+      return NextResponse.json({ error: "Unknown entityType" }, { status: 400 });
+    }
+
+    const searcherPromise = searcherFirmId ? fetchSearcherProfile(searcherFirmId) : Promise.resolve(null);
+
+    const [result, sp] = await Promise.all([entityPromise, searcherPromise]);
+
+    // Attach searcher profile if available
+    if (sp && !("error" in result)) {
+      (result as Record<string, unknown>).searcherProfile = sp;
     }
 
     return NextResponse.json(result);

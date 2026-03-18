@@ -121,29 +121,23 @@ export function ExpertDetailBlock({
 
       {/* Body */}
       <div className="px-5 py-4 space-y-4 max-h-[450px] overflow-y-auto cos-scrollbar">
-        {/* Relevance note */}
+        {/* Relevance paragraph */}
         {hasAnyRelevance && (
           <div className="rounded-cos-xl border border-cos-signal/20 bg-cos-signal/5 px-4 py-3">
-            <p className="text-xs font-medium text-cos-signal">
-              Relevant to your search
+            <p className="text-xs text-cos-midnight/80 leading-relaxed">
+              {matchingProfiles.length > 0 ? (
+                <>Specialist in <strong>{matchingProfiles.map(sp => sp.title).filter(Boolean).join(", ")}</strong> — directly relevant to your search for &quot;{searchQuery}&quot;.{" "}
+                {matchingSkills.length > 0 && <>Brings expertise in {matchingSkills.slice(0, 4).join(", ")}. </>}
+                {matchingIndustries.length > 0 && <>Active in the {matchingIndustries.slice(0, 3).join(", ")} {matchingIndustries.length === 1 ? "sector" : "sectors"}.</>}
+                </>
+              ) : matchingSkills.length > 0 ? (
+                <>Brings <strong>{matchingSkills.slice(0, 4).join(", ")}</strong> experience relevant to your search for &quot;{searchQuery}&quot;.{" "}
+                {matchingIndustries.length > 0 && <>Works across {matchingIndustries.slice(0, 3).join(", ")}.</>}
+                </>
+              ) : (
+                <>Industry background in <strong>{matchingIndustries.slice(0, 3).join(", ")}</strong> aligns with your search for &quot;{searchQuery}&quot;.</>
+              )}
             </p>
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {matchingSkills.map((s) => (
-                <span key={s} className="rounded-cos-full bg-cos-signal/10 px-2 py-0.5 text-[10px] text-cos-signal">
-                  {s}
-                </span>
-              ))}
-              {matchingIndustries.map((ind) => (
-                <span key={ind} className="rounded-cos-full bg-cos-warm/10 px-2 py-0.5 text-[10px] text-cos-warm">
-                  {ind}
-                </span>
-              ))}
-              {matchingProfiles.map((sp, i) => (
-                <span key={`sp-${i}`} className="rounded-cos-full bg-cos-electric/10 px-2 py-0.5 text-[10px] text-cos-electric">
-                  {sp.title ?? "Specialist Profile"}
-                </span>
-              ))}
-            </div>
           </div>
         )}
 
@@ -369,12 +363,17 @@ export function ExpertDetailBlock({
                       Relevant: demonstrates {[...cs.csMatchingSkills, ...cs.csMatchingIndustries].join(", ")}
                     </p>
                   )}
-                  {(cs.title || cs.clientName) && (
-                    <p className="text-[11px] font-medium text-cos-midnight mb-1">
-                      {cs.title}{cs.clientName && <span className="text-cos-slate font-normal"> — for {cs.clientName}</span>}
+                  {cs.clientName && (
+                    <p className="text-[11px] font-semibold text-cos-electric mb-0.5">
+                      for {cs.clientName}
                     </p>
                   )}
-                  {cs.firmName && !cs.title && !cs.clientName && (
+                  {cs.title && (
+                    <p className="text-[11px] font-medium text-cos-midnight mb-1">
+                      {cs.title}
+                    </p>
+                  )}
+                  {!cs.title && !cs.clientName && cs.firmName && (
                     <p className="mb-1 text-[11px] text-cos-slate">by {cs.firmName}</p>
                   )}
                   {cs.summary ? (

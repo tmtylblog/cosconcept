@@ -17,6 +17,16 @@ import { neo4jRead } from "@/lib/neo4j";
 import neo4j from "neo4j-driver";
 import type { SearchFilters, MatchCandidate } from "./types";
 
+/** Safely convert Neo4j integer (which may be {low, high} object) to plain number */
+function toInt(val: unknown): number {
+  if (val == null) return 0;
+  if (typeof val === "number") return val;
+  if (typeof val === "object" && "low" in (val as Record<string, unknown>)) {
+    return (val as { low: number }).low ?? 0;
+  }
+  return Number(val) || 0;
+}
+
 interface StructuredCandidate {
   firmId: string;
   firmName: string;
@@ -179,8 +189,10 @@ export async function structuredFilter(
     const range = sizeRanges[filters.sizeBand];
     if (range) {
       conditions.push(
-        `f.employeeCount >= ${range[0]} AND f.employeeCount <= ${range[1]}`
+        `f.employeeCount >= $sizeMin AND f.employeeCount <= $sizeMax`
       );
+      params.sizeMin = neo4j.int(range[0]);
+      params.sizeMax = neo4j.int(range[1]);
     }
   }
 
@@ -265,9 +277,7 @@ export async function structuredFilter(
     const matchedMarkets: string[] = record.matchedMarkets ?? [];
     const serviceMatches: ServiceMatch[] = (record.serviceMatches ?? []) as ServiceMatch[];
     const categories: string[] = record.categories ?? [];
-    const caseStudyCount = typeof record.caseStudyCount === "object"
-      ? (record.caseStudyCount as { low: number }).low ?? 0
-      : record.caseStudyCount ?? 0;
+    const caseStudyCount = toInt(record.caseStudyCount);
 
     const matchedSkills = skillMatches.map((s) => s.name);
     const matchedServices = serviceMatches.map((s) => s.name);
@@ -323,9 +333,7 @@ export async function structuredFilter(
     }
 
     // ── Team experience boost: up to +15% ────────────────────
-    const teamRelevance = typeof record.teamRelevance === "object"
-      ? (record.teamRelevance as { low: number }).low ?? 0
-      : record.teamRelevance ?? 0;
+    const teamRelevance = toInt(record.teamRelevance);
     if (teamRelevance > 0) {
       const teamBoost = Math.min(teamRelevance, 5) / 5 * 0.15;
       structuredScore = Math.min(1, structuredScore + teamBoost);
@@ -747,9 +755,7 @@ async function expertFilter(
     let structuredScore = maxScore > 0 ? score / maxScore : 0.4;
 
     // Specialist profile boost: curated profiles are higher signal (1.5x weight)
-    const spCount = typeof r.specialistProfileCount === "object"
-      ? (r.specialistProfileCount as unknown as { low: number }).low ?? 0
-      : r.specialistProfileCount ?? 0;
+    const spCount = toInt(r.specialistProfileCount);
     if (spCount > 0) {
       // Boost up to +15% for having specialist profiles
       const spBoost = Math.min(spCount, 3) / 3 * 0.15;

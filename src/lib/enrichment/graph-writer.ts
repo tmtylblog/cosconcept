@@ -479,7 +479,7 @@ export async function writeExpertToGraph(
            p.jobTitleClass = $jobTitleClass,
            p.enrichmentStatus = "enriched",
            p.source = "pdl",
-           p.hiddenSummary = CASE WHEN $hiddenSummary IS NOT NULL THEN $hiddenSummary ELSE p.hiddenSummary END,
+           p.hiddenSummary = coalesce($hiddenSummary, p.hiddenSummary),
            p.emails = coalesce(p.emails, []),
            p.updatedAt = datetime()
        WITH p
