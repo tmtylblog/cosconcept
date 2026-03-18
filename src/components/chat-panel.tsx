@@ -16,8 +16,9 @@ import { useGuestData } from "@/hooks/use-guest-data";
 import { useOssyContext } from "@/hooks/use-ossy-context";
 import { cn } from "@/lib/utils";
 import { ToolResultRenderer } from "@/components/chat/tool-result-renderer";
-import { generatePageContextPrompt } from "@/lib/ai/ossy-page-prompts";
+import { generatePageContextPrompt, getProactiveNavMessage } from "@/lib/ai/ossy-page-prompts";
 import { formatEventsForOssy, type OssyPageEvent } from "@/lib/ossy-events";
+import type { CosSignal } from "@/lib/cos-signal";
 
 const GUEST_MESSAGE_LIMIT = 30;
 
@@ -204,7 +205,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   } = useEnrichment();
   const { updateField: updateProfileField } = useProfile();
   const { guestPreferences, setGuestPreference, setGuestMessages, forceFlushToDb } = useGuestData();
-  const { pageContext } = useOssyContext();
+  const { pageContext, currentPageMode } = useOssyContext();
   const [input, setInput] = useState("");
   const [pendingTranscript, setPendingTranscript] = useState<string | null>(null);
 
@@ -396,9 +397,10 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         conversationId: conversationIdRef.current,
         firmSection: firmSection ?? undefined,
         pageContext: pageContextPrompt || undefined,
+        pageMode: currentPageMode ?? undefined,
       };
     }
-  }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id, isBrandDetected, firmSection, pageContext]);
+  }, [isGuest, contextForOssy, guestPreferences, activeOrg?.id, isBrandDetected, firmSection, pageContext, currentPageMode]);
 
   // Load conversation history on mount for authenticated users.
   // If a recent conversation exists (< 24h), restore it so follow-ups have context.
@@ -476,7 +478,92 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     }),
   });
 
-  // ─── Ossy page event listener + auto-send ───────────────────
+  // ─── COS signal listener (nav + action signals) ─────────────
+  const signalQueueRef = useRef<CosSignal[]>([]);
+  const lastSignalRef = useRef<number>(0);
+  const navProactiveFiredRef = useRef<Set<string>>(new Set());
+
+  // Listen for cos:signal events (new unified signal system)
+  useEffect(() => {
+    if (isGuest || isOnboarding) return;
+
+    const handler = (e: Event) => {
+      const signal = (e as CustomEvent<CosSignal>).detail;
+      if (!signal?.kind) return;
+
+      if (signal.kind === "nav") {
+        // Nav signals: check if we should send a proactive message
+        const pageMode = signal.page;
+        if (navProactiveFiredRef.current.has(pageMode)) return;
+
+        const proactiveMsg = getProactiveNavMessage(pageMode, pageContext);
+        if (!proactiveMsg) return;
+        if (status === "submitted" || status === "streaming") return;
+
+        // Mark as fired so we don't repeat
+        navProactiveFiredRef.current.add(pageMode);
+
+        // Send as hidden context message after short delay
+        setTimeout(() => {
+          sendMessage({ text: `[CONTEXT_SIGNAL] Navigated to ${pageMode}: ${proactiveMsg}` });
+        }, 500);
+      } else if (signal.kind === "action") {
+        // Action signals: queue for deduplication and cooldown processing
+        signalQueueRef.current.push(signal);
+      }
+    };
+
+    window.addEventListener("cos:signal", handler);
+    return () => window.removeEventListener("cos:signal", handler);
+  }, [isGuest, isOnboarding, pageContext, status, sendMessage]);
+
+  // Process action signal queue — flush with dedup and cooldown
+  useEffect(() => {
+    if (isGuest || isOnboarding) return;
+
+    const interval = setInterval(() => {
+      const queue = signalQueueRef.current;
+      if (queue.length === 0) return;
+
+      // Don't send if Ossy is busy
+      if (status === "submitted" || status === "streaming") return;
+
+      // Cooldown: 2s for discover, 5s for others
+      const isDiscover = queue.some((s) => s.kind === "action" && s.page === "discover");
+      const cooldown = isDiscover ? 2000 : 5000;
+      if (Date.now() - lastSignalRef.current < cooldown) return;
+
+      // Dedup by action + entityId within the batch
+      const seen = new Set<string>();
+      const deduped = queue.filter((s) => {
+        if (s.kind !== "action") return false;
+        const key = `${s.action}:${s.entityId ?? ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      signalQueueRef.current = [];
+      if (deduped.length === 0) return;
+
+      lastSignalRef.current = Date.now();
+
+      // Format and send as context signal messages
+      const lines = deduped.map((s) => {
+        if (s.kind !== "action") return "";
+        const parts = [`${s.action} on ${s.page}`];
+        if (s.displayName) parts.push(s.displayName);
+        if (s.entityType && s.entityId) parts.push(`(${s.entityType}:${s.entityId})`);
+        return parts.join(": ");
+      }).filter(Boolean);
+
+      sendMessage({ text: `[CONTEXT_SIGNAL] ${lines.join("; ")}` });
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [isGuest, isOnboarding, status, sendMessage]);
+
+  // ─── Ossy page event listener + auto-send (legacy) ─────────
   const eventQueueRef = useRef<OssyPageEvent[]>([]);
   const lastProactiveRef = useRef<number>(0);
   const proactiveFiredForSectionRef = useRef<string | null>(null);

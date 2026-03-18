@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { emitCosSignal } from "@/lib/cos-signal";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -114,6 +115,13 @@ function PartnershipCard({
         body: JSON.stringify({ action: "accept" }),
       });
       onAction();
+      emitCosSignal({
+        kind: "action",
+        page: "partnerships",
+        action: "accept_partnership",
+        entityId: partnership.id,
+        displayName: partnership.partnerFirm.name,
+      });
     } catch {
       // ignore
     } finally {
@@ -130,6 +138,13 @@ function PartnershipCard({
         body: JSON.stringify({ action: "decline" }),
       });
       onAction();
+      emitCosSignal({
+        kind: "action",
+        page: "partnerships",
+        action: "decline_partnership",
+        entityId: partnership.id,
+        displayName: partnership.partnerFirm.name,
+      });
     } catch {
       // ignore
     } finally {

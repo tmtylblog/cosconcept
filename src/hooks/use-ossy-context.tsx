@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import type { PageMode, CosSignal } from "@/lib/cos-signal";
 
 // ─── Page Context Snapshots ──────────────────────────────
 // Each page registers a typed snapshot of its current state.
@@ -21,22 +22,38 @@ export type PageContextSnapshot =
 interface OssyContextValue {
   pageContext: PageContextSnapshot | null;
   setPageContext: (snapshot: PageContextSnapshot | null) => void;
+  currentPageMode: PageMode | null;
 }
 
 const OssyContext = createContext<OssyContextValue>({
   pageContext: null,
   setPageContext: () => {},
+  currentPageMode: null,
 });
 
 export function OssyContextProvider({ children }: { children: ReactNode }) {
   const [pageContext, setPageContextState] = useState<PageContextSnapshot | null>(null);
+  const [currentPageMode, setCurrentPageMode] = useState<PageMode | null>(null);
 
   const setPageContext = useCallback((snapshot: PageContextSnapshot | null) => {
     setPageContextState(snapshot);
   }, []);
 
+  // Listen for cos:signal nav events to track current page mode
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const signal = (e as CustomEvent<CosSignal>).detail;
+      if (signal?.kind === "nav") {
+        setCurrentPageMode(signal.page);
+      }
+    };
+
+    window.addEventListener("cos:signal", handler);
+    return () => window.removeEventListener("cos:signal", handler);
+  }, []);
+
   return (
-    <OssyContext.Provider value={{ pageContext, setPageContext }}>
+    <OssyContext.Provider value={{ pageContext, setPageContext, currentPageMode }}>
       {children}
     </OssyContext.Provider>
   );

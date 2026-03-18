@@ -20,6 +20,7 @@ import {
 import { useProfile } from "@/hooks/use-profile";
 import { useOssyContext } from "@/hooks/use-ossy-context";
 import { emitOssyEvent } from "@/lib/ossy-events";
+import { emitCosSignal } from "@/lib/cos-signal";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { PartnerMatch } from "@/app/api/partner-matching/route";
@@ -204,6 +205,16 @@ function MatchCard({
       setRequested(true);
       setShowConfirm(false);
       onIntroRequested(match.firmId);
+
+      // Emit signal for Ossy to acknowledge
+      emitCosSignal({
+        kind: "action",
+        page: "partner-matching",
+        action: "request_intro",
+        entityId: match.firmId,
+        displayName: match.firmName,
+        meta: { matchScore: match.matchScore },
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {

@@ -26,6 +26,7 @@ import {
 import { usePlan } from "@/hooks/use-plan";
 import { cn } from "@/lib/utils";
 import { signOut, useActiveOrganization } from "@/lib/auth-client";
+import { emitCosSignal, HREF_TO_PAGE_MODE } from "@/lib/cos-signal";
 
 interface NavChild {
   label: string;
@@ -195,6 +196,10 @@ export function NavBar({
               <div className="flex items-center">
                 <Link
                   href={item.href}
+                  onClick={() => {
+                    const pageMode = HREF_TO_PAGE_MODE[item.href];
+                    if (pageMode) emitCosSignal({ kind: "nav", page: pageMode });
+                  }}
                   className={cn(
                     "flex flex-1 items-center gap-3 rounded-cos-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     item.label === "Upgrade"
@@ -238,6 +243,10 @@ export function NavBar({
                       <Link
                         key={child.href}
                         href={child.href}
+                        onClick={() => {
+                          const pageMode = HREF_TO_PAGE_MODE[child.href];
+                          if (pageMode) emitCosSignal({ kind: "nav", page: pageMode });
+                        }}
                         className={cn(
                           "flex items-center gap-2 rounded-cos-md px-2.5 py-1.5 text-[12px] font-medium transition-colors",
                           childActive

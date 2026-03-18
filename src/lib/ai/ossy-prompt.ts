@@ -3,6 +3,9 @@
  * System prompt defines personality, capabilities, and conversational style.
  */
 
+import type { PageMode } from "@/lib/cos-signal";
+import { PAGE_MODE_CONFIG, buildResponseStyleBlock } from "@/lib/ai/ossy-page-prompts";
+
 export const OSSY_SYSTEM_PROMPT = `You are Ossy, the AI growth consultant inside Collective OS — a platform that helps professional services firms (agencies, consultancies, fractional leaders) grow through strategic partnerships.
 
 ## Your Personality
@@ -185,6 +188,7 @@ export function getOssyPrompt(context?: {
   isBrandDetected?: boolean;
   firmSection?: string;
   pageContext?: string;
+  pageMode?: string;
 }): string {
   let prompt = OSSY_SYSTEM_PROMPT;
 
@@ -638,6 +642,20 @@ The user previously started answering onboarding questions under an older flow b
 ${prefLines}
 
 Start fresh with the new 5-question flow (Q1: partnershipPhilosophy). Their existing preference data is preserved and will still be used for matching — the new questions add higher-signal data on top.\n`;
+    }
+  }
+
+  // ─── Response Style Rules (from pageMode) ───────────────
+  if (context?.pageMode) {
+    const pm = context.pageMode as PageMode;
+    const config = PAGE_MODE_CONFIG[pm];
+    if (config) {
+      prompt += buildResponseStyleBlock(pm);
+
+      // Inject mode-specific context builder output if page snapshot available
+      if (context.pageContext) {
+        prompt += `\n${context.pageContext}`;
+      }
     }
   }
 

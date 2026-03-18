@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react";
 import type { DiscoverCandidate } from "@/hooks/use-discover-results";
+import { emitCosSignal } from "@/lib/cos-signal";
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -217,6 +218,7 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
             if (data.experts.length) parts.push(`Key people: ${data.experts.slice(0, 4).map((e) => `${e.displayName}${e.title ? ` (${e.title})` : ""}`).join(", ")}`);
             if (data.markets.length) parts.push(`Markets: ${data.markets.join(", ")}`);
 
+            // Emit both legacy event (for existing listeners) and new signal
             window.dispatchEvent(new CustomEvent("cos:page-event", {
               detail: {
                 type: "discover_firm_viewed",
@@ -225,6 +227,15 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
                 dataSummary: parts.join(". "),
               },
             }));
+            emitCosSignal({
+              kind: "action",
+              page: "discover",
+              action: "view_profile",
+              entityType: "firm",
+              entityId,
+              displayName: data.name ?? candidate.displayName ?? entityId,
+              meta: { dataSummary: parts.join(". ") },
+            });
           }
         }
         bumpUpdate();
@@ -288,6 +299,15 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
                 dataSummary: parts.join(". "),
               },
             }));
+            emitCosSignal({
+              kind: "action",
+              page: "discover",
+              action: "view_profile",
+              entityType: "expert",
+              entityId,
+              displayName: data.displayName ?? displayName ?? entityId,
+              meta: { dataSummary: parts.join(". ") },
+            });
           }
         }
         bumpUpdate();
@@ -345,6 +365,15 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
                 dataSummary: parts.join(". "),
               },
             }));
+            emitCosSignal({
+              kind: "action",
+              page: "discover",
+              action: "view_profile",
+              entityType: "case_study",
+              entityId,
+              displayName: data.title ?? displayName ?? entityId,
+              meta: { dataSummary: parts.join(". ") },
+            });
           }
         }
         bumpUpdate();

@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     const userId = session?.user?.id;
     const userName = session?.user?.name;
 
-    const { messages, organizationId: clientOrgId, websiteContext, conversationId: clientConvId, firmSection, pageContext: clientPageContext } =
+    const { messages, organizationId: clientOrgId, websiteContext, conversationId: clientConvId, firmSection, pageContext: clientPageContext, pageMode: clientPageMode } =
       (await req.json()) as {
         messages: UIMessage[];
         organizationId?: string;
@@ -50,6 +50,7 @@ export async function POST(req: Request) {
         conversationId?: string;
         firmSection?: string;
         pageContext?: string;
+        pageMode?: string;
       };
 
     // ─── Server-side org resolution fallback ────────────────
@@ -151,6 +152,7 @@ export async function POST(req: Request) {
       collectedPreferences,
       firmSection: firmSection ?? undefined,
       pageContext: clientPageContext ?? undefined,
+      pageMode: clientPageMode ?? undefined,
     });
 
     const modelMessages = await convertToModelMessages(messages);

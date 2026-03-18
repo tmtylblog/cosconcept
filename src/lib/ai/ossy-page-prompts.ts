@@ -3,9 +3,201 @@
  *
  * Each function takes a PageContextSnapshot and returns a prompt block
  * that tells Ossy what's on screen and what to notice.
+ *
+ * The PAGE_MODE_CONFIG map defines per-page response behavior,
+ * proactive navigation messages, and context builders.
  */
 
 import type { PageContextSnapshot } from "@/hooks/use-ossy-context";
+import type { PageMode } from "@/lib/cos-signal";
+
+// ─── Response Mode Types ─────────────────────────────────
+
+export type ResponseMode = "observe" | "guide" | "interview" | "silent";
+
+export interface PageModeConfig {
+  /** How Ossy should respond on this page */
+  responseMode: ResponseMode;
+  /** What Ossy says when user navigates here (null = stay silent) */
+  proactiveOnNav: string | null;
+  /** Instructions for reacting to in-page action signals */
+  actionGuidance: string;
+  /** Build dynamic context from page snapshot */
+  contextBuilder: (ctx: PageContextSnapshot | null) => string;
+}
+
+// ─── Page Mode Configuration ─────────────────────────────
+
+export const PAGE_MODE_CONFIG: Record<PageMode, PageModeConfig> = {
+  dashboard: {
+    responseMode: "guide",
+    proactiveOnNav: "Welcome back. Take a look around — I'm here if you need anything.",
+    actionGuidance: "Brief status updates. Suggest next action if profile is incomplete.",
+    contextBuilder: (ctx) => ctx?.page === "dashboard" ? dashboardPrompt(ctx) : "",
+  },
+  discover: {
+    responseMode: "guide",
+    proactiveOnNav: "This is where you search the network. Tell me what kind of partner, expert, or case study you're looking for and I'll find matches.",
+    actionGuidance: "React to profile views with 1-2 sentence commentary. Never narrate what the user clicked — tell them what they can't see.",
+    contextBuilder: () => "", // Discover has its own deep prompt integration
+  },
+  "firm-overview": {
+    responseMode: "guide",
+    proactiveOnNav: null, // Conditionally set by contextBuilder based on completeness
+    actionGuidance: "Help fill gaps, acknowledge edits.",
+    contextBuilder: (ctx) => ctx?.page === "overview" ? overviewPrompt(ctx) : "",
+  },
+  "firm-offering": {
+    responseMode: "guide",
+    proactiveOnNav: null, // Conditionally set by contextBuilder
+    actionGuidance: "Offer to help draft service descriptions.",
+    contextBuilder: (ctx) => ctx?.page === "offering" ? offeringPrompt(ctx) : "",
+  },
+  "firm-experts": {
+    responseMode: "guide",
+    proactiveOnNav: null, // Conditionally set by contextBuilder
+    actionGuidance: "Prompt team discovery, explain enrichment.",
+    contextBuilder: (ctx) => ctx?.page === "experts" ? expertsPrompt(ctx) : "",
+  },
+  "firm-experience": {
+    responseMode: "guide",
+    proactiveOnNav: null, // Conditionally set by contextBuilder
+    actionGuidance: "Encourage adding more case studies.",
+    contextBuilder: (ctx) => ctx?.page === "experience" ? experiencePrompt(ctx) : "",
+  },
+  "firm-preferences": {
+    responseMode: "guide",
+    proactiveOnNav: null, // Conditionally set by contextBuilder
+    actionGuidance: "Help fill remaining preference fields.",
+    contextBuilder: (ctx) => ctx?.page === "preferences" ? preferencesPrompt(ctx) : "",
+  },
+  "partner-matching": {
+    responseMode: "interview",
+    proactiveOnNav: null, // Handled by the partner-matching page's own event system
+    actionGuidance: "React to intro requests with brief acknowledgment.",
+    contextBuilder: (ctx) => ctx?.page === "partner-matching" ? partnerMatchingPrompt(ctx) : "",
+  },
+  partnerships: {
+    responseMode: "guide",
+    proactiveOnNav: null, // Conditionally set — depends on partnership count
+    actionGuidance: "React to accept/decline actions. Congratulate on accepts, empathize on declines.",
+    contextBuilder: () => "",
+  },
+  network: {
+    responseMode: "silent",
+    proactiveOnNav: null,
+    actionGuidance: "Coming soon — stay quiet.",
+    contextBuilder: () => "",
+  },
+  "settings-profile": {
+    responseMode: "guide",
+    proactiveOnNav: "This is where you manage your personal profile — name, email, avatar. Changes here affect how partners see you.",
+    actionGuidance: "Orient to what's editable.",
+    contextBuilder: (ctx) => ctx?.page === "settings" ? settingsPrompt(ctx) : "",
+  },
+  "settings-team": {
+    responseMode: "guide",
+    proactiveOnNav: "Manage who has access to your organization. You can invite team members or change roles.",
+    actionGuidance: "Explain team management.",
+    contextBuilder: (ctx) => ctx?.page === "settings" ? settingsPrompt(ctx) : "",
+  },
+  "settings-billing": {
+    responseMode: "guide",
+    proactiveOnNav: "Your current plan and usage. You can upgrade for more enrichment credits and advanced features.",
+    actionGuidance: "Help understand plan limits.",
+    contextBuilder: (ctx) => ctx?.page === "settings" ? settingsPrompt(ctx) : "",
+  },
+  "settings-notifications": {
+    responseMode: "guide",
+    proactiveOnNav: "Control which emails and alerts you receive — partnership requests, match notifications, weekly digests.",
+    actionGuidance: "Explain notification types.",
+    contextBuilder: (ctx) => ctx?.page === "settings" ? settingsPrompt(ctx) : "",
+  },
+  "settings-security": {
+    responseMode: "guide",
+    proactiveOnNav: "Manage your password and security settings. You can also see active sessions.",
+    actionGuidance: "Brief security context.",
+    contextBuilder: (ctx) => ctx?.page === "settings" ? settingsPrompt(ctx) : "",
+  },
+  "settings-network": {
+    responseMode: "guide",
+    proactiveOnNav: "Connect external accounts like LinkedIn and Gmail to expand your network intelligence.",
+    actionGuidance: "Explain integration value.",
+    contextBuilder: (ctx) => ctx?.page === "settings" ? settingsPrompt(ctx) : "",
+  },
+};
+
+/**
+ * Build the Response Style Rules block for the system prompt.
+ */
+export function buildResponseStyleBlock(pageMode: PageMode): string {
+  const config = PAGE_MODE_CONFIG[pageMode];
+  if (!config) return "";
+
+  return `\n## Response Style
+Current mode: ${config.responseMode}
+
+Rules:
+- "observe": Brief observation (1-2 sentences). Do NOT ask a follow-up question.
+- "guide": Tip or suggestion (2-3 sentences). Ask a question ONLY if it would meaningfully change what you recommend.
+- "interview": Ask one focused question per response. Bold the question.
+- "silent": Do not proactively comment. Only respond to direct user messages.
+
+IMPORTANT: Do not end every response with a question. Most of the time, a statement is better.
+When responding to a [CONTEXT_SIGNAL], make a specific observation — never generic "want to know more?" follow-ups.\n`;
+}
+
+/**
+ * Get the proactive nav message for a page mode, with dynamic
+ * overrides based on page context snapshot.
+ */
+export function getProactiveNavMessage(
+  pageMode: PageMode,
+  ctx: PageContextSnapshot | null,
+): string | null {
+  const config = PAGE_MODE_CONFIG[pageMode];
+  if (!config) return null;
+
+  // Dynamic overrides based on page context
+  if (pageMode === "firm-overview" && ctx?.page === "overview") {
+    if (ctx.completeness < 80) {
+      return `Your profile is ${ctx.completeness}% complete. ${ctx.completeness < 50 ? "Adding more details would help partners find you." : "Almost there — a few more fields would strengthen your matches."}`;
+    }
+    return null; // Silent if profile is healthy
+  }
+
+  if (pageMode === "firm-offering" && ctx?.page === "offering") {
+    if (ctx.withoutDescription > 0) {
+      return `${ctx.serviceCount} services, ${ctx.withoutDescription} need descriptions.`;
+    }
+    return null;
+  }
+
+  if (pageMode === "firm-experts" && ctx?.page === "experts") {
+    if (ctx.expertCount === 0) {
+      return "Adding team members strengthens your matches.";
+    }
+    return null;
+  }
+
+  if (pageMode === "firm-experience" && ctx?.page === "experience") {
+    if (ctx.caseStudyCount < 3) {
+      return "Case studies are your strongest matching signal.";
+    }
+    return null;
+  }
+
+  if (pageMode === "firm-preferences" && ctx?.page === "preferences") {
+    if (ctx.completeness < 100) {
+      return `${ctx.completeness}% complete.`;
+    }
+    return null;
+  }
+
+  return config.proactiveOnNav;
+}
+
+// ─── Legacy wrapper — keeps existing callers working ─────
 
 /**
  * Generate a page-aware prompt block from the current page context.
@@ -37,6 +229,8 @@ export function generatePageContextPrompt(ctx: PageContextSnapshot | null): stri
       return ""; // Discover has its own deep prompt integration
   }
 }
+
+// ─── Per-page prompt builders (unchanged) ────────────────
 
 function overviewPrompt(ctx: Extract<PageContextSnapshot, { page: "overview" }>) {
   const lines: string[] = [
