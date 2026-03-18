@@ -110,6 +110,8 @@ export function createOssyTools(organizationId: string, firmId?: string) {
           // Filter out searcher's own firm from results
           const filtered = result.candidates.filter(c => c.firmId !== firmId);
 
+          const searchIntent = result.searchIntent ?? "partner";
+
           const candidates = filtered.slice(0, 8).map((c) => ({
             entityType: c.entityType,
             entityId: c.entityId,
@@ -123,6 +125,15 @@ export function createOssyTools(organizationId: string, firmId?: string) {
             industries: c.preview.industries.slice(0, 5),
             website: c.preview.website ?? undefined,
             caseStudyCount: c.preview.caseStudyCount ?? undefined,
+            // Expert-specific fields
+            specialistTitle: c.preview.primarySpecialistTitle ?? undefined,
+            specialistProfileCount: c.preview.specialistProfileCount ?? undefined,
+            subtitle: c.preview.subtitle ?? undefined,
+            // Case study-specific fields
+            contributorCount: c.preview.contributorCount ?? undefined,
+            summary: c.preview.summary ?? undefined,
+            sourceUrl: c.preview.sourceUrl ?? undefined,
+            clientName: c.preview.clientName ?? undefined,
           }));
 
           // Build a brief analysis hint for Ossy from the result data
@@ -171,6 +182,7 @@ export function createOssyTools(organizationId: string, firmId?: string) {
           return {
             success: true,
             query,
+            searchIntent,
             totalFound: filtered.length,
             candidates,
             ...(_searcherProfile ? { _searcherProfile } : {}),

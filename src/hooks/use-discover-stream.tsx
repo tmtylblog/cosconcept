@@ -72,12 +72,26 @@ interface ExpertDetailData {
   workHistory?: Array<{ company: string; title: string; industry: string | null; startDate: string | null; endDate: string | null; isCurrent: boolean }>;
 }
 
+interface CaseStudyDetailData {
+  entityId: string;
+  title: string | null;
+  summary: string | null;
+  sourceUrl: string | null;
+  clientName: string | null;
+  firmName: string | null;
+  firmWebsite: string | null;
+  skills: string[];
+  industries: string[];
+  contributors: Array<{ legacyId: string; displayName: string; title: string | null }>;
+}
+
 export type StreamItem =
   | { type: "results"; results: DiscoverCandidate[]; query: string; id: string; timestamp: number }
   | { type: "firm_detail"; entityId: string; matchContext?: MatchContext; searcherProfile?: SearcherProfile; data: FirmDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number }
-  | { type: "expert_detail"; entityId: string; displayName: string; searcherProfile?: SearcherProfile; data: ExpertDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number };
+  | { type: "expert_detail"; entityId: string; displayName: string; searcherProfile?: SearcherProfile; data: ExpertDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number }
+  | { type: "case_study_detail"; entityId: string; displayName: string; data: CaseStudyDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number };
 
-export type { FirmDetailData, ExpertDetailData };
+export type { FirmDetailData, ExpertDetailData, CaseStudyDetailData };
 
 interface DiscoverStreamContextValue {
   items: StreamItem[];
@@ -86,6 +100,7 @@ interface DiscoverStreamContextValue {
   pushResults: (results: DiscoverCandidate[], query: string) => void;
   pushFirmDetail: (candidate: DiscoverCandidate, searchQuery: string) => void;
   pushExpertDetail: (entityId: string, searchQuery: string, displayName?: string) => void;
+  pushCaseStudyDetail: (entityId: string, searchQuery: string, displayName?: string) => void;
   /** Remove a stream item by ID (for closing detail blocks) */
   removeItem: (id: string) => void;
   lastResultsId: string | null;
@@ -117,7 +132,8 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
       // Clean up shownEntitiesRef so the entity can be re-opened
       if (item) {
         const key = item.type === "firm_detail" ? `firm:${item.entityId}` :
-                    item.type === "expert_detail" ? `expert:${item.entityId}` : null;
+                    item.type === "expert_detail" ? `expert:${item.entityId}` :
+                    item.type === "case_study_detail" ? `case_study:${item.entityId}` : null;
         if (key) shownEntitiesRef.current.delete(key);
       }
       return prev.filter((i) => i.id !== id);
@@ -282,6 +298,63 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
       });
   }, [nextId, bumpUpdate]);
 
+  const pushCaseStudyDetail = useCallback((entityId: string, searchQuery: string, displayName?: string) => {
+    // Prevent duplicate detail blocks for the same entity
+    const key = `case_study:${entityId}`;
+    if (shownEntitiesRef.current.has(key)) return;
+    shownEntitiesRef.current.add(key);
+
+    const id = nextId("case_study");
+    const item: StreamItem = {
+      type: "case_study_detail",
+      entityId,
+      displayName: displayName ?? "Case Study",
+      data: null,
+      loading: true,
+      error: null,
+      searchQuery,
+      id,
+      timestamp: Date.now(),
+    };
+    setItems((prev) => [...prev, item]);
+
+    // Fetch case study detail
+    fetch(`/api/discover/entity?entityId=${encodeURIComponent(entityId)}&entityType=case_study`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error) {
+          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, error: d.error } as StreamItem : i));
+        } else {
+          const data = d.data as CaseStudyDetailData;
+          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, data, displayName: data?.title ?? displayName ?? "Case Study" } as StreamItem : i));
+
+          // Emit enriched event for Ossy commentary
+          if (typeof window !== "undefined" && data) {
+            const parts: string[] = [];
+            if (data.clientName) parts.push(`Client: ${data.clientName}`);
+            if (data.firmName) parts.push(`By ${data.firmName}`);
+            if (data.skills.length) parts.push(`Skills: ${data.skills.slice(0, 6).join(", ")}`);
+            if (data.industries.length) parts.push(`Industries: ${data.industries.slice(0, 4).join(", ")}`);
+            if (data.contributors.length) parts.push(`${data.contributors.length} contributors`);
+
+            window.dispatchEvent(new CustomEvent("cos:page-event", {
+              detail: {
+                type: "discover_case_study_viewed",
+                entityId,
+                displayName: data.title ?? displayName ?? entityId,
+                dataSummary: parts.join(". "),
+              },
+            }));
+          }
+        }
+        bumpUpdate();
+      })
+      .catch(() => {
+        setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, error: "Failed to load" } as StreamItem : i));
+        bumpUpdate();
+      });
+  }, [nextId, bumpUpdate]);
+
   return (
     <DiscoverStreamContext.Provider
       value={{
@@ -290,6 +363,7 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
         pushResults,
         pushFirmDetail,
         pushExpertDetail,
+        pushCaseStudyDetail,
         removeItem,
         lastResultsId: lastResultsIdRef.current,
         setSearcherOrgId,

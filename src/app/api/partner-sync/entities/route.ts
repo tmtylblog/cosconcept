@@ -280,7 +280,7 @@ export async function GET(req: Request) {
   const type = url.searchParams.get("type");
   const partnerId = url.searchParams.get("partnerId");
   const cursor = url.searchParams.get("cursor") ?? null;
-  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "1000"), 5000);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "500") || 500, 2000);
 
   if (!type || !ALLOWED_TYPES.has(type)) {
     return NextResponse.json(
@@ -383,7 +383,7 @@ export async function GET(req: Request) {
       }
 
       case "Person": {
-        // Return experts from the partner's firm
+        // Return experts from the partner's firm, with cursor pagination
         const [partnerFirm] = await db
           .select({ id: serviceFirms.id })
           .from(serviceFirms)
@@ -391,6 +391,10 @@ export async function GET(req: Request) {
           .limit(1);
 
         if (partnerFirm) {
+          const personConditions = cursor
+            ? and(eq(expertProfiles.firmId, partnerFirm.id), gt(expertProfiles.id, cursor))
+            : eq(expertProfiles.firmId, partnerFirm.id);
+
           const rows = await db
             .select({
               id: expertProfiles.id,
@@ -398,10 +402,17 @@ export async function GET(req: Request) {
               topSkills: expertProfiles.topSkills,
             })
             .from(expertProfiles)
-            .where(eq(expertProfiles.firmId, partnerFirm.id))
-            .limit(limit);
+            .where(personConditions)
+            .orderBy(asc(expertProfiles.id))
+            .limit(limit + 1);
 
-          entities = rows.map((r) => ({
+          const hasMore = rows.length > limit;
+          const pageRows = hasMore ? rows.slice(0, limit) : rows;
+          if (hasMore && pageRows.length > 0) {
+            nextCursor = pageRows[pageRows.length - 1].id;
+          }
+
+          entities = pageRows.map((r) => ({
             type: "Person",
             id: r.id,
             data: {
@@ -416,6 +427,17 @@ export async function GET(req: Request) {
       }
 
       case "CaseStudy": {
+        const csConditions = cursor
+          ? and(
+              eq(firmCaseStudies.sourceType, "partner_sync"),
+              sql`${firmCaseStudies.sourceUrl} LIKE ${"partner_sync:" + partnerId + ":%"}`,
+              gt(firmCaseStudies.id, cursor)
+            )
+          : and(
+              eq(firmCaseStudies.sourceType, "partner_sync"),
+              sql`${firmCaseStudies.sourceUrl} LIKE ${"partner_sync:" + partnerId + ":%"}`
+            );
+
         const rows = await db
           .select({
             id: firmCaseStudies.id,
@@ -423,15 +445,17 @@ export async function GET(req: Request) {
             sourceUrl: firmCaseStudies.sourceUrl,
           })
           .from(firmCaseStudies)
-          .where(
-            and(
-              eq(firmCaseStudies.sourceType, "partner_sync"),
-              sql`${firmCaseStudies.sourceUrl} LIKE ${"partner_sync:" + partnerId + ":%"}`
-            )
-          )
-          .limit(limit);
+          .where(csConditions)
+          .orderBy(asc(firmCaseStudies.id))
+          .limit(limit + 1);
 
-        entities = rows.map((r) => ({
+        const hasMore = rows.length > limit;
+        const pageRows = hasMore ? rows.slice(0, limit) : rows;
+        if (hasMore && pageRows.length > 0) {
+          nextCursor = pageRows[pageRows.length - 1].id;
+        }
+
+        entities = pageRows.map((r) => ({
           type: "CaseStudy",
           id: r.sourceUrl?.replace(`partner_sync:${partnerId}:`, "") ?? r.id,
           data: { title: r.title },
@@ -441,7 +465,14 @@ export async function GET(req: Request) {
       }
 
       case "ServiceFirm": {
-        // Return firms that have partner sync metadata in enrichmentData
+        // Return firms that have partner sync metadata in enrichmentData, with cursor pagination
+        const sfConditions = cursor
+          ? and(
+              sql`${serviceFirms.enrichmentData}->'partnerSync'->>${partnerId} IS NOT NULL`,
+              gt(serviceFirms.id, cursor)
+            )
+          : sql`${serviceFirms.enrichmentData}->'partnerSync'->>${partnerId} IS NOT NULL`;
+
         const rows = await db
           .select({
             id: serviceFirms.id,
@@ -450,10 +481,17 @@ export async function GET(req: Request) {
             enrichmentData: serviceFirms.enrichmentData,
           })
           .from(serviceFirms)
-          .where(sql`${serviceFirms.enrichmentData}->'partnerSync'->>${partnerId} IS NOT NULL`)
-          .limit(limit);
+          .where(sfConditions)
+          .orderBy(asc(serviceFirms.id))
+          .limit(limit + 1);
 
-        entities = rows.map((r) => {
+        const hasMore = rows.length > limit;
+        const pageRows = hasMore ? rows.slice(0, limit) : rows;
+        if (hasMore && pageRows.length > 0) {
+          nextCursor = pageRows[pageRows.length - 1].id;
+        }
+
+        entities = pageRows.map((r) => {
           const ed = (r.enrichmentData as Record<string, unknown>) ?? {};
           const ps = (ed.partnerSync as Record<string, Record<string, unknown>>) ?? {};
           return {
@@ -469,6 +507,9 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       entities,
+      cursor: nextCursor,
+      hasMore: nextCursor !== null,
+      // Backward-compat fields
       nextCursor,
       ...(total !== null ? { total } : {}),
       count: entities.length,

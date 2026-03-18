@@ -1,6 +1,6 @@
 # 14. API Reference
 
-> Last updated: 2026-03-11
+> Last updated: 2026-03-18
 
 Comprehensive reference for all API routes in `src/app/api/`. Organized by domain.
 
@@ -405,7 +405,7 @@ Server-to-server API for bi-directional data sync with partner platforms (e.g., 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | POST | `/api/partner-sync/entities` | Accepts a batch of entity pushes from the partner. Body: `{ entities: [{ type, id, data, source }] }`. Supported types: `Company`, `Person`, `CaseStudy`, `ServiceFirm`. Upserts into PostgreSQL. Logs a `migrationBatches` record per batch. | Partner key |
-| GET | `/api/partner-sync/entities` | Returns entities previously synced for a partner. Query params: `type` (required, one of Company/Person/CaseStudy/ServiceFirm), `partnerId` (required), `limit` (default 1000, max 5000). | Partner key |
+| GET | `/api/partner-sync/entities` | Returns entities previously synced for a partner. Supports cursor-based pagination on ALL entity types. Query params: `type` (required, one of Company/Person/CaseStudy/ServiceFirm), `partnerId` (required), `cursor` (string, optional — opaque cursor from previous response), `limit` (default 500, max 2000). Response includes `cursor` (next page token), `hasMore` (boolean), plus backward-compat fields `nextCursor`, `count`, `total`. | Partner key |
 
 ### User Provisioning
 

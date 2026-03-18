@@ -71,6 +71,10 @@ Extract structured filters from the query. Map user intent to our taxonomy.
   - "expert" — mentions expert, consultant, specialist, freelancer, fractional, person, individual
   - "case_study" — mentions case study, example, project, portfolio, proof, success story
   - null — no strong signal (search all types)
+- For searchIntent: classify the user's primary intent:
+  - "partner" (default) — find a firm to work with, partnership-oriented
+  - "expertise" — find people with deep experience; signals: "who has done", "specialist in", "someone who can", "expert in", "fractional", "consultant who"
+  - "evidence" — find proof/examples/case studies; signals: "show me examples", "case studies", "proof", "portfolio", "success stories", "projects"
 
 Only extract what the query explicitly or strongly implies. Don't over-extract.`,
       schema: z.object({
@@ -100,6 +104,9 @@ Only extract what the query explicitly or strongly implies. Don't over-extract.`
           .enum(["firm", "expert", "case_study"])
           .optional()
           .describe("Entity type the user is looking for, if explicitly stated"),
+        searchIntent: z
+          .enum(["partner", "expertise", "evidence"])
+          .describe("'partner' — find a firm to work with (default); 'expertise' — find people with deep experience; 'evidence' — find proof/examples/case studies"),
       }),
       maxOutputTokens: 256,
     });
@@ -136,6 +143,7 @@ Only extract what the query explicitly or strongly implies. Don't over-extract.`
       sizeBand: result.object.sizeBand,
       languages: result.object.languages?.length ? result.object.languages : undefined,
       entityType: result.object.entityType,
+      searchIntent: result.object.searchIntent ?? "partner",
     };
   } catch (err) {
     console.error("[QueryParser] Parse failed:", err);

@@ -139,6 +139,7 @@ export async function executeSearch(params: {
   const result: SearchResult = {
     query,
     candidates: finalCandidates,
+    searchIntent: filters.searchIntent,
     stats: {
       layer1Candidates: layer1Count,
       layer2Candidates: layer2Candidates.length,

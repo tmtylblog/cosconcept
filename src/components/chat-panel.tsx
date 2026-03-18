@@ -172,6 +172,13 @@ interface DiscoverResult {
   industries: string[];
   website?: string;
   caseStudyCount?: number;
+  specialistTitle?: string;
+  specialistProfileCount?: number;
+  subtitle?: string;
+  contributorCount?: number;
+  summary?: string;
+  sourceUrl?: string;
+  clientName?: string;
 }
 
 interface ChatPanelProps {
@@ -181,7 +188,7 @@ interface ChatPanelProps {
   answeredCount?: number;
   firmSection?: string | null;
   onRequestLogin?: () => void;
-  onSearchResults?: (results: DiscoverResult[], query: string) => void;
+  onSearchResults?: (results: DiscoverResult[], query: string, searchIntent?: "partner" | "expertise" | "evidence") => void;
   onSearchStart?: () => void;
 }
 
@@ -825,11 +832,11 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         // Handle discover_search (and legacy search_partners) — push to discover panel
         if ((toolName === "discover_search" || toolName === "search_partners") && onSearchResults) {
           const output = (part as { output?: unknown }).output as
-            | { candidates?: DiscoverResult[]; totalFound?: number }
+            | { candidates?: DiscoverResult[]; totalFound?: number; searchIntent?: "partner" | "expertise" | "evidence" }
             | undefined;
           const args = (part as { args?: { query?: string } }).args;
           if (output?.candidates) {
-            onSearchResults(output.candidates, args?.query ?? "");
+            onSearchResults(output.candidates, args?.query ?? "", output.searchIntent);
           }
         }
 

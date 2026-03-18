@@ -330,8 +330,8 @@ function AppLayoutInner({
 
   // ─── Discover results context ────────────────────────────────
   const discover = useDiscoverResults();
-  const handleSearchResults = (results: DiscoverCandidate[], query: string) => {
-    discover?.setResults(results, query);
+  const handleSearchResults = (results: DiscoverCandidate[], query: string, searchIntent?: "partner" | "expertise" | "evidence") => {
+    discover?.setResults(results, query, searchIntent);
   };
 
   // ─── Derive app phase (5 states) ──────────────────────────

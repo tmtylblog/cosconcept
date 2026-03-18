@@ -39,6 +39,8 @@ export interface SearchFilters {
   minScore?: number;
   /** Restrict results to a specific entity type */
   entityType?: "firm" | "expert" | "case_study";
+  /** Detected search intent — drives result allocation and UI layout */
+  searchIntent?: "partner" | "expertise" | "evidence";
 }
 
 // ─── Abstraction Profile ───────────────────────────────────
@@ -135,6 +137,12 @@ export interface MatchCandidate {
     languages?: string[];
     /** Case study: number of contributing persons */
     contributorCount?: number;
+    /** Case study: brief summary text */
+    summary?: string;
+    /** Case study: source URL */
+    sourceUrl?: string;
+    /** Case study: client company name */
+    clientName?: string;
     /** Firm: team collective experience summary (notable companies worked at) */
     teamExperience?: string;
     /** Firm: what size clients they typically serve */
@@ -169,6 +177,8 @@ export interface MatchCandidate {
 export interface SearchResult {
   query: SearchQuery;
   candidates: MatchCandidate[];
+  /** Detected search intent from query parsing */
+  searchIntent?: "partner" | "expertise" | "evidence";
   stats: {
     layer1Candidates: number;
     layer2Candidates: number;

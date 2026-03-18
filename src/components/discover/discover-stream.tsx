@@ -7,6 +7,7 @@ import { useDiscoverResults, type DiscoverCandidate } from "@/hooks/use-discover
 import { ResultCardsBlock } from "@/components/discover/stream-blocks/result-cards-block";
 import { FirmDetailBlock } from "@/components/discover/stream-blocks/firm-detail-block";
 import { ExpertDetailBlock } from "@/components/discover/stream-blocks/expert-detail-block";
+import { CaseStudyDetailBlock } from "@/components/discover/stream-blocks/case-study-detail-block";
 
 // ─── Conversation starters ───────────────────────────────────
 
@@ -70,7 +71,9 @@ export function DiscoverStream() {
   // ─── Handle card clicks — dispatch by entity type + scroll to detail ──
   const handleViewProfile = useCallback(
     (match: DiscoverCandidate) => {
-      if (match.entityType === "expert") {
+      if (match.entityType === "case_study") {
+        stream?.pushCaseStudyDetail(match.entityId, discoverSearchQuery, match.displayName);
+      } else if (match.entityType === "expert") {
         stream?.pushExpertDetail(match.entityId, discoverSearchQuery, match.displayName);
       } else {
         stream?.pushFirmDetail(match, discoverSearchQuery);
@@ -147,6 +150,7 @@ export function DiscoverStream() {
               <ResultCardsBlock
                 results={results}
                 query={searchQuery}
+                searchIntent={discover?.searchIntent}
                 onViewProfile={handleViewProfile}
                 onDismiss={handleDismissResult}
               />
@@ -197,6 +201,21 @@ export function DiscoverStream() {
                     loading={si.loading}
                     error={si.error}
                     searchQuery={si.searchQuery}
+                    onClose={() => handleCloseDetail(si.id)}
+                  />
+                </div>
+              );
+            }
+            if (si.type === "case_study_detail") {
+              return (
+                <div key={si.id} className="mb-4">
+                  <CaseStudyDetailBlock
+                    displayName={si.displayName}
+                    data={si.data}
+                    loading={si.loading}
+                    error={si.error}
+                    searchQuery={si.searchQuery}
+                    onViewExpert={handleViewExpert}
                     onClose={() => handleCloseDetail(si.id)}
                   />
                 </div>

@@ -1,6 +1,6 @@
 # Discover Page
 
-> Last updated: 2026-03-17 (unified discover stream, consultative Ossy, inline profiles)
+> Last updated: 2026-03-18 (search intent classification, adaptive result allocation, case study detail blocks)
 
 ## Overview
 
@@ -88,6 +88,40 @@ There is no traditional search bar. Ossy is the sole entry point to discovery. O
 
 ---
 
+## Search Intent Classification
+
+The query parser extracts a `searchIntent` field from every user query, classifying it as one of three intents:
+
+| Intent | Description | Example Query |
+|--------|-------------|---------------|
+| `"partner"` | Looking for a firm to partner with | "Find me a Salesforce consultancy in APAC" |
+| `"expertise"` | Looking for specific expertise/specialists | "Who has deep ML ops experience?" |
+| `"evidence"` | Looking for proof of work / case studies | "Show me examples of fintech migrations" |
+
+### Intent-Adaptive Result Allocation
+
+`universalStructuredFilter` adjusts result allocation (firm/expert/case-study mix) based on intent:
+
+| Intent | Firms | Experts | Case Studies |
+|--------|-------|---------|-------------|
+| `partner` | 50% | 30% | 20% |
+| `expertise` | 20% | 55% | 25% |
+| `evidence` | 20% | 25% | 55% |
+
+### Intent-Specific Scoring Boosts
+
+- **`expertise` intent:** Specialist boost doubles to +30% (vs default +15%)
+- **`evidence` intent:** Case study contributor boost +15% applied
+
+### searchIntent Propagation
+
+`searchIntent` is propagated through the full stack:
+- Query parser types → search pipeline → `universalStructuredFilter`
+- Chat panel → layout → `DiscoverResultsProvider` context
+- Available to result card components for adaptive rendering
+
+---
+
 ## Result Cards
 
 ### Fit Tiers
@@ -105,6 +139,16 @@ There is no traditional search bar. Ossy is the sole entry point to discovery. O
 - Skill pills (up to 4) + industry pills (up to 2)
 - "View Profile" button
 - X dismiss button (lower-right)
+
+### Adaptive Result Card Variants
+
+Result cards render differently based on entity type:
+
+| Variant | Component | When Used |
+|---------|-----------|-----------|
+| Default result card | `result-cards-block.tsx` | Firm results (all intents) |
+| `ExpertResultCard` | `result-cards-block.tsx` | Expert results — shows specialist title, firm affiliation |
+| `CaseStudyResultCard` | `result-cards-block.tsx` | Case study results — shows contributing firm, outcome summary |
 
 ### Card Actions
 - **Click anywhere on card** → opens inline detail block below
@@ -151,6 +195,27 @@ Expert profile rendered in the center feed. Component: `src/components/discover/
 
 ---
 
+## Case Study Detail Block (Inline)
+
+Case study profile rendered in the center feed. Component: `src/components/discover/stream-blocks/case-study-detail-block.tsx`
+
+### Content
+- Case study title + contributing firm name with link
+- Client name + industry
+- Challenge / approach / outcome sections
+- Skills and industry tag clouds
+- Contributing experts (if available)
+
+### Data Type
+`CaseStudyDetailData` — typed interface for case study detail payloads.
+
+### Behavior
+- X close button in upper-right header
+- Max height 450px with internal scroll
+- Pushed via `pushCaseStudyDetail()` in `use-discover-stream.tsx`
+
+---
+
 ## Ossy Contextual Commentary (Page Events)
 
 When a user clicks a firm/expert in the center panel, the system:
@@ -187,8 +252,8 @@ User → types in ChatPanel (right aside)
   → Center content feed re-renders with result cards
 
 User → clicks result card in center
-  → handleViewProfile dispatches by entityType (firm/expert)
-  → pushFirmDetail() or pushExpertDetail() in DiscoverStreamProvider
+  → handleViewProfile dispatches by entityType (firm/expert/case_study)
+  → pushFirmDetail(), pushExpertDetail(), or pushCaseStudyDetail() in DiscoverStreamProvider
   → Detail block appears (skeleton → loaded)
   → After data loads, cos:page-event emitted with data summary
   → ChatPanel flush sends [PAGE_EVENT] to Ossy
@@ -216,7 +281,8 @@ User → clicks conversation starter
 | `src/components/discover/stream-blocks/result-cards-block.tsx` | Search result cards with dismiss | ✅ Working |
 | `src/components/discover/stream-blocks/firm-detail-block.tsx` | Tabbed inline firm profile | ✅ Working |
 | `src/components/discover/stream-blocks/expert-detail-block.tsx` | Inline expert profile | ✅ Working |
-| `src/hooks/use-discover-stream.tsx` | Stream state — detail blocks, dedup, data fetch, event emit | ✅ Working |
+| `src/components/discover/stream-blocks/case-study-detail-block.tsx` | Inline case study profile | ✅ Working |
+| `src/hooks/use-discover-stream.tsx` | Stream state — detail blocks (firm/expert/case study), dedup, data fetch, event emit. Exposes `pushCaseStudyDetail()`. | ✅ Working |
 | `src/hooks/use-discover-results.tsx` | Search results context (shared between layout + page) | ✅ Working |
 | `src/app/(app)/discover/[firmId]/page.tsx` | Full-page firm profile (separate route) | ✅ Built |
 | `src/components/discover/discover-drawer.tsx` | Legacy side drawer (deprecated — replaced by inline blocks) | Deprecated |

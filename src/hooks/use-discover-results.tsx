@@ -15,6 +15,15 @@ export interface DiscoverCandidate {
   industries: string[];
   website?: string;
   caseStudyCount?: number;
+  // Expert-specific
+  specialistTitle?: string;
+  specialistProfileCount?: number;
+  subtitle?: string;
+  // Case study-specific
+  contributorCount?: number;
+  summary?: string;
+  sourceUrl?: string;
+  clientName?: string;
 }
 
 export interface DiscoverFilters {
@@ -30,6 +39,7 @@ interface DiscoverState {
   results: DiscoverCandidate[];
   searching: boolean;
   searchQuery: string;
+  searchIntent: "partner" | "expertise" | "evidence";
   filters: DiscoverFilters;
   parsedFilters: DiscoverFilters;
   stats: { layer1Candidates: number; layer2Candidates: number; layer3Ranked: number; totalDurationMs: number; estimatedCostUsd: number } | null;
@@ -37,7 +47,8 @@ interface DiscoverState {
 }
 
 interface DiscoverContextValue extends DiscoverState {
-  setResults: (results: DiscoverCandidate[], query?: string) => void;
+  setResults: (results: DiscoverCandidate[], query?: string, intent?: "partner" | "expertise" | "evidence") => void;
+  setSearchIntent: (intent: "partner" | "expertise" | "evidence") => void;
   setSearching: (v: boolean) => void;
   setFilters: (filters: DiscoverFilters) => void;
   setParsedFilters: (filters: DiscoverFilters) => void;
@@ -54,14 +65,19 @@ export function DiscoverResultsProvider({ children }: { children: ReactNode }) {
     results: [],
     searching: false,
     searchQuery: "",
+    searchIntent: "partner",
     filters: {},
     parsedFilters: {},
     stats: null,
     error: null,
   });
 
-  const setResults = useCallback((results: DiscoverCandidate[], query = "") => {
-    setState((prev) => ({ ...prev, results, searching: false, searchQuery: query }));
+  const setResults = useCallback((results: DiscoverCandidate[], query = "", intent?: "partner" | "expertise" | "evidence") => {
+    setState((prev) => ({ ...prev, results, searching: false, searchQuery: query, ...(intent ? { searchIntent: intent } : {}) }));
+  }, []);
+
+  const setSearchIntent = useCallback((intent: "partner" | "expertise" | "evidence") => {
+    setState((prev) => ({ ...prev, searchIntent: intent }));
   }, []);
 
   const setSearching = useCallback((v: boolean) => {
@@ -89,6 +105,7 @@ export function DiscoverResultsProvider({ children }: { children: ReactNode }) {
       results: [],
       searching: false,
       searchQuery: "",
+      searchIntent: "partner",
       filters: {},
       parsedFilters: {},
       stats: null,
@@ -188,6 +205,7 @@ export function DiscoverResultsProvider({ children }: { children: ReactNode }) {
       value={{
         ...state,
         setResults,
+        setSearchIntent,
         setSearching,
         setFilters,
         setParsedFilters,

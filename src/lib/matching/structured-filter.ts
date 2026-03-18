@@ -909,15 +909,23 @@ export async function universalStructuredFilter(
 ): Promise<MatchCandidate[]> {
   // If an entity type filter is set, only run that query
   const et = filters.entityType;
+
+  // Intent-driven allocation: adjust how many results per entity type
+  const intent = filters.searchIntent ?? "partner";
+  const alloc = et ? { firm: 1, expert: 1, caseStudy: 1 } :
+    intent === "expertise" ? { firm: 0.20, expert: 0.55, caseStudy: 0.25 } :
+    intent === "evidence" ? { firm: 0.20, expert: 0.25, caseStudy: 0.55 } :
+    /* partner */            { firm: 0.50, expert: 0.30, caseStudy: 0.20 };
+
   const [firms, experts, caseStudies] = await Promise.all([
     !et || et === "firm"
-      ? structuredFilter(filters, et ? limit : Math.ceil(limit * 0.5))
+      ? structuredFilter(filters, et ? limit : Math.ceil(limit * alloc.firm))
       : Promise.resolve([] as ReturnType<typeof structuredFilter> extends Promise<infer T> ? T : never),
     !et || et === "expert"
-      ? expertFilter(filters, et ? limit : Math.ceil(limit * 0.3))
+      ? expertFilter(filters, et ? limit : Math.ceil(limit * alloc.expert), intent)
       : Promise.resolve([] as MatchCandidate[]),
     !et || et === "case_study"
-      ? caseStudyFilter(filters, et ? limit : Math.ceil(limit * 0.2))
+      ? caseStudyFilter(filters, et ? limit : Math.ceil(limit * alloc.caseStudy), intent)
       : Promise.resolve([] as MatchCandidate[]),
   ]);
 
@@ -937,7 +945,8 @@ export async function universalStructuredFilter(
  */
 async function expertFilter(
   filters: SearchFilters,
-  limit: number
+  limit: number,
+  intent: "partner" | "expertise" | "evidence" = "partner"
 ): Promise<MatchCandidate[]> {
   const hasExpertSignals =
     (filters.skills?.length ?? 0) > 0 ||
@@ -1044,11 +1053,12 @@ async function expertFilter(
     }
     let structuredScore = maxScore > 0 ? score / maxScore : 0.4;
 
-    // Specialist profile boost: curated profiles are higher signal (1.5x weight)
+    // Specialist profile boost: curated profiles are higher signal
+    // When intent is "expertise", double the boost from +15% to +30%
     const spCount = toInt(r.specialistProfileCount);
     if (spCount > 0) {
-      // Boost up to +15% for having specialist profiles
-      const spBoost = Math.min(spCount, 3) / 3 * 0.15;
+      const maxBoost = intent === "expertise" ? 0.30 : 0.15;
+      const spBoost = Math.min(spCount, 3) / 3 * maxBoost;
       structuredScore = Math.min(1, structuredScore + spBoost);
     }
 
@@ -1084,7 +1094,8 @@ async function expertFilter(
  */
 async function caseStudyFilter(
   filters: SearchFilters,
-  limit: number
+  limit: number,
+  intent: "partner" | "expertise" | "evidence" = "partner"
 ): Promise<MatchCandidate[]> {
   const hasCaseStudySignals =
     (filters.skills?.length ?? 0) > 0 ||
@@ -1127,7 +1138,8 @@ async function caseStudyFilter(
     MATCH (cs:CaseStudy)
     ${whereClause}
     OPTIONAL MATCH (cs)<-[:HAS_CASE_STUDY]-(sf:Company:ServiceFirm)
-    WITH cs, sf,
+    OPTIONAL MATCH (cs)-[:FOR_CLIENT]->(cl:Company)
+    WITH cs, sf, cl,
       [(cs)-[:DEMONSTRATES_SKILL]->(s:Skill) | s.name][0..8] AS skills,
       [(cs)-[:IN_INDUSTRY]->(i:Industry) | i.name][0..5] AS industries,
       size([(p:Person)-[:CONTRIBUTED_TO]->(cs) | 1]) AS contributorCount
@@ -1137,7 +1149,10 @@ async function caseStudyFilter(
       sf.name AS firmName,
       skills,
       industries,
-      contributorCount
+      contributorCount,
+      cs.summary AS summary,
+      cs.sourceUrl AS sourceUrl,
+      coalesce(cl.name, cs.clientName) AS clientName
     LIMIT $limit
   `;
 
@@ -1148,6 +1163,9 @@ async function caseStudyFilter(
     skills: string[];
     industries: string[];
     contributorCount: number;
+    summary?: string;
+    sourceUrl?: string;
+    clientName?: string;
   }
 
   const records = await neo4jRead<CaseStudyRow>(query, params);
@@ -1163,7 +1181,14 @@ async function caseStudyFilter(
       score += r.industries.filter((i) => filters.industries!.includes(i)).length / filters.industries.length;
       maxScore += 1;
     }
-    const structuredScore = maxScore > 0 ? score / maxScore : 0.3;
+    let structuredScore = maxScore > 0 ? score / maxScore : 0.3;
+
+    // Evidence intent: contributor count gives up to +15% boost
+    const contribCount = toInt(r.contributorCount);
+    if (intent === "evidence" && contribCount > 0) {
+      const contribBoost = Math.min(contribCount, 5) / 5 * 0.15;
+      structuredScore = Math.min(1, structuredScore + contribBoost);
+    }
 
     const displayName = r.displayName?.length > 80
       ? r.displayName.slice(0, 77) + "…"
@@ -1186,6 +1211,9 @@ async function caseStudyFilter(
         subtitle: r.firmName,
         firmName: r.firmName,
         contributorCount: r.contributorCount,
+        summary: r.summary ?? undefined,
+        sourceUrl: r.sourceUrl ?? undefined,
+        clientName: r.clientName ?? undefined,
       },
     };
   });
