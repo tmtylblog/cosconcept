@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { networkConnections, members } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import { inngest } from "@/inngest/client";
+import { handleNetworkScan } from "@/lib/jobs/handlers/network-scan";
 
 export const dynamic = "force-dynamic";
 
@@ -52,13 +53,12 @@ export async function POST(req: NextRequest) {
     .where(eq(members.userId, session.user.id))
     .limit(1);
 
-  const jobId = `netscan_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  await inngest.send({ name: "network/scan", data: {
+  const payload = {
     userId: session.user.id,
     organizationId: member?.organizationId ?? connection.organizationId,
     provider,
     connectionId: connection.id,
-  } });
+  };
 
   // Immediately mark as scanning so the UI updates
   await db
@@ -66,5 +66,16 @@ export async function POST(req: NextRequest) {
     .set({ scanStatus: "scanning", updatedAt: new Date() })
     .where(eq(networkConnections.id, connection.id));
 
+  // Run inline in dev (Inngest unreliable in local Next.js dev server).
+  // In production, send to Inngest.
+  if (process.env.NODE_ENV === "development") {
+    handleNetworkScan(payload).catch((err) => {
+      console.error("[NetworkScan] inline run failed:", err);
+    });
+    return NextResponse.json({ status: "scanning" });
+  }
+
+  const jobId = `netscan_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  await inngest.send({ name: "network/scan", data: payload });
   return NextResponse.json({ jobId, status: "scanning" });
 }

@@ -12,16 +12,21 @@ import { createHmac, randomBytes } from "crypto";
 
 export const dynamic = "force-dynamic";
 
+// NETWORK_GOOGLE_CLIENT_ID is preferred (dedicated network-scan OAuth app).
+// Falls back to GOOGLE_CLIENT_ID (main auth app) since the same app can be reused
+// if the network callback redirect URI has been added to it.
 const PROVIDER_CONFIG = {
   google: {
     authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-    scopes: "https://www.googleapis.com/auth/gmail.metadata",
-    clientId: process.env.NETWORK_GOOGLE_CLIENT_ID!,
+    scopes: "openid email https://www.googleapis.com/auth/gmail.metadata",
+    clientId: (process.env.NETWORK_GOOGLE_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID)!,
+    clientSecret: (process.env.NETWORK_GOOGLE_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET)!,
   },
   microsoft: {
     authUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     scopes: "Mail.ReadBasic offline_access",
     clientId: process.env.NETWORK_MICROSOFT_CLIENT_ID!,
+    clientSecret: process.env.NETWORK_MICROSOFT_CLIENT_SECRET!,
   },
 } as const;
 
@@ -38,7 +43,7 @@ export async function GET(
 ) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
-    return NextResponse.redirect(new URL("/login", process.env.BETTER_AUTH_URL));
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { provider } = await params;
@@ -51,7 +56,7 @@ export async function GET(
 
   // Guard: provider not configured yet
   if (!config.clientId) {
-    return NextResponse.redirect(`${baseUrl}/settings/network?error=provider_not_configured`);
+    return NextResponse.json({ error: "provider_not_configured" }, { status: 503 });
   }
   const redirectUri = `${baseUrl}/api/settings/network/callback/${provider}`;
 
@@ -70,7 +75,10 @@ export async function GET(
   authUrl.searchParams.set("access_type", "offline"); // Google: get refresh token
   authUrl.searchParams.set("prompt", "consent"); // Google: always show consent to ensure refresh token
 
-  const response = NextResponse.redirect(authUrl.toString());
+  // Return URL as JSON so the client can navigate via fetch (which sends Origin header,
+  // required for auth.api.getSession to work). The state cookie is set via Set-Cookie
+  // and will be present when Google redirects back to our callback.
+  const response = NextResponse.json({ url: authUrl.toString() });
 
   // Store state in cookie for callback verification
   response.cookies.set("network_oauth_state", state, {

@@ -153,9 +153,13 @@ function AppLayoutInner({
         let orgId: string;
 
         if (orgList.length > 0) {
-          // Has org(s) but none set active — just activate the first one
+          // Has org(s) but none set active — just activate the first one.
+          // Skip ensure-org: the firm row already exists for an existing org.
           orgId = orgList[0].id;
           console.log(`[Layout] Auto-activating existing org: ${orgId}`);
+          await authClient.organization.setActive({ organizationId: orgId });
+          console.log(`[Layout] Org active: ${orgId}`);
+          return;
         } else if (isInternal) {
           // Internal team without an org — skip auto-creation
           console.log("[Layout] Internal team member has no org, skipping auto-create");
@@ -208,10 +212,8 @@ function AppLayoutInner({
           orgId = newOrg.id;
         }
 
-        // Set org active (triggers useActiveOrganization re-render)
+        // New org — set active and ensure the serviceFirms row exists
         await authClient.organization.setActive({ organizationId: orgId });
-
-        // Ensure serviceFirms row exists for this org
         await fetch("/api/onboarding/ensure-org", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -300,9 +302,11 @@ function AppLayoutInner({
       }
 
       // Celebration shows for 2.5s while authenticated layout loads behind it
+      // Don't redirect if user is already on a feature page (e.g. /settings/network)
+      const isFeaturePage = pathname !== "/" && pathname !== "/dashboard" && pathname !== "/discover";
       const timer = setTimeout(() => {
         setShowCelebration(false);
-        router.push("/discover");
+        if (!isFeaturePage) router.push("/discover");
       }, 2500);
       prevOnboardingCompleteRef.current = onboardingComplete;
       return () => clearTimeout(timer);
@@ -341,7 +345,10 @@ function AppLayoutInner({
     ? (enrichmentStatus === "idle" ? "landing" : "enriching")
     : isBrandWaitlist
       ? "brand_waitlist"
-      : (onboardingComplete || isImpersonating)
+      // While the onboarding status API is still loading, assume authenticated to avoid
+      // flashing the onboarding/chat screen on every page load (e.g. after OAuth callback).
+      // The real phase renders once the first API response arrives (~500ms).
+      : (onboardingComplete || isImpersonating || onboardingLoading)
         ? "authenticated"
         : "onboarding";
 

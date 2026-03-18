@@ -90,7 +90,6 @@ export async function scanGmailHeaders(
   ownEmail: string
 ): Promise<DomainContact[]> {
   const ownDomain = extractDomain(ownEmail) ?? "";
-  const sinceStr = `${since.getFullYear()}/${String(since.getMonth() + 1).padStart(2, "0")}/${String(since.getDate()).padStart(2, "0")}`;
 
   // Step 1: Paginate through message IDs (inbox + sent)
   const messageIds: string[] = [];
@@ -98,17 +97,19 @@ export async function scanGmailHeaders(
   let pages = 0;
 
   while (pages < 20) { // max 2000 messages (100/page × 20 pages)
-    const params = new URLSearchParams({
-      maxResults: "100",
-      q: `after:${sinceStr}`,
-    });
+    // Note: gmail.metadata scope does not support the `q` parameter.
+    // We filter by date client-side using internalDate during the metadata fetch.
+    const params = new URLSearchParams({ maxResults: "100" });
     if (pageToken) params.set("pageToken", pageToken);
 
     const res = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (!res.ok) break;
+    if (!res.ok) {
+      console.error(`[NetworkScan] Gmail API error ${res.status}:`, await res.text());
+      break;
+    }
     const data = await res.json() as { messages?: GmailMessage[]; nextPageToken?: string };
 
     for (const msg of data.messages ?? []) {
@@ -132,6 +133,10 @@ export async function scanGmailHeaders(
       );
       if (!res.ok) return;
       const msg = await res.json() as GmailMessageMetadata;
+
+      // Filter by internalDate (ms since epoch) — skip messages older than `since`
+      if (msg.internalDate && Number(msg.internalDate) < since.getTime()) return;
+
       const headers = msg.payload?.headers ?? [];
 
       const fromHeader = headers.find(h => h.name === "From")?.value ?? "";
@@ -350,8 +355,8 @@ export async function refreshGoogleToken(refreshToken: string): Promise<{
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      client_id: process.env.NETWORK_GOOGLE_CLIENT_ID!,
-      client_secret: process.env.NETWORK_GOOGLE_CLIENT_SECRET!,
+      client_id: (process.env.NETWORK_GOOGLE_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID)!,
+      client_secret: (process.env.NETWORK_GOOGLE_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET)!,
     }),
   });
   if (!res.ok) return null;

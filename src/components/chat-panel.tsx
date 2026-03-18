@@ -345,6 +345,9 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   // For guests, onboarding users, and discover mode, messages are set synchronously — no need to fetch greeting
   // For post-onboarding auth users, historyLoaded=false triggers loadGreeting for personalized greeting
   const [historyLoaded, setHistoryLoaded] = useState(isGuest || isOnboarding || firmSection === "discover" ? true : false);
+  // Prevent duplicate greeting fetches: activeOrg?.id changing recreates loadGreeting,
+  // which re-triggers the effect. The ref ensures only the first call actually fires.
+  const greetingFetchedRef = useRef(false);
   const enrichedUrlRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string>(crypto.randomUUID());
   // Track whether we've seen enrichment go through "loading" this session
@@ -405,8 +408,10 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   // Load conversation history on mount for authenticated users.
   // If a recent conversation exists (< 24h), restore it so follow-ups have context.
   // Otherwise fall back to personalized greeting or default welcome.
+  // greetingFetchedRef prevents duplicate fetches when activeOrg?.id changes mid-load.
   const loadHistory = useCallback(async () => {
-    if (isGuest) return;
+    if (isGuest || greetingFetchedRef.current) return;
+    greetingFetchedRef.current = true;
 
     // Authenticated onboarding phase — skip history, use dynamic welcome
     if (isOnboarding) {

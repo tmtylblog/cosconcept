@@ -92,8 +92,12 @@ export async function GET(
 
   // Exchange code for tokens
   const redirectUri = `${baseUrl}/api/settings/network/callback/${provider}`;
-  const clientId = provider === "google" ? process.env.NETWORK_GOOGLE_CLIENT_ID! : process.env.NETWORK_MICROSOFT_CLIENT_ID!;
-  const clientSecret = provider === "google" ? process.env.NETWORK_GOOGLE_CLIENT_SECRET! : process.env.NETWORK_MICROSOFT_CLIENT_SECRET!;
+  const clientId = provider === "google"
+    ? (process.env.NETWORK_GOOGLE_CLIENT_ID ?? process.env.GOOGLE_CLIENT_ID)!
+    : process.env.NETWORK_MICROSOFT_CLIENT_ID!;
+  const clientSecret = provider === "google"
+    ? (process.env.NETWORK_GOOGLE_CLIENT_SECRET ?? process.env.GOOGLE_CLIENT_SECRET)!
+    : process.env.NETWORK_MICROSOFT_CLIENT_SECRET!;
 
   const tokenRes = await fetch(TOKEN_ENDPOINTS[provider], {
     method: "POST",
@@ -147,28 +151,13 @@ export async function GET(
     )
     .limit(1);
 
-  const id = existing[0]?.id ?? `nc_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
   const now = new Date();
 
-  await db
-    .insert(networkConnections)
-    .values({
-      id,
-      userId: session.user.id,
-      organizationId,
-      provider,
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token ?? null,
-      expiresAt: expiresAt,
-      scope: tokenData.scope ?? null,
-      providerEmail,
-      scanStatus: "idle",
-      createdAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [networkConnections.userId, networkConnections.provider],
-      set: {
+  if (existing[0]) {
+    // Update existing connection
+    await db
+      .update(networkConnections)
+      .set({
         accessToken: tokenData.access_token,
         refreshToken: tokenData.refresh_token ?? null,
         expiresAt: expiresAt,
@@ -177,8 +166,28 @@ export async function GET(
         scanStatus: "idle",
         scanError: null,
         updatedAt: now,
-      },
-    });
+      })
+      .where(eq(networkConnections.id, existing[0].id));
+  } else {
+    // Insert new connection
+    const id = `nc_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+    await db
+      .insert(networkConnections)
+      .values({
+        id,
+        userId: session.user.id,
+        organizationId,
+        provider,
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token ?? null,
+        expiresAt: expiresAt,
+        scope: tokenData.scope ?? null,
+        providerEmail,
+        scanStatus: "idle",
+        createdAt: now,
+        updatedAt: now,
+      });
+  }
 
   const response = NextResponse.redirect(`${baseUrl}/settings/network?connected=${provider}`);
   // Clear state cookie
