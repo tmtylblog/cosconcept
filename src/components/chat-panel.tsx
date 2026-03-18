@@ -509,13 +509,9 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         // Queue nav signal — process on timer so page context can catch up
         if (!navProactiveFiredRef.current.has(signal.page)) {
           pendingNavRef.current = { page: signal.page, ts: Date.now() };
-          console.log(`[CosSignal] Nav queued: ${signal.page}`);
-        } else {
-          console.log(`[CosSignal] Nav skipped (already fired): ${signal.page}`);
         }
       } else if (signal.kind === "action") {
         signalQueueRef.current.push(signal);
-        console.log(`[CosSignal] Action queued: ${signal.action} on ${signal.page}`);
       }
     };
 
@@ -545,14 +541,11 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
               pageMode as import("@/lib/cos-signal").PageMode,
               pageContextRef.current,
             );
-            console.log(`[CosSignal] Nav processing: ${pageMode}, status=${currentStatus}, msg=${proactiveMsg ? proactiveMsg.slice(0, 60) : "null"}`);
             if (proactiveMsg) {
               navProactiveFiredRef.current.add(pageMode);
               sendMessageRef.current({ text: `[CONTEXT_SIGNAL] Navigated to ${pageMode}: ${proactiveMsg}` });
               return; // One message per tick to avoid flooding
             }
-          } else {
-            console.log(`[CosSignal] Nav already fired for: ${pageMode}`);
           }
         }
       }
@@ -600,13 +593,18 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   const eventQueueRef = useRef<OssyPageEvent[]>([]);
   const lastProactiveRef = useRef<number>(0);
   const proactiveFiredForSectionRef = useRef<string | null>(null);
-  const sessionTipsShownRef = useRef<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const stored = sessionStorage.getItem("cos_ossy_tips_shown");
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
-  });
+  // NOTE: useRef does NOT support lazy initializers like useState.
+  // Compute the initial value inline (safe — this runs once on mount).
+  const sessionTipsShownRef = useRef<Set<string>>(
+    typeof window !== "undefined"
+      ? (() => {
+          try {
+            const stored = sessionStorage.getItem("cos_ossy_tips_shown");
+            return stored ? new Set(JSON.parse(stored) as string[]) : new Set<string>();
+          } catch { return new Set<string>(); }
+        })()
+      : new Set<string>()
+  );
 
   // Reset proactive tracking on page navigation
   useEffect(() => {
