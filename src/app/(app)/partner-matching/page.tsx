@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Sparkles,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
 import { useOssyContext } from "@/hooks/use-ossy-context";
+import { emitOssyEvent } from "@/lib/ossy-events";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { PartnerMatch } from "@/app/api/partner-matching/route";
@@ -512,6 +513,21 @@ export default function PartnerMatchingPage() {
     });
     return () => setPageContext(null);
   }, [hydrated, prefsComplete, missingFields.length, matches.length, setPageContext, missingFields]);
+
+  // Auto-trigger Ossy to start preference interview when prefs are incomplete
+  const ossyTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (!hydrated || prefsComplete || ossyTriggeredRef.current) return;
+    // Small delay to let chat panel mount and be ready to receive events
+    const timer = setTimeout(() => {
+      emitOssyEvent({
+        type: "partner_matching_needs_prefs",
+        missingFields: [...missingFields],
+      });
+      ossyTriggeredRef.current = true;
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [hydrated, prefsComplete, missingFields]);
 
   // Load matches when preferences are complete
   const loadMatches = useCallback(async () => {

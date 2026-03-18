@@ -495,17 +495,20 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       // Don't send if Ossy is busy (streaming/submitted)
       if (status === "submitted" || status === "streaming") return;
 
-      // Check if queue has discover navigation events (these get priority treatment)
+      // Check if queue has priority events (discover nav + partner matching prefs)
       const hasDiscoverNavEvent = queue.some(
         (e) => e.type === "discover_firm_viewed" || e.type === "discover_expert_viewed"
       );
+      const hasPriorityEvent = hasDiscoverNavEvent || queue.some(
+        (e) => e.type === "partner_matching_needs_prefs"
+      );
 
-      // Cooldown: 2s for discover nav events, 30s for general page events
-      const cooldown = hasDiscoverNavEvent ? 2000 : 30_000;
+      // Cooldown: 2s for priority events, 30s for general page events
+      const cooldown = hasPriorityEvent ? 2000 : 30_000;
       if (Date.now() - lastProactiveRef.current < cooldown) return;
 
-      // For non-discover events: only one proactive comment per page visit
-      if (!hasDiscoverNavEvent) {
+      // For non-priority events: only one proactive comment per page visit
+      if (!hasPriorityEvent) {
         const currentSection = firmSection ?? "unknown";
         if (proactiveFiredForSectionRef.current === currentSection) {
           eventQueueRef.current = [];
@@ -513,8 +516,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         }
       }
 
-      // For non-discover events: check session dedup
-      if (!hasDiscoverNavEvent) {
+      // For non-priority events: check session dedup
+      if (!hasPriorityEvent) {
         const eventTypes = queue.map((e) => e.type);
         const allShown = eventTypes.every((t) => (sessionTipsShownRef.current as Set<string>).has(t));
         if (allShown) {
@@ -523,8 +526,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         }
       }
 
-      // For non-discover events: don't interrupt mid-conversation
-      if (!hasDiscoverNavEvent && messages.length > 3) {
+      // For non-priority events: don't interrupt mid-conversation
+      if (!hasPriorityEvent && messages.length > 3) {
         const lastMsg = messages[messages.length - 1];
         if (lastMsg?.role === "user") {
           return;

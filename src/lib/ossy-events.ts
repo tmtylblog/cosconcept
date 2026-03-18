@@ -15,7 +15,8 @@ export type OssyPageEvent =
   | { type: "preference_updated"; field: string }
   | { type: "empty_state_lingered"; section: string }
   | { type: "discover_firm_viewed"; entityId: string; displayName: string; dataSummary: string }
-  | { type: "discover_expert_viewed"; entityId: string; displayName: string; dataSummary: string };
+  | { type: "discover_expert_viewed"; entityId: string; displayName: string; dataSummary: string }
+  | { type: "partner_matching_needs_prefs"; missingFields: string[] };
 
 /**
  * Emit a page event that ChatPanel will pick up.
@@ -65,6 +66,8 @@ export function formatEventsForOssy(events: OssyPageEvent[]): string {
         return `discover_firm_viewed: User is viewing "${e.displayName}". Profile data: ${e.dataSummary}`;
       case "discover_expert_viewed":
         return `discover_expert_viewed: User is viewing expert "${e.displayName}". Profile data: ${e.dataSummary}`;
+      case "partner_matching_needs_prefs":
+        return `partner_matching_needs_prefs: User opened Partner Matching but is missing these V2 preference fields: ${e.missingFields.join(", ")}. Start the preference interview NOW — ask the first missing question.`;
     }
   });
   return `[PAGE_EVENT] ${lines.join("; ")}`;
