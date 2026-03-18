@@ -3,10 +3,10 @@
 import {
   Building2,
   Globe,
-  ExternalLink,
   Linkedin,
   User,
   X,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ExpertDetailData } from "@/hooks/use-discover-stream";
@@ -20,6 +20,12 @@ interface ExpertDetailBlockProps {
   error: string | null;
   searchQuery: string;
   onClose?: () => void;
+}
+
+// ─── Helpers ──────────────────────────────────────────────
+
+function getQueryTerms(query: string): string[] {
+  return query.toLowerCase().split(/\s+/).filter(Boolean);
 }
 
 // ─── Component ────────────────────────────────────────────
@@ -63,14 +69,33 @@ export function ExpertDetailBlock({
 
   if (!data) return null;
 
+  const queryTerms = getQueryTerms(searchQuery);
+
   // Compute search relevance from skill overlap
-  const queryTerms = searchQuery.toLowerCase().split(/\s+/).filter(Boolean);
   const matchingSkills = data.skills.filter((s) =>
     queryTerms.some((t) => s.toLowerCase().includes(t))
   );
   const matchingIndustries = data.industries.filter((ind) =>
     queryTerms.some((t) => ind.toLowerCase().includes(t))
   );
+
+  // Find specialist profiles that match the search
+  const matchingProfiles = data.specialistProfiles.filter((sp) => {
+    const titleMatch = sp.title && queryTerms.some((t) => sp.title!.toLowerCase().includes(t));
+    const skillMatch = sp.skills.some((s) => queryTerms.some((t) => s.toLowerCase().includes(t)));
+    return titleMatch || skillMatch;
+  });
+  const nonMatchingProfiles = data.specialistProfiles.filter((sp) => !matchingProfiles.includes(sp));
+
+  // Sort case studies: relevant first
+  const caseStudiesWithRelevance = data.caseStudies.map((cs) => {
+    const csMatchingSkills = cs.skills.filter((s) => queryTerms.some((t) => s.toLowerCase().includes(t)));
+    const csMatchingIndustries = cs.industries.filter((i) => queryTerms.some((t) => i.toLowerCase().includes(t)));
+    return { ...cs, relevanceScore: csMatchingSkills.length + csMatchingIndustries.length, csMatchingSkills, csMatchingIndustries };
+  });
+  caseStudiesWithRelevance.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+  const hasAnyRelevance = matchingSkills.length > 0 || matchingIndustries.length > 0 || matchingProfiles.length > 0;
 
   return (
     <div className="animate-slide-up rounded-cos-2xl border border-cos-border bg-white shadow-sm overflow-hidden">
@@ -97,7 +122,7 @@ export function ExpertDetailBlock({
       {/* Body */}
       <div className="px-5 py-4 space-y-4 max-h-[450px] overflow-y-auto cos-scrollbar">
         {/* Relevance note */}
-        {(matchingSkills.length > 0 || matchingIndustries.length > 0) && (
+        {hasAnyRelevance && (
           <div className="rounded-cos-xl border border-cos-signal/20 bg-cos-signal/5 px-4 py-3">
             <p className="text-xs font-medium text-cos-signal">
               Relevant to your search
@@ -113,7 +138,24 @@ export function ExpertDetailBlock({
                   {ind}
                 </span>
               ))}
+              {matchingProfiles.map((sp, i) => (
+                <span key={`sp-${i}`} className="rounded-cos-full bg-cos-electric/10 px-2 py-0.5 text-[10px] text-cos-electric">
+                  {sp.title ?? "Specialist Profile"}
+                </span>
+              ))}
             </div>
+          </div>
+        )}
+
+        {/* No search match note */}
+        {!hasAnyRelevance && searchQuery && (
+          <div className="rounded-cos-xl border border-cos-border bg-cos-cloud/50 px-4 py-3">
+            <p className="text-[11px] text-cos-slate">
+              No specialist profiles directly matching &quot;{searchQuery}&quot;
+              {data.industries.length > 0 && (
+                <>, but has experience in {data.industries.slice(0, 3).join(", ")}</>
+              )}
+            </p>
           </div>
         )}
 
@@ -158,14 +200,52 @@ export function ExpertDetailBlock({
           )}
         </div>
 
-        {/* Specialist Profiles */}
-        {data.specialistProfiles.length > 0 && (
+        {/* Matching Specialist Profiles (highlighted) */}
+        {matchingProfiles.length > 0 && (
           <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-slate-light">
-              Specialist Profiles
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-signal">
+              <Sparkles className="inline h-3 w-3 mr-1" />
+              Matching Specialist Profiles
             </p>
             <div className="space-y-2">
-              {data.specialistProfiles.map((sp, i) => (
+              {matchingProfiles.map((sp, i) => (
+                <div key={i} className="rounded-cos-xl border border-cos-signal/20 bg-cos-signal/5 p-3">
+                  {sp.title && (
+                    <p className="text-sm font-medium text-cos-midnight">{sp.title}</p>
+                  )}
+                  {sp.description && (
+                    <p className="mt-1 text-xs text-cos-slate leading-relaxed line-clamp-3">
+                      {sp.description}
+                    </p>
+                  )}
+                  {sp.skills.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {sp.skills.map((s) => (
+                        <span key={s} className={cn(
+                          "rounded-cos-full px-2 py-0.5 text-[10px]",
+                          queryTerms.some((t) => s.toLowerCase().includes(t))
+                            ? "bg-cos-signal/10 text-cos-signal"
+                            : "bg-cos-electric/10 text-cos-electric"
+                        )}>
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Other Specialist Profiles */}
+        {nonMatchingProfiles.length > 0 && (
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-slate-light">
+              {matchingProfiles.length > 0 ? "Other Specialist Profiles" : "Specialist Profiles"}
+            </p>
+            <div className="space-y-2">
+              {nonMatchingProfiles.map((sp, i) => (
                 <div key={i} className="rounded-cos-xl border border-cos-border p-3">
                   {sp.title && (
                     <p className="text-sm font-medium text-cos-midnight">{sp.title}</p>
@@ -198,7 +278,12 @@ export function ExpertDetailBlock({
             </p>
             <div className="flex flex-wrap gap-1.5">
               {data.skills.map((s) => (
-                <span key={s} className="rounded-cos-full bg-cos-cloud px-2 py-0.5 text-xs text-cos-slate">
+                <span key={s} className={cn(
+                  "rounded-cos-full px-2 py-0.5 text-xs",
+                  queryTerms.some((t) => s.toLowerCase().includes(t))
+                    ? "bg-cos-signal/10 text-cos-signal"
+                    : "bg-cos-cloud text-cos-slate"
+                )}>
                   {s}
                 </span>
               ))}
@@ -214,7 +299,12 @@ export function ExpertDetailBlock({
             </p>
             <div className="flex flex-wrap gap-1.5">
               {data.industries.map((ind) => (
-                <span key={ind} className="rounded-cos-full bg-cos-warm/10 px-2 py-0.5 text-xs text-cos-warm">
+                <span key={ind} className={cn(
+                  "rounded-cos-full px-2 py-0.5 text-xs",
+                  queryTerms.some((t) => ind.toLowerCase().includes(t))
+                    ? "bg-cos-signal/10 text-cos-signal"
+                    : "bg-cos-warm/10 text-cos-warm"
+                )}>
                   {ind}
                 </span>
               ))}
@@ -222,15 +312,23 @@ export function ExpertDetailBlock({
           </div>
         )}
 
-        {/* Case Studies */}
-        {data.caseStudies.length > 0 && (
+        {/* Case Studies (sorted by relevance) */}
+        {caseStudiesWithRelevance.length > 0 && (
           <div>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-slate-light">
-              Case Studies ({data.caseStudies.length})
+              Case Studies ({caseStudiesWithRelevance.length})
             </p>
             <div className="space-y-2">
-              {data.caseStudies.map((cs, i) => (
-                <div key={cs.legacyId ?? i} className="rounded-cos-xl border border-cos-border p-3">
+              {caseStudiesWithRelevance.map((cs, i) => (
+                <div key={cs.legacyId ?? i} className={cn(
+                  "rounded-cos-xl border p-3",
+                  cs.relevanceScore > 0 ? "border-cos-signal/20 bg-cos-signal/5" : "border-cos-border"
+                )}>
+                  {cs.relevanceScore > 0 && (
+                    <p className="mb-1 text-[10px] font-medium text-cos-signal">
+                      Relevant: demonstrates {[...cs.csMatchingSkills, ...cs.csMatchingIndustries].join(", ")}
+                    </p>
+                  )}
                   {cs.firmName && (
                     <p className="mb-1 text-[11px] text-cos-slate">by {cs.firmName}</p>
                   )}
@@ -244,12 +342,22 @@ export function ExpertDetailBlock({
                   {(cs.skills.length > 0 || cs.industries.length > 0) && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {cs.skills.slice(0, 3).map((s) => (
-                        <span key={s} className="rounded-cos-full bg-cos-cloud px-1.5 py-0.5 text-[10px] text-cos-slate">
+                        <span key={s} className={cn(
+                          "rounded-cos-full px-1.5 py-0.5 text-[10px]",
+                          queryTerms.some((t) => s.toLowerCase().includes(t))
+                            ? "bg-cos-signal/10 text-cos-signal"
+                            : "bg-cos-cloud text-cos-slate"
+                        )}>
                           {s}
                         </span>
                       ))}
                       {cs.industries.slice(0, 2).map((ind) => (
-                        <span key={ind} className="rounded-cos-full bg-cos-warm/10 px-1.5 py-0.5 text-[10px] text-cos-warm">
+                        <span key={ind} className={cn(
+                          "rounded-cos-full px-1.5 py-0.5 text-[10px]",
+                          queryTerms.some((t) => ind.toLowerCase().includes(t))
+                            ? "bg-cos-signal/10 text-cos-signal"
+                            : "bg-cos-warm/10 text-cos-warm"
+                        )}>
                           {ind}
                         </span>
                       ))}

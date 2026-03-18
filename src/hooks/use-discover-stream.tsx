@@ -5,6 +5,16 @@ import type { DiscoverCandidate } from "@/hooks/use-discover-results";
 
 // ─── Types ────────────────────────────────────────────────
 
+/** Context from the search result card — preserved when clicking through to detail */
+export interface MatchContext {
+  matchScore: number;
+  explanation: string;
+  categories: string[];
+  skills: string[];
+  industries: string[];
+  caseStudyCount?: number;
+}
+
 interface FirmDetailData {
   name: string;
   website: string | null;
@@ -15,8 +25,8 @@ interface FirmDetailData {
   skills: string[];
   industries: string[];
   markets: string[];
-  caseStudies: Array<{ legacyId: string; summary: string | null; skills: string[]; industries: string[] }>;
-  experts: Array<{ legacyId: string; displayName: string; title: string | null }>;
+  caseStudies: Array<{ legacyId: string; summary: string | null; sourceUrl?: string | null; skills: string[]; industries: string[] }>;
+  experts: Array<{ legacyId: string; displayName: string; title: string | null; skills?: string[]; specialistTitles?: string[] }>;
 }
 
 interface ExpertDetailData {
@@ -36,7 +46,7 @@ interface ExpertDetailData {
 
 export type StreamItem =
   | { type: "results"; results: DiscoverCandidate[]; query: string; id: string; timestamp: number }
-  | { type: "firm_detail"; entityId: string; data: FirmDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number }
+  | { type: "firm_detail"; entityId: string; matchContext?: MatchContext; data: FirmDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number }
   | { type: "expert_detail"; entityId: string; displayName: string; data: ExpertDetailData | null; loading: boolean; error: string | null; searchQuery: string; id: string; timestamp: number };
 
 export type { FirmDetailData, ExpertDetailData };
@@ -46,7 +56,7 @@ interface DiscoverStreamContextValue {
   /** Increments on every item mutation (push, load complete, error). Use as scroll trigger. */
   updateCounter: number;
   pushResults: (results: DiscoverCandidate[], query: string) => void;
-  pushFirmDetail: (entityId: string, searchQuery: string, displayName?: string) => void;
+  pushFirmDetail: (candidate: DiscoverCandidate, searchQuery: string) => void;
   pushExpertDetail: (entityId: string, searchQuery: string, displayName?: string) => void;
   /** Remove a stream item by ID (for closing detail blocks) */
   removeItem: (id: string) => void;
@@ -84,16 +94,28 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
   // Track shown entity IDs to prevent duplicates
   const shownEntitiesRef = useRef<Set<string>>(new Set());
 
-  const pushFirmDetail = useCallback((entityId: string, searchQuery: string, displayName?: string) => {
+  const pushFirmDetail = useCallback((candidate: DiscoverCandidate, searchQuery: string) => {
+    const entityId = candidate.entityId;
     // Prevent duplicate detail blocks for the same entity
     const key = `firm:${entityId}`;
     if (shownEntitiesRef.current.has(key)) return;
     shownEntitiesRef.current.add(key);
 
+    // Preserve search context for the detail view
+    const matchContext: MatchContext = {
+      matchScore: candidate.matchScore,
+      explanation: candidate.explanation,
+      categories: candidate.categories,
+      skills: candidate.skills,
+      industries: candidate.industries,
+      caseStudyCount: candidate.caseStudyCount,
+    };
+
     const id = nextId("firm");
     const item: StreamItem = {
       type: "firm_detail",
       entityId,
+      matchContext,
       data: null,
       loading: true,
       error: null,
@@ -110,7 +132,19 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
         if (d.error) {
           setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, error: d.error } as StreamItem : i));
         } else {
-          const data = d.data as FirmDetailData;
+          let data = d.data as FirmDetailData;
+
+          // Merge with matchContext when API data is sparse
+          if (data.categories.length === 0 && matchContext.categories.length > 0) {
+            data = { ...data, categories: matchContext.categories };
+          }
+          if (data.skills.length === 0 && matchContext.skills.length > 0) {
+            data = { ...data, skills: matchContext.skills };
+          }
+          if (data.industries.length === 0 && matchContext.industries.length > 0) {
+            data = { ...data, industries: matchContext.industries };
+          }
+
           setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, data } as StreamItem : i));
 
           // Emit enriched event with actual data for Ossy commentary
@@ -128,7 +162,7 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
               detail: {
                 type: "discover_firm_viewed",
                 entityId,
-                displayName: data.name ?? displayName ?? entityId,
+                displayName: data.name ?? candidate.displayName ?? entityId,
                 dataSummary: parts.join(". "),
               },
             }));

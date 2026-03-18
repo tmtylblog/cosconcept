@@ -73,7 +73,7 @@ export function DiscoverStream() {
       if (match.entityType === "expert") {
         stream?.pushExpertDetail(match.entityId, discoverSearchQuery, match.displayName);
       } else {
-        stream?.pushFirmDetail(match.entityId, discoverSearchQuery, match.displayName);
+        stream?.pushFirmDetail(match, discoverSearchQuery);
       }
       // Force scroll to bottom where the new detail block will appear
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
@@ -180,6 +180,7 @@ export function DiscoverStream() {
                     loading={si.loading}
                     error={si.error}
                     searchQuery={si.searchQuery}
+                    matchContext={si.matchContext}
                     onViewExpert={handleViewExpert}
                     onClose={() => handleCloseDetail(si.id)}
                   />

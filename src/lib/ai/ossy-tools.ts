@@ -107,7 +107,10 @@ export function createOssyTools(organizationId: string, firmId?: string) {
             skipLlmRanking: false,
           });
 
-          const candidates = result.candidates.slice(0, 8).map((c) => ({
+          // Filter out searcher's own firm from results
+          const filtered = result.candidates.filter(c => c.firmId !== firmId);
+
+          const candidates = filtered.slice(0, 8).map((c) => ({
             entityType: c.entityType,
             entityId: c.entityId,
             firmId: c.firmId,
@@ -146,11 +149,31 @@ export function createOssyTools(organizationId: string, firmId?: string) {
             sharpeningHints.push(`Skill clusters: dominant skills are ${topSkills.slice(0, 4).join(", ")} — ask if any specific capability is must-have`);
           }
 
+          // Load searcher's abstraction profile for self-assessment context
+          let _searcherProfile: Record<string, unknown> | undefined;
+          if (firmId) {
+            try {
+              const abs = await loadAbstractionProfile(firmId);
+              if (abs) {
+                _searcherProfile = {
+                  topServices: abs.topServices,
+                  topSkills: abs.topSkills,
+                  topIndustries: abs.topIndustries,
+                  caseStudyCount: abs.evidenceSources?.caseStudyCount ?? 0,
+                  expertCount: abs.evidenceSources?.expertCount ?? 0,
+                };
+              }
+            } catch {
+              // Non-critical — proceed without profile
+            }
+          }
+
           return {
             success: true,
             query,
             totalFound: result.candidates.length,
             candidates,
+            ...(_searcherProfile ? { _searcherProfile } : {}),
             resultAnalysis: {
               categoriesRepresented: topCategories,
               skillsRepresented: topSkills,

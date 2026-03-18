@@ -42,12 +42,12 @@ async function fetchFirm(firmId: string) {
     skills: string[];
     industries: string[];
     markets: string[];
-    caseStudies: Array<{ legacyId: string; summary: string | null; skills: string[]; industries: string[] }>;
-    experts: Array<{ legacyId: string; displayName: string; title: string | null }>;
+    caseStudies: Array<{ legacyId: string | null; summary: string | null; sourceUrl: string | null; skills: string[]; industries: string[] }>;
+    experts: Array<{ legacyId: string | null; displayName: string; title: string | null; skills: string[]; specialistTitles: string[] }>;
   }
 
   const records = await neo4jRead<FirmRow>(
-    `MATCH (f:ServiceFirm {id: $firmId})
+    `MATCH (f:Company:ServiceFirm {id: $firmId})
      OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs:CaseStudy)
      OPTIONAL MATCH (exp:Person)-[:WORKS_AT]->(f)
      WHERE "expert" IN exp.personTypes
@@ -55,13 +55,16 @@ async function fetchFirm(firmId: string) {
        collect(DISTINCT {
          legacyId: cs.legacyId,
          summary: cs.summary,
+         sourceUrl: cs.sourceUrl,
          skills: [(cs)-[:DEMONSTRATES_SKILL]->(s:Skill) | s.name][0..6],
          industries: [(cs)-[:IN_INDUSTRY]->(i:Industry) | i.name][0..4]
        })[0..10] AS caseStudies,
        collect(DISTINCT {
          legacyId: exp.legacyId,
          displayName: coalesce(exp.fullName, exp.firstName + ' ' + exp.lastName, exp.name, 'Expert'),
-         title: [(exp)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | sp.title][0]
+         title: [(exp)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | sp.title][0],
+         skills: [(exp)-[:HAS_SKILL]->(s:Skill) | s.name][0..8],
+         specialistTitles: [(exp)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | sp.title][0..3]
        })[0..8] AS experts
      RETURN
        f.name AS name,
@@ -69,7 +72,7 @@ async function fetchFirm(firmId: string) {
        f.linkedinUrl AS linkedinUrl,
        f.sizeBand AS sizeBand,
        f.description AS description,
-       [(f)-[:IN_CATEGORY]->(c:Category) | c.name] AS categories,
+       [(f)-[:IN_CATEGORY]->(c:FirmCategory) | c.name] AS categories,
        [(f)-[:HAS_SKILL]->(s:Skill) | s.name][0..15] AS skills,
        [(f)-[:SERVES_INDUSTRY]->(i:Industry) | i.name][0..10] AS industries,
        [(f)-[:OPERATES_IN]->(m:Market) | m.name][0..8] AS markets,
@@ -79,7 +82,14 @@ async function fetchFirm(firmId: string) {
   );
 
   if (!records.length) return { error: "Not found" };
-  return { entityType: "firm", data: records[0] };
+
+  const data = records[0];
+
+  // Filter phantom entries from OPTIONAL MATCH (collect produces {legacyId: null} ghosts)
+  data.caseStudies = data.caseStudies.filter(cs => cs.legacyId != null);
+  data.experts = data.experts.filter(exp => exp.legacyId != null);
+
+  return { entityType: "firm", data };
 }
 
 // ─── Expert ───────────────────────────────────────────────

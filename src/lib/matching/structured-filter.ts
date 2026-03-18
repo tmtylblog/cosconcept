@@ -732,7 +732,8 @@ async function expertFilter(
     let score = 0;
     let maxScore = 0;
     if (filters.skills?.length) {
-      score += r.skills.filter((s) => filters.skills!.includes(s)).length / filters.skills.length;
+      const directMatches = r.skills.filter((s) => filters.skills!.includes(s)).length;
+      score += directMatches / filters.skills.length;
       maxScore += 1;
     }
     if (filters.industries?.length) {
@@ -743,7 +744,17 @@ async function expertFilter(
       score += r.markets.filter((m) => filters.markets!.includes(m)).length / filters.markets.length;
       maxScore += 1;
     }
-    const structuredScore = maxScore > 0 ? score / maxScore : 0.4;
+    let structuredScore = maxScore > 0 ? score / maxScore : 0.4;
+
+    // Specialist profile boost: curated profiles are higher signal (1.5x weight)
+    const spCount = typeof r.specialistProfileCount === "object"
+      ? (r.specialistProfileCount as unknown as { low: number }).low ?? 0
+      : r.specialistProfileCount ?? 0;
+    if (spCount > 0) {
+      // Boost up to +15% for having specialist profiles
+      const spBoost = Math.min(spCount, 3) / 3 * 0.15;
+      structuredScore = Math.min(1, structuredScore + spBoost);
+    }
 
     return {
       entityType: "expert" as const,
