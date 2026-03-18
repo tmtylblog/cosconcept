@@ -10,7 +10,8 @@ import {
   growthOpsInviteQueue,
   attributionEvents,
 } from "@/lib/db/schema";
-import { eq, gte, desc, asc, sql, and, count } from "drizzle-orm";
+import { eq, gte, desc, asc, sql, count } from "drizzle-orm";
+import Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
 
@@ -215,6 +216,65 @@ export async function GET(req: NextRequest) {
       createdAt: a.createdAt?.toISOString() ?? null,
     }));
 
+    // ── Stripe Revenue Data ─────────────────────────────────
+    let stripeData = null;
+    if (process.env.STRIPE_SECRET_KEY) {
+      try {
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+        // Get all active subscriptions
+        const activeSubs: Stripe.Subscription[] = [];
+        for await (const sub of stripe.subscriptions.list({ status: "active", expand: ["data.customer"], limit: 100 })) {
+          activeSubs.push(sub);
+        }
+
+        // Get canceled subscriptions
+        const canceledSubs: Stripe.Subscription[] = [];
+        for await (const sub of stripe.subscriptions.list({ status: "canceled", expand: ["data.customer"], limit: 100 })) {
+          canceledSubs.push(sub);
+        }
+
+        // Calculate MRR from active subscriptions
+        let mrr = 0;
+        const activeCustomers: { name: string; plan: string; mrr: number; since: string }[] = [];
+        for (const sub of activeSubs) {
+          const item = sub.items.data[0];
+          if (!item?.price) continue;
+          const amount = item.price.unit_amount ?? 0;
+          const interval = item.price.recurring?.interval;
+          const monthlyAmount = interval === "year" ? amount / 12 : amount;
+          mrr += monthlyAmount;
+          const cust = typeof sub.customer === "object" ? sub.customer as Stripe.Customer : null;
+          activeCustomers.push({
+            name: cust?.name || cust?.email || "Unknown",
+            plan: item.price.nickname || item.price.id,
+            mrr: Math.round(monthlyAmount) / 100,
+            since: new Date(sub.created * 1000).toISOString().slice(0, 10),
+          });
+        }
+
+        // Churned customers
+        const churned: { name: string; canceledAt: string }[] = [];
+        for (const sub of canceledSubs) {
+          const cust = typeof sub.customer === "object" ? sub.customer as Stripe.Customer : null;
+          churned.push({
+            name: cust?.name || cust?.email || "Unknown",
+            canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString().slice(0, 10) : "",
+          });
+        }
+
+        stripeData = {
+          mrr: Math.round(mrr) / 100,
+          activeSubscriptions: activeSubs.length,
+          canceledSubscriptions: canceledSubs.length,
+          activeCustomers: activeCustomers.sort((a, b) => b.mrr - a.mrr),
+          churned: churned.sort((a, b) => b.canceledAt.localeCompare(a.canceledAt)),
+        };
+      } catch (stripeErr) {
+        console.error("Stripe fetch error:", stripeErr);
+      }
+    }
+
     // ── Timeline event counts (for sparklines / detail views) ─
     const timelineByDay = await db
       .select({
@@ -234,6 +294,7 @@ export async function GET(req: NextRequest) {
       recentActivity,
       dealsByStage,
       timelineByDay,
+      stripe: stripeData,
       _meta: {
         period,
         since: since.toISOString(),
