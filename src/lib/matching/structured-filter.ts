@@ -690,7 +690,7 @@ async function expertFilter(
     MATCH (p:Person)
     WHERE p.enrichmentStatus <> "stub"
     ${whereClause ? "AND (" + whereClause.replace(/^WHERE /, "") + ")" : ""}
-    OPTIONAL MATCH (p)-[:WORKS_AT]->(sf:Company:ServiceFirm)
+    OPTIONAL MATCH (p)-[:CURRENTLY_AT|WORKS_AT]->(sf:Company:ServiceFirm)
     WITH p, sf,
       [(p)-[:HAS_SKILL|HAS_EXPERTISE]->(s:Skill) | s.name][0..8] AS skills,
       [(p)-[:SERVES_INDUSTRY]->(i:Industry) | i.name][0..5] AS industries,

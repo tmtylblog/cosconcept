@@ -49,7 +49,7 @@ async function fetchFirm(firmId: string) {
   const records = await neo4jRead<FirmRow>(
     `MATCH (f:Company:ServiceFirm {id: $firmId})
      OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs:CaseStudy)
-     OPTIONAL MATCH (exp:Person)-[:WORKS_AT]->(f)
+     OPTIONAL MATCH (exp:Person)-[:CURRENTLY_AT|WORKS_AT]->(f)
      WHERE "expert" IN exp.personTypes
      WITH f,
        collect(DISTINCT {
@@ -114,7 +114,7 @@ async function fetchExpert(legacyId: string) {
   const records = await neo4jRead<ExpertRow>(
     `MATCH (p:Person {legacyId: $legacyId})
      WHERE "expert" IN p.personTypes
-     OPTIONAL MATCH (p)-[:WORKS_AT]->(sf:ServiceFirm)
+     OPTIONAL MATCH (p)-[:CURRENTLY_AT|WORKS_AT]->(sf:ServiceFirm)
      WITH p, sf
      RETURN
        p.legacyId AS legacyId,
