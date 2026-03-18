@@ -48,6 +48,8 @@ interface DiscoverStreamContextValue {
   pushResults: (results: DiscoverCandidate[], query: string) => void;
   pushFirmDetail: (entityId: string, searchQuery: string, displayName?: string) => void;
   pushExpertDetail: (entityId: string, searchQuery: string, displayName?: string) => void;
+  /** Remove a stream item by ID (for closing detail blocks) */
+  removeItem: (id: string) => void;
   lastResultsId: string | null;
 }
 
@@ -66,6 +68,11 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
     idCounter.current++;
     return `${prefix}_${idCounter.current}_${Date.now()}`;
   }, []);
+
+  const removeItem = useCallback((id: string) => {
+    setItems((prev) => prev.filter((i) => i.id !== id));
+    bumpUpdate();
+  }, [bumpUpdate]);
 
   const pushResults = useCallback((results: DiscoverCandidate[], query: string) => {
     const id = nextId("results");
@@ -204,6 +211,7 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
         pushResults,
         pushFirmDetail,
         pushExpertDetail,
+        removeItem,
         lastResultsId: lastResultsIdRef.current,
       }}
     >

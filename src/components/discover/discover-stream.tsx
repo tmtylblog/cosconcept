@@ -46,6 +46,27 @@ export function DiscoverStream() {
     }
   }, [streamItemCount, streamUpdateCounter, resultCount]);
 
+  // ─── Dismiss handlers ────────────────────────────────────
+  const handleDismissResult = useCallback(
+    (match: DiscoverCandidate) => {
+      // Remove from discover results context
+      if (discover) {
+        const filtered = discover.results.filter(
+          (r) => !(r.entityType === match.entityType && r.entityId === match.entityId)
+        );
+        discover.setResults(filtered, discover.searchQuery);
+      }
+    },
+    [discover]
+  );
+
+  const handleCloseDetail = useCallback(
+    (id: string) => {
+      stream?.removeItem(id);
+    },
+    [stream]
+  );
+
   // ─── Handle card clicks — dispatch by entity type + scroll to detail ──
   const handleViewProfile = useCallback(
     (match: DiscoverCandidate) => {
@@ -127,6 +148,7 @@ export function DiscoverStream() {
                 results={results}
                 query={searchQuery}
                 onViewProfile={handleViewProfile}
+                onDismiss={handleDismissResult}
               />
             </div>
           )}
@@ -159,6 +181,7 @@ export function DiscoverStream() {
                     error={si.error}
                     searchQuery={si.searchQuery}
                     onViewExpert={handleViewExpert}
+                    onClose={() => handleCloseDetail(si.id)}
                   />
                 </div>
               );
@@ -172,6 +195,7 @@ export function DiscoverStream() {
                     loading={si.loading}
                     error={si.error}
                     searchQuery={si.searchQuery}
+                    onClose={() => handleCloseDetail(si.id)}
                   />
                 </div>
               );

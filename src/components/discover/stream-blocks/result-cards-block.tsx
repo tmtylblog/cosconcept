@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, User, BookOpen, ArrowRight } from "lucide-react";
+import { Building2, User, BookOpen, ArrowRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DiscoverCandidate } from "@/hooks/use-discover-results";
@@ -42,10 +42,12 @@ function ResultCard({
   match,
   index,
   onViewProfile,
+  onDismiss,
 }: {
   match: DiscoverCandidate;
   index: number;
   onViewProfile: (match: DiscoverCandidate) => void;
+  onDismiss?: (match: DiscoverCandidate) => void;
 }) {
   const tier = getFitTier(match.matchScore);
   const tierCfg = FIT_TIER_CONFIG[tier];
@@ -110,7 +112,7 @@ function ResultCard({
         ))}
       </div>
 
-      <div className="mt-3">
+      <div className="mt-3 flex items-center justify-between">
         <Button
           variant="outline"
           size="sm"
@@ -123,6 +125,18 @@ function ResultCard({
           View Profile
           <ArrowRight className="ml-1 h-3 w-3" />
         </Button>
+        {onDismiss && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismiss(match);
+            }}
+            className="flex h-6 w-6 items-center justify-center rounded-cos-full text-cos-slate-light hover:bg-cos-cloud hover:text-cos-slate transition-colors"
+            title="Dismiss"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -134,9 +148,10 @@ interface ResultCardsBlockProps {
   results: DiscoverCandidate[];
   query: string;
   onViewProfile: (match: DiscoverCandidate) => void;
+  onDismiss?: (match: DiscoverCandidate) => void;
 }
 
-export function ResultCardsBlock({ results, query, onViewProfile }: ResultCardsBlockProps) {
+export function ResultCardsBlock({ results, query, onViewProfile, onDismiss }: ResultCardsBlockProps) {
   if (results.length === 0) {
     return (
       <div className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-6 text-center animate-slide-up">
@@ -160,6 +175,7 @@ export function ResultCardsBlock({ results, query, onViewProfile }: ResultCardsB
           match={match}
           index={i}
           onViewProfile={onViewProfile}
+          onDismiss={onDismiss}
         />
       ))}
     </div>
