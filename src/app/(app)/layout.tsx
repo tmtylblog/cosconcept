@@ -915,7 +915,7 @@ function AppLayoutInner({
             {/* Right: Chat panel — desktop (always visible, including on discover) */}
             <aside className="hidden w-96 shrink-0 flex-col border-l border-cos-midnight/20 lg:flex">
               <ChatPanel
-                key={`${chatKey}-${firmSection === "discover" ? "discover" : "app"}`}
+                key={chatKey}
                 isGuest={false}
                 firmSection={firmSection}
                 onRequestLogin={handleRequestLogin}
@@ -946,7 +946,7 @@ function AppLayoutInner({
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <ChatPanel
-                    key={`${chatKey}-${firmSection === "discover" ? "discover" : "app"}`}
+                    key={chatKey}
                     isGuest={false}
                     firmSection={firmSection}
                     onRequestLogin={handleRequestLogin}
