@@ -500,7 +500,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         (e) => e.type === "discover_firm_viewed" || e.type === "discover_expert_viewed"
       );
       const hasPriorityEvent = hasDiscoverNavEvent || queue.some(
-        (e) => e.type === "partner_matching_needs_prefs"
+        (e) => e.type === "partner_matching_needs_prefs" || e.type === "partner_matches_loaded"
       );
 
       // Cooldown: 2s for priority events, 30s for general page events

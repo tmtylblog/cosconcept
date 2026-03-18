@@ -16,7 +16,8 @@ export type OssyPageEvent =
   | { type: "empty_state_lingered"; section: string }
   | { type: "discover_firm_viewed"; entityId: string; displayName: string; dataSummary: string }
   | { type: "discover_expert_viewed"; entityId: string; displayName: string; dataSummary: string }
-  | { type: "partner_matching_needs_prefs"; missingFields: string[] };
+  | { type: "partner_matching_needs_prefs"; missingFields: string[] }
+  | { type: "partner_matches_loaded"; matchCount: number; topMatches: string; patterns: string };
 
 /**
  * Emit a page event that ChatPanel will pick up.
@@ -68,6 +69,8 @@ export function formatEventsForOssy(events: OssyPageEvent[]): string {
         return `discover_expert_viewed: User is viewing expert "${e.displayName}". Profile data: ${e.dataSummary}`;
       case "partner_matching_needs_prefs":
         return `partner_matching_needs_prefs: User opened Partner Matching but is missing these V2 preference fields: ${e.missingFields.join(", ")}. Start the preference interview NOW — ask the first missing question.`;
+      case "partner_matches_loaded":
+        return `partner_matches_loaded: ${e.matchCount} partner matches just loaded. ${e.topMatches}. ${e.patterns}. Give the user a brief consultant-style commentary — what stands out, who you'd prioritize, any patterns worth noting. Be specific, reference firm names and scores. 2-3 sentences max.`;
     }
   });
   return `[PAGE_EVENT] ${lines.join("; ")}`;

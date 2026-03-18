@@ -530,15 +530,45 @@ export default function PartnerMatchingPage() {
   }, [hydrated, prefsComplete, missingFields]);
 
   // Load matches when preferences are complete
+  const matchesNotifiedRef = useRef(false);
   const loadMatches = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/partner-matching");
       if (!res.ok) throw new Error("Failed to load matches");
       const data = await res.json();
-      setMatches(data.matches ?? []);
+      const loadedMatches: PartnerMatch[] = data.matches ?? [];
+      setMatches(loadedMatches);
       setFirmId(data.firmId ?? null);
       setMessage(data.message ?? null);
+
+      // Notify Ossy about the matches so it can comment
+      if (loadedMatches.length > 0 && !matchesNotifiedRef.current) {
+        matchesNotifiedRef.current = true;
+        const top3 = loadedMatches.slice(0, 3);
+        const topMatches = top3
+          .map((m) => `${m.firmName} (${m.matchScore}%${m.firmType ? ", " + m.firmType : ""})`)
+          .join("; ");
+        // Detect patterns
+        const types = loadedMatches.map((m) => m.firmType).filter(Boolean);
+        const typeCounts = types.reduce((acc, t) => { acc[t!] = (acc[t!] ?? 0) + 1; return acc; }, {} as Record<string, number>);
+        const topTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([t, c]) => `${c}x ${t}`);
+        const withPrefs = loadedMatches.filter((m) => m.theirGapsThatYouFill.length > 0).length;
+        const patterns = [
+          topTypes.length > 0 ? `Firm types: ${topTypes.join(", ")}` : "",
+          withPrefs > 0 ? `${withPrefs} firms actively need what you offer` : "",
+          loadedMatches.some((m) => m.symbioticType) ? "Some known symbiotic pairs found" : "",
+        ].filter(Boolean).join(". ");
+
+        setTimeout(() => {
+          emitOssyEvent({
+            type: "partner_matches_loaded",
+            matchCount: loadedMatches.length,
+            topMatches,
+            patterns,
+          });
+        }, 1000);
+      }
     } catch (err) {
       console.error("Failed to load partner matches:", err);
     } finally {
