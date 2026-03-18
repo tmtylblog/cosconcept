@@ -509,9 +509,13 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         // Queue nav signal — process on timer so page context can catch up
         if (!navProactiveFiredRef.current.has(signal.page)) {
           pendingNavRef.current = { page: signal.page, ts: Date.now() };
+          console.log(`[CosSignal] Nav queued: ${signal.page}`);
+        } else {
+          console.log(`[CosSignal] Nav skipped (already fired): ${signal.page}`);
         }
       } else if (signal.kind === "action") {
         signalQueueRef.current.push(signal);
+        console.log(`[CosSignal] Action queued: ${signal.action} on ${signal.page}`);
       }
     };
 
@@ -541,11 +545,14 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
               pageMode as import("@/lib/cos-signal").PageMode,
               pageContextRef.current,
             );
+            console.log(`[CosSignal] Nav processing: ${pageMode}, status=${currentStatus}, msg=${proactiveMsg ? proactiveMsg.slice(0, 60) : "null"}`);
             if (proactiveMsg) {
               navProactiveFiredRef.current.add(pageMode);
               sendMessageRef.current({ text: `[CONTEXT_SIGNAL] Navigated to ${pageMode}: ${proactiveMsg}` });
               return; // One message per tick to avoid flooding
             }
+          } else {
+            console.log(`[CosSignal] Nav already fired for: ${pageMode}`);
           }
         }
       }
