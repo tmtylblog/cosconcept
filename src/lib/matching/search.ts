@@ -11,7 +11,7 @@
  */
 
 import { parseSearchQuery } from "./query-parser";
-import { structuredFilter, bidirectionalStructuredFilter, toMatchCandidates, universalStructuredFilter } from "./structured-filter";
+import { structuredFilter, bidirectionalStructuredFilter, toMatchCandidates, universalStructuredFilter, enrichWithConnectedEntities } from "./structured-filter";
 import { pgStructuredFilter } from "./pg-structured-filter";
 import { vectorRerank } from "./vector-search";
 import { deepRank } from "./deep-ranker";
@@ -97,6 +97,15 @@ export async function executeSearch(params: {
       layer1Count = layer1Candidates.length;
       layer1Source = "pg";
       console.warn("[Search] PG fallback returned %d candidates", layer1Count);
+    }
+  }
+
+  // Step 2.5: Enrich Layer 1 candidates with connected entity data (case study skills, expert skills, client industries)
+  if (layer1Source === "neo4j" && layer1Candidates.length > 0) {
+    try {
+      await enrichWithConnectedEntities(layer1Candidates, filters);
+    } catch (err) {
+      console.error("[Search] Connected entity enrichment failed, continuing without:", err);
     }
   }
 

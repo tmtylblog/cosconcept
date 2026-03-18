@@ -135,13 +135,20 @@ Pre-score: ${c.totalScore.toFixed(2)}`;
         enterprise: "Enterprise clients (1000+ employees)",
         mixed: "Mixed client sizes",
       };
+      // Connected entity evidence lines
+      const csSkills = c.preview.caseStudySkills;
+      const expertSkills = c.preview.expertSkills;
+      const clientInds = c.preview.clientIndustries;
+      const topCl = c.preview.topClients;
+      const csOutcomes = c.preview.caseStudyOutcomes;
+
       return `[${i}] FIRM: ${c.displayName}
 Categories: ${c.preview.categories.join(", ") || "N/A"}
 Services: ${services?.length ? services.join(", ") : "N/A"}
 Skills: ${c.preview.topSkills.join(", ") || "N/A"}
 Industries: ${c.preview.industries.join(", ") || "N/A"}
 Markets: ${markets?.length ? markets.join(", ") : "N/A"}
-${clientSize ? `Client Segment: ${clientSizeLabel[clientSize] ?? clientSize}\n` : ""}${langs?.length ? `Languages: ${langs.join(", ")}\n` : ""}${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"} (proven work)\n` : "No case studies (unproven)\n"}${c.preview.caseStudyHighlights?.length ? `Key Outcomes: ${c.preview.caseStudyHighlights.slice(0, 3).join("; ")}\n` : ""}${teamExp ? `Team Experience: ${teamExp}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
+${clientSize ? `Client Segment: ${clientSizeLabel[clientSize] ?? clientSize}\n` : ""}${langs?.length ? `Languages: ${langs.join(", ")}\n` : ""}${cs > 0 ? `Evidence: ${cs} case stud${cs !== 1 ? "ies" : "y"} (proven work)\n` : "No case studies (unproven)\n"}${csSkills?.length ? `Case Study Skills (proven): ${csSkills.slice(0, 8).map((s) => `${s.name} (${s.count}x)`).join(", ")}\n` : ""}${expertSkills?.length ? `Team Skill Coverage: ${expertSkills.slice(0, 6).map((s) => `${s.name} (${s.expertCount} experts)`).join(", ")}\n` : ""}${clientInds?.length ? `Client Industries: ${clientInds.slice(0, 5).map((ci) => `${ci.name} (${ci.count})`).join(", ")}\n` : ""}${topCl?.length ? `Notable Clients: ${topCl.slice(0, 5).join(", ")}\n` : ""}${csOutcomes?.length ? `Proven Outcomes: ${csOutcomes.slice(0, 3).join("; ")}\n` : ""}${c.preview.caseStudyHighlights?.length ? `Key Outcomes: ${c.preview.caseStudyHighlights.slice(0, 3).join("; ")}\n` : ""}${teamExp ? `Team Experience: ${teamExp}\n` : ""}Pre-score: ${c.totalScore.toFixed(2)}`;
     })
     .join("\n\n");
 
@@ -215,10 +222,12 @@ Results may include FIRMS, EXPERTS, and CASE STUDIES — rank all together by re
 
 RANKING PRIORITIES (most important first):
 1. PROVEN WORK: Firms with case studies (proven work) should rank significantly higher than those without. A firm with 10 case studies is far more credible than one with zero.
-2. COMPLEMENTARY FIT: Focus on entities that fill gaps in what the searcher needs — not duplicates of what they already do.
-3. EVIDENCE QUALITY: Weight case study evidence > specialist profiles > listed skills > self-described categories. Skills backed by multiple evidence sources are more reliable.
-4. TEAM DEPTH: Firms whose team has worked at relevant companies/industries have deeper practical experience. Consider team experience as a strong credibility signal.
-5. MARKET/LANGUAGE FIT: If the query mentions geography or cross-border needs, weight market presence and language capabilities.
+2. CASE STUDY PROOF: When "Case Study Skills (proven)" are listed, these are skills DEMONSTRATED in actual projects — much stronger than self-described skills. A firm with "AI/ML (3x)" in case study skills has delivered AI/ML 3 times vs one that just lists it.
+3. COMPLEMENTARY FIT: Focus on entities that fill gaps in what the searcher needs — not duplicates of what they already do.
+4. EVIDENCE QUALITY: Weight case study evidence > specialist profiles > listed skills > self-described categories. Skills backed by multiple evidence sources are more reliable.
+5. TEAM DEPTH: "Team Skill Coverage" shows how many experts have each skill. A firm where 4 experts have "Data Engineering" has deeper capability than one where 1 person lists it. Firms whose team has worked at relevant companies/industries have deeper practical experience.
+6. CLIENT PORTFOLIO: "Client Industries" reveals implicit expertise. A firm that served 5 FinTech clients deeply understands FinTech even if they don't list it explicitly. "Notable Clients" shows real companies they've worked with.
+7. MARKET/LANGUAGE FIT: If the query mentions geography or cross-border needs, weight market presence and language capabilities.
 6. SYMBIOTIC PARTNERSHIPS: If candidate categories form known symbiotic pairs with the searcher, that's a natural fit signal.
 7. For firms marked "No case studies (unproven)" — lower confidence but don't exclude. Some newer firms may still be relevant.
 

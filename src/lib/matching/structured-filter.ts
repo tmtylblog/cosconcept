@@ -45,6 +45,14 @@ interface StructuredCandidate {
   caseStudyCount?: number;
   teamRelevance?: number;
   classifierConfidence?: number;
+  /** Connected entity data from 2-hop traversals */
+  caseStudySkills?: Array<{ name: string; count: number }>;
+  caseStudyIndustries?: Array<{ name: string; count: number }>;
+  expertSkills?: Array<{ name: string; expertCount: number }>;
+  expertIndustries?: string[];
+  clientIndustries?: Array<{ name: string; count: number }>;
+  topClients?: string[];
+  caseStudyOutcomes?: string[];
 }
 
 /**
@@ -414,8 +422,264 @@ export function toMatchCandidates(
       serviceEvidence: c.serviceEvidence,
       classifierConfidence: c.classifierConfidence,
       teamRelevance: c.teamRelevance,
+      caseStudySkills: c.caseStudySkills,
+      caseStudyIndustries: c.caseStudyIndustries,
+      expertSkills: c.expertSkills,
+      expertIndustries: c.expertIndustries,
+      clientIndustries: c.clientIndustries,
+      topClients: c.topClients,
+      caseStudyOutcomes: c.caseStudyOutcomes,
     },
   }));
+}
+
+// ─── Connected Entity Enrichment ────────────────────────
+
+/**
+ * Batch-fetch connected entity data (case study skills/industries,
+ * expert skills/industries, client industries) for a set of firm IDs.
+ * Uses a single UNWIND query for all firms. Gracefully returns empty
+ * map on failure (search continues without connected entity boosts).
+ */
+async function fetchConnectedEntities(
+  firmIds: string[]
+): Promise<Map<string, {
+  csSkills: string[];
+  csIndustries: string[];
+  expertSkillPairs: Array<{ skill: string; person: string }>;
+  expertIndustries: string[];
+  clientData: Array<{ name: string; industry: string | null }>;
+  outcomes: string[];
+}>> {
+  if (firmIds.length === 0) return new Map();
+
+  try {
+    const rows = await neo4jRead<{
+      firmId: string;
+      csSkills: string[];
+      csIndustries: string[];
+      expertSkillPairs: Array<{ skill: string; person: string }>;
+      expertIndustries: string[];
+      clientData: Array<{ name: string; industry: string | null }>;
+      outcomes: string[][];
+    }>(
+      `UNWIND $firmIds AS fId
+       MATCH (f:Company:ServiceFirm {id: fId})
+
+       // Case study skills (2-hop)
+       OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs:CaseStudy)-[:DEMONSTRATES_SKILL]->(s:Skill)
+       WHERE cs.hidden IS NULL OR cs.hidden = false
+       WITH f, fId, collect(DISTINCT s.name) AS csSkills
+
+       // Case study industries (2-hop)
+       OPTIONAL MATCH (f)-[:HAS_CASE_STUDY]->(cs2:CaseStudy)-[:IN_INDUSTRY]->(i:Industry)
+       WHERE cs2.hidden IS NULL OR cs2.hidden = false
+       WITH f, fId, csSkills, collect(DISTINCT i.name) AS csIndustries
+
+       // Expert skills (2-hop)
+       OPTIONAL MATCH (f)<-[:CURRENTLY_AT]-(p:Person)-[:HAS_SKILL|HAS_EXPERTISE]->(es:Skill)
+       WHERE p.hidden IS NULL OR p.hidden = false
+       WITH f, fId, csSkills, csIndustries,
+         [x IN collect(DISTINCT {skill: es.name, person: p.id}) WHERE x.skill IS NOT NULL] AS expertSkillPairs
+
+       // Expert industries (2-hop)
+       OPTIONAL MATCH (f)<-[:CURRENTLY_AT]-(p2:Person)-[:SERVES_INDUSTRY]->(ei:Industry)
+       WHERE p2.hidden IS NULL OR p2.hidden = false
+       WITH f, fId, csSkills, csIndustries, expertSkillPairs,
+         [x IN collect(DISTINCT ei.name) WHERE x IS NOT NULL] AS expertIndustries
+
+       // Client companies (1-hop)
+       OPTIONAL MATCH (f)-[:HAS_CLIENT]->(cl:Company)
+       WHERE cl.name IS NOT NULL
+       WITH fId, csSkills, csIndustries, expertSkillPairs, expertIndustries,
+         collect(DISTINCT {name: cl.name, industry: cl.industry})[0..15] AS clientData
+
+       // Case study outcomes
+       OPTIONAL MATCH (f:Company:ServiceFirm {id: fId})-[:HAS_CASE_STUDY]->(cs3:CaseStudy)
+       WHERE cs3.outcomes IS NOT NULL AND size(cs3.outcomes) > 0
+         AND (cs3.hidden IS NULL OR cs3.hidden = false)
+       WITH fId, csSkills, csIndustries, expertSkillPairs, expertIndustries, clientData,
+         collect(cs3.outcomes)[0..5] AS outcomes
+
+       RETURN fId AS firmId, csSkills, csIndustries, expertSkillPairs, expertIndustries, clientData, outcomes`,
+      { firmIds }
+    );
+
+    const map = new Map<string, {
+      csSkills: string[];
+      csIndustries: string[];
+      expertSkillPairs: Array<{ skill: string; person: string }>;
+      expertIndustries: string[];
+      clientData: Array<{ name: string; industry: string | null }>;
+      outcomes: string[];
+    }>();
+
+    for (const row of rows) {
+      // Flatten outcomes (array of arrays)
+      const flatOutcomes: string[] = [];
+      if (row.outcomes) {
+        for (const arr of row.outcomes) {
+          if (Array.isArray(arr)) {
+            for (const o of arr) {
+              if (typeof o === "string" && o.trim()) flatOutcomes.push(o.trim());
+            }
+          }
+        }
+      }
+
+      map.set(row.firmId, {
+        csSkills: (row.csSkills ?? []).filter(Boolean),
+        csIndustries: (row.csIndustries ?? []).filter(Boolean),
+        expertSkillPairs: (row.expertSkillPairs ?? []).filter((p) => p.skill),
+        expertIndustries: (row.expertIndustries ?? []).filter(Boolean),
+        clientData: (row.clientData ?? []).filter((c) => c.name),
+        outcomes: [...new Set(flatOutcomes)].slice(0, 5),
+      });
+    }
+    return map;
+  } catch (err) {
+    console.error("[StructuredFilter] Connected entity enrichment failed:", err);
+    return new Map();
+  }
+}
+
+/** Count occurrences of each value in a string array */
+function countOccurrences(arr: string[]): Array<{ name: string; count: number }> {
+  const map = new Map<string, number>();
+  for (const v of arr) {
+    map.set(v, (map.get(v) ?? 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** Count distinct persons per skill */
+function countExpertSkills(pairs: Array<{ skill: string; person: string }>): Array<{ name: string; expertCount: number }> {
+  const map = new Map<string, Set<string>>();
+  for (const { skill, person } of pairs) {
+    if (!map.has(skill)) map.set(skill, new Set());
+    map.get(skill)!.add(person);
+  }
+  return [...map.entries()]
+    .map(([name, persons]) => ({ name, expertCount: persons.size }))
+    .sort((a, b) => b.expertCount - a.expertCount);
+}
+
+/**
+ * Enrich Layer 1 candidates with connected entity data and apply score boosts.
+ * Works on MatchCandidate[] (the format used in search.ts pipeline).
+ * Mutates candidates in-place for efficiency.
+ */
+export async function enrichWithConnectedEntities(
+  candidates: MatchCandidate[],
+  filters: SearchFilters
+): Promise<void> {
+  const firmCandidates = candidates.filter((c) => c.entityType === "firm" || !c.entityType);
+  const firmIds = firmCandidates.map((c) => c.entityId || c.firmId);
+  if (firmIds.length === 0) return;
+
+  const connected = await fetchConnectedEntities(firmIds);
+  if (connected.size === 0) return;
+
+  const searchedSkills = filters.skills ?? [];
+  const searchedIndustries = filters.industries ?? [];
+
+  for (const candidate of firmCandidates) {
+    const data = connected.get(candidate.entityId || candidate.firmId);
+    if (!data) continue;
+
+    // Aggregate into display-friendly structures
+    const csSkills = countOccurrences(data.csSkills);
+    const csIndustries = countOccurrences(data.csIndustries);
+    const expertSkillCov = countExpertSkills(data.expertSkillPairs);
+    const clientIndustries = countOccurrences(
+      data.clientData.filter((c) => c.industry).map((c) => c.industry!)
+    );
+    const topClients = data.clientData.map((c) => c.name).slice(0, 10);
+
+    // Attach to preview
+    candidate.preview.caseStudySkills = csSkills;
+    candidate.preview.caseStudyIndustries = csIndustries;
+    candidate.preview.expertSkills = expertSkillCov;
+    candidate.preview.expertIndustries = data.expertIndustries;
+    candidate.preview.clientIndustries = clientIndustries;
+    candidate.preview.topClients = topClients;
+    candidate.preview.caseStudyOutcomes = data.outcomes;
+
+    // Apply score boosts based on connected entity evidence
+    let boost = 0;
+
+    // Skill match backed by case study DEMONSTRATES_SKILL
+    if (searchedSkills.length > 0 && csSkills.length > 0) {
+      const csSkillNames = new Set(csSkills.map((s) => s.name.toLowerCase()));
+      const provenSkills = searchedSkills.filter((sk) =>
+        csSkillNames.has(sk.toLowerCase()) ||
+        [...csSkillNames].some((csn) => csn.includes(sk.toLowerCase()) || sk.toLowerCase().includes(csn))
+      );
+      if (provenSkills.length > 0) {
+        boost += Math.min(0.10, (provenSkills.length / searchedSkills.length) * 0.10);
+      }
+    }
+
+    // Industry match backed by case study IN_INDUSTRY
+    if (searchedIndustries.length > 0 && csIndustries.length > 0) {
+      const csIndNames = new Set(csIndustries.map((i) => i.name.toLowerCase()));
+      const provenIndustries = searchedIndustries.filter((ind) =>
+        csIndNames.has(ind.toLowerCase()) ||
+        [...csIndNames].some((csn) => csn.includes(ind.toLowerCase()) || ind.toLowerCase().includes(csn))
+      );
+      if (provenIndustries.length > 0) {
+        boost += Math.min(0.08, (provenIndustries.length / searchedIndustries.length) * 0.08);
+      }
+    }
+
+    // Expert skill depth (>2 experts with searched skill)
+    if (searchedSkills.length > 0 && expertSkillCov.length > 0) {
+      const deepSkills = searchedSkills.filter((sk) => {
+        const match = expertSkillCov.find((e) =>
+          e.name.toLowerCase().includes(sk.toLowerCase()) || sk.toLowerCase().includes(e.name.toLowerCase())
+        );
+        return match && match.expertCount >= 2;
+      });
+      if (deepSkills.length > 0) {
+        boost += Math.min(0.08, (deepSkills.length / searchedSkills.length) * 0.08);
+      }
+    }
+
+    // Expert industry coverage
+    if (searchedIndustries.length > 0 && data.expertIndustries.length > 0) {
+      const expertIndSet = new Set(data.expertIndustries.map((i) => i.toLowerCase()));
+      const matched = searchedIndustries.filter((ind) =>
+        expertIndSet.has(ind.toLowerCase()) ||
+        [...expertIndSet].some((ei) => ei.includes(ind.toLowerCase()) || ind.toLowerCase().includes(ei))
+      );
+      if (matched.length > 0) {
+        boost += Math.min(0.05, (matched.length / searchedIndustries.length) * 0.05);
+      }
+    }
+
+    // Client industry signal
+    if (searchedIndustries.length > 0 && clientIndustries.length > 0) {
+      const clientIndSet = new Set(clientIndustries.map((ci) => ci.name.toLowerCase()));
+      const matched = searchedIndustries.filter((ind) =>
+        clientIndSet.has(ind.toLowerCase()) ||
+        [...clientIndSet].some((ci) => ci.includes(ind.toLowerCase()) || ind.toLowerCase().includes(ci))
+      );
+      if (matched.length > 0) {
+        boost += Math.min(0.04, (matched.length / searchedIndustries.length) * 0.04);
+      }
+    }
+
+    // Apply boost (capped)
+    if (boost > 0) {
+      candidate.structuredScore = Math.min(1, candidate.structuredScore + boost);
+      candidate.totalScore = Math.min(1, candidate.totalScore + boost);
+    }
+  }
+
+  // Re-sort after boosting
+  candidates.sort((a, b) => b.totalScore - a.totalScore);
 }
 
 // ─── Bidirectional Matching ──────────────────────────────

@@ -149,6 +149,20 @@ export interface MatchCandidate {
     classifierConfidence?: number;
     /** Team relevance: count of team members with relevant work history */
     teamRelevance?: number;
+    /** Connected entity: skills proven by case studies (DEMONSTRATES_SKILL), with occurrence count */
+    caseStudySkills?: Array<{ name: string; count: number }>;
+    /** Connected entity: industries proven by case studies (IN_INDUSTRY), with occurrence count */
+    caseStudyIndustries?: Array<{ name: string; count: number }>;
+    /** Connected entity: team skill coverage — how many experts have each skill */
+    expertSkills?: Array<{ name: string; expertCount: number }>;
+    /** Connected entity: team industry expertise from Person→SERVES_INDUSTRY */
+    expertIndustries?: string[];
+    /** Connected entity: industries of client companies (HAS_CLIENT→Company.industry) */
+    clientIndustries?: Array<{ name: string; count: number }>;
+    /** Connected entity: notable client names */
+    topClients?: string[];
+    /** Connected entity: case study outcome highlights from Neo4j */
+    caseStudyOutcomes?: string[];
   };
 }
 

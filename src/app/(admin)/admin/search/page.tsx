@@ -33,6 +33,7 @@ interface MatchCandidate {
   vectorScore: number;
   llmScore?: number;
   matchExplanation?: string;
+  entityType?: string;
   bidirectionalFit?: { theyWantUs: number; weWantThem: number };
   preview: {
     categories: string[];
@@ -41,6 +42,18 @@ interface MatchCandidate {
     industries: string[];
     employeeCount?: number;
     website?: string;
+    caseStudyCount?: number;
+    skillEvidence?: Array<{ name: string; caseStudyCount: number; expertCount: number; confidence: number }>;
+    serviceEvidence?: Array<{ name: string; caseStudyCount: number; expertCount: number }>;
+    classifierConfidence?: number;
+    teamRelevance?: number;
+    caseStudySkills?: Array<{ name: string; count: number }>;
+    caseStudyIndustries?: Array<{ name: string; count: number }>;
+    expertSkills?: Array<{ name: string; expertCount: number }>;
+    expertIndustries?: string[];
+    clientIndustries?: Array<{ name: string; count: number }>;
+    topClients?: string[];
+    caseStudyOutcomes?: string[];
   };
 }
 
@@ -598,7 +611,7 @@ function LayerAccordion({
             <div className="divide-y divide-cos-border">
               {candidates.map((c, idx) => {
                 const score = c[scoreKey] as number | undefined;
-                const hasEvidence = showEvidence && (c.preview.skillEvidence?.length || c.preview.serviceEvidence?.length || c.preview.caseStudyCount);
+                const hasEvidence = showEvidence && (c.preview.skillEvidence?.length || c.preview.serviceEvidence?.length || c.preview.caseStudyCount || c.preview.caseStudySkills?.length || c.preview.expertSkills?.length || c.preview.clientIndustries?.length);
                 const isEvidenceOpen = expandedEvidence === c.firmId;
 
                 return (
@@ -719,6 +732,85 @@ function LayerAccordion({
                                 </span>
                               ))}
                             </div>
+                          </div>
+                        )}
+
+                        {/* Case study proven skills */}
+                        {c.preview.caseStudySkills && c.preview.caseStudySkills.length > 0 && (
+                          <div>
+                            <p className="font-bold text-cos-midnight mb-1">Case Study Skills (DEMONSTRATES_SKILL — proven)</p>
+                            <div className="flex flex-wrap gap-1">
+                              {c.preview.caseStudySkills.map((sk, i) => (
+                                <span key={i} className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-medium text-cos-signal">
+                                  {sk.name}
+                                  <span className="text-[9px] opacity-70">({sk.count}x)</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Case study industries */}
+                        {c.preview.caseStudyIndustries && c.preview.caseStudyIndustries.length > 0 && (
+                          <div>
+                            <p className="font-bold text-cos-midnight mb-1">Case Study Industries (IN_INDUSTRY — proven)</p>
+                            <div className="flex flex-wrap gap-1">
+                              {c.preview.caseStudyIndustries.map((ind, i) => (
+                                <span key={i} className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-medium text-cos-signal">
+                                  {ind.name}
+                                  <span className="text-[9px] opacity-70">({ind.count}x)</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Expert skill coverage */}
+                        {c.preview.expertSkills && c.preview.expertSkills.length > 0 && (
+                          <div>
+                            <p className="font-bold text-cos-midnight mb-1">Team Skill Coverage (Person→HAS_SKILL)</p>
+                            <div className="flex flex-wrap gap-1">
+                              {c.preview.expertSkills.slice(0, 15).map((sk, i) => (
+                                <span key={i} className="inline-flex items-center gap-1 rounded-cos-pill bg-purple-50 px-2 py-0.5 text-[10px] font-medium text-purple-700">
+                                  {sk.name}
+                                  <span className="text-[9px] opacity-70">({sk.expertCount} expert{sk.expertCount !== 1 ? "s" : ""})</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Client industries */}
+                        {c.preview.clientIndustries && c.preview.clientIndustries.length > 0 && (
+                          <div>
+                            <p className="font-bold text-cos-midnight mb-1">Client Industries (HAS_CLIENT→Company.industry)</p>
+                            <div className="flex flex-wrap gap-1">
+                              {c.preview.clientIndustries.map((ci, i) => (
+                                <span key={i} className="inline-flex items-center gap-1 rounded-cos-pill bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                                  {ci.name}
+                                  <span className="text-[9px] opacity-70">({ci.count})</span>
+                                </span>
+                              ))}
+                              {c.preview.topClients && c.preview.topClients.length > 0 && (
+                                <span className="text-[10px] text-cos-slate-light ml-1">
+                                  Clients: {c.preview.topClients.slice(0, 5).join(", ")}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Case study outcomes */}
+                        {c.preview.caseStudyOutcomes && c.preview.caseStudyOutcomes.length > 0 && (
+                          <div>
+                            <p className="font-bold text-cos-midnight mb-1">Proven Outcomes</p>
+                            <ul className="space-y-0.5">
+                              {c.preview.caseStudyOutcomes.slice(0, 3).map((o, i) => (
+                                <li key={i} className="text-cos-slate flex items-start gap-1">
+                                  <span className="text-cos-signal mt-0.5 shrink-0">&#x2022;</span> {o}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
                         )}
 
