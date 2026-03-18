@@ -131,6 +131,21 @@ export function createOssyTools(organizationId: string, firmId?: string) {
           const topIndustries = [...new Set(allIndustries)].slice(0, 6);
           const withCaseStudies = candidates.filter((c) => (c.caseStudyCount ?? 0) > 0).length;
 
+          // Build specific sharpening hints from result data
+          const sharpeningHints: string[] = [];
+          if (topCategories.length >= 2) {
+            sharpeningHints.push(`Category split: results span ${topCategories.slice(0, 3).join(", ")} — ask which direction fits their model better`);
+          }
+          if (withCaseStudies > 0 && withCaseStudies < candidates.length) {
+            sharpeningHints.push(`Evidence gap: ${withCaseStudies} of ${candidates.length} firms have case studies — ask if proven track record matters`);
+          }
+          if (topIndustries.length >= 2) {
+            sharpeningHints.push(`Industry variety: results cover ${topIndustries.slice(0, 3).join(", ")} — ask which segment they're targeting`);
+          }
+          if (topSkills.length >= 3) {
+            sharpeningHints.push(`Skill clusters: dominant skills are ${topSkills.slice(0, 4).join(", ")} — ask if any specific capability is must-have`);
+          }
+
           return {
             success: true,
             query,
@@ -143,7 +158,8 @@ export function createOssyTools(organizationId: string, firmId?: string) {
               firmsWithCaseStudies: withCaseStudies,
               totalCandidates: candidates.length,
             },
-            _instruction: "IMPORTANT: After presenting these results, you MUST ask a sharpening follow-up question based on what you see in the resultAnalysis. Look at the categories, skills, and industries across all matches — notice patterns, splits, or gaps, and ask ONE specific question that helps the user think deeper about what they need. Do NOT just say 'want me to narrow by X?' — instead tell them what you NOTICED and ask something specific.",
+            _sharpeningHints: sharpeningHints,
+            _instruction: "CRITICAL: Your response MUST have two parts: (1) A 2-3 sentence insight about what you found — mention specific patterns, splits, or notable observations from the resultAnalysis. Do NOT just say 'Found N matches'. (2) ONE specific sharpening follow-up question using the _sharpeningHints above. Tell the user what you NOTICED and ask a question that would meaningfully change the results. Example: 'Interesting — half these firms are full-service agencies and the other half are specialist boutiques. The specialists have deeper case study portfolios. Are you looking for a focused expert or a broader partner who can handle more?' NEVER just say 'want me to narrow by X?' — always lead with an observation.",
             stats: {
               durationMs: result.stats.totalDurationMs,
               layer1: result.stats.layer1Candidates,

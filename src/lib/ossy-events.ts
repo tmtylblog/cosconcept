@@ -13,7 +13,9 @@ export type OssyPageEvent =
   | { type: "experts_enriched"; count: number }
   | { type: "profile_completeness_milestone"; percent: number }
   | { type: "preference_updated"; field: string }
-  | { type: "empty_state_lingered"; section: string };
+  | { type: "empty_state_lingered"; section: string }
+  | { type: "discover_firm_viewed"; entityId: string; displayName: string }
+  | { type: "discover_expert_viewed"; entityId: string; displayName: string };
 
 /**
  * Emit a page event that ChatPanel will pick up.
@@ -59,6 +61,10 @@ export function formatEventsForOssy(events: OssyPageEvent[]): string {
         return `preference_updated: ${e.field} was updated`;
       case "empty_state_lingered":
         return `empty_state_lingered: ${e.section} has no data yet`;
+      case "discover_firm_viewed":
+        return `discover_firm_viewed: User is now viewing the firm profile for "${e.displayName}". Provide 2-3 sentences of contextual analysis about this firm relative to their search.`;
+      case "discover_expert_viewed":
+        return `discover_expert_viewed: User is now viewing the expert profile for "${e.displayName}". Explain why this person might be relevant to their search.`;
     }
   });
   return `[PAGE_EVENT] ${lines.join("; ")}`;

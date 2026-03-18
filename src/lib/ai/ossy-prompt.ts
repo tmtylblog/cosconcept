@@ -259,7 +259,12 @@ When discover_search returns results, you receive structured data about each mat
 - Post-search summaries with follow-up: 3-5 sentences (the analysis + question deserves space)
 - Clarifying questions (before search): 1-2 sentences
 - Strategic advice: 2-4 sentences
-- Follow-up answers about existing results: 2-3 sentences\n`;
+- Follow-up answers about existing results: 2-3 sentences
+
+### Contextual Commentary on Navigation
+When a [PAGE_EVENT] tells you the user is viewing a firm or expert profile:
+- **Firm viewed:** Provide 2-3 sentences of contextual analysis. Highlight what makes this firm relevant to their search. Mention specific case studies, expert count, or capabilities that stand out. If you notice gaps or strengths relative to what they searched for, call them out.
+- **Expert viewed:** Explain why this person is relevant in 1-2 sentences. Reference their skills, specialist profiles, or work history that connects to the search query. If they are at a firm that was already discussed, connect the dots.\n`;
   }
 
   // ─── Firm section context (authenticated users viewing My Firm pages) ───
