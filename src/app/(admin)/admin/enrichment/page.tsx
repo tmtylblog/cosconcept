@@ -202,8 +202,16 @@ function EnrichmentStatsSection() {
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs font-medium text-cos-midnight flex items-center gap-1.5"><UserCheck className="h-3 w-3 text-cos-ember" /> Experts Enriched (work history)</span>
+            <span className="text-[10px] text-cos-slate">{stats.experts.enriched.toLocaleString()} / {stats.experts.total.toLocaleString()}</span>
           </div>
           <ProgressBar done={stats.experts.enriched} total={stats.experts.total} color={stats.experts.enriched / stats.experts.total < 0.5 ? "bg-cos-ember" : "bg-cos-signal"} />
+          <div className="flex gap-3 mt-1.5 text-[10px] text-cos-slate-dim">
+            <span>{stats.experts.withLinkedin?.toLocaleString() ?? 0} have LinkedIn</span>
+            <span className="text-cos-slate-dim/50">&middot;</span>
+            <span>{stats.experts.roster?.toLocaleString() ?? 0} awaiting LinkedIn</span>
+            <span className="text-cos-slate-dim/50">&middot;</span>
+            <span>{stats.experts.needsLinkedin?.toLocaleString() ?? 0} no LinkedIn found</span>
+          </div>
         </div>
         <div>
           <div className="flex items-center justify-between mb-1">
