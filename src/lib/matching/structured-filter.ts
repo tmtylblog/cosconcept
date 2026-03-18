@@ -826,8 +826,12 @@ async function caseStudyFilter(
     params.industries = filters.industries;
   }
 
+  // Always require a summary — summaryless case studies add noise to results
+  const summaryCondition = "cs.summary IS NOT NULL AND trim(cs.summary) <> ''";
   const whereClause =
-    conditions.length > 0 ? `WHERE ${conditions.join(" OR ")}` : "";
+    conditions.length > 0
+      ? `WHERE ${summaryCondition} AND (${conditions.join(" OR ")})`
+      : `WHERE ${summaryCondition}`;
 
   const query = `
     MATCH (cs:CaseStudy)
