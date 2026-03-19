@@ -94,7 +94,6 @@ function AppLayoutInner({
     status: enrichmentStatus,
     result: enrichmentResult,
     triggerEnrichment,
-    reset: resetEnrichment,
   } = useEnrichment();
   const {
     guestPreferences,
@@ -452,24 +451,6 @@ function AppLayoutInner({
     window.location.reload();
   };
 
-  /** DEV: Simulate adding a new agency — resets chat + enrichment + guest data */
-  const handleSimulateNewUser = () => {
-    resetEnrichment();
-    clearGuestData();
-    setChatKey((k) => k + 1);
-    // Clear all cos_ keys from both storages for a truly fresh start
-    try {
-      Object.keys(sessionStorage).forEach((key) => {
-        if (key.startsWith("cos_")) sessionStorage.removeItem(key);
-      });
-      Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith("cos_")) localStorage.removeItem(key);
-      });
-    } catch { /* ignore */ }
-    if (pathname !== "/dashboard") {
-      router.push("/dashboard");
-    }
-  };
 
   /** DEV: Auto-login as test user — seeds data + creates session + reloads */
   const handleDevLogin = async () => {
@@ -595,15 +576,9 @@ function AppLayoutInner({
               </button>
             </div>
 
-            {/* DEV: Simulate New Onboarding + Dev Login — bottom left */}
-            <div className="absolute bottom-6 left-6 flex gap-2">
-              <button
-                onClick={handleSimulateNewUser}
-                className="rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
-              >
-                🔄 Simulate New Onboarding
-              </button>
-              {isDevMode && (
+            {/* DEV: Dev Login — bottom left */}
+            {isDevMode && (
+              <div className="absolute bottom-6 left-6 flex gap-2">
                 <button
                   onClick={handleDevLogin}
                   disabled={devLoginLoading}
@@ -611,8 +586,8 @@ function AppLayoutInner({
                 >
                   {devLoginLoading ? "⏳ Seeding..." : "🔑 Dev Login"}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </main>
 
           {/* Right: Chat panel — matches enriching/authenticated layout */}
@@ -712,14 +687,8 @@ function AppLayoutInner({
           </button>
 
           {/* DEV buttons — bottom center */}
-          <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 gap-2">
-            <button
-              onClick={handleSimulateNewUser}
-              className="rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember backdrop-blur-sm transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
-            >
-              🔄 Simulate New Onboarding
-            </button>
-            {isDevMode && (
+          {isDevMode && (
+            <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 gap-2">
               <button
                 onClick={handleDevLogin}
                 disabled={devLoginLoading}
@@ -727,8 +696,8 @@ function AppLayoutInner({
               >
                 {devLoginLoading ? "⏳ Seeding..." : "🔑 Dev Login"}
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -833,14 +802,8 @@ function AppLayoutInner({
               )}
 
               {/* DEV buttons — bottom left */}
-              <div className="fixed bottom-6 left-6 z-40 flex gap-2">
-                <button
-                  onClick={handleSimulateNewUser}
-                  className="rounded-cos-pill border border-cos-ember/40 bg-cos-ember/10 px-4 py-2 text-xs font-medium text-cos-ember backdrop-blur-sm transition-colors hover:border-cos-ember hover:bg-cos-ember/20"
-                >
-                  Simulate New Onboarding
-                </button>
-                {isDevMode && (
+              {isDevMode && (
+                <div className="fixed bottom-6 left-6 z-40 flex gap-2">
                   <button
                     onClick={handleDevLogin}
                     disabled={devLoginLoading}
@@ -848,8 +811,8 @@ function AppLayoutInner({
                   >
                     {devLoginLoading ? "⏳ Seeding..." : "🔑 Dev Login"}
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </>
@@ -920,7 +883,6 @@ function AppLayoutInner({
               isGuest={false}
               hideOverview={true}
               onRequestLogin={handleRequestLogin}
-              onSimulateNewUser={handleSimulateNewUser}
             />
 
             {/* Center: Rich content area */}

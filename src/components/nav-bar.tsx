@@ -17,7 +17,6 @@ import {
   LogOut,
   LogIn,
   ArrowLeftRight,
-  RotateCcw,
   ChevronDown,
   Briefcase,
   FileText,
@@ -74,7 +73,6 @@ interface NavBarProps {
   onToggle: () => void;
   isGuest?: boolean;
   onRequestLogin?: () => void;
-  onSimulateNewUser?: () => void;
   /** Hide the Overview item (used post-onboarding since its content lives elsewhere) */
   hideOverview?: boolean;
 }
@@ -84,7 +82,6 @@ export function NavBar({
   onToggle,
   isGuest,
   onRequestLogin,
-  onSimulateNewUser,
   hideOverview,
 }: NavBarProps) {
   const pathname = usePathname();
@@ -289,20 +286,6 @@ export function NavBar({
 
       {/* Bottom section */}
       <div className="border-t border-white/10 p-2">
-        {/* DEV: Simulate New User — above Collapse */}
-        {!isGuest && onSimulateNewUser && (
-          <button
-            onClick={onSimulateNewUser}
-            title="Reset chat and enrichment — simulate a new user onboarding"
-            className="flex w-full items-center gap-3 rounded-cos-lg px-3 py-2 text-[11px] font-medium text-cos-warm/80 transition-colors hover:bg-cos-warm/10 hover:text-cos-warm"
-          >
-            <RotateCcw className="h-4 w-4 shrink-0" />
-            {showLabels && (
-              <span className="truncate">Simulate New User</span>
-            )}
-          </button>
-        )}
-
         <button
           onClick={onToggle}
           className="flex w-full items-center gap-3 rounded-cos-lg px-3 py-2.5 text-sm font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
