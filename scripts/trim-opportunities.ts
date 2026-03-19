@@ -5,14 +5,15 @@
  * Usage: npx tsx scripts/trim-opportunities.ts
  */
 
-import "dotenv/config";
+import { config } from "dotenv";
+config({ path: ".env.local" });
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 import { opportunities, leads, leadShares } from "../src/lib/db/schema";
 import { desc, notInArray, eq, inArray } from "drizzle-orm";
 
 async function main() {
-  const sql = neon(process.env.POSTGRES_URL!);
+  const sql = neon(process.env.DATABASE_URL!);
   const db = drizzle(sql);
 
   // Get the 3 most recent opportunities

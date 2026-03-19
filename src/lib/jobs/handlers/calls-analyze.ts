@@ -161,10 +161,12 @@ export async function handleCallsAnalyze(
 
   // Step 3: Create opportunity records
   let createdOpportunities = 0;
+  const createdOppIds: string[] = [];
   for (const opp of extractedOpportunities) {
     if (opp.confidence < 0.6) continue;
+    const oppId = generateId("opp");
     await db.insert(opportunities).values({
-      id: generateId("opp"),
+      id: oppId,
       firmId,
       createdBy: userId ?? firmId,
       title: opp.title,
@@ -185,7 +187,24 @@ export async function handleCallsAnalyze(
       sourceId: transcriptId ?? null,
       status: "new",
     });
+    createdOppIds.push(oppId);
     createdOpportunities++;
+  }
+
+  // Step 3b: Auto-match opportunities to specialist profiles
+  let matchResults: { opportunityId: string; totalExpertMatches: number; totalCaseStudyMatches: number }[] = [];
+  if (createdOppIds.length > 0) {
+    try {
+      const { findOpportunityMatches } = await import("@/lib/matching/opportunity-matcher");
+      const results = await findOpportunityMatches(createdOppIds, firmId, "both");
+      matchResults = results.map((m) => ({
+        opportunityId: m.opportunityId,
+        totalExpertMatches: m.totalExpertMatches,
+        totalCaseStudyMatches: m.totalCaseStudyMatches,
+      }));
+    } catch (err) {
+      console.warn("[CallsAnalyze] Opportunity matching failed:", err);
+    }
   }
 
   // Step 4: Recommendations via Neo4j
@@ -301,5 +320,6 @@ export async function handleCallsAnalyze(
     },
     opportunities: { detected: extractedOpportunities.length, created: createdOpportunities },
     recommendations: { experts: recommendations.experts.length, caseStudies: recommendations.caseStudies.length },
+    matches: matchResults,
   };
 }
