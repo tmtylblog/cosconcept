@@ -156,14 +156,14 @@ export async function queuePartnershipIntro(opts: {
   const testEmailA = toTestEmail(firmA.name);
   const testEmailB = toTestEmail(firmB.name);
 
-  // Insert queue entry — status depends on auto-send toggle
+  // Always use test addresses (masa+) — toggle controls auto vs manual send only
   const queueId = generateId("eq");
   await db.insert(emailApprovalQueue).values({
     id: queueId,
     firmId: firmAId,
     userId: senderUserId,
     emailType: "intro",
-    toEmails: autoSend ? [testEmailA, testEmailB] : [resolvedA.email, resolvedB.email],
+    toEmails: [testEmailA, testEmailB],
     subject: intro.subject,
     bodyHtml: intro.htmlBody,
     bodyText: intro.textBody,
@@ -172,7 +172,7 @@ export async function queuePartnershipIntro(opts: {
     ...(autoSend ? { sentAt: new Date() } : {}),
   });
 
-  // If auto-send is ON, fire the email immediately to test addresses
+  // If auto-send is ON, fire immediately — otherwise stays pending for manual approval
   if (autoSend) {
     const result = await sendEmail({
       to: [testEmailA, testEmailB],
