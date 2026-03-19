@@ -19,9 +19,19 @@ interface SandboxSession {
   createdAt: string;
   orgId: string;
   orgName: string;
+  orgMetadata: string | null;
   firmId: string;
   website: string | null;
   enrichmentStatus: string | null;
+}
+
+function getSessionMode(s: SandboxSession): "pre-onboard" | "post-onboard" {
+  try {
+    const meta = typeof s.orgMetadata === "string" ? JSON.parse(s.orgMetadata) : s.orgMetadata;
+    return meta?.mode === "pre-onboarded" ? "post-onboard" : "pre-onboard";
+  } catch {
+    return "pre-onboard";
+  }
 }
 
 export default function SandboxPage() {
@@ -336,6 +346,7 @@ export default function SandboxPage() {
                 <tr className="border-b border-cos-border text-left">
                   <th className="pb-2 font-medium text-cos-slate-dim">Name</th>
                   <th className="pb-2 font-medium text-cos-slate-dim">Domain</th>
+                  <th className="pb-2 font-medium text-cos-slate-dim">Mode</th>
                   <th className="pb-2 font-medium text-cos-slate-dim">Status</th>
                   <th className="pb-2 font-medium text-cos-slate-dim">Created</th>
                   <th className="pb-2 font-medium text-cos-slate-dim text-right">Actions</th>
@@ -350,6 +361,17 @@ export default function SandboxPage() {
                     </td>
                     <td className="py-3 text-cos-slate">
                       {s.website ? s.website.replace("https://", "") : "(none)"}
+                    </td>
+                    <td className="py-3">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          getSessionMode(s) === "post-onboard"
+                            ? "bg-cos-electric/10 text-cos-electric"
+                            : "bg-cos-warm/10 text-cos-warm"
+                        }`}
+                      >
+                        {getSessionMode(s) === "post-onboard" ? "Post" : "Pre"}
+                      </span>
                     </td>
                     <td className="py-3">
                       <span

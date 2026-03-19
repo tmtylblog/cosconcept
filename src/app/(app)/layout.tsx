@@ -394,17 +394,34 @@ function AppLayoutInner({
       domainToEnrich = emailDomain;
     }
 
-    // If enrichment is already done with company data, check if the email domain
-    // is an alias for the enriched domain (e.g., chameleon.co → chameleoncollective.com)
+    // If enrichment is already done with company data, check domain match
     if (enrichmentStatus === "done" && hasCompanyData) {
-      // Already enriched — domains might differ but that's fine (alias case)
-      enrichTriggeredRef.current = session.user.email;
-      if (enrichedDomain && enrichedDomain !== domainToEnrich) {
+      // For sandbox users: if enriched domain is wrong (stale data from admin session),
+      // force re-enrichment with the correct sandbox domain
+      if (isSandboxEmail && enrichedDomain && enrichedDomain !== domainToEnrich) {
         console.log(
-          `[Layout] Skipping auto-enrich: target domain (${domainToEnrich}) differs from enriched domain (${enrichedDomain}), likely an alias`
+          `[Layout] Sandbox: stale enrichment for ${enrichedDomain}, forcing re-enrich for ${domainToEnrich}`
         );
+        // Clear stale enrichment storage so the hook starts fresh
+        try {
+          Object.keys(localStorage).forEach((key) => {
+            if (key.startsWith("cos_enrichment") || key === "cos_guest_domain") localStorage.removeItem(key);
+          });
+          Object.keys(sessionStorage).forEach((key) => {
+            if (key.startsWith("cos_enrichment") || key === "cos_guest_domain") sessionStorage.removeItem(key);
+          });
+        } catch { /* ignore */ }
+        // Don't return — fall through to trigger enrichment below
+      } else {
+        // Normal user: already enriched, domains match or alias case
+        enrichTriggeredRef.current = session.user.email;
+        if (enrichedDomain && enrichedDomain !== domainToEnrich) {
+          console.log(
+            `[Layout] Skipping auto-enrich: target domain (${domainToEnrich}) differs from enriched domain (${enrichedDomain}), likely an alias`
+          );
+        }
+        return;
       }
-      return;
     }
 
     // If enrichment is loading, wait for it

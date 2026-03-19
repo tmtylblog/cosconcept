@@ -71,7 +71,11 @@ export async function POST(req: NextRequest) {
       .limit(1);
     const domain = firm?.website?.replace(/^https?:\/\//, "").replace(/\/+$/, "") || undefined;
 
-    const token = await createToken(userId, membership.orgId, domain);
+    const token = await createToken({
+      userId,
+      orgId: membership.orgId,
+      domain,
+    });
     const loginUrl = `/api/sandbox/enter?token=${token}`;
 
     return NextResponse.json({ success: true, loginUrl });

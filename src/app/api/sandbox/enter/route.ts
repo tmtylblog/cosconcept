@@ -48,11 +48,13 @@ export async function GET(req: NextRequest) {
       updatedAt: now,
     });
 
-    // Redirect to dashboard with session cookies.
-    // In production (HTTPS), Better Auth uses "__Secure-" prefixed cookie names.
-    // We set BOTH prefixed and unprefixed to ensure the session is recognized.
+    // Redirect with session cookies.
+    // Post-onboard → /discover (onboarding already complete)
+    // Pre-onboard → /dashboard (full onboarding flow)
     const isProduction = process.env.NODE_ENV === "production";
-    const redirectUrl = new URL("/dashboard", req.url);
+    const isPostOnboard = entry.mode === "pre-onboarded";
+    const redirectPath = isPostOnboard ? "/discover" : "/dashboard";
+    const redirectUrl = new URL(redirectPath, req.url);
     // Pass sandbox firm domain so auto-enrich uses the right domain (not the email domain)
     if (entry.domain) {
       redirectUrl.searchParams.set("sandbox_domain", entry.domain);
@@ -102,6 +104,18 @@ export async function GET(req: NextRequest) {
         sameSite: "lax",
         path: "/",
         expires: expiresAt,
+      });
+    }
+
+    // Set sandbox domain cookie so the layout auto-enrich uses the correct domain
+    // (not the joincollectiveos.com email domain). Persists across redirects.
+    if (entry.domain) {
+      response.cookies.set("cos_sandbox_domain", entry.domain, {
+        httpOnly: false,
+        secure: isProduction,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 86400, // 24 hours
       });
     }
 

@@ -33,7 +33,12 @@ export async function POST(req: NextRequest) {
 
     const result = await createSandboxUser({ name, domain, mode });
     const normalizedDomain = domain?.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-    const token = await createToken(result.userId, result.orgId, normalizedDomain);
+    const token = await createToken({
+      userId: result.userId,
+      orgId: result.orgId,
+      domain: normalizedDomain,
+      mode,
+    });
     const loginUrl = `/api/sandbox/enter?token=${token}`;
 
     return NextResponse.json({
