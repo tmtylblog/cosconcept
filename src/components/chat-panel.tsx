@@ -1017,6 +1017,31 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     return () => clearTimeout(timer);
   }, [messages, status, isGuest, sendMessage]);
 
+  // ─── Sandbox pre-onboard: auto-submit domain as first message ──
+  // When a sandbox user lands on pre-onboard mode, auto-send the domain
+  // so enrichment starts immediately without them having to type it.
+  const sandboxAutoSentRef = useRef(false);
+  useEffect(() => {
+    if (sandboxAutoSentRef.current) return;
+    if (status !== "ready") return;
+    // Only for authenticated sandbox users in pre-onboard mode
+    if (isGuest || !isOnboarding) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const sandboxDomain = params.get("sandbox_domain");
+    const sandboxMode = params.get("sandbox_mode");
+    if (!sandboxDomain || sandboxMode !== "pre") return;
+
+    // Wait for Ossy's greeting to arrive first
+    if (messages.length < 1) return;
+
+    sandboxAutoSentRef.current = true;
+    const timer = setTimeout(() => {
+      sendMessage({ text: sandboxDomain });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [status, isGuest, isOnboarding, messages.length, sendMessage]);
+
   // Save guest messages for migration after auth
   useEffect(() => {
     if (isGuest && messages.length > 1) {
