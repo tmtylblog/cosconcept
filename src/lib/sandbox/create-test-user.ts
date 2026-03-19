@@ -146,7 +146,10 @@ export async function createSandboxUser(opts: {
   if (isPreOnboarded && !enrichmentData) {
     enrichmentData = {
       companyData: { name: domain ? `Sandbox (${domain})` : name },
-      classification: { categories: ["Technology Consulting"] },
+      classification: {
+        categories: ["Technology Consulting"],
+        firmNature: "service_provider",
+      },
       domain: domain || null,
     };
   }

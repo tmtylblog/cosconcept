@@ -375,9 +375,18 @@ function AppLayoutInner({
 
     if (isSandboxEmail) {
       // Check URL param first, then cookie
-      const urlDomain = new URLSearchParams(window.location.search).get("sandbox_domain");
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlDomain = urlParams.get("sandbox_domain");
+      const sandboxMode = urlParams.get("sandbox_mode");
       const cookieDomain = document.cookie.match(/cos_sandbox_domain=([^;]+)/)?.[1];
       const sandboxDomain = urlDomain || cookieDomain;
+
+      // Post-onboard sandbox: skip enrichment entirely — data is already in the DB
+      if (sandboxMode === "post") {
+        enrichTriggeredRef.current = session.user.email;
+        return;
+      }
+
       if (!sandboxDomain) {
         // No domain specified for sandbox user — skip auto-enrich
         enrichTriggeredRef.current = session.user.email;
