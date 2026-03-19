@@ -26,6 +26,7 @@ import {
   FileX,
   FlaskConical,
   AlertTriangle,
+  FileCode2,
 } from "lucide-react";
 import type { AdminSection } from "@/lib/admin/permissions";
 
@@ -82,7 +83,6 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { href: "/admin/onboarding", label: "Onboarding", icon: TrendingUp },
       { href: "/admin/opportunities", label: "Opportunities", icon: Lightbulb },
       { href: "/admin/calls", label: "Call Transcripts", icon: Phone },
-      { href: "/admin/calls/settings", label: "Call Settings", icon: Settings },
     ],
   },
   {
@@ -119,6 +119,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { href: "/admin/enrichment", label: "Enrichment", icon: Sparkles },
       { href: "/admin/data-quality", label: "Data Quality", icon: AlertTriangle },
       { href: "/admin/enrichment/poor-results", label: "Poor CS Results", icon: FileX },
+      { href: "/admin/prompts", label: "Key Prompts", icon: FileCode2 },
       { href: "/admin/sandbox", label: "Sandbox", icon: FlaskConical },
     ],
   },
