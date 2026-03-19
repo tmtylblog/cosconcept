@@ -25,8 +25,8 @@ function uid(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Recall.ai status codes that mean the call is fully done
-const DONE_STATUSES = new Set(["done", "call_ended", "recording_done"]);
+// Recall.ai events that signal the call is fully done
+const DONE_EVENTS = new Set(["bot.done", "bot.call_ended"]);
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -39,25 +39,22 @@ export async function POST(req: NextRequest) {
   const event = body.event as string;
   const data = body.data as Record<string, unknown> | undefined;
 
-  console.log("[Recall webhook] Event:", event, "Status:", (data?.status as Record<string, unknown>)?.code);
+  // Log every event so we can see the payload structure
+  console.log("[Recall webhook] Event:", event, JSON.stringify(data, null, 2));
 
-  // Only process status change events
-  if (event !== "bot.status_change") {
+  // Skip events we don't care about
+  if (!DONE_EVENTS.has(event)) {
     return NextResponse.json({ ok: true, skipped: event });
   }
 
-  const status = data?.status as Record<string, unknown> | undefined;
-  const statusCode = status?.code as string | undefined;
-  const botId = data?.bot_id as string | undefined;
+  // bot_id can be at data.bot_id or data.bot.id depending on Recall.ai version
+  const botId =
+    (data?.bot_id as string | undefined) ??
+    ((data?.bot as Record<string, unknown> | undefined)?.id as string | undefined);
 
   if (!botId) {
+    console.error("[Recall webhook] Missing bot_id in payload", data);
     return NextResponse.json({ error: "Missing bot_id" }, { status: 400 });
-  }
-
-  // Only act when call is fully done
-  if (!statusCode || !DONE_STATUSES.has(statusCode)) {
-    console.log(`[Recall webhook] Bot ${botId} status: ${statusCode} — waiting for done`);
-    return NextResponse.json({ ok: true, status: statusCode });
   }
 
   console.log(`[Recall webhook] Bot ${botId} done — fetching transcript`);
