@@ -61,50 +61,49 @@ export async function GET(req: NextRequest) {
     }
     redirectUrl.searchParams.set("sandbox_mode", isPostOnboard ? "post" : "pre");
 
-    const response = NextResponse.redirect(redirectUrl);
+    // Build the redirect response manually (don't use NextResponse.redirect
+    // which can conflict with manually appended Set-Cookie headers)
+    const response = new Response(null, {
+      status: 302,
+      headers: { Location: redirectUrl.toString() },
+    });
 
-    // Forward ALL Set-Cookie headers from Better Auth's response
-    // This includes the signed session token + session data cache
-    const setCookieHeaders = signInResponse.headers.getSetCookie?.()
-      ?? (signInResponse.headers as unknown as { raw?: () => Record<string, string[]> }).raw?.()?.["set-cookie"]
-      ?? [];
+    // Forward ALL Set-Cookie headers from Better Auth's sign-in response
+    // This includes the HMAC-signed session token + session data cache
+    const setCookieHeaders = signInResponse.headers.getSetCookie?.() ?? [];
     for (const cookie of setCookieHeaders) {
       response.headers.append("Set-Cookie", cookie);
     }
 
-    // Also set the active organization cookie (Better Auth doesn't do this)
-    const isProduction = process.env.NODE_ENV === "production";
-    const orgCookieName = isProduction
-      ? "__Secure-better-auth.active_organization"
-      : "better-auth.active_organization";
+    console.log(`[Sandbox] Enter: forwarding ${setCookieHeaders.length} cookies from Better Auth sign-in`);
 
-    response.cookies.set(orgCookieName, entry.orgId, {
-      httpOnly: false,
-      secure: isProduction,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 30 * 24 * 60 * 60, // 30 days
-    });
+    // Set the active organization cookie (Better Auth doesn't set this)
+    const isProduction = process.env.NODE_ENV === "production";
+    const maxAge = 30 * 24 * 60 * 60; // 30 days
 
     if (isProduction) {
-      response.cookies.set("better-auth.active_organization", entry.orgId, {
-        httpOnly: false,
-        secure: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 30 * 24 * 60 * 60,
-      });
+      response.headers.append(
+        "Set-Cookie",
+        `__Secure-better-auth.active_organization=${entry.orgId}; Path=/; Max-Age=${maxAge}; SameSite=Lax; Secure`
+      );
+      response.headers.append(
+        "Set-Cookie",
+        `better-auth.active_organization=${entry.orgId}; Path=/; Max-Age=${maxAge}; SameSite=Lax; Secure`
+      );
+    } else {
+      response.headers.append(
+        "Set-Cookie",
+        `better-auth.active_organization=${entry.orgId}; Path=/; Max-Age=${maxAge}; SameSite=Lax`
+      );
     }
 
-    // Set sandbox domain cookie for the layout's auto-enrich
+    // Set sandbox domain cookie so the layout auto-enrich uses the correct domain
     if (entry.domain) {
-      response.cookies.set("cos_sandbox_domain", entry.domain, {
-        httpOnly: false,
-        secure: isProduction,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 86400, // 24 hours
-      });
+      const secureSuffix = isProduction ? "; Secure" : "";
+      response.headers.append(
+        "Set-Cookie",
+        `cos_sandbox_domain=${entry.domain}; Path=/; Max-Age=86400; SameSite=Lax${secureSuffix}`
+      );
     }
 
     return response;
