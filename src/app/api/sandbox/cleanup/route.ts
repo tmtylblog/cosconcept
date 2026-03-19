@@ -1,8 +1,7 @@
 /**
  * POST /api/sandbox/cleanup
  *
- * Bulk deletes all sandbox test users via auth.api.removeUser().
- * Also cleans up orphaned sandbox orgs.
+ * Bulk deletes all sandbox test users and their orgs via direct SQL.
  * Auth: superadmin session required.
  */
 
@@ -27,42 +26,37 @@ export async function POST() {
   }
 
   try {
-    // Find all sandbox users
-    const usersResult = await db.execute(sql`
-      SELECT id, email FROM "users"
-      WHERE email LIKE 'support+sandbox-%@joincollectiveos.com'
+    // Delete partner_preferences for sandbox firms first (not FK-cascaded from org)
+    const prefResult = await db.execute(sql`
+      DELETE FROM "partner_preferences"
+      WHERE firm_id IN (
+        SELECT sf.id FROM "service_firms" sf
+        JOIN "organizations" o ON o.id = sf.organization_id
+        WHERE o.metadata::text LIKE '%"sandbox"%'
+      )
+      RETURNING firm_id
     `);
 
-    const sandboxUsers = usersResult.rows as { id: string; email: string }[];
+    // Delete all sandbox users — cascades to sessions, accounts, members via FK
+    const userResult = await db.execute(sql`
+      DELETE FROM "users"
+      WHERE email LIKE 'support+sandbox-%@joincollectiveos.com'
+      RETURNING id
+    `);
 
-    let deleted = 0;
-    const errors: { userId: string; email: string; error: string }[] = [];
-
-    // Delete each user via Better Auth (cascades to sessions, accounts, members)
-    for (const user of sandboxUsers) {
-      try {
-        await auth.api.removeUser({ body: { userId: user.id } });
-        deleted++;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        errors.push({ userId: user.id, email: user.email, error: message });
-      }
-    }
-
-    // Clean up orphaned sandbox orgs (orgs with sandbox metadata and no members)
-    const orphanResult = await db.execute(sql`
+    // Clean up orphaned sandbox orgs (now memberless) — cascades to service_firms, subscriptions
+    const orgResult = await db.execute(sql`
       DELETE FROM "organizations"
-      WHERE metadata::text LIKE '%"source":"sandbox"%'
+      WHERE metadata::text LIKE '%"sandbox"%'
         AND id NOT IN (SELECT DISTINCT organization_id FROM "members")
       RETURNING id
     `);
 
     return NextResponse.json({
       success: true,
-      deleted,
-      orphanedOrgsDeleted: orphanResult.rows.length,
-      errors: errors.length > 0 ? errors : undefined,
-      totalFound: sandboxUsers.length,
+      deleted: userResult.rows.length,
+      orphanedOrgsDeleted: orgResult.rows.length,
+      preferencesDeleted: prefResult.rows.length,
     });
   } catch (error) {
     console.error("[Sandbox] Cleanup error:", error);
