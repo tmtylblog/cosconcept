@@ -33,7 +33,14 @@ export default async function AdminLayout({
 
   const ALLOWED_ROLES = ["superadmin", "admin", "growth_ops", "customer_success"];
   if (!ALLOWED_ROLES.includes(session.user.role ?? "")) {
-    redirect("/dashboard");
+    // If a sandbox session is active, sign out so admin can reclaim their session
+    const isSandbox = (session.user.email ?? "").includes("+sandbox");
+    if (isSandbox) {
+      try {
+        await auth.api.signOut({ headers: headersList });
+      } catch { /* best effort */ }
+    }
+    redirect("/login");
   }
 
   const role = session.user.role ?? "";
