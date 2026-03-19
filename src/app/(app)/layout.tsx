@@ -364,6 +364,7 @@ function AppLayoutInner({
   // Stable primitive deps for the auto-enrich effect
   const hasCompanyData = !!enrichmentResult?.companyData;
   const enrichedDomain = enrichmentResult?.domain;
+  const hasRealServices = !!(enrichmentResult?.extracted?.services?.length);
 
   useEffect(() => {
     if (!session?.user?.email) return;
@@ -381,11 +382,9 @@ function AppLayoutInner({
       const cookieDomain = document.cookie.match(/cos_sandbox_domain=([^;]+)/)?.[1];
       const sandboxDomain = urlDomain || cookieDomain;
 
-      // Post-onboard sandbox: skip enrichment entirely — data is already in the DB
-      if (sandboxMode === "post") {
-        enrichTriggeredRef.current = session.user.email;
-        return;
-      }
+      // Post-onboard sandbox: still run real enrichment so the firm page
+      // populates with actual services, team, case studies, etc.
+      // The DB has minimal placeholder data — enrichment will overwrite it.
 
       if (!sandboxDomain) {
         // No domain specified for sandbox user — skip auto-enrich
@@ -405,11 +404,17 @@ function AppLayoutInner({
 
     // If enrichment is already done with company data, check domain match
     if (enrichmentStatus === "done" && hasCompanyData) {
-      // For sandbox users: if enriched domain is wrong (stale data from admin session),
-      // force re-enrichment with the correct sandbox domain
-      if (isSandboxEmail && enrichedDomain && enrichedDomain !== domainToEnrich) {
+      // For sandbox users: force re-enrichment if domain is wrong OR if data is placeholder
+      const sandboxNeedsRealEnrichment = isSandboxEmail && (
+        // Stale domain from admin session
+        (enrichedDomain && enrichedDomain !== domainToEnrich) ||
+        // Post-onboard placeholder data (no real services/clients extracted)
+        (sandboxMode === "post" && !hasRealServices)
+      );
+
+      if (sandboxNeedsRealEnrichment) {
         console.log(
-          `[Layout] Sandbox: stale enrichment for ${enrichedDomain}, forcing re-enrich for ${domainToEnrich}`
+          `[Layout] Sandbox: forcing real enrichment for ${domainToEnrich} (placeholder or stale data)`
         );
         // Clear stale enrichment storage so the hook starts fresh
         try {
@@ -451,7 +456,7 @@ function AppLayoutInner({
       );
       triggerEnrichmentRef.current(domainToEnrich, isGapFill);
     }
-  }, [session?.user?.email, enrichmentStatus, hasCompanyData, enrichedDomain]);
+  }, [session?.user?.email, enrichmentStatus, hasCompanyData, enrichedDomain, hasRealServices]);
 
   // ─── Guest-to-auth data migration ──────────────────────────
   const migrationDoneRef = useRef(false);
