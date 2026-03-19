@@ -368,12 +368,12 @@ export function ExpertDetailBlock({
                       for {cs.clientName}
                     </p>
                   )}
-                  {cs.title && (
+                  {cs.title && cs.title !== "Manual Input" && (
                     <p className="text-[11px] font-medium text-cos-midnight mb-1">
                       {cs.title}
                     </p>
                   )}
-                  {!cs.title && !cs.clientName && cs.firmName && (
+                  {(!cs.title || cs.title === "Manual Input") && !cs.clientName && cs.firmName && (
                     <p className="mb-1 text-[11px] text-cos-slate">by {cs.firmName}</p>
                   )}
                   {cs.summary ? (

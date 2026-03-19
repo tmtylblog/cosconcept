@@ -1145,13 +1145,19 @@ async function caseStudyFilter(
       size([(p:Person)-[:CONTRIBUTED_TO]->(cs) | 1]) AS contributorCount
     RETURN
       coalesce(cs.id, cs.legacyId) AS entityId,
-      coalesce(cs.title, cs.summary, 'Case Study') AS displayName,
+      coalesce(
+        CASE WHEN cs.title IS NOT NULL AND cs.title <> 'Manual Input' THEN cs.title ELSE null END,
+        CASE WHEN cl.name IS NOT NULL THEN 'Project for ' + cl.name ELSE null END,
+        CASE WHEN cs.clientName IS NOT NULL THEN 'Project for ' + cs.clientName ELSE null END,
+        cs.summary,
+        'Case Study'
+      ) AS displayName,
       sf.name AS firmName,
       skills,
       industries,
       contributorCount,
       cs.summary AS summary,
-      cs.sourceUrl AS sourceUrl,
+      CASE WHEN cs.sourceUrl IS NOT NULL AND NOT cs.sourceUrl STARTS WITH 'manual:' AND NOT cs.sourceUrl STARTS WITH 'uploaded:' THEN cs.sourceUrl ELSE null END AS sourceUrl,
       coalesce(cl.name, cs.clientName) AS clientName
     LIMIT $limit
   `;

@@ -89,7 +89,7 @@ export function CaseStudyDetailBlock({
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="font-heading text-base font-bold text-cos-midnight truncate">
-            {data.title ?? displayName}
+            {data.title && data.title !== "Manual Input" ? data.title : (data.clientName ? `Project for ${data.clientName}` : displayName)}
           </h3>
           <div className="flex items-center gap-2 mt-0.5">
             {data.clientName && (
@@ -97,7 +97,7 @@ export function CaseStudyDetailBlock({
                 for {data.clientName}
               </span>
             )}
-            {data.sourceUrl && (
+            {data.sourceUrl && !data.sourceUrl.startsWith("manual:") && !data.sourceUrl.startsWith("uploaded:") && (
               <a
                 href={data.sourceUrl}
                 target="_blank"

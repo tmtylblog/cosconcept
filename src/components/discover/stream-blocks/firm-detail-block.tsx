@@ -86,6 +86,15 @@ function isExternalUrl(url: string | null | undefined): url is string {
   return !url.startsWith("manual:") && !url.startsWith("uploaded:");
 }
 
+/** Clean case study title — replace "Manual Input" with client name or null */
+function cleanCsTitle(title: string | null | undefined, clientName?: string | null): string | null {
+  if (!title) return null;
+  if (title === "Manual Input" || title.toLowerCase() === "manual input") {
+    return clientName ? `Project for ${clientName}` : null;
+  }
+  return title;
+}
+
 /** Generate a synthetic summary when a case study has no summary */
 function synthesizeCaseStudySummary(cs: { skills: string[]; industries: string[] }): string {
   const parts: string[] = [];
@@ -534,9 +543,9 @@ function OverviewTab({
                       for {cs.clientName}
                     </p>
                   )}
-                  {cs.title && (
+                  {cleanCsTitle(cs.title, cs.clientName) && (
                     <p className="text-[11px] font-medium text-cos-midnight mb-1">
-                      {cs.title}
+                      {cleanCsTitle(cs.title, cs.clientName)}
                     </p>
                   )}
                   <p className="text-xs text-cos-midnight/80 leading-relaxed line-clamp-2">
@@ -698,9 +707,9 @@ function CaseStudiesTab({
                 for {cs.clientName}
               </p>
             )}
-            {cs.title && (
+            {cleanCsTitle(cs.title, cs.clientName) && (
               <p className="text-[11px] font-medium text-cos-midnight mb-1">
-                {cs.title}
+                {cleanCsTitle(cs.title, cs.clientName)}
               </p>
             )}
             <p className="text-xs text-cos-midnight/80 leading-relaxed line-clamp-3">
