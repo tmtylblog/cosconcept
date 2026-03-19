@@ -28,6 +28,8 @@ import {
   AlertTriangle,
   FileCode2,
   History,
+  BookOpen,
+  Presentation,
 } from "lucide-react";
 import type { AdminSection } from "@/lib/admin/permissions";
 
@@ -121,7 +123,9 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { href: "/admin/data-quality", label: "Data Quality", icon: AlertTriangle },
       { href: "/admin/enrichment/poor-results", label: "Poor CS Results", icon: FileX },
       { href: "/admin/prompts", label: "Key Prompts", icon: FileCode2 },
+      { href: "/admin/docs", label: "Docs", icon: BookOpen },
       { href: "/admin/feature-log", label: "Feature Log", icon: History },
+      { href: "/admin/product-overview", label: "Product Overview", icon: Presentation },
       { href: "/admin/sandbox", label: "Sandbox", icon: FlaskConical },
     ],
   },
