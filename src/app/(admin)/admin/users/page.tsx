@@ -85,10 +85,12 @@ export default function AdminUsersPage() {
   // Add staff modal
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [addEmail, setAddEmail] = useState("");
+  const [addName, setAddName] = useState("");
   const [addRole, setAddRole] = useState("admin");
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState("");
   const [addSuccess, setAddSuccess] = useState("");
+  const [addTempPassword, setAddTempPassword] = useState("");
 
   useEffect(() => {
     fetch("/api/admin/staff")
@@ -144,22 +146,24 @@ export default function AdminUsersPage() {
     setAddLoading(true);
     setAddError("");
     setAddSuccess("");
+    setAddTempPassword("");
     try {
-      // First find the user by email in ALL users (not just staff)
-      const res = await fetch(`/api/admin/customers?search=${encodeURIComponent(addEmail.trim())}&limit=200`);
+      const res = await fetch("/api/admin/staff/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: addEmail.trim(), name: addName.trim() || undefined, role: addRole }),
+      });
       const data = await res.json();
-      const allUsers = [...(data.staff ?? []), ...(data.users ?? [])];
-      const match = allUsers.find((u: { email: string }) => u.email.toLowerCase() === addEmail.trim().toLowerCase());
+      if (!res.ok) { setAddError(data.error || "Failed"); return; }
 
-      if (!match) {
-        setAddError("No user found with that email. They need to sign up first.");
-        return;
+      if (data.action === "created") {
+        setAddSuccess(`Account created for ${data.user.name || data.user.email} as ${addRole}`);
+        setAddTempPassword(data.tempPassword);
+      } else {
+        setAddSuccess(`${data.user.name || data.user.email} promoted to ${addRole}`);
       }
 
-      // Promote them
-      await authClient.admin.setRole({ userId: match.id, role: addRole as "admin" | "user" });
-      setAddSuccess(`${match.name || match.email} promoted to ${addRole}`);
-      // Refresh the list
+      // Refresh the staff list
       const staffRes = await fetch("/api/admin/staff");
       const staffData = await staffRes.json();
       if (staffData.staff) {
@@ -168,7 +172,6 @@ export default function AdminUsersPage() {
           createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "",
         })));
       }
-      setTimeout(() => { setShowAddStaff(false); setAddEmail(""); setAddRole("admin"); setAddSuccess(""); }, 1500);
     } catch (err) {
       setAddError(String(err));
     } finally {
@@ -608,22 +611,46 @@ export default function AdminUsersPage() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
             <h2 className="text-lg font-semibold text-cos-midnight mb-1">Add Staff Member</h2>
             <p className="text-xs text-cos-slate mb-4">
-              Enter the email of an existing user to grant them admin access.
+              Add a new admin user. If they don&apos;t have an account yet, one will be created automatically.
             </p>
 
             {addSuccess ? (
-              <div className="rounded-cos-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700 mb-4">
-                {addSuccess}
+              <div className="space-y-3">
+                <div className="rounded-cos-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700">
+                  {addSuccess}
+                </div>
+                {addTempPassword && (
+                  <div className="rounded-cos-lg bg-amber-50 border border-amber-200 p-3">
+                    <p className="text-xs font-semibold text-amber-800 mb-1">Temporary Password</p>
+                    <p className="text-sm font-mono text-amber-900 select-all">{addTempPassword}</p>
+                    <p className="text-[10px] text-amber-600 mt-1">Share this with the user so they can log in at /admin-login. They should change it after first login.</p>
+                  </div>
+                )}
+                <div className="flex justify-end">
+                  <Button size="sm" onClick={() => { setShowAddStaff(false); setAddEmail(""); setAddName(""); setAddRole("admin"); setAddSuccess(""); setAddTempPassword(""); }}>
+                    Done
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-medium text-cos-slate mb-1 block">User Email</label>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">Email</label>
                   <input
                     type="email"
                     value={addEmail}
                     onChange={(e) => { setAddEmail(e.target.value); setAddError(""); }}
                     placeholder="e.g. joseph@joincollectiveos.com"
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">Full Name</label>
+                  <input
+                    type="text"
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    placeholder="e.g. Joseph Gustilo"
                     className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
                   />
                 </div>
@@ -646,7 +673,7 @@ export default function AdminUsersPage() {
                   </div>
                 )}
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" size="sm" onClick={() => { setShowAddStaff(false); setAddEmail(""); setAddError(""); }}>
+                  <Button variant="outline" size="sm" onClick={() => { setShowAddStaff(false); setAddEmail(""); setAddName(""); setAddError(""); }}>
                     Cancel
                   </Button>
                   <Button size="sm" onClick={handleAddStaff} disabled={addLoading || !addEmail.trim()}>
