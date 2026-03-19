@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
     const token = await createToken({
       userId,
       orgId: membership.orgId,
+      email: user.email,
       domain,
     });
     const loginUrl = `/api/sandbox/enter?token=${token}`;

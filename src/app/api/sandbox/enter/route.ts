@@ -1,18 +1,18 @@
 /**
  * GET /api/sandbox/enter?token=xxx
  *
- * Consumes a one-time sandbox login token, creates a DB session,
- * sets session cookies, and redirects to /dashboard.
+ * Consumes a one-time sandbox login token, signs in via Better Auth's
+ * internal sign-in API (which handles session creation + signed cookies),
+ * and redirects to the app.
  *
  * This route is in PUBLIC_EXCEPTIONS in middleware.ts because
  * the browser needs to access it without an existing session.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
-import { db } from "@/lib/db";
-import { sessions } from "@/lib/db/schema";
 import { consumeToken } from "@/lib/sandbox/token-store";
+import { SANDBOX_PASSWORD } from "@/lib/sandbox/create-test-user";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -31,71 +31,59 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Create a session directly in the DB (same pattern as auto-login)
-    const sessionToken = crypto.randomBytes(32).toString("hex");
-    const sessionId = crypto.randomBytes(16).toString("hex");
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-    const now = new Date();
-
-    await db.insert(sessions).values({
-      id: sessionId,
-      userId: entry.userId,
-      token: sessionToken,
-      expiresAt,
-      ipAddress: req.headers.get("x-forwarded-for") || "unknown",
-      userAgent: "sandbox-session",
-      createdAt: now,
-      updatedAt: now,
+    // Use Better Auth's internal sign-in API to create a proper session
+    // with signed cookies. This is the only reliable way to get the cookie
+    // format right (HMAC-signed, session data cache cookie, etc.).
+    const signInResponse = await auth.api.signInEmail({
+      body: {
+        email: entry.email,
+        password: SANDBOX_PASSWORD,
+      },
+      asResponse: true,
+      headers: req.headers,
     });
 
-    // Redirect with session cookies.
-    // Post-onboard → /discover (onboarding already complete)
-    // Pre-onboard → /dashboard (full onboarding flow)
-    const isProduction = process.env.NODE_ENV === "production";
+    if (!signInResponse.ok) {
+      const errText = await signInResponse.text();
+      console.error("[Sandbox] Better Auth sign-in failed:", signInResponse.status, errText);
+      return NextResponse.json(
+        { error: `Sign-in failed: ${errText}` },
+        { status: 500 }
+      );
+    }
+
+    // Build redirect URL
     const isPostOnboard = entry.mode === "pre-onboarded";
     const redirectPath = isPostOnboard ? "/discover" : "/dashboard";
     const redirectUrl = new URL(redirectPath, req.url);
-    // Pass sandbox info so the client can identify the session type and enrich the right domain
     if (entry.domain) {
       redirectUrl.searchParams.set("sandbox_domain", entry.domain);
     }
     redirectUrl.searchParams.set("sandbox_mode", isPostOnboard ? "post" : "pre");
+
     const response = NextResponse.redirect(redirectUrl);
 
-    const sessionCookieName = isProduction
-      ? "__Secure-better-auth.session_token"
-      : "better-auth.session_token";
+    // Forward ALL Set-Cookie headers from Better Auth's response
+    // This includes the signed session token + session data cache
+    const setCookieHeaders = signInResponse.headers.getSetCookie?.()
+      ?? (signInResponse.headers as unknown as { raw?: () => Record<string, string[]> }).raw?.()?.["set-cookie"]
+      ?? [];
+    for (const cookie of setCookieHeaders) {
+      response.headers.append("Set-Cookie", cookie);
+    }
+
+    // Also set the active organization cookie (Better Auth doesn't do this)
+    const isProduction = process.env.NODE_ENV === "production";
     const orgCookieName = isProduction
       ? "__Secure-better-auth.active_organization"
       : "better-auth.active_organization";
 
-    // Set session cookie
-    response.cookies.set(sessionCookieName, sessionToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: "lax",
-      path: "/",
-      expires: expiresAt,
-    });
-
-    // Also set the unprefixed version in production (some code checks both)
-    if (isProduction) {
-      response.cookies.set("better-auth.session_token", sessionToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-        path: "/",
-        expires: expiresAt,
-      });
-    }
-
-    // Set active organization cookie
     response.cookies.set(orgCookieName, entry.orgId, {
       httpOnly: false,
       secure: isProduction,
       sameSite: "lax",
       path: "/",
-      expires: expiresAt,
+      maxAge: 30 * 24 * 60 * 60, // 30 days
     });
 
     if (isProduction) {
@@ -104,12 +92,11 @@ export async function GET(req: NextRequest) {
         secure: true,
         sameSite: "lax",
         path: "/",
-        expires: expiresAt,
+        maxAge: 30 * 24 * 60 * 60,
       });
     }
 
-    // Set sandbox domain cookie so the layout auto-enrich uses the correct domain
-    // (not the joincollectiveos.com email domain). Persists across redirects.
+    // Set sandbox domain cookie for the layout's auto-enrich
     if (entry.domain) {
       response.cookies.set("cos_sandbox_domain", entry.domain, {
         httpOnly: false,

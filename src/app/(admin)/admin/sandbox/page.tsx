@@ -151,7 +151,8 @@ export default function SandboxPage() {
         alert(`Delete failed: ${err.error}`);
         return;
       }
-      setSessions((prev) => prev.filter((s) => s.userId !== userId));
+      // Refresh from server to confirm deletion
+      await fetchSessions();
     } catch (err) {
       alert(`Delete failed: ${err}`);
     } finally {

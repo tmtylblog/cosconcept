@@ -19,6 +19,10 @@ import {
   enrichmentCache,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { hashPassword } from "better-auth/crypto";
+
+/** Fixed password for all sandbox users — used by enter route to sign in via Better Auth */
+export const SANDBOX_PASSWORD = "sandbox-test-session-2026";
 
 const RANDOM_ADJECTIVES = [
   "Bright", "Swift", "Bold", "Keen", "Agile",
@@ -70,14 +74,15 @@ export async function createSandboxUser(opts: {
     updatedAt: now,
   });
 
-  // 2. Create credential account (no password — login via token only)
+  // 2. Create credential account with known password (used by enter route to sign in via Better Auth)
   const accountId = crypto.randomBytes(16).toString("hex");
+  const hashedPassword = await hashPassword(SANDBOX_PASSWORD);
   await db.insert(accounts).values({
     id: accountId,
     userId,
     accountId: email,
     providerId: "credential",
-    password: null,
+    password: hashedPassword,
     createdAt: now,
     updatedAt: now,
   });

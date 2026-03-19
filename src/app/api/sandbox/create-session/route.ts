@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
     const token = await createToken({
       userId: result.userId,
       orgId: result.orgId,
+      email: result.email,
       domain: normalizedDomain,
       mode,
     });
