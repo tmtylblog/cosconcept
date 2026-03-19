@@ -37,6 +37,8 @@ interface QueueDealInput {
   messageText?: string;
   sentimentScore?: number;
   sentiment?: string;
+  linkedinAccountId?: string;
+  outreachEmailAccount?: string;
 }
 
 /** Queue a detected response for admin review */
@@ -79,6 +81,8 @@ export async function queueDealFromResponse(input: QueueDealInput): Promise<{ qu
     messageText: input.messageText ?? null,
     sentiment: input.sentiment ?? null,
     sentimentScore: input.sentimentScore ?? null,
+    linkedinAccountId: input.linkedinAccountId ?? null,
+    outreachEmailAccount: input.outreachEmailAccount ?? null,
   });
 
   return { queueId, isNew: true };
@@ -193,6 +197,8 @@ export async function approveDealFromQueue(
     sourceCampaignId: queueItem.sourceCampaignId,
     sourceCampaignName: queueItem.sourceCampaignName,
     sourceMessageId: queueItem.sourceMessageId,
+    linkedinAccountId: queueItem.linkedinAccountId ?? null,
+    outreachEmailAccount: queueItem.outreachEmailAccount ?? null,
     sentimentScore: queueItem.sentimentScore,
     priority: "normal",
     lastActivityAt: new Date(),

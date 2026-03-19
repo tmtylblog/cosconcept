@@ -2052,6 +2052,8 @@ export const acqDeals = pgTable("acq_deals", {
   sourceCampaignId: text("source_campaign_id"),
   sourceCampaignName: text("source_campaign_name"),
   sourceMessageId: text("source_message_id"),
+  linkedinAccountId: text("linkedin_account_id").references(() => growthOpsLinkedInAccounts.id, { onDelete: "set null" }),
+  outreachEmailAccount: text("outreach_email_account"),
   notes: text("notes"),
   customFields: jsonb("custom_fields"),
   priority: text("priority").notNull().default("normal"), // low | normal | high | urgent
@@ -2095,6 +2097,8 @@ export const acqDealQueue = pgTable("acq_deal_queue", {
   messageText: text("message_text"),
   sentiment: text("sentiment"), // positive | negative | neutral | unsubscribe
   sentimentScore: real("sentiment_score"),
+  linkedinAccountId: text("linkedin_account_id"),
+  outreachEmailAccount: text("outreach_email_account"),
   status: text("status").notNull().default("pending"), // pending | approved | rejected
   reviewedAt: timestamp("reviewed_at"),
   reviewedBy: text("reviewed_by"),

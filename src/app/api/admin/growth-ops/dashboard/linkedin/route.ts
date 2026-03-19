@@ -84,6 +84,7 @@ export async function GET(req: NextRequest) {
         id: acqDeals.id,
         source: acqDeals.source,
         sourceCampaignId: acqDeals.sourceCampaignId,
+        linkedinAccountId: acqDeals.linkedinAccountId,
         stageId: acqDeals.stageId,
         status: acqDeals.status,
         dealValue: acqDeals.dealValue,
@@ -114,9 +115,10 @@ export async function GET(req: NextRequest) {
       const totalOutreach = sent + accepted;
       const responseRate = totalOutreach > 0 ? Math.round((accepted / totalOutreach) * 100) : 0;
 
-      // Deals linked to this account via campaign
+      // Deals linked to this account: direct linkedinAccountId first, then campaign chain fallback
       const acctDeals = linkedinDeals.filter((d) =>
-        d.sourceCampaignId && campaignToAccount.get(d.sourceCampaignId) === acct.id
+        d.linkedinAccountId === acct.id ||
+        (!d.linkedinAccountId && d.sourceCampaignId && campaignToAccount.get(d.sourceCampaignId) === acct.id)
       );
       const totalDeals = acctDeals.length;
       const openDeals = acctDeals.filter((d) => d.status === "open").length;

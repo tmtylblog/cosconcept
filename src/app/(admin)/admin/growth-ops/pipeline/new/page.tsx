@@ -35,6 +35,9 @@ export default function NewDealPage() {
   const [priority, setPriority] = useState("normal");
   const [stageId, setStageId] = useState("");
   const [source, setSource] = useState("manual");
+  const [linkedinAccountId, setLinkedinAccountId] = useState("");
+  const [outreachEmailAccount, setOutreachEmailAccount] = useState("");
+  const [linkedinAccounts, setLinkedinAccounts] = useState<{ id: string; displayName: string }[]>([]);
   const [notes, setNotes] = useState("");
 
   // Contact/company linking
@@ -64,6 +67,10 @@ export default function NewDealPage() {
     fetch("/api/admin/growth-ops/pipeline?action=getDealSources")
       .then((r) => r.json())
       .then((d) => setDealSources(d.sources ?? []))
+      .catch(() => {});
+    fetch("/api/admin/growth-ops/linkedin-accounts")
+      .then((r) => r.json())
+      .then((d) => setLinkedinAccounts((d.accounts ?? []).map((a: { id: string; displayName: string }) => ({ id: a.id, displayName: a.displayName }))))
       .catch(() => {});
   }, []);
 
@@ -148,6 +155,9 @@ export default function NewDealPage() {
           stageId: stageId || stages.find((s) => !s.parentStageId)?.id || null,
           priority,
           source,
+          sourceChannel: source.includes("linkedin") ? "linkedin" : source.includes("instantly") ? "instantly" : null,
+          linkedinAccountId: linkedinAccountId || null,
+          outreachEmailAccount: outreachEmailAccount || null,
           notes: notes || null,
           contactId: contactId || null,
           companyId: companyId || null,
@@ -236,6 +246,21 @@ export default function NewDealPage() {
               }
             </select>
           </div>
+          {source.includes("linkedin") && linkedinAccounts.length > 0 && (
+            <div>
+              <label className="text-xs font-medium text-cos-slate mb-1.5 block">LinkedIn Account</label>
+              <select value={linkedinAccountId} onChange={(e) => setLinkedinAccountId(e.target.value)} className={inputClass}>
+                <option value="">Not specified</option>
+                {linkedinAccounts.map((a) => <option key={a.id} value={a.id}>{a.displayName}</option>)}
+              </select>
+            </div>
+          )}
+          {source.includes("instantly") && (
+            <div>
+              <label className="text-xs font-medium text-cos-slate mb-1.5 block">Sender Email Account</label>
+              <input type="email" value={outreachEmailAccount} onChange={(e) => setOutreachEmailAccount(e.target.value)} placeholder="e.g. freddie@joincollectiveos.com" className={inputClass} />
+            </div>
+          )}
         </div>
 
         {/* Contact link */}

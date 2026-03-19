@@ -265,7 +265,7 @@ export async function POST(req: NextRequest) {
               if (sentiment.sentiment === "positive" || sentiment.confidence < 0.6) {
                 // Queue for review — positive or uncertain responses
                 const campaignRows = target.campaignId
-                  ? await db.select({ name: growthOpsInviteCampaigns.name }).from(growthOpsInviteCampaigns).where(eq(growthOpsInviteCampaigns.id, target.campaignId)).limit(1)
+                  ? await db.select({ name: growthOpsInviteCampaigns.name, linkedinAccountId: growthOpsInviteCampaigns.linkedinAccountId }).from(growthOpsInviteCampaigns).where(eq(growthOpsInviteCampaigns.id, target.campaignId)).limit(1)
                   : [];
 
                 await queueDealFromResponse({
@@ -281,6 +281,7 @@ export async function POST(req: NextRequest) {
                   messageText: text.slice(0, 500),
                   sentiment: sentiment.sentiment,
                   sentimentScore: sentiment.confidence,
+                  linkedinAccountId: campaignRows[0]?.linkedinAccountId ?? undefined,
                 });
               }
             }

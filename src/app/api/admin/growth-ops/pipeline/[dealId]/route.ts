@@ -11,6 +11,7 @@ import {
   attributionTouchpoints,
   acqDealContacts,
   acqDealQueue,
+  growthOpsLinkedInAccounts,
 } from "@/lib/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 
@@ -61,12 +62,25 @@ export async function GET(
         updatedAt: acqDeals.updatedAt,
         contactId: acqDeals.contactId,
         companyId: acqDeals.companyId,
+        linkedinAccountId: acqDeals.linkedinAccountId,
+        outreachEmailAccount: acqDeals.outreachEmailAccount,
       })
       .from(acqDeals)
       .where(eq(acqDeals.id, dealId))
       .limit(1);
 
     if (!deal) return NextResponse.json({ error: "Deal not found" }, { status: 404 });
+
+    // Get LinkedIn account details if linked
+    let linkedinAccount: { displayName: string; linkedinUsername: string | null } | null = null;
+    if (deal.linkedinAccountId) {
+      const [la] = await db
+        .select({ displayName: growthOpsLinkedInAccounts.displayName, linkedinUsername: growthOpsLinkedInAccounts.linkedinUsername })
+        .from(growthOpsLinkedInAccounts)
+        .where(eq(growthOpsLinkedInAccounts.id, deal.linkedinAccountId))
+        .limit(1);
+      linkedinAccount = la ?? null;
+    }
 
     // Get contact details
     let contact = null;
@@ -151,6 +165,7 @@ export async function GET(
       touchpoints,
       dealContacts: dealContactRows,
       queueMessage,
+      linkedinAccount,
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

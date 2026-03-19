@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.action === "createDeal") {
-      const { name, contactId, companyId, stageId, dealValue, priority, notes, source } = body;
+      const { name, contactId, companyId, stageId, dealValue, priority, notes, source, sourceChannel, linkedinAccountId, outreachEmailAccount } = body;
 
       // Check for existing deal with same name (prevent duplicates from inbox)
       if (name) {
@@ -181,6 +181,9 @@ export async function POST(req: NextRequest) {
         priority: priority || "normal",
         notes: notes || null,
         source: source || "manual",
+        sourceChannel: sourceChannel || null,
+        linkedinAccountId: linkedinAccountId || null,
+        outreachEmailAccount: outreachEmailAccount || null,
         lastActivityAt: now,
       });
 

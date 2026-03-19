@@ -23,7 +23,8 @@ import {
 } from "lucide-react";
 
 interface Stage { id: string; label: string; displayOrder: number; color: string; isClosedWon: boolean; isClosedLost: boolean; parentStageId: string | null; }
-interface Deal { id: string; name: string; stageId: string | null; stageLabel: string; dealValue: string | null; status: string; source: string; sourceChannel: string | null; sourceCampaignName: string | null; sourceMessageId: string | null; notes: string | null; priority: string; lastActivityAt: string | null; sentimentScore: number | null; hubspotDealId: string | null; closedAt: string | null; createdAt: string; updatedAt: string; }
+interface Deal { id: string; name: string; stageId: string | null; stageLabel: string; dealValue: string | null; status: string; source: string; sourceChannel: string | null; sourceCampaignName: string | null; sourceMessageId: string | null; linkedinAccountId: string | null; outreachEmailAccount: string | null; notes: string | null; priority: string; lastActivityAt: string | null; sentimentScore: number | null; hubspotDealId: string | null; closedAt: string | null; createdAt: string; updatedAt: string; }
+interface LinkedInAccountInfo { displayName: string; linkedinUsername: string | null; }
 interface Contact { id: string; email: string; firstName: string; lastName: string; linkedinUrl: string | null; companyId: string | null; }
 interface DealContact { id: string; email: string; firstName: string; lastName: string; linkedinUrl: string | null; companyId: string | null; role: string | null; }
 interface Company { id: string; name: string; domain: string | null; industry: string | null; sizeEstimate: string | null; }
@@ -57,6 +58,7 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
   const [activities, setActivities] = useState<Activity[]>([]);
   const [touchpoints, setTouchpoints] = useState<Touchpoint[]>([]);
   const [dealContacts, setDealContacts] = useState<DealContact[]>([]);
+  const [linkedinAccount, setLinkedinAccount] = useState<LinkedInAccountInfo | null>(null);
   const [queueMessage, setQueueMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
@@ -111,6 +113,7 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
         setActivities(data.activities ?? []);
         setTouchpoints(data.touchpoints ?? []);
         setDealContacts(data.dealContacts ?? []);
+        setLinkedinAccount(data.linkedinAccount ?? null);
         setQueueMessage(data.queueMessage ?? null);
         setNotes(data.deal?.notes ?? "");
         setEditName(data.deal?.name ?? "");
@@ -574,6 +577,25 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
                 <div className="flex justify-between text-xs">
                   <span className="text-cos-slate">Channel</span>
                   <span className="font-medium text-cos-midnight capitalize">{deal.sourceChannel}</span>
+                </div>
+              )}
+              {linkedinAccount && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-cos-slate">LinkedIn Acct</span>
+                  <span className="inline-flex items-center gap-1 font-medium text-cos-midnight">
+                    <Linkedin className="h-3 w-3 text-blue-600" />
+                    {linkedinAccount.displayName}
+                    {linkedinAccount.linkedinUsername && <span className="text-cos-slate font-normal">@{linkedinAccount.linkedinUsername}</span>}
+                  </span>
+                </div>
+              )}
+              {deal.outreachEmailAccount && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-cos-slate">Email Acct</span>
+                  <span className="inline-flex items-center gap-1 font-medium text-cos-midnight">
+                    <Mail className="h-3 w-3 text-orange-500" />
+                    {deal.outreachEmailAccount}
+                  </span>
                 </div>
               )}
               {deal.hubspotDealId && (
