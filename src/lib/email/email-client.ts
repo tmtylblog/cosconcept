@@ -36,7 +36,7 @@ interface EmailResult {
   testMode?: boolean;
 }
 
-const FROM_EMAIL = "ossy@joincollectiveos.com";
+const FROM_EMAIL = "onboarding@resend.dev";
 const FROM_NAME = "Ossy from Collective OS";
 
 async function getSetting(key: string): Promise<string | null> {
