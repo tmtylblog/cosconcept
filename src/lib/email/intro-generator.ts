@@ -185,9 +185,6 @@ function buildIntroHtml(data: {
     .map((tp) => `<li style="margin-bottom: 10px; color: #4b5563; font-size: 14px; line-height: 1.6;">${tp}</li>`)
     .join("");
 
-  const firmAInitial = data.firmA.name.charAt(0).toUpperCase();
-  const firmBInitial = data.firmB.name.charAt(0).toUpperCase();
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -204,19 +201,6 @@ function buildIntroHtml(data: {
         <span style="color: #ffffff; font-size: 15px; font-weight: 700; letter-spacing: 0.5px;">Collective OS</span>
       </div>
       <p style="font-size: 13px; color: #9ca3af; margin: 10px 0 0; letter-spacing: 0.3px;">PARTNERSHIP INTRODUCTION</p>
-    </div>
-
-    <!-- Firm badges -->
-    <div style="display: flex; justify-content: center; align-items: center; gap: 12px; margin-bottom: 28px; text-align: center;">
-      <div style="background: #ffffff; border-radius: 10px; padding: 14px 18px; border: 1px solid #e5e7eb; flex: 1;">
-        <div style="width: 36px; height: 36px; border-radius: 50%; background: #ede9fe; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-weight: 700; color: #6366f1; font-size: 16px;">${firmAInitial}</div>
-        <div style="font-size: 13px; font-weight: 600; color: #111827;">${data.firmA.name}</div>
-      </div>
-      <div style="font-size: 20px; color: #6366f1; font-weight: 300; padding: 0 4px;">×</div>
-      <div style="background: #ffffff; border-radius: 10px; padding: 14px 18px; border: 1px solid #e5e7eb; flex: 1;">
-        <div style="width: 36px; height: 36px; border-radius: 50%; background: #ede9fe; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-weight: 700; color: #6366f1; font-size: 16px;">${firmBInitial}</div>
-        <div style="font-size: 13px; font-weight: 600; color: #111827;">${data.firmB.name}</div>
-      </div>
     </div>
 
     <!-- Email body -->
