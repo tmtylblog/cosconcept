@@ -92,6 +92,7 @@ interface Payload {
   partnershipId?: string;
   scheduledCallId?: string;
   transcriptId?: string;
+  customPrompt?: string;
 }
 
 export async function handleCallsAnalyze(
@@ -107,6 +108,7 @@ export async function handleCallsAnalyze(
     partnershipId,
     scheduledCallId,
     transcriptId,
+    customPrompt,
   } = payload as unknown as Payload;
 
   // Step 1: Extract opportunities
@@ -117,10 +119,29 @@ export async function handleCallsAnalyze(
   const firmCategories =
     (firm?.enrichmentData as { classification?: { categories?: string[] } } | null)
       ?.classification?.categories ?? [];
+  // Load custom prompt from platform settings if not provided in payload
+  let promptToUse = customPrompt;
+  if (!promptToUse) {
+    try {
+      const { platformSettings } = await import("@/lib/db/schema");
+      const setting = await db
+        .select({ value: platformSettings.value })
+        .from(platformSettings)
+        .where(eq(platformSettings.key, "opportunity_extraction_prompt"))
+        .limit(1);
+      if (setting[0]?.value) {
+        promptToUse = setting[0].value;
+      }
+    } catch {
+      // Table may not exist yet — use default
+    }
+  }
+
   const extractedOpportunities = await extractOpportunities(transcript, {
     firmName: firm?.name,
     firmCategories,
     source: "call_transcript",
+    customPrompt: promptToUse,
   });
 
   // Step 2: Coaching analysis
@@ -179,7 +200,7 @@ export async function handleCallsAnalyze(
   if (transcriptId) {
     await db
       .update(callTranscripts)
-      .set({ coachingReportId: reportId })
+      .set({ coachingReportId: reportId, processingStatus: "done" })
       .where(eq(callTranscripts.id, transcriptId));
   }
 

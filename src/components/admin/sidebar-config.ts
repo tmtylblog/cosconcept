@@ -82,6 +82,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { href: "/admin/onboarding", label: "Onboarding", icon: TrendingUp },
       { href: "/admin/opportunities", label: "Opportunities", icon: Lightbulb },
       { href: "/admin/calls", label: "Call Transcripts", icon: Phone },
+      { href: "/admin/calls/settings", label: "Call Settings", icon: Settings },
     ],
   },
   {

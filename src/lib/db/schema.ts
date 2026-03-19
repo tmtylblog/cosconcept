@@ -2270,3 +2270,16 @@ export const crmAnnotations = pgTable("crm_annotations", {
 }, (t) => [
   uniqueIndex("crm_annotations_entity_unique").on(t.entityType, t.entityId),
 ]);
+
+// ─── Platform Settings (admin-configurable key-value) ──────────────────────
+// Stores configurable settings like custom AI prompts, thresholds, etc.
+// Avoids hardcoding values that admins need to tweak without redeploying.
+
+export const platformSettings = pgTable("platform_settings", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  metadata: jsonb("metadata").$type<{ updatedBy?: string; version?: number }>(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
