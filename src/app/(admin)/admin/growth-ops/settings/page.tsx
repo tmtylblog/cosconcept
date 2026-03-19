@@ -532,10 +532,10 @@ function LinkedInAccountsSettings({ setError }: { setError: (e: string | null) =
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
-  async function connectMyAccount() {
+  async function connectMyAccount(provider?: "sales_navigator") {
     setConnecting(true);
     try {
-      const d = await fetch("/api/admin/growth-ops/unipile", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "generateAuthLink" }) }).then((r) => r.json());
+      const d = await fetch("/api/admin/growth-ops/unipile", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "generateAuthLink", ...(provider ? { provider } : {}) }) }).then((r) => r.json());
       const url = d.url ?? d.link ?? d.hosted_url;
       if (url) window.open(url, "_blank");
       else setError(d.error ?? "Failed to generate auth link");
@@ -626,11 +626,17 @@ function LinkedInAccountsSettings({ setError }: { setError: (e: string | null) =
             </div>
             <div className="flex-1">
               <p className="font-heading text-sm font-semibold text-cos-midnight">Connect my account</p>
-              <p className="mt-0.5 text-xs text-cos-slate">Opens the LinkedIn login flow in a new tab.</p>
-              <button onClick={connectMyAccount} disabled={connecting} className="mt-3 flex items-center gap-1.5 rounded-cos-pill bg-cos-electric px-3.5 py-1.5 text-xs font-medium text-white hover:bg-cos-electric-hover disabled:opacity-60 transition-colors">
-                {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-                Connect now
-              </button>
+              <p className="mt-0.5 text-xs text-cos-slate">Choose your LinkedIn connection type. Use Sales Navigator for premium features.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => connectMyAccount()} disabled={connecting} className="flex items-center gap-1.5 rounded-cos-pill bg-cos-electric px-3.5 py-1.5 text-xs font-medium text-white hover:bg-cos-electric-hover disabled:opacity-60 transition-colors">
+                  {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                  LinkedIn
+                </button>
+                <button onClick={() => connectMyAccount("sales_navigator")} disabled={connecting} className="flex items-center gap-1.5 rounded-cos-pill bg-amber-600 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60 transition-colors">
+                  {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                  Sales Navigator
+                </button>
+              </div>
             </div>
           </div>
         </div>

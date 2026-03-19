@@ -159,12 +159,12 @@ export const UnipileClient = {
   generateHostedAuthLink: (
     callbackUrl: string,
     notifyUrl?: string,
+    provider: "LINKEDIN" | "LINKEDIN_SALES_NAVIGATOR" = "LINKEDIN",
   ) =>
     req("POST", "/hosted/accounts/link", {
       type: "create",
-      // providers_filter is the correct Unipile v1 field name; include providers as fallback
-      providers_filter: ["LINKEDIN"],
-      providers: ["LINKEDIN"],
+      providers_filter: [provider],
+      providers: [provider],
       api_url: BASE_URL,
       expiresOn: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       success_redirect_url: callbackUrl,
