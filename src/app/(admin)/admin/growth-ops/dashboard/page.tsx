@@ -307,6 +307,7 @@ interface LinkedInAccount {
   linkedinUsername: string | null;
   status: string;
   accountType: string;
+  notes: string | null;
   outreach: { sent: number; accepted: number; queued: number; failed: number; totalOutreach: number; responseRate: number };
   deals: { total: number; open: number; won: number; lost: number; pipelineValue: number; byStage: { label: string; color: string; count: number }[] };
 }
@@ -411,6 +412,9 @@ function LinkedInTab() {
                         <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-amber-100 text-amber-700 uppercase">{acct.accountType.replace(/_/g, " ")}</span>
                       )}
                     </p>
+                    {acct.notes && (
+                      <p className="text-[10px] text-cos-slate mt-0.5 italic">{acct.notes}</p>
+                    )}
                   </div>
                 </div>
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${

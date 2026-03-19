@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
         linkedinUsername: growthOpsLinkedInAccounts.linkedinUsername,
         status: growthOpsLinkedInAccounts.status,
         accountType: growthOpsLinkedInAccounts.accountType,
+        notes: growthOpsLinkedInAccounts.notes,
       })
       .from(growthOpsLinkedInAccounts)
       .orderBy(asc(growthOpsLinkedInAccounts.createdAt));
@@ -138,6 +139,7 @@ export async function GET(req: NextRequest) {
         linkedinUsername: acct.linkedinUsername,
         status: acct.status,
         accountType: acct.accountType,
+        notes: acct.notes ?? null,
         outreach: { sent, accepted, queued, failed, totalOutreach, responseRate },
         deals: { total: totalDeals, open: openDeals, won: wonDeals, lost: lostDeals, pipelineValue, byStage: dealsByStage },
       };

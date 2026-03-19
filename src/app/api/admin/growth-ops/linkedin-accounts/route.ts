@@ -124,9 +124,13 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   if (!await checkAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const body = await req.json() as { id: string; status?: string; displayName?: string };
+  const body = await req.json() as { id: string; status?: string; displayName?: string; notes?: string };
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (body.status !== undefined) updates.status = body.status;
+  if (body.displayName !== undefined) updates.displayName = body.displayName;
+  if (body.notes !== undefined) updates.notes = body.notes;
   await db.update(growthOpsLinkedInAccounts)
-    .set({ status: body.status, displayName: body.displayName, updatedAt: new Date() })
+    .set(updates)
     .where(eq(growthOpsLinkedInAccounts.id, body.id));
   return NextResponse.json({ ok: true });
 }

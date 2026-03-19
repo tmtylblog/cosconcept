@@ -52,6 +52,7 @@ interface Account {
   displayName: string;
   linkedinUsername: string | null;
   status: string;
+  notes: string | null;
   createdAt: string;
 }
 
@@ -77,6 +78,47 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = 
   CREDENTIALS: { bg: "bg-red-50",      text: "text-red-700",      dot: "bg-red-500" },
   ERROR:       { bg: "bg-red-50",      text: "text-red-700",      dot: "bg-red-500" },
 };
+
+function AccountNotes({ accountId, initialNotes }: { accountId: string; initialNotes: string }) {
+  const [notes, setNotes] = useState(initialNotes);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  function handleChange(value: string) {
+    setNotes(value);
+    setDirty(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => saveNotes(value), 1000);
+  }
+
+  async function saveNotes(value: string) {
+    setSaving(true);
+    try {
+      await fetch("/api/admin/growth-ops/linkedin-accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: accountId, notes: value }),
+      });
+      setDirty(false);
+    } catch { /* silent */ }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="flex items-start gap-2">
+      <input
+        type="text"
+        value={notes}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder="Add notes about this account..."
+        className="flex-1 rounded-cos-md border border-cos-border/50 bg-cos-cloud/30 px-2.5 py-1 text-xs text-cos-slate placeholder:text-cos-slate-dim/50 focus:border-cos-electric focus:outline-none focus:bg-white transition-colors"
+      />
+      {saving && <span className="text-[10px] text-cos-slate-dim mt-1">Saving...</span>}
+      {!saving && dirty && <span className="text-[10px] text-cos-slate-dim mt-1">Unsaved</span>}
+    </div>
+  );
+}
 
 const STAGE_COLORS = ["#6366f1", "#8b5cf6", "#3b82f6", "#06b6d4", "#10b981", "#22c55e", "#f59e0b", "#ef4444", "#ec4899", "#64748b"];
 const ICON_OPTIONS = ["globe", "mail", "linkedin", "plus-circle", "phone", "zap", "users", "star", "target", "megaphone"];
@@ -706,8 +748,8 @@ function LinkedInAccountsSettings({ setError }: { setError: (e: string | null) =
                 const style = STATUS_STYLE[a.status] ?? STATUS_STYLE.CONNECTING;
                 const isRevoking = revoking === a.id;
                 const isThisSyncing = isSyncing && syncingAccount === a.unipileAccountId;
-                return (
-                  <tr key={a.id} className="border-b border-cos-border/50 last:border-0 hover:bg-cos-cloud/30 transition-colors">
+                return (<>
+                  <tr key={a.id} className="border-b-0 hover:bg-cos-cloud/30 transition-colors">
                     <td className="px-4 py-3 font-medium text-cos-midnight">{a.displayName || a.unipileAccountId}</td>
                     <td className="px-4 py-3 text-cos-slate">{a.linkedinUsername ? `@${a.linkedinUsername}` : "\u2014"}</td>
                     <td className="px-4 py-3">
@@ -740,7 +782,12 @@ function LinkedInAccountsSettings({ setError }: { setError: (e: string | null) =
                       </div>
                     </td>
                   </tr>
-                );
+                  <tr key={`${a.id}-notes`} className="border-b border-cos-border/50 last:border-0">
+                    <td colSpan={5} className="px-4 pb-3 pt-0">
+                      <AccountNotes accountId={a.id} initialNotes={a.notes ?? ""} />
+                    </td>
+                  </tr>
+                </>);
               })}
             </tbody>
           </table>

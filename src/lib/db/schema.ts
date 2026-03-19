@@ -1836,6 +1836,7 @@ export const growthOpsLinkedInAccounts = pgTable("growth_ops_linkedin_accounts",
   premiumContractId: text("premium_contract_id"),
   /** Unipile premiumFeatures — e.g. ["sales_navigator"], ["recruiter", "sales_navigator"] */
   premiumFeatures: text("premium_features").array().default([]),
+  notes: text("notes"),
   syncStatus: text("sync_status").notNull().default("idle"), // idle | syncing | done | error
   syncProgress: text("sync_progress"), // JSON string: { seeded, enriching, pages, error? }
   syncStartedAt: timestamp("sync_started_at"),
