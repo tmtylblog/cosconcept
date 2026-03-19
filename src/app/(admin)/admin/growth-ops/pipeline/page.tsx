@@ -111,6 +111,7 @@ export default function PipelinePage() {
   const [dragging, setDragging] = useState<{ dealId: string; fromStageId: string } | null>(null);
   const [view, setView] = useState<"kanban" | "table">("kanban");
   const [tableStageFilter, setTableStageFilter] = useState<string | "all">("all");
+  const [tableSourceFilter, setTableSourceFilter] = useState<string | "all">("all");
 
   // Queue state
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
@@ -231,9 +232,11 @@ export default function PipelinePage() {
   const tableDeals = columns.flatMap((col) =>
     col.deals.map((deal) => ({ ...deal, _stageLabel: col.stage.label, _stageOrder: col.stage.displayOrder, _stageColor: col.stage.color }))
   );
-  const filteredTableDeals = tableStageFilter === "all"
-    ? tableDeals
-    : tableDeals.filter((d) => d.stageId === tableStageFilter);
+  const filteredTableDeals = tableDeals.filter((d) => {
+    if (tableStageFilter !== "all" && d.stageId !== tableStageFilter) return false;
+    if (tableSourceFilter !== "all" && d.source !== tableSourceFilter) return false;
+    return true;
+  });
 
   return (
     <div>
@@ -481,6 +484,17 @@ export default function PipelinePage() {
                 </option>
               ))}
             </select>
+            <label className="text-xs font-semibold text-cos-slate-dim uppercase tracking-wider ml-3">Source:</label>
+            <select
+              value={tableSourceFilter}
+              onChange={(e) => setTableSourceFilter(e.target.value)}
+              className="rounded-cos-lg border border-cos-border bg-white px-3 py-1.5 text-sm focus:border-cos-electric focus:outline-none"
+            >
+              <option value="all">All sources</option>
+              {dealSources.map((s) => (
+                <option key={s.key} value={s.key}>{s.label}</option>
+              ))}
+            </select>
             <span className="text-xs text-cos-slate ml-2">
               Showing {filteredTableDeals.length.toLocaleString()} deals
             </span>
@@ -520,7 +534,12 @@ export default function PipelinePage() {
                           <span className="ml-1.5 text-[10px] text-cos-electric">{stages.find((st) => st.id === deal.stageId)?.label}</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">{sourceIcon(deal.source, deal.sourceChannel)}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5 text-xs text-cos-slate">
+                          {sourceIcon(deal.source, deal.sourceChannel)}
+                          {dealSources.find((s) => s.key === deal.source)?.label ?? deal.source.replace(/_/g, " ")}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         {deal.dealValue
                           ? <span className="text-cos-signal font-medium">${Number(deal.dealValue).toLocaleString()}</span>

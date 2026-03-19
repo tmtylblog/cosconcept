@@ -80,13 +80,23 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
 
   const companySearchTimer = useRef<ReturnType<typeof setTimeout>>();
   const contactSearchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [dealSources, setDealSources] = useState<{ key: string; label: string }[]>([]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const p = new URLSearchParams(window.location.search);
       setFromInbox(p.get("from") === "inbox");
     }
+    // Fetch deal source labels
+    fetch("/api/admin/growth-ops/pipeline?action=getDealSources")
+      .then((r) => r.json())
+      .then((d) => setDealSources(d.sources ?? []))
+      .catch(() => {});
   }, []);
+
+  const dealSourceLabel = deal
+    ? (dealSources.find((s) => s.key === deal.source)?.label ?? deal.source.replace(/_/g, " "))
+    : "";
 
   useEffect(() => {
     async function load() {
@@ -543,7 +553,16 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
               )}
               <div className="flex justify-between text-xs">
                 <span className="text-cos-slate">Source</span>
-                <span className="font-medium text-cos-midnight">{deal.source.replace(/_/g, " ")}</span>
+                <span className="inline-flex items-center gap-1.5 font-medium text-cos-midnight">
+                  {deal.sourceChannel === "linkedin" || deal.source === "linkedin_auto"
+                    ? <Linkedin className="h-3 w-3 text-blue-600" />
+                    : deal.sourceChannel === "instantly" || deal.source === "instantly_auto"
+                    ? <Mail className="h-3 w-3 text-orange-500" />
+                    : deal.source === "hubspot_sync"
+                    ? <Globe className="h-3 w-3 text-[#ff7a59]" />
+                    : <Globe className="h-3 w-3 text-cos-slate" />}
+                  {dealSourceLabel}
+                </span>
               </div>
               {deal.sourceCampaignName && (
                 <div className="flex justify-between text-xs">
