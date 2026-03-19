@@ -53,15 +53,18 @@ export default async function AdminLayout({
       headersList.get("x-invoke-path") ??
       "";
 
-    const allowedPrefixes: string[] = [];
+    const allowedPrefixes: string[] = ["/admin"]; // overview always accessible
     if (role === "growth_ops") allowedPrefixes.push("/admin/growth-ops");
     if (role === "customer_success") allowedPrefixes.push("/admin/customer-success");
 
+    // Allow exact /admin (overview) + their section prefix
     const isAllowed =
-      allowedPrefixes.some((prefix) => pathname.startsWith(prefix));
+      pathname === "/admin" ||
+      allowedPrefixes.some((prefix) => pathname.startsWith(prefix + "/"));
 
     if (pathname && !isAllowed) {
-      redirect(allowedPrefixes[0] ?? "/dashboard");
+      const defaultSection = role === "growth_ops" ? "/admin/growth-ops" : "/admin/customer-success";
+      redirect(defaultSection);
     }
   }
 
