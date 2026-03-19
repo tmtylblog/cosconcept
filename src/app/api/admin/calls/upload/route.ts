@@ -14,6 +14,7 @@ import {
   serviceFirms,
   platformSettings,
   members,
+  companyResearch,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { inngest } from "@/inngest/client";
@@ -31,10 +32,11 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
   }
 
-  const { transcript, firmId, callType } = (await req.json()) as {
+  const { transcript, firmId, callType, clientDomain } = (await req.json()) as {
     transcript: string;
     firmId?: string;
     callType?: string;
+    clientDomain?: string;
   };
 
   if (!transcript || transcript.length < 100) {
@@ -126,6 +128,40 @@ export async function POST(req: Request) {
     // Table may not exist yet — ignore
   }
 
+  // Look up existing client research if domain provided
+  let clientContext: string | undefined;
+  const normalizedDomain = clientDomain?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
+
+  if (normalizedDomain) {
+    try {
+      const [research] = await db
+        .select()
+        .from(companyResearch)
+        .where(eq(companyResearch.domain, normalizedDomain))
+        .limit(1);
+
+      if (research) {
+        const parts: string[] = [`Client: ${research.companyName} (${normalizedDomain})`];
+        if (research.executiveSummary) parts.push(`About: ${research.executiveSummary}`);
+        if (research.industryInsight) parts.push(`Industry: ${research.industryInsight}`);
+        if (research.growthChallenges) parts.push(`Known challenges: ${research.growthChallenges}`);
+        if (research.stageInsight) parts.push(`Stage: ${research.stageInsight}`);
+        if (research.offeringSummary) parts.push(`They offer: ${research.offeringSummary}`);
+        clientContext = parts.join("\n");
+      }
+    } catch {
+      // companyResearch table query failed — proceed without
+    }
+
+    // Fire background research if we don't have data yet
+    if (!clientContext) {
+      await inngest.send({
+        name: "research/company",
+        data: { domain: normalizedDomain, firmId: resolvedFirmId, userId: session.user.id },
+      });
+    }
+  }
+
   // Fire the Inngest pipeline
   await inngest.send({
     name: "calls/analyze",
@@ -137,6 +173,8 @@ export async function POST(req: Request) {
       callType: callType ?? "client",
       transcriptId: txId,
       customPrompt,
+      clientDomain: normalizedDomain,
+      clientContext,
     },
   });
 
@@ -146,5 +184,7 @@ export async function POST(req: Request) {
     firmName,
     status: "processing",
     wordCount: transcript.split(/\s+/).length,
+    clientResearched: !!clientContext,
+    clientDomain: normalizedDomain || null,
   }, { status: 201 });
 }

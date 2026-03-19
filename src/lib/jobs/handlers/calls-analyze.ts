@@ -93,6 +93,8 @@ interface Payload {
   scheduledCallId?: string;
   transcriptId?: string;
   customPrompt?: string;
+  clientDomain?: string;
+  clientContext?: string;
 }
 
 export async function handleCallsAnalyze(
@@ -109,6 +111,8 @@ export async function handleCallsAnalyze(
     scheduledCallId,
     transcriptId,
     customPrompt,
+    clientDomain,
+    clientContext,
   } = payload as unknown as Payload;
 
   // Step 1: Extract opportunities
@@ -137,7 +141,15 @@ export async function handleCallsAnalyze(
     }
   }
 
-  const extractedOpportunities = await extractOpportunities(transcript, {
+  // Build transcript with client context prepended if available
+  let textToAnalyze = transcript;
+  if (clientContext) {
+    textToAnalyze = `## CLIENT CONTEXT (from research)\n${clientContext}\n\n## TRANSCRIPT\n${transcript}`;
+  } else if (clientDomain) {
+    textToAnalyze = `## CLIENT CONTEXT\nClient domain: ${clientDomain} (no research data available yet)\n\n## TRANSCRIPT\n${transcript}`;
+  }
+
+  const extractedOpportunities = await extractOpportunities(textToAnalyze, {
     firmName: firm?.name,
     firmCategories,
     source: "call_transcript",

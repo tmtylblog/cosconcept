@@ -239,9 +239,10 @@ function UploadModal({
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState("");
   const [firmId, setFirmId] = useState("");
+  const [clientDomain, setClientDomain] = useState("");
   const [firms, setFirms] = useState<FirmOption[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<{ status: string; wordCount: number } | null>(null);
+  const [result, setResult] = useState<{ status: string; wordCount: number; clientResearched?: boolean } | null>(null);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -302,6 +303,7 @@ function UploadModal({
         body: JSON.stringify({
           transcript: text,
           firmId: firmId || undefined,
+          clientDomain: clientDomain.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -310,7 +312,7 @@ function UploadModal({
         return;
       }
       const data = await res.json();
-      setResult({ status: data.status, wordCount: data.wordCount });
+      setResult({ status: data.status, wordCount: data.wordCount, clientResearched: data.clientResearched });
       setTimeout(() => {
         onSuccess();
         onClose();
@@ -344,6 +346,12 @@ function UploadModal({
               <p className="text-sm text-[var(--cos-text-muted)] mt-1">
                 {result.wordCount.toLocaleString()} words &mdash; opportunity extraction is processing in the background.
               </p>
+              {result.clientResearched && (
+                <p className="text-xs text-green-600 mt-2">Client research found and included as context.</p>
+              )}
+              {result.clientResearched === false && clientDomain && (
+                <p className="text-xs text-amber-600 mt-2">Client research queued &mdash; will be available for future transcripts.</p>
+              )}
             </div>
           ) : (
             <>
@@ -418,6 +426,24 @@ function UploadModal({
                   {wordCount.toLocaleString()} words &bull; {text.length.toLocaleString()} characters
                 </p>
               )}
+
+              {/* Client domain */}
+              <div>
+                <label className="block text-xs font-medium text-[var(--cos-text-muted)] mb-1">
+                  Client domain (the company being discussed)
+                </label>
+                <input
+                  type="text"
+                  value={clientDomain}
+                  onChange={(e) => setClientDomain(e.target.value)}
+                  placeholder="e.g. acme.com"
+                  className="w-full rounded-lg border border-[var(--cos-border)] px-3 py-2 text-sm text-[var(--cos-text-primary)] placeholder:text-[var(--cos-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--cos-primary)]/30"
+                />
+                <p className="text-xs text-[var(--cos-text-muted)] mt-1">
+                  If we have research on this company, it will be used as context for opportunity extraction.
+                  If not, we&apos;ll research them in the background.
+                </p>
+              </div>
 
               {/* Firm selector */}
               <div>
