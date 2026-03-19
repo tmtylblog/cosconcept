@@ -39,11 +39,15 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
-/** App page paths where sandbox params should be injected (not API routes, not static) */
-function isAppPage(pathname: string): boolean {
-  return !pathname.startsWith("/api/") &&
-    !pathname.startsWith("/_next/") &&
-    !pathname.startsWith("/admin/");
+/** App page paths where sandbox params should be injected (not API routes, not static, not auth) */
+function isSandboxEligiblePage(pathname: string): boolean {
+  if (pathname.startsWith("/api/")) return false;
+  if (pathname.startsWith("/_next/")) return false;
+  if (pathname.startsWith("/admin/")) return false;
+  if (pathname.startsWith("/login")) return false;
+  if (pathname.startsWith("/org/")) return false;
+  if (pathname === "/") return false;
+  return true;
 }
 
 export async function middleware(req: NextRequest) {
@@ -52,7 +56,7 @@ export async function middleware(req: NextRequest) {
   // ─── Sandbox param persistence ─────────────────────────────
   // If sandbox cookies exist but URL params are missing, redirect to add them.
   // This keeps sandbox_domain and sandbox_mode visible in the URL bar at all times.
-  if (isAppPage(pathname)) {
+  if (isSandboxEligiblePage(pathname)) {
     const sandboxDomain = req.cookies.get("cos_sandbox_domain")?.value;
     const sandboxMode = req.cookies.get("cos_sandbox_mode")?.value;
     if (sandboxDomain && !req.nextUrl.searchParams.has("sandbox_domain")) {
