@@ -787,8 +787,8 @@ export async function POST(req: NextRequest) {
       const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.BETTER_AUTH_URL ?? "").replace(/\/$/, "");
       const successUrl = `${appUrl}/linkedin-connected`;
       const notifyUrl = `${appUrl}/api/webhooks/unipile`;
-      const provider = body.provider === "sales_navigator" ? "LINKEDIN_SALES_NAVIGATOR" as const : "LINKEDIN" as const;
-      const data = await UnipileClient.generateHostedAuthLink(successUrl, notifyUrl, provider);
+      const mode = body.provider === "sales_navigator" ? "sales_navigator" as const : "linkedin" as const;
+      const data = await UnipileClient.generateHostedAuthLink(successUrl, notifyUrl, mode);
       return NextResponse.json(data);
     }
 

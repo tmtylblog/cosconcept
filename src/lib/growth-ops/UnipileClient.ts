@@ -9,8 +9,8 @@
  *  - Chat attendees do NOT include profile photos — need separate getProfile call
  */
 
-const BASE_URL = process.env.UNIPILE_BASE_URL!;
-const API_KEY = process.env.UNIPILE_API_KEY!;
+const BASE_URL = (process.env.UNIPILE_BASE_URL ?? "").trim();
+const API_KEY = (process.env.UNIPILE_API_KEY ?? "").trim();
 
 async function req<T = unknown>(
   method: string,
@@ -159,17 +159,22 @@ export const UnipileClient = {
   generateHostedAuthLink: (
     callbackUrl: string,
     notifyUrl?: string,
-    provider: "LINKEDIN" | "LINKEDIN_SALES_NAVIGATOR" = "LINKEDIN",
+    mode: "linkedin" | "sales_navigator" = "linkedin",
   ) =>
     req("POST", "/hosted/accounts/link", {
       type: "create",
-      providers_filter: [provider],
-      providers: [provider],
+      providers_filter: ["LINKEDIN"],
+      providers: ["LINKEDIN"],
       api_url: BASE_URL,
-      expiresOn: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      expiresOn: new Date(Date.now() + 30 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, ".000Z"),
       success_redirect_url: callbackUrl,
       failure_redirect_url: callbackUrl,
       ...(notifyUrl ? { notify_url: notifyUrl } : {}),
+      // For regular LinkedIn, disable SN/Recruiter features so the auth flow stays simple.
+      // For Sales Navigator mode, allow all features so SN is available after connect.
+      ...(mode === "linkedin"
+        ? { disabled_features: ["linkedin_sales_navigator", "linkedin_recruiter", "linkedin_organizations_mailboxes"] }
+        : {}),
     }),
 
   generateReconnectLink: (
