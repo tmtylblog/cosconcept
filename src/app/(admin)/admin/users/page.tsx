@@ -82,6 +82,14 @@ export default function AdminUsersPage() {
     Record<string, { loading: boolean; profile: ExpertProfile | null }>
   >({});
 
+  // Add staff modal
+  const [showAddStaff, setShowAddStaff] = useState(false);
+  const [addEmail, setAddEmail] = useState("");
+  const [addRole, setAddRole] = useState("admin");
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState("");
+  const [addSuccess, setAddSuccess] = useState("");
+
   useEffect(() => {
     fetch("/api/admin/staff")
       .then((res) => res.json())
@@ -129,6 +137,43 @@ export default function AdminUsersPage() {
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, role } : u))
     );
+  }
+
+  async function handleAddStaff() {
+    if (!addEmail.trim()) { setAddError("Email is required"); return; }
+    setAddLoading(true);
+    setAddError("");
+    setAddSuccess("");
+    try {
+      // First find the user by email in ALL users (not just staff)
+      const res = await fetch(`/api/admin/customers?search=${encodeURIComponent(addEmail.trim())}&limit=200`);
+      const data = await res.json();
+      const allUsers = [...(data.staff ?? []), ...(data.users ?? [])];
+      const match = allUsers.find((u: { email: string }) => u.email.toLowerCase() === addEmail.trim().toLowerCase());
+
+      if (!match) {
+        setAddError("No user found with that email. They need to sign up first.");
+        return;
+      }
+
+      // Promote them
+      await authClient.admin.setRole({ userId: match.id, role: addRole as "admin" | "user" });
+      setAddSuccess(`${match.name || match.email} promoted to ${addRole}`);
+      // Refresh the list
+      const staffRes = await fetch("/api/admin/staff");
+      const staffData = await staffRes.json();
+      if (staffData.staff) {
+        setUsers(staffData.staff.map((u: { id: string; name: string; email: string; role: string | null; banned: boolean | null; createdAt: string }) => ({
+          id: u.id, name: u.name, email: u.email, role: u.role ?? "user", banned: u.banned ?? false,
+          createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "",
+        })));
+      }
+      setTimeout(() => { setShowAddStaff(false); setAddEmail(""); setAddRole("admin"); setAddSuccess(""); }, 1500);
+    } catch (err) {
+      setAddError(String(err));
+    } finally {
+      setAddLoading(false);
+    }
   }
 
   async function handleExpandUser(userId: string) {
@@ -200,7 +245,11 @@ export default function AdminUsersPage() {
             platform management access. Click a name to open their profile.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <Button size="sm" onClick={() => setShowAddStaff(true)}>
+            <UserCheck className="h-3.5 w-3.5 mr-1.5" />
+            Add Staff
+          </Button>
           <div className="flex items-center gap-1.5 rounded-cos bg-cos-ember/5 px-3 py-1.5">
             <ShieldCheck className="h-4 w-4 text-cos-ember" />
             <div className="text-center">
@@ -552,6 +601,64 @@ export default function AdminUsersPage() {
           </div>
         )}
       </div>
+
+      {/* Add Staff Modal */}
+      {showAddStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+            <h2 className="text-lg font-semibold text-cos-midnight mb-1">Add Staff Member</h2>
+            <p className="text-xs text-cos-slate mb-4">
+              Enter the email of an existing user to grant them admin access.
+            </p>
+
+            {addSuccess ? (
+              <div className="rounded-cos-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700 mb-4">
+                {addSuccess}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">User Email</label>
+                  <input
+                    type="email"
+                    value={addEmail}
+                    onChange={(e) => { setAddEmail(e.target.value); setAddError(""); }}
+                    placeholder="e.g. joseph@joincollectiveos.com"
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm text-cos-midnight placeholder:text-cos-slate-light focus:border-cos-electric focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-cos-slate mb-1 block">Role</label>
+                  <select
+                    value={addRole}
+                    onChange={(e) => setAddRole(e.target.value)}
+                    className="w-full rounded-cos-lg border border-cos-border px-3 py-2 text-sm text-cos-midnight focus:border-cos-electric focus:outline-none"
+                  >
+                    <option value="superadmin">Superadmin</option>
+                    <option value="admin">Admin</option>
+                    <option value="growth_ops">Growth Ops</option>
+                    <option value="customer_success">Customer Success</option>
+                  </select>
+                </div>
+                {addError && (
+                  <div className="rounded-cos-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600">
+                    {addError}
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => { setShowAddStaff(false); setAddEmail(""); setAddError(""); }}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleAddStaff} disabled={addLoading || !addEmail.trim()}>
+                    {addLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <UserCheck className="h-3.5 w-3.5 mr-1.5" />}
+                    Add Staff
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
