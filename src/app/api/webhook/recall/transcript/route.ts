@@ -24,6 +24,7 @@ import {
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { inngest } from "@/inngest/client";
+import { classifyParticipants } from "@/lib/calls/participant-classifier";
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -153,7 +154,42 @@ export async function POST(req: NextRequest) {
     })
     .where(eq(scheduledCalls.id, scheduledCall.id));
 
-  // Queue post-call analysis
+  // Classify participant domains from calendar invite
+  const participants = (scheduledCall.participants as string[] | null) ?? [];
+  let clientContext: string | undefined;
+  let clientDomain: string | undefined;
+
+  if (participants.length > 0) {
+    const classified = await classifyParticipants(participants);
+
+    // Auto-associate partner firm if a service provider was on the call
+    if (classified.serviceProviders.length > 0 && !scheduledCall.partnershipId) {
+      const partnerFirm = classified.serviceProviders.find(
+        (sp) => sp.firmId !== scheduledCall.firmId
+      );
+      if (partnerFirm) {
+        await db
+          .update(callRecordings)
+          .set({ partnerFirmId: partnerFirm.firmId })
+          .where(eq(callRecordings.id, recordingId));
+      }
+    }
+
+    // Fire research jobs for external domains we don't have data on
+    for (const domain of classified.externalDomains) {
+      await inngest.send({
+        name: "research/company",
+        data: { domain, firmId: scheduledCall.firmId, userId: scheduledCall.userId },
+      });
+    }
+
+    clientDomain = classified.externalDomains[0];
+    if (classified.contextString) {
+      clientContext = classified.contextString;
+    }
+  }
+
+  // Queue post-call analysis with participant context
   await inngest.send({ name: "calls/analyze", data: {
     callId: recordingId,
     firmId: scheduledCall.firmId,
@@ -163,6 +199,8 @@ export async function POST(req: NextRequest) {
     partnershipId: scheduledCall.partnershipId ?? undefined,
     scheduledCallId: scheduledCall.id,
     transcriptId,
+    clientDomain,
+    clientContext,
   } });
 
   return NextResponse.json({ ok: true });

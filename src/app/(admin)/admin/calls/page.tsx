@@ -290,6 +290,10 @@ function UploadModal({
   };
 
   const handleSubmit = async () => {
+    if (!clientDomain.trim()) {
+      setError("Client domain is required — enter the domain of the company being discussed");
+      return;
+    }
     if (text.length < 100) {
       setError("Transcript too short (min 100 characters)");
       return;
@@ -478,7 +482,7 @@ function UploadModal({
                 <Button
                   size="sm"
                   onClick={handleSubmit}
-                  disabled={uploading || text.length < 100}
+                  disabled={uploading || text.length < 100 || !clientDomain.trim()}
                 >
                   {uploading ? "Uploading..." : "Upload & Analyze"}
                 </Button>
