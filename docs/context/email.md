@@ -1,6 +1,6 @@
 # 9. Email System
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-19
 
 Ossy sends and receives email at `ossy@joincollectiveos.com` via **Resend**. All outbound emails pass through an approval queue system. Inbound emails are processed by AI for intent classification, entity extraction, and automated response drafting.
 
@@ -87,6 +87,32 @@ Applied only when `RESEND_DEV_OVERRIDE` is not set:
 
 1. Controlled by `settings` table: `email_test_mode` = `"true"` / `"false"`.
 2. When active, all recipients are replaced with the `email_test_whitelist` (comma-separated emails in `settings`).
+
+---
+
+## Partnership Email Auto-Send Toggles
+
+Two platform settings control whether partnership emails send immediately or queue for review:
+
+| Setting key | Controls | Default |
+|-------------|----------|---------|
+| `partnership_intro_auto_send` | Intro emails triggered from `/admin/partnerships` | `false` (queued) |
+| `partnership_followup_auto_send` | Follow-up emails after transcript opportunity analysis | `false` (queued) |
+
+### Intro email behaviour
+
+When `partnership_intro_auto_send = "true"`:
+- `queuePartnershipIntro()` generates the email via AI (Gemini Flash)
+- Sends immediately via Resend to **test addresses**: `masa+{firmslug}@joincollectiveos.com` for both firms
+- Queue entry is inserted with `status = "sent"` (visible in `/admin/email` as Sent tab)
+- "Send Intro" button label changes to "Send Now" (⚡) to signal live mode
+
+When `partnership_intro_auto_send = "false"`:
+- Email is generated and inserted into `emailApprovalQueue` with `status = "pending"`
+- Button label shows "Queue Intro" (✉️)
+- Admin reviews and approves via `/admin/email`
+
+The toggle UI lives on `/admin/partnerships` in the **Email Settings** panel. Changes are persisted immediately to the `settings` table via `POST /api/admin/settings`.
 3. Subject is prefixed with `[TEST -> original@email.com]`.
 4. A yellow `TEST MODE` banner is prepended to the HTML body.
 5. If whitelist is empty, email is silently suppressed (returns success with `suppressed_` ID).

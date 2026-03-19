@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   if (!partnership) return NextResponse.json({ error: "Partnership not found" }, { status: 404 });
 
   try {
-    const { queueId } = await queuePartnershipIntro({
+    const { queueId, autoSent } = await queuePartnershipIntro({
       partnershipId,
       firmAId: partnership.firmAId,
       firmBId: partnership.firmBId,
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       senderUserId: admin.id,
     });
 
-    return NextResponse.json({ ok: true, queueId });
+    return NextResponse.json({ ok: true, queueId, autoSent });
   } catch (err) {
     console.error("[Intro] Failed to queue intro:", err);
     return NextResponse.json(

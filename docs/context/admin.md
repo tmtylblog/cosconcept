@@ -84,8 +84,13 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 ### 8. Partnerships
 - **Route:** `/admin/partnerships`
 - **File:** `src/app/(admin)/admin/partnerships/page.tsx`
-- **Purpose:** Platform-wide partnership and referral tracking. Shows stats (total, accepted, referrals, opportunities), pipeline flow visualization (suggested -> requested -> accepted), and partnership table with status filter. Admins can trigger intro emails for requested/accepted partnerships.
-- **API:** `GET /api/admin/partnerships`, `GET /api/admin/partnerships/stats`, `POST /api/admin/partnerships/intro`
+- **Purpose:** Platform-wide partnership and referral tracking. Shows stats (total, accepted, referrals, opportunities), pipeline flow visualization (suggested -> requested -> accepted), email settings panel with two auto-send toggles, and partnership table with status filter. Admins can trigger intro emails for requested/accepted partnerships.
+- **API:** `GET /api/admin/partnerships`, `GET /api/admin/partnerships/stats`, `POST /api/admin/partnerships/intro`, `GET /api/admin/settings?key=partnership_intro_auto_send`, `GET /api/admin/settings?key=partnership_followup_auto_send`, `POST /api/admin/settings`
+- **Email Settings Panel:** Two toggle switches:
+  - **Auto-send intro emails** (`partnership_intro_auto_send`) — ON: sends immediately to `masa+{firmslug}@joincollectiveos.com`; OFF: queues for review
+  - **Auto-send follow-up emails** (`partnership_followup_auto_send`) — ON: follow-ups send automatically after transcript analysis; OFF: queues for review
+  - Button label changes dynamically: "Send Now" (⚡) when auto-send ON, "Queue Intro" (✉️) when OFF
+  - Feedback shows "Sent!" (green) vs "Queued!" (blue) based on actual outcome
 
 ### 9. Neo4j Administration
 - **Route:** `/admin/neo4j`
@@ -123,6 +128,29 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 - **File:** `src/app/(admin)/admin/search/page.tsx`
 - **Purpose:** Two sections. (1) **Search Test Tool**: natural language query input, optional searcher firm ID, skip-LLM toggle, Run Search button. Results show 3 expandable layers — Layer 1 (Neo4j structured filter candidates with structuredScore), Layer 2 (vector re-ranked with vectorScore), Layer 3 (LLM-ranked with llmScore and matchExplanation) — plus parsed filters, duration, and estimated cost. (2) **Abstraction Profile Status**: stat cards (total firms, profiles generated, missing, avg confidence) and a table of firms with confidence, top services, last generated, and per-row Regenerate button.
 - **API:** `POST /api/admin/search/test`, `GET /api/admin/abstractions?missing=true`, `GET /api/admin/abstractions/[firmId]`, `POST /api/admin/abstractions/[firmId]`
+
+### 28. Call Transcripts
+- **Route:** `/admin/calls`
+- **File:** `src/app/(admin)/admin/calls/page.tsx`
+- **Purpose:** View and manage all call transcripts platform-wide. Shows 4 stat cards (total, processed, opps extracted, avg coaching score). Filter tabs: All / Manual / Recall.ai. Expandable transcript rows with preview. "Upload Transcript" button opens a modal for manual upload.
+- **Upload Modal:**
+  - Firm picker (search from `GET /api/admin/calls/firms`)
+  - Client domain field (optional, stored on opportunities)
+  - Two tabs: Paste text (textarea) | Upload file (.txt)
+  - On submit: POST to `/api/admin/calls/upload` → AI analysis → opportunities stored → optional follow-up email
+  - Results shown inline with opportunity cards
+- **API:**
+  - `GET /api/admin/calls` — list all transcripts with stats
+  - `GET /api/admin/calls/firms` — lightweight firm search for modal (`[{id, name}]`)
+  - `POST /api/admin/calls/upload` — upload + analyze transcript (see below)
+
+### /api/admin/calls/upload
+- Creates a `callRecording` (type: partnership) and `callTranscript` record
+- Runs AI analysis via Gemini Flash (OpenRouter) to extract partnership opportunities
+- Stores each opportunity in the `opportunities` table with `source = "call"`, `sourceId = transcriptId`
+- Marks transcript `processingStatus = "done"` on success
+- If `partnership_followup_auto_send = "true"` AND opportunities were found: sends follow-up email to `masa+{firmslug}@joincollectiveos.com` via Resend
+- Returns: `{ transcriptId, recordingId, opportunityCount, opportunities, summary }`
 
 ### 13. Email Queue
 - **Route:** `/admin/email`
@@ -273,7 +301,14 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 |--------|------|---------|
 | GET | `/api/admin/partnerships` | List all partnerships |
 | GET | `/api/admin/partnerships/stats` | Partnership pipeline stats |
-| POST | `/api/admin/partnerships/intro` | Queue an intro email for a partnership |
+| POST | `/api/admin/partnerships/intro` | Queue or auto-send intro email (respects `partnership_intro_auto_send` toggle) |
+
+### Call Transcripts
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/admin/calls` | List all transcripts with stats (filter: `?source=manual\|recall`) |
+| GET | `/api/admin/calls/firms` | Lightweight firm search for upload modal (`?q=`) |
+| POST | `/api/admin/calls/upload` | Upload transcript, run AI analysis, store opportunities, optional follow-up email |
 
 ### Neo4j
 | Method | Path | Purpose |

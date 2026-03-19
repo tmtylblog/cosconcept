@@ -11,6 +11,8 @@ import {
   DollarSign,
   Mail,
   Sparkles,
+  SendHorizonal,
+  Zap,
 } from "lucide-react";
 
 interface Partnership {
@@ -48,6 +50,36 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> =
 
 const PAGE_SIZE = 100;
 
+// ─── Simple toggle switch ─────────────────────────────────────────────────
+
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (val: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked ? "bg-cos-electric" : "bg-slate-300"
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+          checked ? "translate-x-4" : "translate-x-0"
+        }`}
+      />
+    </button>
+  );
+}
+
 export default function AdminPartnershipsPage() {
   const router = useRouter();
   const [partnerships, setPartnerships] = useState<Partnership[]>([]);
@@ -57,6 +89,34 @@ export default function AdminPartnershipsPage() {
   const [introSending, setIntroSending] = useState<string | null>(null);
   const [introFeedback, setIntroFeedback] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
+
+  // Email settings toggles
+  const [introAutoSend, setIntroAutoSend] = useState(false);
+  const [followupAutoSend, setFollowupAutoSend] = useState(false);
+  const [toggleSaving, setToggleSaving] = useState<string | null>(null);
+
+  async function saveToggle(key: string, value: boolean) {
+    setToggleSaving(key);
+    try {
+      await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value: String(value) }),
+      });
+    } finally {
+      setToggleSaving(null);
+    }
+  }
+
+  async function handleIntroToggle(val: boolean) {
+    setIntroAutoSend(val);
+    await saveToggle("partnership_intro_auto_send", val);
+  }
+
+  async function handleFollowupToggle(val: boolean) {
+    setFollowupAutoSend(val);
+    await saveToggle("partnership_followup_auto_send", val);
+  }
 
   async function sendIntro(partnershipId: string) {
     setIntroSending(partnershipId);
@@ -68,7 +128,10 @@ export default function AdminPartnershipsPage() {
       });
       const data = await res.json();
       if (data.ok) {
-        setIntroFeedback((prev) => ({ ...prev, [partnershipId]: "Queued!" }));
+        setIntroFeedback((prev) => ({
+          ...prev,
+          [partnershipId]: data.autoSent ? "Sent!" : "Queued!",
+        }));
       } else {
         setIntroFeedback((prev) => ({ ...prev, [partnershipId]: data.error ?? "Error" }));
       }
@@ -83,10 +146,14 @@ export default function AdminPartnershipsPage() {
     Promise.all([
       fetch("/api/admin/partnerships").then((r) => r.json()),
       fetch("/api/admin/partnerships/stats").then((r) => r.json()),
+      fetch("/api/admin/settings?key=partnership_intro_auto_send").then((r) => r.json()),
+      fetch("/api/admin/settings?key=partnership_followup_auto_send").then((r) => r.json()),
     ])
-      .then(([partnerData, statsData]) => {
+      .then(([partnerData, statsData, introSetting, followupSetting]) => {
         setPartnerships(partnerData.partnerships ?? []);
         setStats(statsData);
+        setIntroAutoSend(introSetting.value === "true");
+        setFollowupAutoSend(followupSetting.value === "true");
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -189,6 +256,62 @@ export default function AdminPartnershipsPage() {
           </div>
         </div>
       )}
+
+      {/* Email Settings */}
+      <div className="rounded-cos-xl border border-cos-border bg-cos-surface px-5 py-4">
+        <p className="mb-4 text-[10px] font-semibold uppercase tracking-widest text-cos-slate-light">
+          Email Settings
+        </p>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <SendHorizonal className="h-3.5 w-3.5 text-cos-electric" />
+                <p className="text-sm font-medium text-cos-midnight">Auto-send intro emails</p>
+                {introAutoSend && (
+                  <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-semibold text-cos-signal">
+                    <Zap className="h-2.5 w-2.5" /> LIVE
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 text-xs text-cos-slate">
+                {introAutoSend
+                  ? "Intro emails send immediately to masa+{firm}@joincollectiveos.com"
+                  : "Intro emails queue for manual admin review"}
+              </p>
+            </div>
+            <Toggle
+              checked={introAutoSend}
+              onChange={handleIntroToggle}
+              disabled={toggleSaving === "partnership_intro_auto_send"}
+            />
+          </div>
+          <div className="h-px bg-cos-border/60" />
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Mail className="h-3.5 w-3.5 text-cos-warm" />
+                <p className="text-sm font-medium text-cos-midnight">Auto-send follow-up emails</p>
+                {followupAutoSend && (
+                  <span className="inline-flex items-center gap-1 rounded-cos-pill bg-cos-signal/10 px-2 py-0.5 text-[10px] font-semibold text-cos-signal">
+                    <Zap className="h-2.5 w-2.5" /> LIVE
+                  </span>
+                )}
+              </div>
+              <p className="mt-0.5 text-xs text-cos-slate">
+                {followupAutoSend
+                  ? "Follow-up emails send automatically after transcript analysis finds opportunities"
+                  : "Follow-up emails queue for manual admin review after transcript analysis"}
+              </p>
+            </div>
+            <Toggle
+              checked={followupAutoSend}
+              onChange={handleFollowupToggle}
+              disabled={toggleSaving === "partnership_followup_auto_send"}
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Filter */}
       <div className="flex items-center gap-0.5 rounded-cos-lg bg-cos-cloud-dim p-1">
@@ -299,15 +422,17 @@ export default function AdminPartnershipsPage() {
                   <td className="px-5 py-3.5">
                     {["requested", "accepted"].includes(p.status) && (
                       introFeedback[p.id] ? (
-                        <span className="text-xs text-cos-signal">{introFeedback[p.id]}</span>
+                        <span className={`text-xs font-medium ${introFeedback[p.id] === "Sent!" ? "text-cos-signal" : introFeedback[p.id] === "Queued!" ? "text-cos-electric" : "text-cos-ember"}`}>
+                          {introFeedback[p.id]}
+                        </span>
                       ) : (
                         <button
                           onClick={() => sendIntro(p.id)}
                           disabled={introSending === p.id}
                           className="flex items-center gap-1.5 rounded-cos-md bg-cos-electric/10 px-3 py-1.5 text-xs font-semibold text-cos-electric transition-colors hover:bg-cos-electric hover:text-white disabled:opacity-50"
                         >
-                          <Mail className="h-3.5 w-3.5" />
-                          {introSending === p.id ? "Generating…" : "Send Intro"}
+                          {introAutoSend ? <Zap className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
+                          {introSending === p.id ? "Generating…" : introAutoSend ? "Send Now" : "Queue Intro"}
                         </button>
                       )
                     )}
