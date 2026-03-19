@@ -199,6 +199,11 @@ export async function POST(req: NextRequest) {
 
     if (body.action === "updateDeal") {
       const { dealId, ...fields } = body;
+
+      // Fetch current deal for change detection
+      const [oldDeal] = await db.select().from(acqDeals).where(eq(acqDeals.id, dealId)).limit(1);
+      if (!oldDeal) return NextResponse.json({ error: "Deal not found" }, { status: 404 });
+
       const updateData: Record<string, unknown> = { updatedAt: now };
       if (fields.name !== undefined) updateData.name = fields.name;
       if (fields.dealValue !== undefined) updateData.dealValue = fields.dealValue;
@@ -210,6 +215,8 @@ export async function POST(req: NextRequest) {
       if (fields.linkedinAccountId !== undefined) updateData.linkedinAccountId = fields.linkedinAccountId || null;
       if (fields.outreachEmailAccount !== undefined) updateData.outreachEmailAccount = fields.outreachEmailAccount || null;
       if (fields.status !== undefined) updateData.status = fields.status;
+      if (fields.contactId !== undefined) updateData.contactId = fields.contactId || null;
+      if (fields.companyId !== undefined) updateData.companyId = fields.companyId || null;
 
       // If stageId is being changed, also update stageLabel and log activity
       if (fields.stageId !== undefined) {
@@ -227,6 +234,56 @@ export async function POST(req: NextRequest) {
       }
 
       await db.update(acqDeals).set(updateData).where(eq(acqDeals.id, dealId));
+
+      // Auto-log field changes as activities
+      const TRACKABLE: { field: string; label: string; type: string }[] = [
+        { field: "name", label: "Deal name", type: "field_change" },
+        { field: "dealValue", label: "Deal value", type: "field_change" },
+        { field: "priority", label: "Priority", type: "field_change" },
+        { field: "source", label: "Source", type: "field_change" },
+        { field: "status", label: "Status", type: "field_change" },
+        { field: "contactId", label: "Primary contact", type: "field_change" },
+        { field: "companyId", label: "Company", type: "field_change" },
+        { field: "linkedinAccountId", label: "LinkedIn account", type: "field_change" },
+        { field: "outreachEmailAccount", label: "Email account", type: "field_change" },
+        { field: "notes", label: "Notes", type: "note_added" },
+      ];
+
+      for (const { field, label, type } of TRACKABLE) {
+        if (fields[field] === undefined) continue;
+        const oldVal = (oldDeal as Record<string, unknown>)[field];
+        const newVal = fields[field];
+        // Skip if value unchanged
+        if (String(oldVal ?? "") === String(newVal ?? "")) continue;
+        // For notes, only log if going from empty to non-empty or vice versa (avoid logging every keystroke)
+        if (field === "notes") {
+          const hadNotes = !!(oldVal as string)?.trim();
+          const hasNotes = !!(newVal as string)?.trim();
+          if (hadNotes === hasNotes) continue;
+        }
+
+        await db.insert(acqDealActivities).values({
+          id: randomId(),
+          dealId,
+          activityType: type,
+          description: field === "notes"
+            ? (newVal ? "Notes updated" : "Notes cleared")
+            : `${label} changed from "${oldVal ?? "none"}" to "${newVal ?? "none"}"`,
+          metadata: { field, oldValue: oldVal ?? null, newValue: newVal ?? null },
+        });
+      }
+
+      // Stage change gets its own dedicated activity type (existing behavior)
+      if (fields.stageId !== undefined && fields.stageId !== oldDeal.stageId) {
+        await db.insert(acqDealActivities).values({
+          id: randomId(),
+          dealId,
+          activityType: "stage_change",
+          description: `Stage changed from "${oldDeal.stageLabel}" to "${updateData.stageLabel}"`,
+          metadata: { oldStageId: oldDeal.stageId, newStageId: fields.stageId, oldLabel: oldDeal.stageLabel, newLabel: updateData.stageLabel },
+        });
+      }
+
       return NextResponse.json({ ok: true });
     }
 
