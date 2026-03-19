@@ -59,19 +59,15 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
   const { text, replyTo, tags } = options;
 
   // ── DEV OVERRIDE (env-level, checked first, cannot be bypassed) ───────────
+  // Supports comma-separated addresses: "masa@joincollectiveos.com,freddie@joincollectiveos.com"
   const devOverride = process.env.RESEND_DEV_OVERRIDE?.trim();
   if (devOverride) {
-    const originalTo = [to].flat().join(", ");
-    to = devOverride;
+    const overrideAddresses = devOverride.split(",").map((e) => e.trim()).filter(Boolean);
+    console.log(`[Email] DEV OVERRIDE active — redirecting to ${overrideAddresses.join(", ")} (was: ${[to].flat().join(", ")})`);
+    to = overrideAddresses;
     cc = [];
     bcc = [];
-    subject = `[DEV → ${originalTo}] ${subject}`;
-    html =
-      `<div style="background:#fef3c7;padding:12px;margin-bottom:16px;border-left:4px solid #f59e0b;font-family:sans-serif;font-size:13px;">` +
-      `<strong>🔒 DEV MODE</strong> — Original recipient: <strong>${originalTo}</strong>` +
-      `</div>` +
-      (html ?? "");
-    console.log(`[Email] DEV OVERRIDE active — redirecting to ${devOverride} (was: ${originalTo})`);
+    // No subject or body mangling — email looks exactly as it would in production
   }
   // ─────────────────────────────────────────────────────────────────────────
 
