@@ -23,9 +23,12 @@ function generateId(prefix: string): string {
 }
 
 /** Slugify a firm name into a safe email local-part: "Acme Corp" → "acmecorp" */
-function toTestEmail(firmName: string): string {
+function toTestEmails(firmName: string): string[] {
   const slug = firmName.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return `masa+${slug}@joincollectiveos.com`;
+  return [
+    `masa+${slug}@joincollectiveos.com`,
+    `freddie+${slug}@joincollectiveos.com`,
+  ];
 }
 
 async function getSetting(key: string): Promise<string | null> {
@@ -152,18 +155,19 @@ export async function queuePartnershipIntro(opts: {
   // Check whether auto-send is enabled for intro emails
   const autoSend = (await getSetting("partnership_intro_auto_send")) === "true";
 
-  // Build test recipient addresses
-  const testEmailA = toTestEmail(firmA.name);
-  const testEmailB = toTestEmail(firmB.name);
+  // Build test recipient addresses (masa+ and freddie+ for each firm)
+  const testEmailsA = toTestEmails(firmA.name);
+  const testEmailsB = toTestEmails(firmB.name);
+  const allTestEmails = [...testEmailsA, ...testEmailsB];
 
-  // Always use test addresses (masa+) — toggle controls auto vs manual send only
+  // Always use test addresses — toggle controls auto vs manual send only
   const queueId = generateId("eq");
   await db.insert(emailApprovalQueue).values({
     id: queueId,
     firmId: firmAId,
     userId: senderUserId,
     emailType: "intro",
-    toEmails: [testEmailA, testEmailB],
+    toEmails: allTestEmails,
     subject: intro.subject,
     bodyHtml: intro.htmlBody,
     bodyText: intro.textBody,
@@ -175,7 +179,7 @@ export async function queuePartnershipIntro(opts: {
   // If auto-send is ON, fire immediately — otherwise stays pending for manual approval
   if (autoSend) {
     const result = await sendEmail({
-      to: [testEmailA, testEmailB],
+      to: allTestEmails,
       subject: intro.subject,
       html: intro.htmlBody,
       text: intro.textBody,
