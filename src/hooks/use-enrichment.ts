@@ -187,6 +187,25 @@ export function EnrichmentProvider({
       // This gives instant UI while DB fetch is in flight
       if (!result) {
         try {
+          // Sandbox sessions: clear stale enrichment from previous sessions
+          // The cos_sandbox_domain cookie indicates this is a sandbox user
+          const sandboxDomain = document.cookie.match(/cos_sandbox_domain=([^;]+)/)?.[1];
+          if (sandboxDomain) {
+            const cached = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
+            if (cached) {
+              try {
+                const staleData = JSON.parse(cached);
+                if (staleData.domain && staleData.domain !== sandboxDomain) {
+                  console.log(`[Enrichment] Sandbox: clearing stale cache (${staleData.domain} != ${sandboxDomain})`);
+                  localStorage.removeItem(STORAGE_KEY);
+                  sessionStorage.removeItem(STORAGE_KEY);
+                  localStorage.removeItem("cos_guest_domain");
+                  sessionStorage.removeItem("cos_guest_domain");
+                }
+              } catch { /* ignore parse errors */ }
+            }
+          }
+
           const cached = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
           if (cached && !cancelled) {
             const enrichmentData = JSON.parse(cached) as EnrichmentResult;

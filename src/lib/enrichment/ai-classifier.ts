@@ -125,9 +125,11 @@ Determine if this is primarily:
 - "hybrid" — offers both professional services AND has a significant product/brand component
 - "unclear" — not enough evidence to determine
 
-Key signals for service_provider: case studies about client work, "our clients", consulting/agency language, team of consultants/strategists
-Key signals for brand_or_retailer: "Shop now", product catalog, "Add to cart", manufacturing, retail stores, consumer products
-Key signals for product_company: "Sign up", "Start free trial", feature pages, API docs, pricing for a software product
+Key signals for service_provider: "our work", "our clients", case studies, portfolio of client projects, "we help", "our team", agency/consultancy/studio language, services pages listing what they do for clients, team bios with titles like strategist/designer/developer/consultant, "contact us" for a project, "let's work together", "our approach", "our process", media agency, creative agency, digital agency, marketing agency, PR firm, design studio
+Key signals for brand_or_retailer: "Shop now", "Add to cart", product catalog with prices, e-commerce checkout, manufacturing facility, retail store locations, consumer product packaging, "Buy now"
+Key signals for product_company: "Sign up", "Start free trial", feature comparison pages, API documentation, per-seat or per-month pricing for a software product, "Log in" to a dashboard
+
+IMPORTANT: If the company name contains "agency", "consulting", "consultancy", "studio", "partners", "advisors", "group", or "collective", it is almost certainly a service_provider unless there is overwhelming evidence otherwise. When in doubt between service_provider and brand_or_retailer, default to service_provider — our platform is for service firms and we would rather include a borderline case than exclude a real agency.
 
 Be precise. Only tag what the evidence supports. Don't guess.`;
 
