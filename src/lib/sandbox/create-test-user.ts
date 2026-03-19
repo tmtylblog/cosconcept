@@ -130,7 +130,7 @@ export async function createSandboxUser(opts: {
   const isPreOnboarded = opts.mode === "pre-onboarded";
 
   // Check enrichment cache if domain provided and pre-onboarded
-  let enrichmentData = null;
+  let enrichmentData: Record<string, unknown> | null = null;
   if (domain && isPreOnboarded) {
     const [cached] = await db
       .select({ enrichmentData: enrichmentCache.enrichmentData })
@@ -138,8 +138,17 @@ export async function createSandboxUser(opts: {
       .where(eq(enrichmentCache.domain, domain))
       .limit(1);
     if (cached) {
-      enrichmentData = cached.enrichmentData;
+      enrichmentData = cached.enrichmentData as Record<string, unknown>;
     }
+  }
+  // For post-onboard: ensure enrichmentData has at least companyData.name
+  // so the onboarding status check sees enrichment as complete
+  if (isPreOnboarded && !enrichmentData) {
+    enrichmentData = {
+      companyData: { name: domain ? `Sandbox (${domain})` : name },
+      classification: { categories: ["Technology Consulting"] },
+      domain: domain || null,
+    };
   }
 
   await db.insert(serviceFirms).values({
@@ -157,18 +166,50 @@ export async function createSandboxUser(opts: {
     updatedAt: now,
   });
 
-  // 7. If pre-onboarded, create canned partner preferences
+  // 7. If pre-onboarded (post-onboard mode), create canned partner preferences
+  //    with the v2 required fields so onboarding status reports complete
   if (isPreOnboarded) {
+    const philosophies = [
+      "We believe in deep, long-term partnerships where both sides win. Quality over quantity.",
+      "Partnerships should be mutually beneficial — we refer work both ways and share knowledge openly.",
+      "We focus on complementary capabilities. We don't partner with competitors, only firms that extend our reach.",
+    ];
+    const gaps = [
+      "We need partners with strong data engineering and ML capabilities — our strength is strategy and design.",
+      "Looking for firms with deep industry expertise in healthcare and fintech to complement our technical delivery.",
+      "We lack creative and brand capabilities — need a design-forward agency partner.",
+    ];
+    const partnerTypes = [
+      "Boutique agencies with 10-50 people, advisory firms, and fractional CTO/CMO practices.",
+      "Mid-size consultancies with implementation capability, plus niche specialists in AI/ML.",
+      "Full-service digital agencies, management consultancies, and technology integrators.",
+    ];
+    const dealBreakers = [
+      "Firms that compete on price or undercut proposals. We need partners who value quality.",
+      "No firms without proven case studies or references — trust is built on evidence.",
+      "Poor communication and missed deadlines are non-negotiable. We need reliable partners.",
+    ];
+    const geoPreferences = [
+      "North America primarily, open to UK/EU for international projects.",
+      "Global — we work across time zones and need partners who can too.",
+      "US-focused, especially East Coast metros (NYC, Boston, DC, Atlanta).",
+    ];
+
+    const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+
     const prefId = `pref_sandbox_${sandboxId}`;
     await db.insert(partnerPreferences).values({
       id: prefId,
       firmId,
       rawOnboardingData: {
-        growthGoals: ["Find complementary partners", "Expand service offerings"],
-        idealPartnerTypes: ["boutique_agency", "advisory"],
-        industries: ["Technology", "Financial Services"],
-        dealSize: "$50K-$200K",
-        source: "sandbox-pre-onboarded",
+        // v2 required fields (these 5 must be set for onboarding to be "complete")
+        partnershipPhilosophy: pick(philosophies),
+        capabilityGaps: pick(gaps),
+        preferredPartnerTypes: pick(partnerTypes),
+        dealBreaker: pick(dealBreakers),
+        geographyPreference: pick(geoPreferences),
+        // metadata
+        source: "sandbox-post-onboard",
       },
       createdAt: now,
       updatedAt: now,

@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { users, members } from "@/lib/db/schema";
+import { users, members, serviceFirms } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createToken } from "@/lib/sandbox/token-store";
 
@@ -62,7 +62,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No org found for user" }, { status: 404 });
     }
 
-    const token = await createToken(userId, membership.orgId);
+    // Look up firm domain for the redirect hint
+    const firmId = `firm_${membership.orgId}`;
+    const [firm] = await db
+      .select({ website: serviceFirms.website })
+      .from(serviceFirms)
+      .where(eq(serviceFirms.id, firmId))
+      .limit(1);
+    const domain = firm?.website?.replace(/^https?:\/\//, "").replace(/\/+$/, "") || undefined;
+
+    const token = await createToken(userId, membership.orgId, domain);
     const loginUrl = `/api/sandbox/enter?token=${token}`;
 
     return NextResponse.json({ success: true, loginUrl });

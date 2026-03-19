@@ -141,7 +141,8 @@ function AppLayoutInner({
     if (!session?.user || activeOrg?.id || orgProvisionedRef.current) return;
     orgProvisionedRef.current = true;
 
-    const isInternal = session.user.email?.endsWith("@joincollectiveos.com");
+    const isSandboxUser = !!session.user.email?.match(/^support\+sandbox-.*@joincollectiveos\.com$/);
+    const isInternal = session.user.email?.endsWith("@joincollectiveos.com") && !isSandboxUser;
 
     async function provisionOrg() {
       try {
@@ -247,7 +248,8 @@ function AppLayoutInner({
   // users who land on /dashboard (e.g. from login redirect or bookmarks).
   useEffect(() => {
     if (!session?.user || sessionPending || !onboardingComplete) return;
-    if (session.user.email?.endsWith("@joincollectiveos.com")) return; // internal team handled above
+    const isSandbox = !!session.user.email?.match(/^support\+sandbox-.*@joincollectiveos\.com$/);
+    if (session.user.email?.endsWith("@joincollectiveos.com") && !isSandbox) return; // internal team handled above
     if (pathname === "/dashboard") {
       router.replace("/discover");
     }
@@ -367,17 +369,39 @@ function AppLayoutInner({
     if (!session?.user?.email) return;
     if (enrichTriggeredRef.current === session.user.email) return;
 
-    const emailDomain = getEmailDomain(session.user.email);
-    if (!emailDomain || isPersonalEmail(session.user.email)) return;
+    // Sandbox users: use the firm domain from URL param or cookie, not the email domain
+    const isSandboxEmail = !!session.user.email.match(/^support\+sandbox-.*@joincollectiveos\.com$/);
+    let domainToEnrich: string;
+
+    if (isSandboxEmail) {
+      // Check URL param first, then cookie
+      const urlDomain = new URLSearchParams(window.location.search).get("sandbox_domain");
+      const cookieDomain = document.cookie.match(/cos_sandbox_domain=([^;]+)/)?.[1];
+      const sandboxDomain = urlDomain || cookieDomain;
+      if (!sandboxDomain) {
+        // No domain specified for sandbox user — skip auto-enrich
+        enrichTriggeredRef.current = session.user.email;
+        return;
+      }
+      domainToEnrich = sandboxDomain;
+      // Persist for future page loads so we don't lose it
+      if (urlDomain) {
+        document.cookie = `cos_sandbox_domain=${urlDomain};path=/;max-age=86400`;
+      }
+    } else {
+      const emailDomain = getEmailDomain(session.user.email);
+      if (!emailDomain || isPersonalEmail(session.user.email)) return;
+      domainToEnrich = emailDomain;
+    }
 
     // If enrichment is already done with company data, check if the email domain
     // is an alias for the enriched domain (e.g., chameleon.co → chameleoncollective.com)
     if (enrichmentStatus === "done" && hasCompanyData) {
       // Already enriched — domains might differ but that's fine (alias case)
       enrichTriggeredRef.current = session.user.email;
-      if (enrichedDomain && enrichedDomain !== emailDomain) {
+      if (enrichedDomain && enrichedDomain !== domainToEnrich) {
         console.log(
-          `[Layout] Skipping auto-enrich: email domain (${emailDomain}) differs from enriched domain (${enrichedDomain}), likely an alias`
+          `[Layout] Skipping auto-enrich: target domain (${domainToEnrich}) differs from enriched domain (${enrichedDomain}), likely an alias`
         );
       }
       return;
@@ -395,10 +419,11 @@ function AppLayoutInner({
       enrichTriggeredRef.current = session.user.email;
       const isGapFill = enrichmentStatus === "done";
       console.log(
-        `[Layout] Auto-enriching from email domain: ${emailDomain}` +
+        `[Layout] Auto-enriching from domain: ${domainToEnrich}` +
+        (isSandboxEmail ? " (sandbox user)" : "") +
         (isGapFill ? " (gap-fill: missing PDL data)" : "")
       );
-      triggerEnrichmentRef.current(emailDomain, isGapFill);
+      triggerEnrichmentRef.current(domainToEnrich, isGapFill);
     }
   }, [session?.user?.email, enrichmentStatus, hasCompanyData, enrichedDomain]);
 

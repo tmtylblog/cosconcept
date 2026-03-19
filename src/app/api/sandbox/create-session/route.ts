@@ -32,7 +32,8 @@ export async function POST(req: NextRequest) {
     const mode = (body.mode as "onboarding" | "pre-onboarded") || "onboarding";
 
     const result = await createSandboxUser({ name, domain, mode });
-    const token = await createToken(result.userId, result.orgId);
+    const normalizedDomain = domain?.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    const token = await createToken(result.userId, result.orgId, normalizedDomain);
     const loginUrl = `/api/sandbox/enter?token=${token}`;
 
     return NextResponse.json({

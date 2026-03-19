@@ -237,7 +237,8 @@ export default function SandboxPage() {
                 onChange={() => setMode("onboarding")}
                 className="accent-cos-electric"
               />
-              <span className="text-sm text-cos-midnight">Fresh Onboarding</span>
+              <span className="text-sm text-cos-midnight">Pre-Onboard</span>
+              <span className="text-xs text-cos-slate-light">(full flow: enrichment + interview)</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -247,7 +248,8 @@ export default function SandboxPage() {
                 onChange={() => setMode("pre-onboarded")}
                 className="accent-cos-electric"
               />
-              <span className="text-sm text-cos-midnight">Pre-Onboarded (skip interview)</span>
+              <span className="text-sm text-cos-midnight">Post-Onboard</span>
+              <span className="text-xs text-cos-slate-light">(skip to app with random answers)</span>
             </label>
           </div>
         </div>

@@ -53,6 +53,10 @@ export async function GET(req: NextRequest) {
     // We set BOTH prefixed and unprefixed to ensure the session is recognized.
     const isProduction = process.env.NODE_ENV === "production";
     const redirectUrl = new URL("/dashboard", req.url);
+    // Pass sandbox firm domain so auto-enrich uses the right domain (not the email domain)
+    if (entry.domain) {
+      redirectUrl.searchParams.set("sandbox_domain", entry.domain);
+    }
     const response = NextResponse.redirect(redirectUrl);
 
     const sessionCookieName = isProduction
