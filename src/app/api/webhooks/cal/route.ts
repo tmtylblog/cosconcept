@@ -41,11 +41,26 @@ export async function POST(req: NextRequest) {
   }
 
   const booking = payload.payload as Record<string, unknown>;
+
+  // Log full payload to diagnose missing meeting URL
+  console.log("[Cal webhook] Full booking payload:", JSON.stringify({
+    uid: booking.uid,
+    title: booking.title,
+    location: booking.location,
+    meetingUrl: booking.meetingUrl,
+    videoCallData: booking.videoCallData,
+    conferenceData: booking.conferenceData,
+  }, null, 2));
+
   const meetingUrl = extractMeetingUrl(booking);
 
   if (!meetingUrl) {
-    console.warn("[Cal webhook] No Google Meet URL found in booking", booking.uid);
-    return NextResponse.json({ ok: true, skipped: "no_meeting_url" });
+    console.warn("[Cal webhook] No Google Meet URL found in booking", booking.uid,
+      "— location:", booking.location, "videoCallData:", booking.videoCallData);
+    return NextResponse.json({ ok: true, skipped: "no_meeting_url", debug: {
+      location: booking.location,
+      videoCallData: booking.videoCallData,
+    }});
   }
 
   // Extract metadata from the booking
