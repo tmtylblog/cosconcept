@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 
     // Build redirect URL
     const isPostOnboard = entry.mode === "pre-onboarded";
-    const redirectPath = isPostOnboard ? "/discover" : "/dashboard";
+    const redirectPath = isPostOnboard ? "/firm" : "/dashboard";
     const redirectUrl = new URL(redirectPath, req.url);
     if (entry.domain) {
       redirectUrl.searchParams.set("sandbox_domain", entry.domain);
@@ -97,14 +97,18 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Set sandbox domain cookie so the layout auto-enrich uses the correct domain
+    // Set sandbox cookies so middleware can persist URL params across navigation
+    const secureSuffix = isProduction ? "; Secure" : "";
     if (entry.domain) {
-      const secureSuffix = isProduction ? "; Secure" : "";
       response.headers.append(
         "Set-Cookie",
         `cos_sandbox_domain=${entry.domain}; Path=/; Max-Age=86400; SameSite=Lax${secureSuffix}`
       );
     }
+    response.headers.append(
+      "Set-Cookie",
+      `cos_sandbox_mode=${isPostOnboard ? "post" : "pre"}; Path=/; Max-Age=86400; SameSite=Lax${secureSuffix}`
+    );
 
     return response;
   } catch (error) {

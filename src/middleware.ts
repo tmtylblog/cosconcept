@@ -39,8 +39,29 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
+/** App page paths where sandbox params should be injected (not API routes, not static) */
+function isAppPage(pathname: string): boolean {
+  return !pathname.startsWith("/api/") &&
+    !pathname.startsWith("/_next/") &&
+    !pathname.startsWith("/admin/");
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // ─── Sandbox param persistence ─────────────────────────────
+  // If sandbox cookies exist but URL params are missing, redirect to add them.
+  // This keeps sandbox_domain and sandbox_mode visible in the URL bar at all times.
+  if (isAppPage(pathname)) {
+    const sandboxDomain = req.cookies.get("cos_sandbox_domain")?.value;
+    const sandboxMode = req.cookies.get("cos_sandbox_mode")?.value;
+    if (sandboxDomain && !req.nextUrl.searchParams.has("sandbox_domain")) {
+      const url = req.nextUrl.clone();
+      url.searchParams.set("sandbox_domain", sandboxDomain);
+      if (sandboxMode) url.searchParams.set("sandbox_mode", sandboxMode);
+      return NextResponse.redirect(url);
+    }
+  }
 
   // Rewrite root URL to /dashboard (URL stays as /, content from /dashboard)
   if (pathname === "/") {

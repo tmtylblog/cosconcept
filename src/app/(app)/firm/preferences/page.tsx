@@ -124,12 +124,118 @@ export default function FirmPreferencesPage() {
         </p>
       </div>
 
-      {/* Section divider */}
+      {/* ─── V2 Preferences (from onboarding interview) ─── */}
       <div className="flex items-center gap-3">
         <div className="h-px flex-1 bg-cos-border" />
         <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-cos-electric">
           <Handshake className="h-3.5 w-3.5" />
-          Matching Criteria
+          Partnership Strategy
+        </p>
+        <div className="h-px flex-1 bg-cos-border" />
+      </div>
+
+      {/* Partnership Philosophy */}
+      <EditableSinglePrefSection
+        icon={<Compass className="h-4 w-4" />}
+        title="Partnership Philosophy"
+        field="partnershipPhilosophy"
+        value={typeof profileData.partnershipPhilosophy === "string" ? profileData.partnershipPhilosophy : undefined}
+        emptyHint="Your approach to partnerships &mdash; tell Ossy or click edit"
+        editing={editingSection === "partnershipPhilosophy"}
+        onEdit={() => setEditingSection(editingSection === "partnershipPhilosophy" ? null : "partnershipPhilosophy")}
+        onSave={async (val) => {
+          const prev = typeof profileData.partnershipPhilosophy === "string" ? profileData.partnershipPhilosophy : "";
+          updateField("partnershipPhilosophy", val);
+          try {
+            const res = await fetch("/api/profile/update", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ field: "partnershipPhilosophy", value: val }),
+            });
+            if (!res.ok) { updateField("partnershipPhilosophy", prev); return; }
+          } catch { updateField("partnershipPhilosophy", prev); return; }
+          setEditingSection(null);
+        }}
+      />
+
+      {/* Capability Gaps */}
+      <EditableSinglePrefSection
+        icon={<Target className="h-4 w-4" />}
+        title="Capability Gaps"
+        field="capabilityGaps"
+        value={Array.isArray(profileData.capabilityGaps) ? profileData.capabilityGaps.join(", ") : typeof profileData.capabilityGaps === "string" ? profileData.capabilityGaps : undefined}
+        emptyHint="Skills or capabilities you need from partners"
+        editing={editingSection === "capabilityGaps"}
+        onEdit={() => setEditingSection(editingSection === "capabilityGaps" ? null : "capabilityGaps")}
+        onSave={async (val) => {
+          const prev = profileData.capabilityGaps;
+          updateField("capabilityGaps", val);
+          try {
+            const res = await fetch("/api/profile/update", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ field: "capabilityGaps", value: val }),
+            });
+            if (!res.ok) { updateField("capabilityGaps", prev ?? ""); return; }
+          } catch { updateField("capabilityGaps", prev ?? ""); return; }
+          setEditingSection(null);
+        }}
+      />
+
+      {/* Deal Breaker */}
+      <EditableSinglePrefSection
+        icon={<X className="h-4 w-4" />}
+        title="Deal Breaker"
+        field="dealBreaker"
+        value={typeof profileData.dealBreaker === "string" ? profileData.dealBreaker : undefined}
+        emptyHint="What would make a partner a non-starter?"
+        editing={editingSection === "dealBreaker"}
+        onEdit={() => setEditingSection(editingSection === "dealBreaker" ? null : "dealBreaker")}
+        onSave={async (val) => {
+          const prev = typeof profileData.dealBreaker === "string" ? profileData.dealBreaker : "";
+          updateField("dealBreaker", val);
+          try {
+            const res = await fetch("/api/profile/update", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ field: "dealBreaker", value: val }),
+            });
+            if (!res.ok) { updateField("dealBreaker", prev); return; }
+          } catch { updateField("dealBreaker", prev); return; }
+          setEditingSection(null);
+        }}
+      />
+
+      {/* Geography Preference */}
+      <EditableSinglePrefSection
+        icon={<MapPin className="h-4 w-4" />}
+        title="Geography Preference"
+        field="geographyPreference"
+        value={typeof profileData.geographyPreference === "string" ? profileData.geographyPreference : undefined}
+        emptyHint="Geographic focus for partnerships"
+        editing={editingSection === "geographyPreference"}
+        onEdit={() => setEditingSection(editingSection === "geographyPreference" ? null : "geographyPreference")}
+        onSave={async (val) => {
+          const prev = typeof profileData.geographyPreference === "string" ? profileData.geographyPreference : "";
+          updateField("geographyPreference", val);
+          try {
+            const res = await fetch("/api/profile/update", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ field: "geographyPreference", value: val }),
+            });
+            if (!res.ok) { updateField("geographyPreference", prev); return; }
+          } catch { updateField("geographyPreference", prev); return; }
+          setEditingSection(null);
+        }}
+      />
+
+      {/* ─── V1 Detailed Criteria ─── */}
+      <div className="flex items-center gap-3 pt-2">
+        <div className="h-px flex-1 bg-cos-border" />
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-cos-slate-dim">
+          <BarChart3 className="h-3.5 w-3.5" />
+          Detailed Criteria
         </p>
         <div className="h-px flex-1 bg-cos-border" />
       </div>
