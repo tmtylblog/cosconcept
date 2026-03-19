@@ -231,7 +231,7 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
         body: JSON.stringify({
           firmId: selectedFirm.id,
           clientDomain: clientDomain.trim() || undefined,
-          text: text.trim(),
+          transcript: text.trim(),
         }),
       });
       const data = await res.json();
