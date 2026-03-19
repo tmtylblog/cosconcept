@@ -207,6 +207,8 @@ export async function POST(req: NextRequest) {
       if (fields.customFields !== undefined) updateData.customFields = fields.customFields;
       if (fields.source !== undefined) updateData.source = fields.source;
       if (fields.sourceChannel !== undefined) updateData.sourceChannel = fields.sourceChannel;
+      if (fields.linkedinAccountId !== undefined) updateData.linkedinAccountId = fields.linkedinAccountId || null;
+      if (fields.outreachEmailAccount !== undefined) updateData.outreachEmailAccount = fields.outreachEmailAccount || null;
       if (fields.status !== undefined) updateData.status = fields.status;
 
       // If stageId is being changed, also update stageLabel and log activity

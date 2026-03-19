@@ -554,18 +554,23 @@ export default function DealDetailPage({ params }: { params: Promise<{ dealId: s
                   <span className="font-medium text-cos-signal">${Number(deal.dealValue).toLocaleString()}</span>
                 </div>
               )}
-              <div className="flex justify-between text-xs">
+              <div className="flex justify-between items-center text-xs">
                 <span className="text-cos-slate">Source</span>
-                <span className="inline-flex items-center gap-1.5 font-medium text-cos-midnight">
-                  {deal.sourceChannel === "linkedin" || deal.source === "linkedin_auto"
-                    ? <Linkedin className="h-3 w-3 text-blue-600" />
-                    : deal.sourceChannel === "instantly" || deal.source === "instantly_auto"
-                    ? <Mail className="h-3 w-3 text-orange-500" />
-                    : deal.source === "hubspot_sync"
-                    ? <Globe className="h-3 w-3 text-[#ff7a59]" />
-                    : <Globe className="h-3 w-3 text-cos-slate" />}
-                  {dealSourceLabel}
-                </span>
+                <select
+                  value={deal.source}
+                  onChange={(e) => { saveField("source", e.target.value); saveField("sourceChannel", e.target.value.includes("linkedin") ? "linkedin" : e.target.value.includes("instantly") ? "instantly" : null); }}
+                  className="rounded-cos-md border border-cos-border px-2 py-1 text-xs text-cos-midnight font-medium focus:border-cos-electric focus:outline-none bg-white"
+                >
+                  {dealSources.length > 0
+                    ? dealSources.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)
+                    : <>
+                        <option value="manual">Manual</option>
+                        <option value="hubspot_sync">HubSpot Sync</option>
+                        <option value="linkedin_auto">LinkedIn Auto</option>
+                        <option value="instantly_auto">Instantly Auto</option>
+                      </>
+                  }
+                </select>
               </div>
               {deal.sourceCampaignName && (
                 <div className="flex justify-between text-xs">
