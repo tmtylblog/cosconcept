@@ -2288,3 +2288,25 @@ export const platformSettings = pgTable("platform_settings", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// ─── Feature Log ─────────────────────────────────────────
+// Automated changelog — entries created by CI on PR merge + manual entries.
+
+export const featureLogCategoryEnum = pgEnum("feature_log_category", [
+  "feature",
+  "enhancement",
+  "fix",
+  "infrastructure",
+  "docs",
+]);
+
+export const featureLog = pgTable("feature_log", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  category: featureLogCategoryEnum("category").notNull().default("feature"),
+  loggedBy: text("logged_by").notNull().default(""),
+  prNumber: integer("pr_number"),
+  commitHash: text("commit_hash"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});

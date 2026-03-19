@@ -32,3 +32,56 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Auto-log merged PRs to the feature log
+  log-feature:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message != ''
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    steps:
+      - name: Log to feature log
+        if: contains(github.event.head_commit.message, 'Merge pull request') || contains(github.event.head_commit.message, '(#')
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          ADMIN_SECRET: ${{ secrets.ADMIN_SECRET }}
+        run: |
+          TITLE="${{ github.event.head_commit.message }}"
+          SHA="${{ github.event.head_commit.id }}"
+          AUTHOR="${{ github.event.head_commit.author.username }}"
+
+          # Extract PR number if present
+          PR_NUM=$(echo "$TITLE" | grep -oP '#\K\d+' | head -1 || echo "")
+
+          # Extract category from conventional commit prefix
+          CATEGORY="feature"
+          case "$TITLE" in
+            fix:*|fix\(*) CATEGORY="fix" ;;
+            feat:*|feat\(*) CATEGORY="feature" ;;
+            enhance:*|update:*|improve:*) CATEGORY="enhancement" ;;
+            infra:*|ci:*|chore:*|perf:*|build:*) CATEGORY="infrastructure" ;;
+            docs:*) CATEGORY="docs" ;;
+            refactor:*) CATEGORY="enhancement" ;;
+          esac
+
+          # Clean title — strip prefix and PR merge boilerplate
+          CLEAN_TITLE=$(echo "$TITLE" | sed 's/^Merge pull request #[0-9]* from [^ ]* //' | sed 's/^[a-z]*\([^)]*\)\?: //' | sed 's/^[a-z]*: //' | head -c 200)
+
+          # Build JSON payload
+          PAYLOAD=$(jq -n \
+            --arg title "$CLEAN_TITLE" \
+            --arg category "$CATEGORY" \
+            --arg loggedBy "${AUTHOR:-ci}" \
+            --arg commitHash "$SHA" \
+            '{title: $title, category: $category, loggedBy: $loggedBy, commitHash: $commitHash}')
+
+          # Add prNumber if found
+          if [ -n "$PR_NUM" ]; then
+            PAYLOAD=$(echo "$PAYLOAD" | jq --argjson prNumber "$PR_NUM" '. + {prNumber: $prNumber}')
+          fi
+
+          # POST to feature log API (best-effort, don't fail the build)
+          curl -s -o /dev/null -w "Feature log: HTTP %{http_code}\n" \
+            -X POST "${APP_URL:-https://cos-concept.vercel.app}/api/admin/feature-log" \
+            -H "Content-Type: application/json" \
+            -H "x-admin-secret: ${ADMIN_SECRET}" \
+            -d "$PAYLOAD" || echo "Feature log POST failed (non-fatal)"

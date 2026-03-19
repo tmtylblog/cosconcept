@@ -27,6 +27,7 @@ import {
   FlaskConical,
   AlertTriangle,
   FileCode2,
+  History,
 } from "lucide-react";
 import type { AdminSection } from "@/lib/admin/permissions";
 
@@ -120,6 +121,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { href: "/admin/data-quality", label: "Data Quality", icon: AlertTriangle },
       { href: "/admin/enrichment/poor-results", label: "Poor CS Results", icon: FileX },
       { href: "/admin/prompts", label: "Key Prompts", icon: FileCode2 },
+      { href: "/admin/feature-log", label: "Feature Log", icon: History },
       { href: "/admin/sandbox", label: "Sandbox", icon: FlaskConical },
     ],
   },
