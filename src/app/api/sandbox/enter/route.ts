@@ -55,10 +55,11 @@ export async function GET(req: NextRequest) {
     const isPostOnboard = entry.mode === "pre-onboarded";
     const redirectPath = isPostOnboard ? "/discover" : "/dashboard";
     const redirectUrl = new URL(redirectPath, req.url);
-    // Pass sandbox firm domain so auto-enrich uses the right domain (not the email domain)
+    // Pass sandbox info so the client can identify the session type and enrich the right domain
     if (entry.domain) {
       redirectUrl.searchParams.set("sandbox_domain", entry.domain);
     }
+    redirectUrl.searchParams.set("sandbox_mode", isPostOnboard ? "post" : "pre");
     const response = NextResponse.redirect(redirectUrl);
 
     const sessionCookieName = isProduction
