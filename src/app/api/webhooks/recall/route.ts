@@ -25,8 +25,8 @@ function uid(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Recall.ai events that signal the call is fully done
-const DONE_EVENTS = new Set(["bot.done", "bot.call_ended"]);
+// Only bot.done means transcript is fully processed — call_ended fires too early
+const DONE_EVENTS = new Set(["bot.done"]);
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
