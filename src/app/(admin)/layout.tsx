@@ -7,64 +7,60 @@ import { eq } from "drizzle-orm";
 import { BUILT_IN_ROLES } from "@/lib/admin/permissions";
 import AdminSidebar from "@/components/admin/admin-sidebar";
 
+const ALLOWED_ROLES = ["superadmin", "admin", "growth_ops", "customer_success"];
+
 /**
- * Admin layout — server-side role check + permission resolution.
- * Renders the collapsible sidebar (client component) with the user's permissions.
+ * Admin layout — completely separate auth world.
+ *
+ * If not authenticated or not an admin role, redirects to /admin-login
+ * (never to /login or /dashboard — admin is fully isolated from customer app).
  */
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  let session;
   const headersList = await headers();
+
+  // Check session — any failure goes to admin login
+  let session;
   try {
-    session = await auth.api.getSession({
-      headers: headersList,
-    });
-  } catch (error) {
-    console.error("[Admin] Session check failed:", error);
-    redirect("/login");
+    session = await auth.api.getSession({ headers: headersList });
+  } catch {
+    redirect("/admin-login");
   }
 
   if (!session?.user) {
-    redirect("/login");
+    redirect("/admin-login");
   }
 
-  const ALLOWED_ROLES = ["superadmin", "admin", "growth_ops", "customer_success"];
-  if (!ALLOWED_ROLES.includes(session.user.role ?? "")) {
-    // If a sandbox session is active, sign out so admin can reclaim their session
-    const isSandbox = (session.user.email ?? "").includes("+sandbox");
-    if (isSandbox) {
-      try {
-        await auth.api.signOut({ headers: headersList });
-      } catch { /* best effort */ }
-    }
-    redirect("/login");
-  }
-
+  // Role gate — non-admin roles go to admin login (not the customer app)
   const role = session.user.role ?? "";
-  const isSpecializedRole = role === "growth_ops" || role === "customer_success";
+  if (!ALLOWED_ROLES.includes(role)) {
+    // If a sandbox session leaked in, sign it out
+    if ((session.user.email ?? "").includes("+sandbox")) {
+      try { await auth.api.signOut({ headers: headersList }); } catch { /* best effort */ }
+    }
+    redirect("/admin-login");
+  }
 
-  // Route-level protection: specialized roles can only access their sections
+  // Specialized roles: restrict to their section (but always allow /admin overview)
+  const isSpecializedRole = role === "growth_ops" || role === "customer_success";
   if (isSpecializedRole) {
     const pathname =
       headersList.get("x-pathname") ??
       headersList.get("x-invoke-path") ??
       "";
 
-    const allowedPrefixes: string[] = ["/admin"]; // overview always accessible
-    if (role === "growth_ops") allowedPrefixes.push("/admin/growth-ops");
-    if (role === "customer_success") allowedPrefixes.push("/admin/customer-success");
+    if (pathname && pathname !== "/admin") {
+      const allowed =
+        (role === "growth_ops" && pathname.startsWith("/admin/growth-ops")) ||
+        (role === "customer_success" && pathname.startsWith("/admin/customer-success"));
 
-    // Allow exact /admin (overview) + their section prefix
-    const isAllowed =
-      pathname === "/admin" ||
-      allowedPrefixes.some((prefix) => pathname.startsWith(prefix + "/"));
-
-    if (pathname && !isAllowed) {
-      const defaultSection = role === "growth_ops" ? "/admin/growth-ops" : "/admin/customer-success";
-      redirect(defaultSection);
+      if (!allowed) {
+        const section = role === "growth_ops" ? "/admin/growth-ops" : "/admin/customer-success";
+        redirect(section);
+      }
     }
   }
 
