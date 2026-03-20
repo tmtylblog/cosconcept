@@ -222,33 +222,30 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
     }
   }, [state]);
 
-  // Fire TTS when status returns to "ready" after we sent a message
+  // Fire TTS for any new assistant message while in voice mode
+  // This handles multi-turn responses (e.g., tool call → result → follow-up)
   useEffect(() => {
-    if (!waitingForResponseRef.current) return;
+    // Only speak when not already speaking and not currently listening for new input
+    if (state === "listening" || state === "speaking" || state === "initializing") return;
     if (status !== "ready") return;
 
+    // Find the last assistant message
     const lastMsg = messages[messages.length - 1];
-    if (
-      lastMsg?.role === "assistant" &&
-      lastMsg.id !== lastHandledMsgIdRef.current
-    ) {
-      const text = lastMsg.parts
-        ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
-        .map((p) => p.text)
-        .join(" ")
-        .replace(/\*\*/g, "")
-        .replace(/\*/g, "")
-        .trim();
+    if (!lastMsg || lastMsg.role !== "assistant") return;
+    if (lastMsg.id === lastHandledMsgIdRef.current) return;
 
+    const text = lastMsg.parts
+      ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join(" ")
+      .replace(/\*\*/g, "")
+      .replace(/\*/g, "")
+      .trim();
+
+    if (text) {
       waitingForResponseRef.current = false;
-
-      if (text) {
-        lastHandledMsgIdRef.current = lastMsg.id;
-        playTTS(text);
-      } else {
-        // No text in response — resume listening
-        setState("listening");
-      }
+      lastHandledMsgIdRef.current = lastMsg.id;
+      playTTS(text);
     }
   }, [status, messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
