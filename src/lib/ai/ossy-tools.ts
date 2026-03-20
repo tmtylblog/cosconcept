@@ -91,13 +91,17 @@ export function createOssyTools(organizationId: string, firmId?: string, userId?
       description:
         "Search the Collective OS knowledge graph for firms, experts, or case studies. " +
         "Use when the user wants to find partners, experts, agencies, consultants, or see case study examples. " +
-        "Always use this tool when the user asks to find, search, or discover anything in the network — never say you can't search.",
+        "Always use this tool when the user asks to find, search, or discover anything in the network — never say you can't search. " +
+        "IMPORTANT: When the user asks about 'experts', 'people', 'specialists', 'team members', or 'who knows', set entityType to 'expert'. " +
+        "When they ask about 'case studies', 'examples', 'proof', or 'evidence', set entityType to 'case_study'. " +
+        "When they ask about 'firms', 'agencies', 'partners', or 'companies', set entityType to 'firm'. " +
+        "When the query is ambiguous, omit entityType to search all types.",
       inputSchema: z.object({
         query: z.string().describe("Natural language search query, e.g. 'Shopify agency in APAC' or 'fractional CMO for SaaS'"),
         entityType: z
           .enum(["firm", "expert", "case_study"])
           .optional()
-          .describe("Restrict to a specific entity type. Omit to search all types."),
+          .describe("Set to 'expert' when searching for people/specialists, 'case_study' for evidence/examples, 'firm' for agencies/companies. Omit for mixed results."),
       }),
       execute: async ({ query, entityType }) => {
         try {

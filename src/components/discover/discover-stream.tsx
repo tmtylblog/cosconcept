@@ -5,6 +5,7 @@ import { Sparkles, ArrowUp, MessageSquare, ArrowRight, Loader2 } from "lucide-re
 import { useDiscoverStream, type StreamItem } from "@/hooks/use-discover-stream";
 import { useDiscoverResults, type DiscoverCandidate } from "@/hooks/use-discover-results";
 import { ResultCardsBlock } from "@/components/discover/stream-blocks/result-cards-block";
+import { SearchLoader } from "@/components/discover/search-loader";
 import { FirmDetailBlock } from "@/components/discover/stream-blocks/firm-detail-block";
 import { ExpertDetailBlock } from "@/components/discover/stream-blocks/expert-detail-block";
 import { CaseStudyDetailBlock } from "@/components/discover/stream-blocks/case-study-detail-block";
@@ -137,14 +138,10 @@ export function DiscoverStream() {
           {/* Idle state */}
           {isIdle && <IdleState />}
 
-          {/* Ossy working indicator — shows while chat is processing before search starts */}
-          {ossyWorking && !searching && results.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 animate-slide-up">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-cos-electric/10 mb-4">
-                <Loader2 className="h-8 w-8 animate-spin text-cos-electric" />
-              </div>
-              <p className="text-sm font-medium text-cos-midnight">Ossy is searching the network...</p>
-              <p className="text-xs text-cos-slate mt-1">Analyzing your request and finding the best matches</p>
+          {/* Search loader — shows while Ossy is working or search is running */}
+          {(ossyWorking || searching) && results.length === 0 && (
+            <div className="mb-4">
+              <SearchLoader />
             </div>
           )}
 
@@ -153,23 +150,6 @@ export function DiscoverStream() {
             <div className="rounded-cos-xl border border-red-200 bg-red-50 p-6 text-center mb-4">
               <p className="text-sm font-medium text-red-700">Search failed</p>
               <p className="mt-1 text-xs text-red-600">{error}</p>
-            </div>
-          )}
-
-          {/* Searching skeleton */}
-          {searching && (
-            <div className="space-y-3 mb-4">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-4 animate-pulse">
-                  <div className="flex items-start gap-3">
-                    <div className="h-9 w-9 rounded-cos-lg bg-cos-cloud" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 w-36 rounded bg-cos-cloud" />
-                      <div className="h-3 w-24 rounded bg-cos-cloud" />
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
           )}
 

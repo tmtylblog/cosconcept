@@ -23,6 +23,7 @@ import { emitOssyEvent } from "@/lib/ossy-events";
 import { emitCosSignal } from "@/lib/cos-signal";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SearchLoader } from "@/components/discover/search-loader";
 import type { PartnerMatch } from "@/app/api/partner-matching/route";
 
 // V2 preference fields required for matching
@@ -641,9 +642,8 @@ export default function PartnerMatchingPage() {
   // Loading matches
   if (loading) {
     return (
-      <div className="flex h-96 flex-col items-center justify-center gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-cos-electric" />
-        <p className="text-sm text-cos-slate">Finding your best-fit partners...</p>
+      <div className="flex h-96 items-center justify-center">
+        <SearchLoader />
       </div>
     );
   }
