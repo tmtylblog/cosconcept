@@ -24,6 +24,8 @@ export interface DiscoverCandidate {
   summary?: string;
   sourceUrl?: string;
   clientName?: string;
+  // Own-firm flag: true if this entity belongs to the searcher's firm
+  isOwn?: boolean;
 }
 
 export interface DiscoverFilters {

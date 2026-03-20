@@ -108,12 +108,11 @@ export function createOssyTools(organizationId: string, firmId?: string, userId?
             skipLlmRanking: false,
           });
 
-          // Filter out searcher's own firm from results
-          const filtered = result.candidates.filter(c => c.firmId !== firmId);
-
+          // Tag own-firm results instead of filtering them out
+          // Own results show first as "Your Team", partners show below
           const searchIntent = result.searchIntent ?? "partner";
 
-          const candidates = filtered.slice(0, 8).map((c) => ({
+          const candidates = result.candidates.slice(0, 12).map((c) => ({
             entityType: c.entityType,
             entityId: c.entityId,
             firmId: c.firmId,
@@ -135,6 +134,8 @@ export function createOssyTools(organizationId: string, firmId?: string, userId?
             summary: c.preview.summary ?? undefined,
             sourceUrl: c.preview.sourceUrl ?? undefined,
             clientName: c.preview.clientName ?? undefined,
+            // Own-firm flag: true if this entity belongs to the searcher's firm
+            isOwn: c.firmId === firmId,
           }));
 
           // Build a brief analysis hint for Ossy from the result data

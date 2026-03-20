@@ -429,75 +429,76 @@ export function ResultCardsBlock({ results, query, searchIntent, onViewProfile, 
     );
   }
 
-  // For non-default intents, group primary results first
+  // Split into own-firm results and partner results
+  const ownResults = results.filter((r) => r.isOwn);
+  const partnerResults = results.filter((r) => !r.isOwn);
+
+  // For non-default intents, group primary results first (within each section)
   const intent = searchIntent ?? "partner";
   const primaryType = intent === "expertise" ? "expert" : intent === "evidence" ? "case_study" : null;
 
-  if (primaryType) {
-    const primary = results.filter((r) => r.entityType === primaryType);
-    const secondary = results.filter((r) => r.entityType !== primaryType);
+  const renderResults = (items: DiscoverCandidate[], startIndex: number) => {
+    if (primaryType) {
+      const primary = items.filter((r) => r.entityType === primaryType);
+      const secondary = items.filter((r) => r.entityType !== primaryType);
+      const primaryLabel = intent === "expertise" ? "Top Experts" : "Relevant Case Studies";
+      return (
+        <>
+          {primary.length > 0 && (
+            <>
+              <SectionHeader label={primaryLabel} count={primary.length} />
+              {primary.map((match, i) => (
+                <IntentCard key={`${match.entityType}-${match.entityId}-${i}`} match={match} index={startIndex + i} searchIntent={searchIntent} onViewProfile={onViewProfile} onDismiss={onDismiss} />
+              ))}
+            </>
+          )}
+          {secondary.length > 0 && secondary.map((match, i) => (
+            <IntentCard key={`${match.entityType}-${match.entityId}-sec-${i}`} match={match} index={startIndex + primary.length + i} searchIntent={searchIntent} onViewProfile={onViewProfile} onDismiss={onDismiss} />
+          ))}
+        </>
+      );
+    }
+    return items.map((match, i) => (
+      <ResultCard key={`${match.entityType}-${match.entityId}-${i}`} match={match} index={startIndex + i} onViewProfile={onViewProfile} onDismiss={onDismiss} />
+    ));
+  };
 
-    const primaryLabel = intent === "expertise" ? "Top Experts" : "Relevant Case Studies";
-    const secondaryLabel = "Related Results";
-
-    return (
-      <div className="space-y-2">
-        <p className="text-xs text-cos-slate px-1">
-          {results.length} result{results.length === 1 ? "" : "s"}
-          {query ? ` for \u201C${query}\u201D` : ""}
-        </p>
-
-        {primary.length > 0 && (
-          <>
-            <SectionHeader label={primaryLabel} count={primary.length} />
-            {primary.map((match, i) => (
-              <IntentCard
-                key={`${match.entityType}-${match.entityId}-${i}`}
-                match={match}
-                index={i}
-                searchIntent={searchIntent}
-                onViewProfile={onViewProfile}
-                onDismiss={onDismiss}
-              />
-            ))}
-          </>
-        )}
-
-        {secondary.length > 0 && (
-          <>
-            <SectionHeader label={secondaryLabel} count={secondary.length} />
-            {secondary.map((match, i) => (
-              <IntentCard
-                key={`${match.entityType}-${match.entityId}-sec-${i}`}
-                match={match}
-                index={primary.length + i}
-                searchIntent={searchIntent}
-                onViewProfile={onViewProfile}
-                onDismiss={onDismiss}
-              />
-            ))}
-          </>
-        )}
-      </div>
-    );
-  }
-
-  // Default: flat list (partner intent or no intent)
   return (
     <div className="space-y-2">
       <p className="text-xs text-cos-slate px-1">
         {results.length} result{results.length === 1 ? "" : "s"}
         {query ? ` for \u201C${query}\u201D` : ""}
       </p>
-      {results.map((match, i) => (
-        <ResultCard
-          key={`${match.entityType}-${match.entityId}-${i}`}
-          match={match}
-          index={i}
-          onViewProfile={onViewProfile}
-          onDismiss={onDismiss}
-        />
-      ))}
+
+      {/* Own firm results first */}
+      {ownResults.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 px-1 pt-1">
+            <div className="h-px flex-1 bg-cos-electric/20" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-cos-electric">
+              Your Team ({ownResults.length})
+            </span>
+            <div className="h-px flex-1 bg-cos-electric/20" />
+          </div>
+          {renderResults(ownResults, 0)}
+        </>
+      )}
+
+      {/* Partner results */}
+      {partnerResults.length > 0 && (
+        <>
+          {ownResults.length > 0 && (
+            <div className="flex items-center gap-2 px-1 pt-2">
+              <div className="h-px flex-1 bg-cos-signal/20" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-cos-signal">
+                Partner Matches ({partnerResults.length})
+              </span>
+              <div className="h-px flex-1 bg-cos-signal/20" />
+            </div>
+          )}
+          {renderResults(partnerResults, ownResults.length)}
+        </>
+      )}
     </div>
   );
 }
