@@ -182,11 +182,43 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
   // ─── Watch for Ossy's response ───────────────────────────
   // Track whether we've sent a message and are waiting for TTS
   const waitingForResponseRef = useRef(false);
+  const fillerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fillerSpokenRef = useRef(false);
 
-  // Mark that we're waiting whenever we enter waiting state
+  // Mark that we're waiting whenever we enter waiting state + start filler timer
   useEffect(() => {
     if (state === "waiting") {
       waitingForResponseRef.current = true;
+      fillerSpokenRef.current = false;
+
+      // If response takes >3s, speak a filler via browser TTS (instant, no API)
+      fillerTimerRef.current = setTimeout(() => {
+        if (!mountedRef.current || !waitingForResponseRef.current) return;
+        fillerSpokenRef.current = true;
+        const fillers = [
+          "Let me look into that for you.",
+          "Working on that now.",
+          "Give me just a moment.",
+          "Searching for that now.",
+        ];
+        const filler = fillers[Math.floor(Math.random() * fillers.length)];
+        const utterance = new SpeechSynthesisUtterance(filler);
+        utterance.rate = 1.1;
+        utterance.pitch = 1.0;
+        utterance.volume = 0.8;
+        speechSynthesis.speak(utterance);
+      }, 3000);
+    } else {
+      // Clear filler timer when leaving waiting state
+      if (fillerTimerRef.current) {
+        clearTimeout(fillerTimerRef.current);
+        fillerTimerRef.current = null;
+      }
+      // Cancel any in-progress browser TTS filler
+      if (fillerSpokenRef.current) {
+        speechSynthesis.cancel();
+        fillerSpokenRef.current = false;
+      }
     }
   }, [state]);
 

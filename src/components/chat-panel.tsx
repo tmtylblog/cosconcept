@@ -1228,10 +1228,10 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           <button
             type="button"
             onClick={() => setFullVoiceMode(true)}
-            className="ml-auto flex h-7 w-7 items-center justify-center rounded-full text-white/40 transition-colors hover:bg-white/10 hover:text-white/70"
-            title="Activate Voice Mode"
+            className="ml-auto flex items-center gap-1.5 rounded-cos-pill bg-white/10 px-2.5 py-1 text-[10px] font-medium text-white/70 transition-colors hover:bg-white/15 hover:text-white"
           >
-            <Mic className="h-3.5 w-3.5" />
+            <Mic className="h-3 w-3" />
+            Voice Mode
           </button>
         )}
         {fullVoiceMode && (
