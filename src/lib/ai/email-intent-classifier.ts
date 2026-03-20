@@ -8,6 +8,7 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod/v4";
+import { logUsage } from "@/lib/ai/gateway";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -59,6 +60,7 @@ export async function classifyEmail(opts: {
   const { from, subject, bodyText, threadContext } = opts;
 
   try {
+    const classifyStart = Date.now();
     const result = await generateObject({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       schema: emailClassificationSchema,
@@ -88,6 +90,14 @@ ${bodyText.slice(0, 3000)}
 ${threadContext ? `Previous thread context:\n${threadContext}` : ""}`,
     });
 
+    logUsage({
+      model: "google/gemini-2.0-flash-001",
+      feature: "classification",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      durationMs: Date.now() - classifyStart,
+    }).catch(() => {});
+
     return result.object;
   } catch (err) {
     console.error("[EmailClassifier] Classification failed:", err);
@@ -112,6 +122,7 @@ export async function extractEmailContext(opts: {
   const { from, subject, bodyText, classification } = opts;
 
   try {
+    const extractStart = Date.now();
     const result = await generateObject({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       schema: z.object({
@@ -135,6 +146,14 @@ Summary: ${classification.summary}
 Body:
 ${bodyText.slice(0, 2000)}`,
     });
+
+    logUsage({
+      model: "google/gemini-2.0-flash-001",
+      feature: "classification",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      durationMs: Date.now() - extractStart,
+    }).catch(() => {});
 
     return result.object;
   } catch (err) {

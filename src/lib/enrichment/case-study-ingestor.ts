@@ -15,6 +15,7 @@ import { logEnrichmentStep } from "./audit-logger";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod/v4";
+import { logUsage } from "@/lib/ai/gateway";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -156,6 +157,7 @@ async function extractCaseStudyAnalysis(
   url?: string
 ): Promise<CaseStudyCosAnalysis | null> {
   try {
+    const startMs = Date.now();
     const result = await generateObject({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       prompt: `Extract structured case study data from this content.
@@ -242,6 +244,14 @@ Extract as much detail as the content provides. Be precise about metrics and out
       }),
       maxOutputTokens: 1024,
     });
+
+    logUsage({
+      model: "google/gemini-2.0-flash-001",
+      feature: "case_study",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      durationMs: Date.now() - startMs,
+    }).catch(() => {});
 
     return result.object;
   } catch (err) {

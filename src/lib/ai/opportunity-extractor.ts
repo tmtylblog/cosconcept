@@ -15,6 +15,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod/v4";
 import { FIRM_CATEGORIES, MARKETS } from "./extraction-vocab";
+import { logUsage } from "@/lib/ai/gateway";
 
 // Re-export for convenience
 export { FIRM_CATEGORIES, MARKETS };
@@ -111,6 +112,7 @@ export async function extractOpportunities(
   const instructions = context?.customPrompt || DEFAULT_EXTRACTION_INSTRUCTIONS;
 
   try {
+    const startMs = Date.now();
     const result = await generateObject({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       prompt: `You are analysing a ${context?.source ?? "text"} to extract business opportunities — things the client needs that could potentially be solved by a professional services firm.
@@ -153,6 +155,14 @@ ${instructions}`,
       }),
       maxOutputTokens: 2048,
     });
+
+    logUsage({
+      model: "google/gemini-2.0-flash-001",
+      feature: "enrichment",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      durationMs: Date.now() - startMs,
+    }).catch(() => {});
 
     return result.object.opportunities.filter((o) => o.confidence >= 0.5);
   } catch (err) {

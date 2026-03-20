@@ -13,6 +13,7 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod/v4";
+import { logUsage } from "@/lib/ai/gateway";
 import { db } from "@/lib/db";
 import { abstractionProfiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -178,6 +179,7 @@ export async function generateFirmAbstraction(
           .join("\n")
       : "No team work history available";
 
+  const abstractionStart = Date.now();
   const result = await generateObject({
     model: openrouter.chat("google/gemini-2.0-flash-001"),
     prompt: `Generate a normalized abstraction profile for this professional services firm.
@@ -243,6 +245,14 @@ Be specific and factual. Avoid generic language.`,
     }),
     maxOutputTokens: 1024,
   });
+
+  logUsage({
+    model: "google/gemini-2.0-flash-001",
+    feature: "abstraction",
+    inputTokens: result.usage?.inputTokens ?? 0,
+    outputTokens: result.usage?.outputTokens ?? 0,
+    durationMs: Date.now() - abstractionStart,
+  }).catch(() => {});
 
   // Calculate confidence scores based on evidence quantity
   const csCount = evidence.caseStudies.length;

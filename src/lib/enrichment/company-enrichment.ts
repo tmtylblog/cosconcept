@@ -16,6 +16,7 @@ import { scrapeFirmWebsite } from "./jina-scraper";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject } from "ai";
 import { z } from "zod/v4";
+import { logUsage } from "@/lib/ai/gateway";
 
 export interface CompanyEnrichmentResult {
   company: PdlCompany | null;
@@ -114,6 +115,7 @@ async function extractCompanyFromContent(
   });
 
   try {
+    const startMs = Date.now();
     const result = await generateObject({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       prompt: `Extract structured company information from this website content.
@@ -137,6 +139,14 @@ Extract what you can determine. Set fields to null/empty if not found.`,
       }),
       maxOutputTokens: 512,
     });
+
+    logUsage({
+      model: "google/gemini-2.0-flash-001",
+      feature: "enrichment",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      durationMs: Date.now() - startMs,
+    }).catch(() => {});
 
     const data = result.object;
 

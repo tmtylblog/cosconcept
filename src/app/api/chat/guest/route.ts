@@ -3,6 +3,7 @@ import { streamText, tool, convertToModelMessages, type UIMessage } from "ai";
 import { z } from "zod/v4";
 import { getOssyPrompt } from "@/lib/ai/ossy-prompt";
 import { ALL_PROFILE_FIELDS } from "@/lib/profile/update-profile-field";
+import { logUsage } from "@/lib/ai/gateway";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -186,6 +187,13 @@ export async function POST(req: Request) {
           textLength: text?.length ?? 0,
           usage: JSON.stringify(usage),
         });
+        logUsage({
+          model: "anthropic/claude-sonnet-4",
+          feature: "chat",
+          inputTokens: usage?.inputTokens ?? 0,
+          outputTokens: usage?.outputTokens ?? 0,
+          durationMs: 0,
+        }).catch(() => {});
       },
       onError: ({ error }) => {
         console.error("[Ossy Guest] Stream error:", error);

@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { conversations, messages } from "@/lib/db/schema";
 import { retrieveMemoryContext } from "@/lib/ai/memory-retriever";
+import { logUsage } from "@/lib/ai/gateway";
 
 export const dynamic = "force-dynamic";
 
@@ -89,10 +90,19 @@ ${memoryContext ? `What you know about this user:\n${memoryContext.contextBlock}
 
 ${lastSnippet ? `Last conversation snippet:\n${lastSnippet}` : ""}`;
 
+    const greetingStart = Date.now();
     const result = await generateText({
       model: openrouter.chat("google/gemini-2.0-flash-001"),
       prompt,
     });
+
+    logUsage({
+      model: "google/gemini-2.0-flash-001",
+      feature: "chat",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+      durationMs: Date.now() - greetingStart,
+    }).catch(() => {});
 
     const greeting = result.text?.trim();
 
