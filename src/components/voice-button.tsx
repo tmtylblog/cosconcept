@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Mic, MicOff, Volume2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { transcribeWithDeepgram } from "@/lib/voice/transcribe";
 
 export type VoiceState = "idle" | "listening" | "processing" | "speaking";
 
@@ -305,22 +306,3 @@ export function VoiceButton({
   );
 }
 
-// ─── Deepgram Transcription via Server Proxy ─────────────
-
-async function transcribeWithDeepgram(audioBlob: Blob): Promise<string> {
-  const res = await fetch("/api/voice/transcribe", {
-    method: "POST",
-    headers: {
-      "Content-Type": audioBlob.type,
-    },
-    body: audioBlob,
-  });
-
-  if (!res.ok) {
-    console.error("[Voice] Transcription error:", res.status);
-    return "";
-  }
-
-  const data = await res.json();
-  return data.transcript ?? "";
-}
