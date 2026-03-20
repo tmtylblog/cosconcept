@@ -18,6 +18,7 @@ import { streamTTS, splitIntoSentences } from "@/lib/voice/elevenlabs-tts";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText } from "ai";
 import { logUsage } from "@/lib/ai/gateway";
+import { OSSY_SYSTEM_PROMPT } from "@/lib/ai/ossy-prompt";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -49,11 +50,10 @@ export async function POST(req: NextRequest) {
   const voiceStart = Date.now();
   const result = await generateText({
     model: openrouter.chat("anthropic/claude-sonnet-4"),
-    system: `You are Ossy, the AI consultant at Collective OS. You help professional services firms find partners, share opportunities, and grow their business through partnerships.
+    system: `${OSSY_SYSTEM_PROMPT}
 
-Keep responses concise and conversational — they'll be spoken aloud via text-to-speech.
-Use short sentences. Avoid markdown, bullet points, or formatting.
-Be warm, knowledgeable, and direct.`,
+## Voice Mode Override
+You are responding via VOICE — your answer will be spoken aloud via text-to-speech. Keep answers extra concise (1-2 sentences max). Use short, natural sentences. Avoid markdown, bullet points, numbered lists, or any formatting. Do not bold questions. Be warm, knowledgeable, and direct.`,
     prompt: transcript,
     maxOutputTokens: 300,
   });

@@ -43,6 +43,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   GOOGLE_AI_API_KEY: z.string().optional(),
   DEEPGRAM_API_KEY: z.string().optional(),
+  ELEVENLABS_API_KEY: z.string().optional(),
   JINA_API_KEY: z.string().optional(),
   PDL_API_KEY: z.string().optional(),
   ENRICHLAYER_API_KEY: z.string().optional(),

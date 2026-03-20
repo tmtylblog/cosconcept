@@ -7,7 +7,7 @@ import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Send, Mic, Loader2, Globe, FileText, X, Sparkles, Zap, Radio, Users, BookOpen, Search } from "lucide-react";
+import { Send, Loader2, Globe, FileText, X, Sparkles, Zap, Radio, Users, BookOpen, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
@@ -15,6 +15,7 @@ import { useProfile } from "@/hooks/use-profile";
 import { useGuestData } from "@/hooks/use-guest-data";
 import { useOssyContext } from "@/hooks/use-ossy-context";
 import { cn } from "@/lib/utils";
+import { VoiceButton } from "@/components/voice-button";
 import { ToolResultRenderer } from "@/components/chat/tool-result-renderer";
 import { generatePageContextPrompt, getProactiveNavMessage } from "@/lib/ai/ossy-page-prompts";
 import { formatEventsForOssy, type OssyPageEvent } from "@/lib/ossy-events";
@@ -1728,14 +1729,13 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
               className="flex-1 resize-none appearance-none border-0 bg-transparent py-2 text-sm leading-relaxed text-cos-midnight shadow-none outline-none ring-0 placeholder:text-cos-slate focus:border-0 focus:outline-none focus:ring-0 disabled:opacity-50"
             />
             <div className="flex shrink-0 items-center gap-1 pb-0.5">
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 shrink-0 text-cos-slate hover:text-cos-electric"
-              >
-                <Mic className="h-4 w-4" />
-              </Button>
+              <VoiceButton
+                compact
+                onTranscript={(text) => {
+                  sendMessage({ text });
+                }}
+                className="h-8 w-8 shrink-0"
+              />
               <Button
                 type="submit"
                 size="icon"
