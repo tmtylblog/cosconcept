@@ -219,7 +219,7 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
   async function handleSubmit() {
     if (!selectedFirm) { setError("Please select a firm"); return; }
     const text = tab === "paste" ? pasteText : fileText;
-    if (!text || text.trim().length < 50) { setError("Transcript must be at least 50 characters"); return; }
+    if (!text || text.trim().length < 100) { setError(`Transcript must be at least 100 characters (currently ${text?.trim().length ?? 0})`); return; }
 
     setState("uploading");
     setError("");

@@ -20,7 +20,7 @@ import { eq } from "drizzle-orm";
 import { inngest } from "@/inngest/client";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 function uid(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -39,8 +39,12 @@ export async function POST(req: Request) {
     clientDomain?: string;
   };
 
-  if (!transcript || transcript.length < 100) {
-    return Response.json({ error: "Transcript too short (min 100 chars)" }, { status: 400 });
+  if (!transcript || typeof transcript !== "string" || transcript.trim().length < 100) {
+    const received = typeof transcript === "string" ? transcript.trim().length : 0;
+    return Response.json(
+      { error: `Transcript too short (received ${received} chars, min 100). Make sure you pasted text in the transcript field.` },
+      { status: 400 }
+    );
   }
 
   // Resolve firm — use provided firmId, or look up from admin's membership

@@ -455,6 +455,18 @@ function AppLayoutInner({
         (isGapFill ? " (gap-fill: missing PDL data)" : "")
       );
       triggerEnrichmentRef.current(domainToEnrich, isGapFill);
+
+      // Pre-onboard sandbox: auto-submit the domain as the first chat message
+      // so the user doesn't have to type it manually
+      if (isSandboxEmail && !isGapFill) {
+        try {
+          const mode = new URLSearchParams(window.location.search).get("sandbox_mode");
+          const cookieMode = document.cookie.match(/cos_sandbox_mode=([^;]+)/)?.[1];
+          if ((mode || cookieMode) === "pre") {
+            sessionStorage.setItem("cos_sandbox_auto_message", domainToEnrich);
+          }
+        } catch { /* ignore */ }
+      }
     }
   }, [session?.user?.email, enrichmentStatus, hasCompanyData, enrichedDomain, hasRealServices]);
 
