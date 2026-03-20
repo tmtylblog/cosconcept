@@ -1,6 +1,6 @@
 # 2. Database Schema
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-20
 
 **Source:** `src/lib/db/schema.ts` (Drizzle ORM, Neon PostgreSQL)
 **Migrations:** `drizzle/` directory (3 migrations applied)
@@ -875,6 +875,18 @@ Global key-value configuration store.
 | value | text | |
 | updated_at | timestamp | |
 
+### `platform_settings`
+Admin-configurable key-value settings (e.g., custom extraction prompts). Separate from `settings` with richer metadata support.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| key | text NOT NULL UNIQUE | Setting key (e.g., `call_extraction_prompt`) |
+| value | text | Setting value |
+| metadata | jsonb | Additional structured metadata |
+| updated_at | timestamp | |
+| created_at | timestamp | |
+
 ---
 
 ## Relationship Map (Foreign Keys)
@@ -963,6 +975,7 @@ Connected LinkedIn accounts via Unipile. Upserted by the Unipile webhook.
 | display_name | text (default '') | |
 | linkedin_username | text | |
 | status | text (default 'CONNECTING') | CONNECTING \| OK \| CREDENTIALS \| ERROR |
+| notes | text | Freeform notes per account |
 | created_at | timestamp NOT NULL | |
 | updated_at | timestamp NOT NULL | |
 
@@ -1059,6 +1072,94 @@ Powers the Growth Ops dashboard funnel with real data across all channels.
 **Indexes:** prospect_email, event_type, event_at
 
 **Migration:** `0015_prospect_timeline.sql`
+
+---
+
+## Acquisition CRM (Growth Ops Pipeline)
+
+### `acq_pipeline_stages`
+Pipeline stages for the acquisition CRM. Supports hierarchical stages (parent/child).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| pipeline_id | text NOT NULL (default 'default') | |
+| label | text NOT NULL | Stage display name (e.g., "Meeting Requested", "Meeting Confirmed") |
+| display_order | integer NOT NULL (default 0) | |
+| is_closed_won | boolean (default false) | |
+| is_closed_lost | boolean (default false) | |
+| parent_stage_id | text FK -> acq_pipeline_stages (cascade) | Hierarchical grouping |
+| hubspot_stage_id | text | Maps to HubSpot stage for sync |
+| color | text NOT NULL (default '#6366f1') | Stage color for UI |
+| created_at | timestamp NOT NULL | |
+| updated_at | timestamp NOT NULL | |
+
+**Note:** "Booked Call" renamed to "Meeting Requested", new "Meeting Confirmed" stage added (2026-03-20).
+
+### `acq_deals`
+Deals in the acquisition pipeline. Linked to contacts, companies, and pipeline stages.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| name | text NOT NULL | |
+| contact_id | text FK -> acq_contacts (set null) | |
+| company_id | text FK -> acq_companies (set null) | |
+| stage_id | text FK -> acq_pipeline_stages (set null) | |
+| hubspot_deal_id | text UNIQUE | |
+| hubspot_pipeline_id | text | |
+| hubspot_stage_id | text | |
+| stage_label | text NOT NULL (default '') | |
+| deal_value | text | |
+| status | text NOT NULL (default 'open') | open \| won \| lost |
+| source | text NOT NULL (default 'hubspot_sync') | hubspot_sync \| instantly_auto \| linkedin_auto \| manual |
+| source_channel | text | instantly \| linkedin \| hubspot \| null |
+| source_campaign_id | text | |
+| source_campaign_name | text | |
+| source_message_id | text | |
+| linkedin_account_id | text FK -> growth_ops_linkedin_accounts (set null) | Which LinkedIn account sourced this deal |
+| outreach_email_account | text | Email account used for outreach |
+| notes | text | |
+| custom_fields | jsonb | |
+| priority | text NOT NULL (default 'normal') | low \| normal \| high \| urgent |
+| last_activity_at | timestamp | |
+| sentiment_score | real | 0.0-1.0 |
+| classified_stage | text | AI-assigned stage slug |
+| classification_confidence | real | 0-1 |
+| last_classified_at | timestamp | |
+| closed_at | timestamp | |
+| hubspot_synced_at | timestamp | |
+| created_at | timestamp NOT NULL | |
+| updated_at | timestamp NOT NULL | |
+
+### `acq_deal_queue`
+Inbound deal candidates from automated sources (Instantly replies, LinkedIn messages) awaiting review.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | |
+| contact_email | text | |
+| contact_name | text | |
+| contact_linkedin_url | text | |
+| company_name | text | |
+| company_domain | text | |
+| source | text NOT NULL | instantly_auto \| linkedin_auto |
+| source_channel | text NOT NULL | instantly \| linkedin |
+| source_campaign_id | text | |
+| source_campaign_name | text | |
+| source_message_id | text | |
+| message_text | text | |
+| sentiment | text | positive \| negative \| neutral \| unsubscribe |
+| sentiment_score | real | |
+| linkedin_account_id | text | Which LinkedIn account received the message |
+| outreach_email_account | text | Email account that sent the outreach |
+| classified_stage | text | AI-assigned stage slug |
+| classification_confidence | real | 0-1 |
+| status | text NOT NULL (default 'pending') | pending \| approved \| rejected |
+| reviewed_at | timestamp | |
+| reviewed_by | text | |
+| created_deal_id | text FK -> acq_deals (set null) | |
+| created_at | timestamp NOT NULL | |
 
 ---
 

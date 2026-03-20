@@ -1,6 +1,6 @@
 # 14. API Reference
 
-> Last updated: 2026-03-18
+> Last updated: 2026-03-20
 
 Comprehensive reference for all API routes in `src/app/api/`. Organized by domain.
 
@@ -297,6 +297,21 @@ All admin routes require `superadmin` role unless noted. Prefix: `/api/admin/`.
 |--------|------|-------------|------|
 | GET | `/api/admin/opportunities?period=30d` | Opportunity funnel stats (byStatus, bySignal, byPriority, bySource), lead stats (byStatus, avgQuality, qualityTiers, shares), recentOpportunities (20), recentLeads (20). | superadmin |
 
+### Call Intelligence (Admin)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | `/api/admin/calls/upload` | Admin transcript upload. Creates callRecording + callTranscript records, runs AI analysis, stores opportunities, optional follow-up email. Fires Inngest job. | superadmin |
+| GET | `/api/admin/calls/recall-status` | Recall.ai health check: API key validity, webhook configuration, reachability. | superadmin |
+| GET | `/api/admin/calls/settings` | Get extraction prompt (returns custom prompt if set, otherwise default). | superadmin |
+| PUT | `/api/admin/calls/settings` | Save custom extraction prompt to platform_settings. | superadmin |
+
+### Staff Management (Admin)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | `/api/admin/staff/create` | Create admin staff member directly (no frontend signup required). Creates user account + sets role. | superadmin |
+
 ### Email (Admin)
 
 | Method | Path | Description | Auth |
@@ -434,13 +449,13 @@ Server-to-server API for bi-directional data sync with partner platforms (e.g., 
 | Billing & Usage | 3 |
 | Dashboard & Onboarding | 2 |
 | Legacy Data | 2 |
-| Admin APIs | 28 |
+| Admin APIs | 34 |
 | Webhooks | 4 |
 | Inngest | 1 |
 | Job Queue | 2 |
 | Public API | 5 |
 | Partner Sync | 5 |
-| **Total** | **101 route files** |
+| **Total** | **107 route files** |
 
 ## Job Queue Endpoints
 
@@ -474,6 +489,7 @@ All routes require `role === "superadmin"`. Added 2026-03-12.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/admin/growth-ops/dashboard?period=30d` | Dashboard metrics: funnel (from prospect_timeline), pipeline metrics (from deals), by-source breakdown, timeline-by-day sparkline data. Periods: 7d, 30d, 90d, all |
+| GET | `/api/admin/growth-ops/dashboard/linkedin` | LinkedIn per-account analytics: outreach counts, response rates, deal stages, account performance. Auth: superadmin/admin/growth_ops. |
 
 ### Instantly Proxy
 

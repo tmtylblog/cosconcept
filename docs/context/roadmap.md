@@ -1,6 +1,6 @@
 # 18. Roadmap & Status
 
-> Last updated: 2026-03-11
+> Last updated: 2026-03-20
 
 ## Phase Overview
 
@@ -12,7 +12,7 @@
 | 3 | Knowledge Graph | In Progress | Neo4j schema + seed done, graph-sync Inngest partial, pgvector not live, partner sync API live |
 | 4 | Search & Matching | In Progress | Three-layer search + 5 Ossy tools wired, graph population admin route built, needs firm data in graph |
 | 5 | Partnerships & Opportunities | In Progress | Partnership CRUD, referrals, intros, opportunity extraction — UI built, partner sync API live |
-| 6 | Call Intelligence | In Progress | Recall.ai integration, post-call analysis pipeline, coaching reports — early MVP |
+| 6 | Call Intelligence | In Progress | Recall.ai integration, transcript upload, opportunity extraction pipeline, configurable extraction prompt, participant auto-classification |
 | 7 | Email Agent | In Progress | Resend email client, inbound processing, approval queue — early MVP |
 | 8 | Advanced Features | Planned | Social graph analysis, meeting bot improvements, advanced coaching |
 
@@ -255,7 +255,7 @@
 
 ---
 
-## Phase 6: Call Intelligence & Chrome Extension — In Progress (Early MVP)
+## Phase 6: Call Intelligence & Chrome Extension — In Progress
 
 **What's done:**
 - Call data API (`src/app/api/calls/route.ts`) — submit transcripts, list calls
@@ -272,13 +272,19 @@
 - Recall.ai bot integration (`src/inngest/functions/join-meeting.ts`)
   - Sends Ossy bot into meetings
   - `src/lib/recall.ts` — Recall.ai API client
+  - Recall.ai health check endpoint
+  - Participant auto-classification (service provider vs external company domains)
+  - Auto-fires `research/company` jobs for unknown external participant domains
 - Recall.ai webhook for receiving transcripts
+- **Transcript upload** — admin and frontend chat support paste text, .txt, .docx (via mammoth)
+- **Opportunity extraction pipeline** — complete end-to-end, auto-matches opportunities to specialist profiles
+- **Configurable extraction prompt** — stored in `platform_settings`, editable via `/admin/calls/settings`
+- **Enhanced default prompt** — better pitch vs pain point distinction, latent signal detection, `platformMatchHint` field
 
 **What's not done (gaps):**
 - **Chrome extension** — not built (no Manifest V3 extension for tab audio capture)
 - **Real-time Deepgram streaming** during calls — no live transcription pipeline
 - **Calendar invite detection** — partially done via email parsing, not robust
-- **Recall.ai integration untested in production** — endpoint and webhook signing fixed recently but unclear if working
 - **Ossy post-call debrief in chat** — coaching data stored but not surfaced conversationally
 
 ---
@@ -433,6 +439,16 @@ From git log (most recent first, as of 2026-03-09):
 | `3308b18` | fix: correct Jina embedding dimensions from 1536 to 1024 in admin backfill route |
 
 **Focus:** Data completeness — all 1,152 firms enriched + embedded; discover page search working end-to-end. Firm connections (services, case studies, experts) wired to profile pages.
+
+### Recent Milestones (2026-03-20)
+
+- **AI pipeline classification engine (Gemini Flash)** — auto-classifies inbound responses into 16 stages, auto-stage-progression, stage protection rules, Stripe payment triggers deal progression
+- **Transcript upload + opportunity extraction** on both admin and frontend chat — paste text, .txt, .docx support
+- **Participant auto-classification** for Recall.ai calls — service providers vs external companies, auto-fires research jobs for unknown domains
+- **Admin auth fully separated from customer app** — dedicated `/admin-login` route, staff creation without frontend signup
+- **LinkedIn analytics dashboard** with per-account metrics, deal source tracking, outreach account attribution, per-account notes
+- **Performance fix:** resolved `setInterval` churn in chat panel that was causing browser freeze on partner-matching page
+- **Growth Ops enhancements:** deal source tracking, outreach account attribution, per-account notes
 
 ---
 

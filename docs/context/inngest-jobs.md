@@ -1,6 +1,6 @@
 # 15. Background Jobs (Inngest)
 
-> Last updated: 2026-03-16
+> Last updated: 2026-03-20
 
 ## Overview
 
@@ -224,8 +224,14 @@ All functions are registered in the serve handler at `/api/inngest`.
 
 **Purpose:** Full post-call analysis pipeline. Extracts opportunities, runs coaching analysis, creates opportunity records, finds expert/case-study recommendations via Neo4j, stores coaching report, and delivers coaching emails (two-party for partnership calls).
 
+**Enhancements (2026-03-20):**
+- Loads custom extraction prompt from `platform_settings` table (key: `opportunity_extraction_prompt`)
+- Prepends client context from `company_research` table to transcript before extraction (gives AI context about the client company)
+- Auto-matches extracted opportunities to specialist profiles after extraction
+- Updates transcript `processingStatus` to `"done"` after analysis completes
+
 **Steps:**
-1. `extract-opportunities` -- AI opportunity extraction from transcript. Step 1 now fetches `firm.enrichmentData.classification.categories` and passes as `firmCategories` context to the extractor so it can determine `resolutionApproach` (network vs internal vs hybrid).
+1. `extract-opportunities` -- AI opportunity extraction from transcript. Step 1 now fetches `firm.enrichmentData.classification.categories` and passes as `firmCategories` context to the extractor so it can determine `resolutionApproach` (network vs internal vs hybrid). Also loads custom extraction prompt from `platform_settings` and prepends client context from `company_research`.
 2. `coaching-analysis` -- AI coaching analysis (talk ratio, question quality, topics, action items)
 3. `create-opportunities` -- Create `opportunities` DB rows for high-confidence detections (>= 0.6). Uses new schema fields: evidence, signalType, priority, resolutionApproach, requiredCategories, requiredMarkets, clientName, clientSizeBand, sourceId. Status defaults to "new".
 4. `neo4j-recommendations` -- Query Neo4j for experts/case studies matching discussed topics

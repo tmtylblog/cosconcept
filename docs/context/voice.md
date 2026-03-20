@@ -1,6 +1,6 @@
 # 8. Voice System
 
-> Last updated: 2026-03-09
+> Last updated: 2026-03-20
 
 ## Vision
 
@@ -245,7 +245,21 @@ Separate from voice chat but uses the same Deepgram infrastructure:
 - `coachingReports` table: AI-generated call coaching analysis
 - Chrome extension planned (Manifest V3) to capture tab audio from browser meetings
 - Post-call pipeline: transcription -> opportunity extraction -> coaching report
-- **Status:** Schema exists, no implementation beyond table definitions
+
+### Transcript Upload (2026-03-20)
+- **Admin transcript upload live** — paste text, .txt file, or .docx file (via mammoth library)
+- **Client domain field required** for manual uploads — triggers `research/company` Inngest job for company context
+- Frontend chat also supports transcript upload via Ossy tools
+
+### Recall.ai Integration (2026-03-20)
+- Recall.ai webhook now **auto-classifies participant domains** — distinguishes service provider firms from external companies
+- **Auto-fires `research/company` jobs** for unknown external participant domains (builds company context for extraction)
+- Recall.ai health check endpoint available
+
+### Extraction Prompt Configuration (2026-03-20)
+- Extraction prompt **configurable via `/admin/calls/settings`** — stored in `platform_settings` table (key: `opportunity_extraction_prompt`)
+- **Enhanced default prompt:** better pitch vs pain point distinction, latent signal detection, `platformMatchHint` field for matching opportunities to specialists
+- Client context from `company_research` prepended to transcript before extraction
 
 ---
 
@@ -273,6 +287,6 @@ Separate from voice chat but uses the same Deepgram infrastructure:
 5. **No Ossy voice selection** — hardcoded to ElevenLabs "Rachel" voice; needs custom Ossy voice
 6. **No waveform/visual indicator** — ARCHITECTURE.md calls for waveform while Ossy speaks
 7. **Chrome extension** — call recording not implemented beyond schema
-8. **Recall.ai integration** — meeting bot (Phase 6+), not started
+8. **Recall.ai advanced features** — meeting bot working, participant classification live; needs multi-platform robustness testing
 9. **Deepgram Aura TTS** — mentioned in docs as alternative/fallback to ElevenLabs, not implemented
 10. **`audio-capture.ts` consolidation** — should be used by VoiceButton instead of duplicated inline logic

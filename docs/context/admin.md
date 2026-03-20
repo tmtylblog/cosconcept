@@ -1,6 +1,6 @@
 # 12. Admin Dashboard
 
-> Last updated: 2026-03-11
+> Last updated: 2026-03-20
 
 ## Overview
 
@@ -36,7 +36,7 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 
 ---
 
-## Admin Pages (18 pages)
+## Admin Pages (24 pages)
 
 ### 1. Overview (Dashboard Home)
 - **Route:** `/admin`
@@ -60,8 +60,8 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 ### 4. Users
 - **Route:** `/admin/users`
 - **File:** `src/app/(admin)/admin/users/page.tsx`
-- **Purpose:** User management table. Search by name/email. Set role (user/admin/superadmin), ban/unban users, impersonate users. Expandable rows show linked expert profiles.
-- **API:** Better Auth client `authClient.admin.listUsers()`, `authClient.admin.banUser()`, `authClient.admin.unbanUser()`, `authClient.admin.setRole()`, `authClient.admin.impersonateUser()`, `GET /api/admin/users/[userId]/expert-profile`
+- **Purpose:** User management table. Search by name/email. Set role (user/admin/superadmin), ban/unban users, impersonate users. Expandable rows show linked expert profiles. "Add Staff" button creates admin accounts directly (no frontend signup required) via `POST /api/admin/staff/create`.
+- **API:** Better Auth client `authClient.admin.listUsers()`, `authClient.admin.banUser()`, `authClient.admin.unbanUser()`, `authClient.admin.setRole()`, `authClient.admin.impersonateUser()`, `GET /api/admin/users/[userId]/expert-profile`, `POST /api/admin/staff/create`
 
 ### 5. Subscriptions
 - **Route:** `/admin/subscriptions`
@@ -132,17 +132,20 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 ### 28. Call Transcripts
 - **Route:** `/admin/calls`
 - **File:** `src/app/(admin)/admin/calls/page.tsx`
-- **Purpose:** View and manage all call transcripts platform-wide. Shows 4 stat cards (total, processed, opps extracted, avg coaching score). Filter tabs: All / Manual / Recall.ai. Expandable transcript rows with preview. "Upload Transcript" button opens a modal for manual upload.
+- **Purpose:** View and manage all call transcripts platform-wide. Shows 4 stat cards (total, processed, opps extracted, avg coaching score). Filter tabs: All / Manual / Recall.ai. Expandable transcript rows with preview. "Upload Transcript" button opens a modal for manual upload. Recall.ai status badge shows connection health. Settings gear icon links to `/admin/calls/settings`.
 - **Upload Modal:**
   - Firm picker (search from `GET /api/admin/calls/firms`)
   - Client domain field (optional, stored on opportunities)
-  - Two tabs: Paste text (textarea) | Upload file (.txt)
+  - Three tabs: Paste text (textarea) | Upload file (.txt, .docx) | File upload
   - On submit: POST to `/api/admin/calls/upload` → AI analysis → opportunities stored → optional follow-up email
   - Results shown inline with opportunity cards
 - **API:**
   - `GET /api/admin/calls` — list all transcripts with stats
   - `GET /api/admin/calls/firms` — lightweight firm search for modal (`[{id, name}]`)
   - `POST /api/admin/calls/upload` — upload + analyze transcript (see below)
+  - `GET /api/admin/calls/recall-status` — Recall.ai health check
+  - `GET /api/admin/calls/settings` — get extraction prompt
+  - `PUT /api/admin/calls/settings` — save custom extraction prompt
 
 ### /api/admin/calls/upload
 - Creates a `callRecording` (type: partnership) and `callTranscript` record
@@ -151,6 +154,17 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 - Marks transcript `processingStatus = "done"` on success
 - If `partnership_followup_auto_send = "true"` AND opportunities were found: sends follow-up email to `masa+{firmslug}@joincollectiveos.com` via Resend
 - Returns: `{ transcriptId, recordingId, opportunityCount, opportunities, summary }`
+
+### 29. Call Intelligence Settings
+- **Route:** `/admin/calls/settings`
+- **File:** `src/app/(admin)/admin/calls/settings/page.tsx`
+- **Purpose:** Configurable extraction prompt editor for call intelligence. Features a prompt textarea with a reference panel showing available categories and markets from the COS taxonomy. Allows customizing the AI prompt used for opportunity extraction from call transcripts. Save/reset to default functionality.
+- **API:** `GET /api/admin/calls/settings`, `PUT /api/admin/calls/settings`
+
+### 30. Admin Login
+- **Route:** `/admin-login`
+- **File:** `src/app/admin-login/page.tsx`
+- **Purpose:** Dedicated admin login page with dark theme, separate from the customer-facing app login. Provides direct access to the admin dashboard for staff members.
 
 ### 13. Email Queue
 - **Route:** `/admin/email`
@@ -228,6 +242,24 @@ The admin layout (`src/app/(admin)/layout.tsx`) performs a server-side session c
 - **File:** `src/app/(admin)/admin/growth-ops/attribution/page.tsx`
 - **Purpose:** Cross-channel attribution. On-demand "Run Report" cross-references COS platform users against Instantly email leads (by email) and LinkedIn invited targets (by first name). Shows matched users with which campaign attributed them.
 - **API:** `GET /api/admin/users?limit=500`, `GET /api/admin/growth-ops/instantly?action=listCampaigns`, `POST /api/admin/growth-ops/instantly` (action: listLeads), `GET /api/admin/growth-ops/target-lists`, `GET /api/admin/growth-ops/target-lists/[id]/targets`
+
+### 31. Growth Ops — Dashboard
+- **Route:** `/admin/growth-ops/dashboard`
+- **File:** `src/app/(admin)/admin/growth-ops/dashboard/page.tsx`
+- **Purpose:** Growth operations metrics dashboard with tabbed views. Default tab shows funnel metrics from prospect_timeline, pipeline stats, by-source breakdown, and timeline sparkline. LinkedIn tab (`?tab=linkedin`) shows per-account analytics: outreach counts, response rates, deal stage distribution, and account performance comparisons.
+- **API:** `GET /api/admin/growth-ops/dashboard?period=30d`, `GET /api/admin/growth-ops/dashboard/linkedin`
+
+### 32. Growth Ops — Pipeline
+- **Route:** `/admin/growth-ops/pipeline`
+- **File:** `src/app/(admin)/admin/growth-ops/pipeline/page.tsx`
+- **Purpose:** Acquisition pipeline management. Table view of deals with deal source filter and source labels with icons. Pipeline stages rendered as a Kanban or table.
+- **Deal Detail** (`/admin/growth-ops/pipeline/[dealId]`): Editable deal source dropdown, LinkedIn account display, email account display, auto-logged activity for all field changes.
+- **New Deal** (`/admin/growth-ops/pipeline/new`): LinkedIn account dropdown, email account input (contextual fields shown based on selected source).
+
+### 33. Growth Ops — Settings
+- **Route:** `/admin/growth-ops/settings`
+- **File:** `src/app/(admin)/admin/growth-ops/settings/page.tsx`
+- **Purpose:** Growth Ops configuration. LinkedIn tab includes: separate LinkedIn vs Sales Navigator connect buttons, inline editable notes per account.
 
 ---
 
@@ -358,9 +390,12 @@ The layout renders a fixed sidebar (240px) with a main content area (max-width 6
 1. **Knowledge Graph** -- Knowledge Graph (accent link)
 2. **Platform** -- Organizations, Users
 3. **Operations** -- Subscriptions, AI Costs, API Health, Partnerships
-4. **Matching** -- Search Test, Onboarding
-5. **Growth Ops** -- Overview, LinkedIn, Instantly, HubSpot, Attribution
-6. **Tools** -- Neo4j, APIs, Data Import, Enrichment
+4. **Intelligence** -- Call Transcripts, Call Settings
+5. **Matching** -- Search Test, Onboarding
+6. **Growth Ops** -- Dashboard, Inbox, LinkedIn, Instantly, HubSpot, Pipeline, Settings, Attribution
+7. **Tools** -- Neo4j, APIs, Data Import, Enrichment
+
+**Note:** In the Growth Ops section, Dashboard is listed above Inbox.
 
 Footer: "Back to App" link to `/dashboard`.
 
