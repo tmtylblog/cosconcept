@@ -208,8 +208,9 @@ export function FirmDetailBlock({
 
   if (error) {
     return (
-      <div className="animate-slide-up rounded-cos-2xl border border-cos-ember/20 bg-cos-ember/5 p-6 text-center">
-        <p className="text-sm text-cos-ember">{error}</p>
+      <div className="animate-slide-up rounded-cos-2xl border border-cos-border bg-cos-cloud/50 p-5 text-center">
+        <p className="text-sm text-cos-slate">This firm&apos;s profile couldn&apos;t be loaded</p>
+        <p className="mt-1 text-xs text-cos-slate-light">Removing from view...</p>
       </div>
     );
   }

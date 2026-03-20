@@ -191,7 +191,12 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
       .then((r) => r.json())
       .then((d) => {
         if (d.error) {
-          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, error: d.error } as StreamItem : i));
+          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, error: String(d.error) } as StreamItem : i));
+          // Auto-remove "Not found" errors after 4 seconds
+          setTimeout(() => {
+            shownEntitiesRef.current.delete(key);
+            setItems((prev) => prev.filter((i) => i.id !== id));
+          }, 4000);
         } else {
           let data = d.data as FirmDetailData;
 
@@ -274,7 +279,12 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
       .then((r) => r.json())
       .then((d) => {
         if (d.error) {
-          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, error: d.error } as StreamItem : i));
+          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, error: String(d.error) } as StreamItem : i));
+          // Auto-remove "Not found" errors after 4 seconds
+          setTimeout(() => {
+            shownEntitiesRef.current.delete(key);
+            setItems((prev) => prev.filter((i) => i.id !== id));
+          }, 4000);
         } else {
           const data = d.data as ExpertDetailData;
           const searcherProfileE = d.searcherProfile as SearcherProfile | undefined;
@@ -345,7 +355,12 @@ export function DiscoverStreamProvider({ children }: { children: ReactNode }) {
       .then((r) => r.json())
       .then((d) => {
         if (d.error) {
-          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, error: d.error } as StreamItem : i));
+          setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, error: String(d.error) } as StreamItem : i));
+          // Auto-remove "Not found" errors after 4 seconds
+          setTimeout(() => {
+            shownEntitiesRef.current.delete(key);
+            setItems((prev) => prev.filter((i) => i.id !== id));
+          }, 4000);
         } else {
           const data = d.data as CaseStudyDetailData;
           setItems((prev) => prev.map((i) => i.id === id ? { ...i, loading: false, data, displayName: data?.title ?? displayName ?? "Case Study" } as StreamItem : i));
