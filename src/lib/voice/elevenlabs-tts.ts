@@ -17,11 +17,11 @@ export interface TTSConfig {
 }
 
 const DEFAULT_TTS_CONFIG: TTSConfig = {
-  voiceId: "21m00Tcm4TlvDq8ikWAM", // Rachel - warm, professional
-  modelId: "eleven_turbo_v2_5",
+  voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah — expressive, warm, natural
+  modelId: "eleven_multilingual_v2",
   stability: 0.5,
   similarityBoost: 0.75,
-  style: 0.3,
+  style: 0,
   outputFormat: "mp3_44100_128",
 };
 

@@ -186,13 +186,15 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
   const fillerSpokenRef = useRef(false);
 
   // Mark that we're waiting whenever we enter waiting state + start filler timer
+  const fillerAudioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     if (state === "waiting") {
       waitingForResponseRef.current = true;
       fillerSpokenRef.current = false;
 
-      // If response takes >3s, speak a filler via browser TTS (instant, no API)
-      fillerTimerRef.current = setTimeout(() => {
+      // If response takes >3s, speak a filler via ElevenLabs (same voice as Ossy)
+      fillerTimerRef.current = setTimeout(async () => {
         if (!mountedRef.current || !waitingForResponseRef.current) return;
         fillerSpokenRef.current = true;
         const fillers = [
@@ -202,11 +204,25 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
           "Searching for that now.",
         ];
         const filler = fillers[Math.floor(Math.random() * fillers.length)];
-        const utterance = new SpeechSynthesisUtterance(filler);
-        utterance.rate = 1.1;
-        utterance.pitch = 1.0;
-        utterance.volume = 0.8;
-        speechSynthesis.speak(utterance);
+        try {
+          const res = await fetch("/api/voice/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: filler }),
+          });
+          if (!res.ok || !mountedRef.current || !waitingForResponseRef.current) return;
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          fillerAudioRef.current = audio;
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+            fillerAudioRef.current = null;
+          };
+          await audio.play();
+        } catch {
+          // Filler failed — not critical, just skip it
+        }
       }, 3000);
     } else {
       // Clear filler timer when leaving waiting state
@@ -214,9 +230,10 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
         clearTimeout(fillerTimerRef.current);
         fillerTimerRef.current = null;
       }
-      // Cancel any in-progress browser TTS filler
-      if (fillerSpokenRef.current) {
-        speechSynthesis.cancel();
+      // Stop any in-progress filler audio
+      if (fillerSpokenRef.current && fillerAudioRef.current) {
+        fillerAudioRef.current.pause();
+        fillerAudioRef.current = null;
         fillerSpokenRef.current = false;
       }
     }
