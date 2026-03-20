@@ -489,13 +489,17 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   const lastSignalRef = useRef<number>(0);
   const navProactiveFiredRef = useRef<Set<string>>(new Set());
 
-  // Use refs for volatile values so the event listener doesn't re-register
+  // Use refs for volatile values so intervals/listeners don't re-register
   const statusRef = useRef(status);
   statusRef.current = status;
   const pageContextRef = useRef(pageContext);
   pageContextRef.current = pageContext;
   const sendMessageRef = useRef(sendMessage);
   sendMessageRef.current = sendMessage;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const firmSectionRef = useRef(firmSection);
+  firmSectionRef.current = firmSection;
 
   // Listen for cos:signal events — stable handler, never re-registers
   useEffect(() => {
@@ -626,19 +630,20 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   }, [isGuest, isOnboarding]);
 
   // Process event queue — flush when idle + throttled
+  // Uses refs for all volatile values so the interval stays STABLE (no re-creation on every message)
   useEffect(() => {
     if (isGuest || isOnboarding) return;
-
-    // On discover page, poll faster (2s) for responsive commentary
-    const isDiscover = firmSection === "discover";
-    const pollMs = isDiscover ? 2000 : 3000;
 
     const interval = setInterval(() => {
       const queue = eventQueueRef.current;
       if (queue.length === 0) return;
 
       // Don't send if Ossy is busy (streaming/submitted)
-      if (status === "submitted" || status === "streaming") return;
+      const currentStatus = statusRef.current;
+      if (currentStatus === "submitted" || currentStatus === "streaming") return;
+
+      // On discover page, poll faster (2s) for responsive commentary
+      const currentSection = firmSectionRef.current;
 
       // Check if queue has priority events (discover nav + partner matching prefs)
       const hasDiscoverNavEvent = queue.some(
@@ -654,8 +659,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
       // For non-priority events: only one proactive comment per page visit
       if (!hasPriorityEvent) {
-        const currentSection = firmSection ?? "unknown";
-        if (proactiveFiredForSectionRef.current === currentSection) {
+        const section = currentSection ?? "unknown";
+        if (proactiveFiredForSectionRef.current === section) {
           eventQueueRef.current = [];
           return;
         }
@@ -672,8 +677,9 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       }
 
       // For non-priority events: don't interrupt mid-conversation
-      if (!hasPriorityEvent && messages.length > 3) {
-        const lastMsg = messages[messages.length - 1];
+      const currentMessages = messagesRef.current;
+      if (!hasPriorityEvent && currentMessages.length > 3) {
+        const lastMsg = currentMessages[currentMessages.length - 1];
         if (lastMsg?.role === "user") {
           return;
         }
@@ -687,8 +693,8 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       lastProactiveRef.current = Date.now();
 
       if (!hasDiscoverNavEvent) {
-        const currentSection = firmSection ?? "unknown";
-        proactiveFiredForSectionRef.current = currentSection;
+        const section = currentSection ?? "unknown";
+        proactiveFiredForSectionRef.current = section;
 
         // Track shown tips in session (only for non-discover events)
         for (const e of eventsToSend) {
@@ -703,11 +709,11 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       }
 
       // Auto-send as a user message (Ossy will respond naturally)
-      sendMessage({ text: eventMessage });
-    }, pollMs);
+      sendMessageRef.current({ text: eventMessage });
+    }, 3000);
 
     return () => clearInterval(interval);
-  }, [isGuest, isOnboarding, status, firmSection, messages, sendMessage]);
+  }, [isGuest, isOnboarding]); // Stable deps — all volatile values read from refs
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
