@@ -978,13 +978,22 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         }
 
         // Handle discover_search (and legacy search_partners) — push to discover panel
-        if ((toolName === "discover_search" || toolName === "search_partners") && onSearchResults) {
-          const output = (part as { output?: unknown }).output as
-            | { candidates?: DiscoverResult[]; totalFound?: number; searchIntent?: "partner" | "expertise" | "evidence" }
-            | undefined;
-          const args = (part as { args?: { query?: string } }).args;
-          if (output?.candidates) {
-            onSearchResults(output.candidates, args?.query ?? "", output.searchIntent);
+        // NOTE: This runs outside the dedup guard because onSearchResults may not be
+        // available on first render (layout sets it after mount). We use a separate
+        // ref to track which search results have been pushed to the center panel.
+        if (toolName === "discover_search" || toolName === "search_partners") {
+          if (onSearchResults) {
+            const searchKey = `search:${callId}`;
+            if (!processedToolCallsRef.current.has(searchKey)) {
+              processedToolCallsRef.current.add(searchKey);
+              const output = (part as { output?: unknown }).output as
+                | { candidates?: DiscoverResult[]; totalFound?: number; searchIntent?: "partner" | "expertise" | "evidence" }
+                | undefined;
+              const args = (part as { args?: { query?: string } }).args;
+              if (output?.candidates) {
+                onSearchResults(output.candidates, args?.query ?? "", output.searchIntent);
+              }
+            }
           }
         }
 
