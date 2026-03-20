@@ -189,7 +189,7 @@ export function createOssyTools(organizationId: string, firmId?: string, userId?
             success: true,
             query,
             searchIntent,
-            totalFound: filtered.length,
+            totalFound: result.candidates.length,
             candidates,
             ...(_searcherProfile ? { _searcherProfile } : {}),
             resultAnalysis: {
