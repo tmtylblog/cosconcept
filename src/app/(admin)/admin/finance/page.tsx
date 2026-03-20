@@ -9,6 +9,11 @@ import {
   RefreshCw,
   BarChart3,
   Zap,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Server,
+  Loader2,
 } from "lucide-react";
 
 interface Totals {
@@ -39,6 +44,34 @@ interface FinanceData {
   dailyTrend: DailyTrend[];
 }
 
+interface ServiceStatus {
+  name: string;
+  category: string;
+  envVar: string;
+  configured: boolean;
+  status: "active" | "error" | "unconfigured";
+  error?: string;
+  description: string;
+  costModel: string;
+  freeTier: boolean;
+  required: boolean;
+  phase: string;
+}
+
+interface ServiceData {
+  services: ServiceStatus[];
+  summary: {
+    total: number;
+    configured: number;
+    active: number;
+    errors: number;
+    unconfigured: number;
+    required: number;
+    requiredConfigured: number;
+    requiredMissing: number;
+  };
+}
+
 type Period = "7d" | "30d" | "90d" | "all";
 type Breakdown = "feature" | "model" | "org" | "user";
 
@@ -55,6 +88,8 @@ export default function AdminFinancePage() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>("30d");
   const [breakdown, setBreakdown] = useState<Breakdown>("feature");
+  const [serviceData, setServiceData] = useState<ServiceData | null>(null);
+  const [serviceLoading, setServiceLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -73,6 +108,16 @@ export default function AdminFinancePage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Fetch service status
+  useEffect(() => {
+    setServiceLoading(true);
+    fetch("/api/admin/service-status")
+      .then((r) => r.json())
+      .then((d) => setServiceData(d))
+      .catch(() => {})
+      .finally(() => setServiceLoading(false));
+  }, []);
 
   const maxCost =
     data?.breakdown?.length
@@ -303,6 +348,111 @@ export default function AdminFinancePage() {
           )}
         </>
       )}
+
+      {/* ─── Service Subscriptions ─────────────────────────────── */}
+      <div className="space-y-4 pt-4 border-t border-cos-border">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-heading text-lg font-bold text-cos-midnight flex items-center gap-2">
+              <Server className="h-5 w-5 text-cos-electric" />
+              Service Subscriptions
+            </h2>
+            <p className="text-xs text-cos-slate mt-0.5">
+              All paid APIs powering the platform — {serviceData?.summary.configured ?? 0}/{serviceData?.summary.total ?? 0} configured
+            </p>
+          </div>
+          {serviceData?.summary && (
+            <div className="flex items-center gap-3 text-xs">
+              <span className="flex items-center gap-1 text-green-600">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {serviceData.summary.active} active
+              </span>
+              {serviceData.summary.errors > 0 && (
+                <span className="flex items-center gap-1 text-cos-ember">
+                  <XCircle className="h-3.5 w-3.5" />
+                  {serviceData.summary.errors} errors
+                </span>
+              )}
+              {serviceData.summary.unconfigured > 0 && (
+                <span className="flex items-center gap-1 text-cos-slate">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {serviceData.summary.unconfigured} unconfigured
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {serviceLoading ? (
+          <div className="flex items-center justify-center py-8 text-cos-slate">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" />
+            Checking service status...
+          </div>
+        ) : serviceData ? (
+          <div className="overflow-hidden rounded-cos-xl border border-cos-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-cos-border bg-cos-cloud-dim/50">
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-cos-slate">Service</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-cos-slate">Status</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-cos-slate">Cost Model</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-cos-slate">Phase</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-cos-slate">Free Tier</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cos-border/50">
+                {serviceData.services.map((s) => (
+                  <tr key={s.envVar} className="hover:bg-cos-cloud-dim/30 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {s.required && (
+                          <span className="shrink-0 h-1.5 w-1.5 rounded-full bg-cos-electric" title="Required" />
+                        )}
+                        <div>
+                          <p className="font-medium text-cos-midnight text-sm">{s.name}</p>
+                          <p className="text-[11px] text-cos-slate mt-0.5 line-clamp-1">{s.description}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {s.status === "active" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Active
+                        </span>
+                      ) : s.status === "error" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700" title={s.error}>
+                          <XCircle className="h-3 w-3" />
+                          Error
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                          <AlertCircle className="h-3 w-3" />
+                          Not configured
+                        </span>
+                      )}
+                      {s.error && s.status === "active" && (
+                        <p className="text-[10px] text-cos-slate mt-0.5">{s.error}</p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-cos-slate">{s.costModel}</td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-cos-slate">{s.phase}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {s.freeTier ? (
+                        <span className="text-xs text-green-600">Yes</span>
+                      ) : (
+                        <span className="text-xs text-cos-ember">No</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
