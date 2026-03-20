@@ -1063,6 +1063,12 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
   const handleAnalyseTranscript = async () => {
     if (!pendingTranscript || isLoading) return;
     const transcript = pendingTranscript;
+    const wordCount = transcript.trim().split(/\s+/).length;
+
+    // Show as a collapsed block in chat
+    isNearBottomRef.current = true;
+    sendMessage({ text: `[TRANSCRIPT:${wordCount}]` });
+
     setTranscriptResult({ loading: true });
     setPendingTranscript(null);
     setMatchResult(null);
@@ -1298,12 +1304,16 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                     // Compact card for transcript messages
                     const transcriptMatch = part.text.match(/^\[TRANSCRIPT:(\d+)\]/);
                     if (transcriptMatch) {
-                      const wordCount = transcriptMatch[1];
+                      const wordCount = Number(transcriptMatch[1]).toLocaleString();
                       return (
-                        <div key={partIdx} className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 shrink-0 opacity-80" />
-                          <span className="text-sm font-medium">Call transcript</span>
-                          <span className="text-xs opacity-70">· {wordCount} words</span>
+                        <div key={partIdx} className="flex items-center gap-3 rounded-cos-lg bg-indigo-500/10 border border-indigo-500/20 px-4 py-3 -mx-1">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-cos-lg bg-indigo-500/20">
+                            <FileText className="h-4 w-4 text-indigo-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-white">Client Call Transcript</p>
+                            <p className="text-xs text-white/50">{wordCount} words &bull; analyzing for opportunities&hellip;</p>
+                          </div>
                         </div>
                       );
                     }
