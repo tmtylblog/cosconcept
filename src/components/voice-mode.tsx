@@ -180,10 +180,19 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
   }, []);
 
   // ─── Watch for Ossy's response ───────────────────────────
-  // Fire when waiting/processing and a new assistant message arrives with status "ready"
+  // Track whether we've sent a message and are waiting for TTS
+  const waitingForResponseRef = useRef(false);
+
+  // Mark that we're waiting whenever we enter waiting state
   useEffect(() => {
-    // Only trigger TTS when we're waiting for a response (or just sent)
-    if (state !== "waiting" && state !== "processing") return;
+    if (state === "waiting") {
+      waitingForResponseRef.current = true;
+    }
+  }, [state]);
+
+  // Fire TTS when status returns to "ready" after we sent a message
+  useEffect(() => {
+    if (!waitingForResponseRef.current) return;
     if (status !== "ready") return;
 
     const lastMsg = messages[messages.length - 1];
@@ -199,6 +208,8 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
         .replace(/\*/g, "")
         .trim();
 
+      waitingForResponseRef.current = false;
+
       if (text) {
         lastHandledMsgIdRef.current = lastMsg.id;
         playTTS(text);
@@ -207,7 +218,7 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
         setState("listening");
       }
     }
-  }, [state, status, messages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status, messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Play TTS and resume listening ──────────────────────
   const playTTS = useCallback(async (text: string) => {

@@ -21,8 +21,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
 
+  console.warn("[TTS] Generating speech for:", text.slice(0, 80));
   const audioStream = await streamTTS(text);
   if (!audioStream) {
+    console.error("[TTS] streamTTS returned null — check ELEVENLABS_API_KEY");
     return NextResponse.json(
       { error: "TTS unavailable" },
       { status: 503 }
