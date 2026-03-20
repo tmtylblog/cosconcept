@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Building2,
   Globe,
@@ -7,6 +8,10 @@ import {
   User,
   X,
   Sparkles,
+  ExternalLink,
+  Presentation,
+  ChevronDown,
+  Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ExpertDetailData } from "@/hooks/use-discover-stream";
@@ -153,11 +158,17 @@ export function ExpertDetailBlock({
           </div>
         )}
 
-        {/* Hidden Summary (AI-generated from work history) */}
-        {data.hiddenSummary && (
-          <p className="text-xs text-cos-midnight/80 leading-relaxed">
-            {data.hiddenSummary}
-          </p>
+        {/* Professional Summary — bio or AI-generated summary */}
+        {(data.bio || data.pdlSummary || data.hiddenSummary) && (
+          <div className="rounded-cos-xl border border-cos-border bg-cos-cloud/30 px-4 py-3">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-cos-slate-light flex items-center gap-1">
+              <Briefcase className="h-3 w-3" />
+              About
+            </p>
+            <p className="text-xs text-cos-midnight/80 leading-relaxed">
+              {data.bio || data.pdlSummary || data.hiddenSummary}
+            </p>
+          </div>
         )}
 
         {/* Firm affiliation */}
@@ -211,9 +222,23 @@ export function ExpertDetailBlock({
             <div className="space-y-2">
               {matchingProfiles.map((sp, i) => (
                 <div key={i} className="rounded-cos-xl border border-cos-signal/20 bg-cos-signal/5 p-3">
-                  {sp.title && (
-                    <p className="text-sm font-medium text-cos-midnight">{sp.title}</p>
-                  )}
+                  <div className="flex items-start justify-between gap-2">
+                    {sp.title && (
+                      <p className="text-sm font-medium text-cos-midnight">{sp.title}</p>
+                    )}
+                    {sp.slideUrl && (
+                      <a
+                        href={sp.slideUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-cos-full border border-cos-electric/30 bg-cos-electric/10 px-2.5 py-1 text-[10px] font-medium text-cos-electric hover:bg-cos-electric/20 transition-colors"
+                      >
+                        <Presentation className="h-3 w-3" />
+                        View Slides
+                        <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    )}
+                  </div>
                   {sp.description && (
                     <p className="mt-1 text-xs text-cos-slate leading-relaxed line-clamp-3">
                       {sp.description}
@@ -248,9 +273,23 @@ export function ExpertDetailBlock({
             <div className="space-y-2">
               {nonMatchingProfiles.map((sp, i) => (
                 <div key={i} className="rounded-cos-xl border border-cos-border p-3">
-                  {sp.title && (
-                    <p className="text-sm font-medium text-cos-midnight">{sp.title}</p>
-                  )}
+                  <div className="flex items-start justify-between gap-2">
+                    {sp.title && (
+                      <p className="text-sm font-medium text-cos-midnight">{sp.title}</p>
+                    )}
+                    {sp.slideUrl && (
+                      <a
+                        href={sp.slideUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-cos-full border border-cos-electric/30 bg-cos-electric/10 px-2.5 py-1 text-[10px] font-medium text-cos-electric hover:bg-cos-electric/20 transition-colors"
+                      >
+                        <Presentation className="h-3 w-3" />
+                        View Slides
+                        <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    )}
+                  </div>
                   {sp.description && (
                     <p className="mt-1 text-xs text-cos-slate leading-relaxed line-clamp-3">
                       {sp.description}
@@ -272,37 +311,7 @@ export function ExpertDetailBlock({
         )}
 
         {/* Work History */}
-        {data.workHistory && data.workHistory.length > 0 && (
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-slate-light">
-              Work History
-            </p>
-            <div className="space-y-1.5">
-              {data.workHistory.slice(0, 6).map((wh, i) => (
-                <div key={i} className={cn(
-                  "rounded-cos-xl border px-3 py-2",
-                  queryTerms.some(t => wh.title.toLowerCase().includes(t) || wh.company.toLowerCase().includes(t))
-                    ? "border-cos-signal/20 bg-cos-signal/5"
-                    : "border-cos-border"
-                )}>
-                  <p className="text-xs font-medium text-cos-midnight">{wh.title}</p>
-                  <p className="text-[10px] text-cos-slate">
-                    {wh.company}
-                    {wh.isCurrent && <span className="ml-1 text-cos-signal font-medium">Current</span>}
-                    {!wh.isCurrent && wh.startDate && (
-                      <span className="ml-1">{wh.startDate}{wh.endDate ? ` — ${wh.endDate}` : ""}</span>
-                    )}
-                  </p>
-                  {wh.industry && (
-                    <span className="mt-1 inline-block rounded-cos-full bg-cos-warm/10 px-1.5 py-0.5 text-[9px] text-cos-warm">
-                      {wh.industry}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <WorkHistorySection workHistory={data.workHistory ?? []} queryTerms={queryTerms} />
 
         {/* Skills */}
         {data.skills.length > 0 && (
@@ -413,6 +422,64 @@ export function ExpertDetailBlock({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Work History Section ────────────────────────────────
+
+function WorkHistorySection({
+  workHistory,
+  queryTerms,
+}: {
+  workHistory: Array<{ company: string; title: string; industry: string | null; startDate: string | null; endDate: string | null; isCurrent: boolean }>;
+  queryTerms: string[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (workHistory.length === 0) return null;
+
+  const INITIAL_SHOW = 4;
+  const visible = expanded ? workHistory : workHistory.slice(0, INITIAL_SHOW);
+  const hasMore = workHistory.length > INITIAL_SHOW;
+
+  return (
+    <div>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cos-slate-light">
+        Work History ({workHistory.length} positions)
+      </p>
+      <div className="space-y-1.5">
+        {visible.map((wh, i) => (
+          <div key={i} className={cn(
+            "rounded-cos-xl border px-3 py-2",
+            queryTerms.some(t => wh.title.toLowerCase().includes(t) || wh.company.toLowerCase().includes(t))
+              ? "border-cos-signal/20 bg-cos-signal/5"
+              : "border-cos-border"
+          )}>
+            <p className="text-xs font-medium text-cos-midnight">{wh.title}</p>
+            <p className="text-[10px] text-cos-slate">
+              {wh.company}
+              {wh.isCurrent && <span className="ml-1 text-cos-signal font-medium">Current</span>}
+              {!wh.isCurrent && wh.startDate && (
+                <span className="ml-1">{wh.startDate}{wh.endDate ? ` \u2014 ${wh.endDate}` : ""}</span>
+              )}
+            </p>
+            {wh.industry && (
+              <span className="mt-1 inline-block rounded-cos-full bg-cos-warm/10 px-1.5 py-0.5 text-[9px] text-cos-warm">
+                {wh.industry}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+      {hasMore && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-2 flex items-center gap-1 text-[11px] font-medium text-cos-electric hover:text-cos-electric/80 transition-colors"
+        >
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
+          {expanded ? "Show less" : `Show all ${workHistory.length} positions`}
+        </button>
+      )}
     </div>
   );
 }

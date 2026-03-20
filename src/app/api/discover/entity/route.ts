@@ -184,7 +184,7 @@ async function fetchExpert(legacyId: string) {
     industries: string[];
     markets: string[];
     languages: string[];
-    specialistProfiles: Array<{ title: string | null; description: string | null; skills: string[] }>;
+    specialistProfiles: Array<{ title: string | null; description: string | null; skills: string[]; slideUrl: string | null }>;
     caseStudies: Array<{ legacyId: string; title: string | null; summary: string | null; clientName: string | null; firmName: string | null; skills: string[]; industries: string[] }>;
     workHistory: Array<{ company: string; title: string; industry: string | null; startDate: string | null; endDate: string | null; isCurrent: boolean }>;
   }
@@ -209,7 +209,8 @@ async function fetchExpert(legacyId: string) {
        [(p)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | {
          title: sp.title,
          description: sp.description,
-         skills: [(sp)-[:HAS_SKILL]->(sk:Skill) | sk.name][0..6]
+         skills: [(sp)-[:HAS_SKILL]->(sk:Skill) | sk.name][0..6],
+         slideUrl: sp.slideUrl
        }][0..5] AS specialistProfiles,
        [(p)-[:CONTRIBUTED_TO]->(cs:CaseStudy) | {
          legacyId: cs.legacyId,
@@ -232,7 +233,36 @@ async function fetchExpert(legacyId: string) {
   );
 
   if (!records.length) return { error: "Not found" };
-  return { entityType: "expert", data: records[0] };
+
+  // Enrich with Postgres data (bio, pdlData summary) that isn't in Neo4j
+  const expertRow = records[0];
+  try {
+    const { db } = await import("@/lib/db");
+    const { expertProfiles } = await import("@/lib/db/schema");
+    const { eq: eqOp } = await import("drizzle-orm");
+    const [pgExpert] = await db
+      .select({
+        bio: expertProfiles.bio,
+        pdlData: expertProfiles.pdlData,
+      })
+      .from(expertProfiles)
+      .where(eqOp(expertProfiles.id, legacyId))
+      .limit(1);
+
+    if (pgExpert) {
+      const pdl = pgExpert.pdlData as Record<string, unknown> | null;
+      const enriched = {
+        ...expertRow,
+        bio: pgExpert.bio ?? null,
+        pdlSummary: (pdl?.summary as string) ?? null,
+      };
+      return { entityType: "expert", data: enriched };
+    }
+  } catch {
+    // Postgres enrichment failed — return Neo4j data only
+  }
+
+  return { entityType: "expert", data: { ...expertRow, bio: null, pdlSummary: null } };
 }
 
 // ─── Case Study ───────────────────────────────────────────

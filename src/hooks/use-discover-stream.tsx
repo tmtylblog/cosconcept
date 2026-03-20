@@ -68,9 +68,11 @@ interface ExpertDetailData {
   industries: string[];
   markets: string[];
   languages: string[];
-  specialistProfiles: Array<{ title: string | null; description: string | null; skills: string[] }>;
+  specialistProfiles: Array<{ title: string | null; description: string | null; skills: string[]; slideUrl?: string | null }>;
   caseStudies: Array<{ legacyId: string; title?: string | null; summary: string | null; clientName?: string | null; firmName: string | null; skills: string[]; industries: string[] }>;
   workHistory?: Array<{ company: string; title: string; industry: string | null; startDate: string | null; endDate: string | null; isCurrent: boolean }>;
+  bio?: string | null;
+  pdlSummary?: string | null;
 }
 
 interface CaseStudyDetailData {

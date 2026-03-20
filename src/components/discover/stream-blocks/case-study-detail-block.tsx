@@ -7,6 +7,7 @@ import {
   User,
   Users,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CaseStudyDetailData } from "@/hooks/use-discover-stream";
@@ -102,10 +103,11 @@ export function CaseStudyDetailBlock({
                 href={data.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[10px] text-cos-slate hover:text-cos-electric transition-colors"
+                className="inline-flex items-center gap-1 rounded-cos-full border border-cos-electric/30 bg-cos-electric/10 px-2.5 py-1 text-[10px] font-medium text-cos-electric hover:bg-cos-electric/20 transition-colors"
               >
                 <Globe className="h-3 w-3" />
-                Source
+                View Original
+                <ExternalLink className="h-2.5 w-2.5" />
               </a>
             )}
           </div>

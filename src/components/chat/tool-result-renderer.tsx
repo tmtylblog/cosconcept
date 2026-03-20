@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Search, UserCheck, FileText, Building2, User, Check, AlertCircle, Globe, TrendingUp, Users, Target, Handshake } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Loader2, Search, UserCheck, FileText, Building2, User, Check, AlertCircle, Globe, TrendingUp, Users, Target, Handshake, Sparkles } from "lucide-react";
 import { FirmResultList, FirmDetailCard } from "./firm-result-card";
 import { ExpertResultList } from "./expert-result-card";
 import { CaseStudyResultList } from "./case-study-card";
@@ -311,11 +312,34 @@ function ProfileSaveConfirmation({ success }: { success: boolean }) {
 
 // ─── Main Dispatcher ────────────────────────────────────────
 
+/** Search tools whose results go to the center panel on /discover */
+const DISCOVER_SEARCH_TOOLS = new Set([
+  "search_partners",
+  "search_experts",
+  "search_case_studies",
+  "discover_search",
+]);
+
+/** Compact indicator shown in chat when results are in the center panel */
+function DiscoverResultIndicator({ count }: { count?: number }) {
+  return (
+    <div className="flex items-center gap-2 rounded-cos-lg border border-cos-electric/20 bg-cos-electric/5 px-3 py-2">
+      <Sparkles className="h-3.5 w-3.5 text-cos-electric" />
+      <span className="text-xs font-medium text-cos-electric">
+        {count ? `Found ${count} results` : "Results"} — showing in center panel
+      </span>
+    </div>
+  );
+}
+
 export function ToolResultRenderer({
   toolInvocation,
 }: {
   toolInvocation: ToolInvocationPart;
 }) {
+  const pathname = usePathname();
+  const isDiscoverPage = pathname === "/discover" || pathname?.startsWith("/discover");
+
   // Show loading state while tool is executing
   if (toolInvocation.state !== "result") {
     // Special phased progress for research_client
@@ -329,6 +353,12 @@ export function ToolResultRenderer({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result = toolInvocation.result as any;
   if (!result) return null;
+
+  // On /discover, search results go to the center panel — show compact indicator in chat
+  if (isDiscoverPage && DISCOVER_SEARCH_TOOLS.has(toolInvocation.toolName)) {
+    const count = result.candidates?.length ?? result.length ?? result.results?.length;
+    return <DiscoverResultIndicator count={count} />;
+  }
 
   switch (toolInvocation.toolName) {
     case "search_partners":
