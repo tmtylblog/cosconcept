@@ -1059,6 +1059,10 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     if (!input.trim() || isLoading) return;
     // Always scroll to bottom when user sends a message
     isNearBottomRef.current = true;
+    // Signal discover panel that chat is active (replaces idle state with working indicator)
+    if (firmSection === "discover") {
+      window.dispatchEvent(new CustomEvent("cos:chat-sent"));
+    }
     sendMessage({ text: input });
     setInput("");
     // Keep focus in the textarea (before the next render disables it)

@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
-import { Sparkles, ArrowUp, MessageSquare, ArrowRight } from "lucide-react";
+import { useRef, useEffect, useCallback, useState } from "react";
+import { Sparkles, ArrowUp, MessageSquare, ArrowRight, Loader2 } from "lucide-react";
 import { useDiscoverStream, type StreamItem } from "@/hooks/use-discover-stream";
 import { useDiscoverResults, type DiscoverCandidate } from "@/hooks/use-discover-results";
 import { ResultCardsBlock } from "@/components/discover/stream-blocks/result-cards-block";
@@ -27,6 +27,24 @@ function injectIntoChat(text: string) {
 export function DiscoverStream() {
   const stream = useDiscoverStream();
   const discover = useDiscoverResults();
+  const [ossyWorking, setOssyWorking] = useState(false);
+
+  // Listen for chat activity — when user sends a message, show working state
+  // until results arrive or searching starts
+  useEffect(() => {
+    const handleChatSend = () => {
+      setOssyWorking(true);
+    };
+    window.addEventListener("cos:chat-sent", handleChatSend);
+    return () => window.removeEventListener("cos:chat-sent", handleChatSend);
+  }, []);
+
+  // Clear working state when searching starts or results arrive
+  useEffect(() => {
+    if (discover?.searching || (discover?.results.length ?? 0) > 0) {
+      setOssyWorking(false);
+    }
+  }, [discover?.searching, discover?.results.length]);
 
   const discoverSearchQuery = discover?.searchQuery ?? "";
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -100,7 +118,7 @@ export function DiscoverStream() {
 
   const { results, searching, searchQuery, error } = discover;
   const streamItems = stream?.items ?? [];
-  const hasResults = results.length > 0 || searching;
+  const hasResults = results.length > 0 || searching || ossyWorking;
   const hasSearched = searchQuery.length > 0;
   const isIdle = !hasResults && !hasSearched && streamItems.length === 0;
 
@@ -118,6 +136,17 @@ export function DiscoverStream() {
         <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
           {/* Idle state */}
           {isIdle && <IdleState />}
+
+          {/* Ossy working indicator — shows while chat is processing before search starts */}
+          {ossyWorking && !searching && results.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 animate-slide-up">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-cos-electric/10 mb-4">
+                <Loader2 className="h-8 w-8 animate-spin text-cos-electric" />
+              </div>
+              <p className="text-sm font-medium text-cos-midnight">Ossy is searching the network...</p>
+              <p className="text-xs text-cos-slate mt-1">Analyzing your request and finding the best matches</p>
+            </div>
+          )}
 
           {/* Error */}
           {error && (
