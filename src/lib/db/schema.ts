@@ -2059,6 +2059,9 @@ export const acqDeals = pgTable("acq_deals", {
   priority: text("priority").notNull().default("normal"), // low | normal | high | urgent
   lastActivityAt: timestamp("last_activity_at"),
   sentimentScore: real("sentiment_score"), // 0.0–1.0
+  classifiedStage: text("classified_stage"), // AI-assigned stage slug
+  classificationConfidence: real("classification_confidence"), // 0-1
+  lastClassifiedAt: timestamp("last_classified_at"),
   closedAt: timestamp("closed_at"),
   hubspotSyncedAt: timestamp("hubspot_synced_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -2099,6 +2102,8 @@ export const acqDealQueue = pgTable("acq_deal_queue", {
   sentimentScore: real("sentiment_score"),
   linkedinAccountId: text("linkedin_account_id"),
   outreachEmailAccount: text("outreach_email_account"),
+  classifiedStage: text("classified_stage"), // AI-assigned stage slug
+  classificationConfidence: real("classification_confidence"),
   status: text("status").notNull().default("pending"), // pending | approved | rejected
   reviewedAt: timestamp("reviewed_at"),
   reviewedBy: text("reviewed_by"),

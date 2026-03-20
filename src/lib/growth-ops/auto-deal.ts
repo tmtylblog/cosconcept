@@ -39,6 +39,8 @@ interface QueueDealInput {
   sentiment?: string;
   linkedinAccountId?: string;
   outreachEmailAccount?: string;
+  classifiedStage?: string;
+  classificationConfidence?: number;
 }
 
 /** Queue a detected response for admin review */
@@ -83,6 +85,8 @@ export async function queueDealFromResponse(input: QueueDealInput): Promise<{ qu
     sentimentScore: input.sentimentScore ?? null,
     linkedinAccountId: input.linkedinAccountId ?? null,
     outreachEmailAccount: input.outreachEmailAccount ?? null,
+    classifiedStage: input.classifiedStage ?? null,
+    classificationConfidence: input.classificationConfidence ?? null,
   });
 
   return { queueId, isNew: true };
@@ -171,13 +175,25 @@ export async function approveDealFromQueue(
     }
   }
 
-  // Find initial stage (first stage by display order)
+  // Find initial stage — use AI classification if available, otherwise first stage
   const stages = await db
     .select()
     .from(acqPipelineStages)
     .where(eq(acqPipelineStages.pipelineId, "default"));
 
-  const firstStage = stages.sort((a, b) => a.displayOrder - b.displayOrder)[0];
+  let targetStage = stages.sort((a, b) => a.displayOrder - b.displayOrder)[0];
+
+  // If AI classified the response, find the matching stage
+  if (queueItem.classifiedStage) {
+    const classifiedLabel = (queueItem.classifiedStage as string).replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+    const matched = stages.find((s) => s.label.toLowerCase() === classifiedLabel.toLowerCase());
+    if (matched) targetStage = matched;
+  }
+
+  // Smart priority based on classification
+  const highPriorityStages = ["meeting_requested", "meeting_confirmed", "interested"];
+  const priority = queueItem.classifiedStage && highPriorityStages.includes(queueItem.classifiedStage as string)
+    ? "high" : "normal";
 
   // Create deal
   const dealId = randomId();
@@ -190,8 +206,8 @@ export async function approveDealFromQueue(
     name: dealName,
     contactId,
     companyId,
-    stageId: firstStage?.id ?? null,
-    stageLabel: firstStage?.label ?? "Prospect",
+    stageId: targetStage?.id ?? null,
+    stageLabel: targetStage?.label ?? "Contacted",
     source: queueItem.source,
     sourceChannel: queueItem.sourceChannel,
     sourceCampaignId: queueItem.sourceCampaignId,
@@ -200,7 +216,10 @@ export async function approveDealFromQueue(
     linkedinAccountId: queueItem.linkedinAccountId ?? null,
     outreachEmailAccount: queueItem.outreachEmailAccount ?? null,
     sentimentScore: queueItem.sentimentScore,
-    priority: "normal",
+    classifiedStage: queueItem.classifiedStage ?? null,
+    classificationConfidence: queueItem.classificationConfidence ?? null,
+    lastClassifiedAt: queueItem.classifiedStage ? new Date() : null,
+    priority,
     lastActivityAt: new Date(),
   });
 

@@ -18,9 +18,15 @@ import {
   growthOpsInviteQueue,
   growthOpsInviteCampaigns,
   growthOpsInviteTargets,
+  acqDeals,
+  acqContacts,
+  acqDealActivities,
+  acqPipelineStages,
 } from "@/lib/db/schema";
 import { validateUnipileWebhook, resolveMessageDirection } from "@/lib/growth-ops/UnipileClient";
 import { classifyResponseSentiment } from "@/lib/growth-ops/sentiment";
+import { classifyResponse } from "@/lib/growth-ops/response-classifier";
+import { canTransition, findStageBySlug, stageToSlug } from "@/lib/growth-ops/stage-protection";
 import { queueDealFromResponse } from "@/lib/growth-ops/auto-deal";
 import { ensureContactAndCompany, logLinkedInMessageEvent } from "@/lib/growth-ops/auto-create-contact";
 import { eq, and, sql } from "drizzle-orm";
@@ -259,11 +265,15 @@ export async function POST(req: NextRequest) {
               target = t ?? null;
             }
 
-            // If they're a campaign target, classify sentiment and queue
+            // If they're a campaign target, classify with AI and queue/update
             if (target) {
               const sentiment = classifyResponseSentiment(text);
-              if (sentiment.sentiment === "positive" || sentiment.confidence < 0.6) {
-                // Queue for review — positive or uncertain responses
+              const classification = await classifyResponse(text);
+
+              // Queue new deals for anything except clear unresponsive
+              const shouldQueue = classification.stage !== "unresponsive" || sentiment.confidence < 0.6;
+
+              if (shouldQueue) {
                 const campaignRows = target.campaignId
                   ? await db.select({ name: growthOpsInviteCampaigns.name, linkedinAccountId: growthOpsInviteCampaigns.linkedinAccountId }).from(growthOpsInviteCampaigns).where(eq(growthOpsInviteCampaigns.id, target.campaignId)).limit(1)
                   : [];
@@ -282,7 +292,45 @@ export async function POST(req: NextRequest) {
                   sentiment: sentiment.sentiment,
                   sentimentScore: sentiment.confidence,
                   linkedinAccountId: campaignRows[0]?.linkedinAccountId ?? undefined,
+                  classifiedStage: classification.stage,
+                  classificationConfidence: classification.confidence,
                 });
+              }
+
+              // Auto-update existing deal if one exists for this contact
+              if (linkedinUrl) {
+                try {
+                  const [contact] = await db.select({ id: acqContacts.id }).from(acqContacts).where(eq(acqContacts.linkedinUrl, linkedinUrl)).limit(1);
+                  if (contact) {
+                    const [deal] = await db.select({ id: acqDeals.id, stageId: acqDeals.stageId, stageLabel: acqDeals.stageLabel }).from(acqDeals).where(and(eq(acqDeals.contactId, contact.id), eq(acqDeals.status, "open"))).limit(1);
+                    if (deal) {
+                      const currentSlug = stageToSlug(deal.stageLabel);
+                      if (canTransition(currentSlug, classification.stage)) {
+                        const stages = await db.select({ id: acqPipelineStages.id, label: acqPipelineStages.label, parentStageId: acqPipelineStages.parentStageId }).from(acqPipelineStages).where(eq(acqPipelineStages.pipelineId, "default"));
+                        const newStageId = findStageBySlug(stages, classification.stage);
+                        if (newStageId && newStageId !== deal.stageId) {
+                          const newStage = stages.find((s) => s.id === newStageId);
+                          await db.update(acqDeals).set({
+                            stageId: newStageId,
+                            stageLabel: newStage?.label ?? classification.stage,
+                            classifiedStage: classification.stage,
+                            classificationConfidence: classification.confidence,
+                            lastClassifiedAt: new Date(),
+                            lastActivityAt: new Date(),
+                            updatedAt: new Date(),
+                          }).where(eq(acqDeals.id, deal.id));
+                          await db.insert(acqDealActivities).values({
+                            id: crypto.randomUUID(),
+                            dealId: deal.id,
+                            activityType: "ai_classified",
+                            description: `AI moved from "${deal.stageLabel}" to "${newStage?.label ?? classification.stage}" (${Math.round(classification.confidence * 100)}% confidence)`,
+                            metadata: { from: deal.stageLabel, to: newStage?.label, stage: classification.stage, confidence: classification.confidence, reasoning: classification.reasoning },
+                          });
+                        }
+                      }
+                    }
+                  }
+                } catch { /* non-critical — don't fail webhook */ }
               }
             }
           } catch (e) {

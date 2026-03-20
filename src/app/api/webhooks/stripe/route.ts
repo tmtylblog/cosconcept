@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { subscriptions, subscriptionEvents } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { subscriptions, subscriptionEvents, acqDeals, acqContacts, acqDealActivities, acqPipelineStages, users, members, organizations } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 import type { PlanId } from "@/lib/billing/plan-limits";
 import { grantProCredits, grantBoostPack } from "@/lib/billing/enrichment-credits";
 
@@ -126,6 +126,9 @@ export async function POST(req: NextRequest) {
               console.error(`[Stripe] Failed to grant Pro credits for ${orgId}:`, err)
             );
           }
+
+          // Pipeline progression: move matching deal to "Paying"
+          await progressDealOnPayment(session.customer_email ?? session.customer_details?.email ?? null, "paying");
         }
         break;
       }
@@ -244,4 +247,44 @@ async function syncSubscription(sub: Stripe.Subscription) {
       updatedAt: new Date(),
     })
     .where(eq(subscriptions.stripeSubscriptionId, sub.id));
+}
+
+/** Progress an open deal to a revenue stage when Stripe confirms payment/signup */
+async function progressDealOnPayment(customerEmail: string | null, targetStageSlug: string) {
+  if (!customerEmail) return;
+  try {
+    // Find contact by email
+    const [contact] = await db.select({ id: acqContacts.id }).from(acqContacts).where(eq(acqContacts.email, customerEmail.toLowerCase())).limit(1);
+    if (!contact) return;
+
+    // Find open deal for this contact
+    const [deal] = await db.select({ id: acqDeals.id, stageLabel: acqDeals.stageLabel }).from(acqDeals).where(and(eq(acqDeals.contactId, contact.id), eq(acqDeals.status, "open"))).limit(1);
+    if (!deal) return;
+
+    // Find the target stage
+    const stages = await db.select({ id: acqPipelineStages.id, label: acqPipelineStages.label, isClosedWon: acqPipelineStages.isClosedWon }).from(acqPipelineStages).where(eq(acqPipelineStages.pipelineId, "default"));
+    const label = targetStageSlug.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const stage = stages.find((s) => s.label.toLowerCase() === label.toLowerCase());
+    if (!stage) return;
+
+    await db.update(acqDeals).set({
+      stageId: stage.id,
+      stageLabel: stage.label,
+      status: stage.isClosedWon ? "won" : "open",
+      closedAt: stage.isClosedWon ? new Date() : null,
+      classifiedStage: targetStageSlug,
+      lastActivityAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(acqDeals.id, deal.id));
+
+    await db.insert(acqDealActivities).values({
+      id: crypto.randomUUID(),
+      dealId: deal.id,
+      activityType: "stripe_payment",
+      description: `Stripe confirmed: deal moved to "${stage.label}"`,
+      metadata: { email: customerEmail, from: deal.stageLabel, to: stage.label },
+    });
+  } catch (err) {
+    console.error("[Stripe] Deal progression failed:", err);
+  }
 }
