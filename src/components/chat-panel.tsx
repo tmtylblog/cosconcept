@@ -7,7 +7,7 @@ import { DefaultChatTransport } from "ai";
 import type { UIMessage } from "ai";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Send, Loader2, Globe, FileText, X, Sparkles, Zap, Radio, Users, BookOpen, Search } from "lucide-react";
+import { Send, Loader2, Globe, FileText, X, Sparkles, Zap, Radio, Users, BookOpen, Search, MicOff, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useEnrichment } from "@/hooks/use-enrichment";
@@ -15,7 +15,7 @@ import { useProfile } from "@/hooks/use-profile";
 import { useGuestData } from "@/hooks/use-guest-data";
 import { useOssyContext } from "@/hooks/use-ossy-context";
 import { cn } from "@/lib/utils";
-import { VoiceButton } from "@/components/voice-button";
+import { VoiceButton, type VoiceState } from "@/components/voice-button";
 import { ToolResultRenderer } from "@/components/chat/tool-result-renderer";
 import { generatePageContextPrompt, getProactiveNavMessage } from "@/lib/ai/ossy-page-prompts";
 import { formatEventsForOssy, type OssyPageEvent } from "@/lib/ossy-events";
@@ -483,6 +483,54 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       body: () => transportBodyRef.current,
     }),
   });
+
+  // ─── Voice mode state ──────────────────────────────────────────
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const voiceActiveRef = useRef(false);
+  const lastSpokenMsgIdRef = useRef<string | null>(null);
+
+  // Track whether voice mode is "active" (user initiated a voice interaction)
+  useEffect(() => {
+    voiceActiveRef.current = voiceState !== "idle";
+  }, [voiceState]);
+
+  // Auto-play TTS when Ossy responds during voice mode
+  const prevMsgCountRef = useRef(0);
+  useEffect(() => {
+    if (!voiceActiveRef.current && voiceState === "idle") return;
+    if (status !== "ready") return;
+    if (messages.length <= prevMsgCountRef.current) {
+      prevMsgCountRef.current = messages.length;
+      return;
+    }
+    prevMsgCountRef.current = messages.length;
+
+    const lastMsg = messages[messages.length - 1];
+    if (
+      lastMsg?.role === "assistant" &&
+      lastMsg.id !== lastSpokenMsgIdRef.current
+    ) {
+      // Extract plain text from the message
+      const text = lastMsg.parts
+        ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .map((p) => p.text)
+        .join(" ")
+        .replace(/\*\*/g, "")
+        .replace(/\*/g, "")
+        .trim();
+
+      if (text && text.length > 0) {
+        lastSpokenMsgIdRef.current = lastMsg.id;
+        // Play TTS via the global function exposed by VoiceButton
+        const playTTS = (window as Record<string, unknown>).__ossyPlayTTS as
+          | ((t: string) => Promise<void>)
+          | undefined;
+        if (playTTS) {
+          playTTS(text);
+        }
+      }
+    }
+  }, [messages, status, voiceState]);
 
   // ─── Sandbox pre-onboard auto-submit ─────────────────────────
   // If the sandbox set a domain to auto-submit, send it as the first chat message
@@ -1694,7 +1742,57 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
       {/* Input area */}
       <div className="shrink-0 border-t border-white/10 px-4 py-3">
-        <form onSubmit={handleSubmit}>
+        {/* Voice active: animated orb */}
+        {voiceState !== "idle" && (
+          <div className="flex flex-col items-center gap-2 py-2">
+            <button
+              type="button"
+              onClick={() => {
+                const voiceClick = (window as Record<string, unknown>).__ossyVoiceClick as (() => void) | undefined;
+                voiceClick?.();
+              }}
+              className="group relative flex items-center justify-center"
+            >
+              {/* Outer pulse ring */}
+              <span
+                className={cn(
+                  "absolute h-16 w-16 rounded-full transition-all duration-300",
+                  voiceState === "listening" && "animate-ping bg-red-400/30",
+                  voiceState === "speaking" && "animate-ping bg-cos-electric/20"
+                )}
+              />
+              {/* Middle glow ring */}
+              <span
+                className={cn(
+                  "absolute h-14 w-14 rounded-full transition-all duration-300",
+                  voiceState === "listening" && "animate-pulse bg-red-400/20",
+                  voiceState === "speaking" && "animate-pulse bg-cos-electric/15",
+                  voiceState === "processing" && "bg-cos-slate/10"
+                )}
+              />
+              {/* Core orb */}
+              <span
+                className={cn(
+                  "relative flex h-12 w-12 items-center justify-center rounded-full transition-all duration-300",
+                  voiceState === "listening" && "bg-red-500 text-white shadow-lg shadow-red-500/30",
+                  voiceState === "processing" && "bg-cos-slate/20 text-cos-slate",
+                  voiceState === "speaking" && "bg-cos-electric text-white shadow-lg shadow-cos-electric/30"
+                )}
+              >
+                {voiceState === "listening" && <MicOff className="h-5 w-5" />}
+                {voiceState === "processing" && <Loader2 className="h-5 w-5 animate-spin" />}
+                {voiceState === "speaking" && <Volume2 className="h-5 w-5" />}
+              </span>
+            </button>
+            <span className="text-xs text-cos-slate">
+              {voiceState === "listening" && "Listening... tap to send"}
+              {voiceState === "processing" && "Transcribing..."}
+              {voiceState === "speaking" && "Ossy is speaking... tap to stop"}
+            </span>
+          </div>
+        )}
+        {/* Text input: hidden during voice mode */}
+        <form onSubmit={handleSubmit} className={voiceState !== "idle" ? "hidden" : ""}>
           <div className="flex items-end gap-1.5 rounded-cos-xl border border-white/20 bg-white/95 px-3 py-1.5 shadow-lg">
             <textarea
               ref={inputRef}
@@ -1709,7 +1807,6 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                 }
               }}
               onKeyDown={(e) => {
-                // Submit on Enter (without Shift)
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   if (input.trim() && !isLoading && !atGuestLimit) {
@@ -1729,12 +1826,16 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
               className="flex-1 resize-none appearance-none border-0 bg-transparent py-2 text-sm leading-relaxed text-cos-midnight shadow-none outline-none ring-0 placeholder:text-cos-slate focus:border-0 focus:outline-none focus:ring-0 disabled:opacity-50"
             />
             <div className="flex shrink-0 items-center gap-1 pb-0.5">
+              {/* VoiceButton always mounted — hidden via sr-only during voice active */}
               <VoiceButton
                 compact
+                chatMode
                 onTranscript={(text) => {
                   sendMessage({ text });
                 }}
-                className="h-8 w-8 shrink-0"
+                onStateChange={setVoiceState}
+
+                className={cn("h-8 w-8 shrink-0", voiceState !== "idle" && "sr-only")}
               />
               <Button
                 type="submit"

@@ -4,28 +4,33 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Mic, MicOff, Volume2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type VoiceState = "idle" | "listening" | "processing" | "speaking";
+export type VoiceState = "idle" | "listening" | "processing" | "speaking";
 
 interface VoiceButtonProps {
   onTranscript?: (text: string) => void;
   onResponse?: (text: string) => void;
+  onStateChange?: (state: VoiceState) => void;
   className?: string;
   compact?: boolean;
+  /** When true, only does STT — skips the /api/voice AI call. Used when chat handles AI. */
+  chatMode?: boolean;
 }
 
 /**
  * Voice Button Component
  *
  * Handles microphone capture, streaming to Deepgram for STT,
- * sending transcript to AI, and playing TTS response.
+ * and optionally sending transcript to AI + playing TTS response.
  *
- * States: idle → listening → processing → speaking → idle
+ * States: idle → listening → processing → (speaking) → idle
  */
 export function VoiceButton({
   onTranscript,
   onResponse,
+  onStateChange,
   className,
   compact = false,
+  chatMode = false,
 }: VoiceButtonProps) {
   const [state, setState] = useState<VoiceState>("idle");
   const [transcript, setTranscript] = useState("");
@@ -33,6 +38,14 @@ export function VoiceButton({
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const updateState = useCallback(
+    (newState: VoiceState) => {
+      setState(newState);
+      onStateChange?.(newState);
+    },
+    [onStateChange]
+  );
 
   // Cleanup on unmount
   useEffect(() => {
@@ -75,12 +88,12 @@ export function VoiceButton({
 
       recorder.start(250);
       mediaRecorderRef.current = recorder;
-      setState("listening");
+      updateState("listening");
       setTranscript("");
     } catch {
-      setState("idle");
+      updateState("idle");
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [updateState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -94,21 +107,27 @@ export function VoiceButton({
   }, []);
 
   const processAudio = async (blob: Blob) => {
-    setState("processing");
+    updateState("processing");
 
     try {
       // Step 1: Transcribe via Deepgram REST API
       const transcriptText = await transcribeWithDeepgram(blob);
 
       if (!transcriptText.trim()) {
-        setState("idle");
+        updateState("idle");
         return;
       }
 
       setTranscript(transcriptText);
       onTranscript?.(transcriptText);
 
-      // Step 2: Get AI response + optional TTS
+      // In chat mode, STT is all we do — chat handles AI response + TTS
+      if (chatMode) {
+        updateState("idle");
+        return;
+      }
+
+      // Step 2: Get AI response + optional TTS (standalone voice mode)
       const res = await fetch("/api/voice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -122,7 +141,6 @@ export function VoiceButton({
         const contentType = res.headers.get("content-type");
 
         if (contentType?.includes("audio")) {
-          // Play audio response
           const aiText = decodeURIComponent(
             res.headers.get("x-ai-response") ?? ""
           );
@@ -130,69 +148,107 @@ export function VoiceButton({
             onResponse?.(aiText);
           }
 
-          setState("speaking");
+          updateState("speaking");
           const audioBlob = await res.blob();
           const audioUrl = URL.createObjectURL(audioBlob);
           const audio = new Audio(audioUrl);
           audioRef.current = audio;
 
           audio.onended = () => {
-            setState("idle");
+            updateState("idle");
             URL.revokeObjectURL(audioUrl);
           };
 
           await audio.play();
         } else {
-          // Text-only response
           const data = await res.json();
           if (data.text) {
             onResponse?.(data.text);
           }
-          setState("idle");
+          updateState("idle");
         }
       } else {
-        setState("idle");
+        updateState("idle");
       }
     } catch {
-      setState("idle");
+      updateState("idle");
     }
   };
 
-  const handleClick = () => {
+  const handleClick = useCallback(() => {
     if (state === "idle") {
       startRecording();
     } else if (state === "listening") {
       stopRecording();
     } else if (state === "speaking") {
-      // Interrupt playback
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
-      setState("idle");
+      updateState("idle");
     }
-  };
+  }, [state, startRecording, stopRecording, updateState]);
 
-  const stateConfig: Record<VoiceState, { icon: React.ReactNode; label: string; color: string }> = {
+  /** Play TTS audio for a given text. Called externally via parent when in chatMode. */
+  const playTTS = useCallback(
+    async (text: string) => {
+      try {
+        updateState("speaking");
+        const res = await fetch("/api/voice/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+
+        if (!res.ok) {
+          updateState("idle");
+          return;
+        }
+
+        const audioBlob = await res.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        audioRef.current = audio;
+
+        audio.onended = () => {
+          updateState("idle");
+          URL.revokeObjectURL(audioUrl);
+        };
+
+        await audio.play();
+      } catch {
+        updateState("idle");
+      }
+    },
+    [updateState]
+  );
+
+  // Expose playTTS and handleClick to parent via window
+  useEffect(() => {
+    (window as Record<string, unknown>).__ossyPlayTTS = playTTS;
+    (window as Record<string, unknown>).__ossyVoiceClick = handleClick;
+    return () => {
+      delete (window as Record<string, unknown>).__ossyPlayTTS;
+      delete (window as Record<string, unknown>).__ossyVoiceClick;
+    };
+  }, [playTTS, handleClick]);
+
+  const stateConfig: Record<VoiceState, { icon: React.ReactNode; label: string }> = {
     idle: {
       icon: <Mic className="h-4 w-4" />,
       label: "Talk to Ossy",
-      color: "",
     },
     listening: {
       icon: <MicOff className="h-4 w-4" />,
       label: "Listening...",
-      color: "bg-red-500 hover:bg-red-600 text-white",
     },
     processing: {
       icon: <Loader2 className="h-4 w-4 animate-spin" />,
       label: "Thinking...",
-      color: "",
     },
     speaking: {
       icon: <Volume2 className="h-4 w-4" />,
       label: "Speaking...",
-      color: "bg-cos-electric hover:bg-cos-electric/90 text-white",
     },
   };
 
@@ -201,14 +257,17 @@ export function VoiceButton({
   if (compact) {
     return (
       <button
+        type="button"
         onClick={handleClick}
         disabled={state === "processing"}
-        className={`flex h-10 w-10 items-center justify-center rounded-full transition-all ${
+        className={`flex items-center justify-center rounded-full transition-all ${
           state === "listening"
             ? "bg-red-500 text-white animate-pulse"
             : state === "speaking"
               ? "bg-cos-electric text-white"
-              : "bg-cos-cloud text-cos-slate hover:bg-cos-surface-raised"
+              : state === "processing"
+                ? "text-cos-slate"
+                : "text-cos-slate hover:text-cos-electric"
         } ${className ?? ""}`}
         title={current.label}
       >
@@ -220,17 +279,23 @@ export function VoiceButton({
   return (
     <div className={className}>
       <Button
+        type="button"
         onClick={handleClick}
         disabled={state === "processing"}
         variant={state === "idle" ? "outline" : "default"}
         size="sm"
-        className={current.color}
+        className={
+          state === "listening"
+            ? "bg-red-500 hover:bg-red-600 text-white"
+            : state === "speaking"
+              ? "bg-cos-electric hover:bg-cos-electric/90 text-white"
+              : ""
+        }
       >
         {current.icon}
         <span className="ml-1.5">{current.label}</span>
       </Button>
 
-      {/* Live transcript display */}
       {transcript && state !== "idle" && (
         <p className="mt-2 text-xs text-cos-slate italic">
           &ldquo;{transcript}&rdquo;
@@ -243,7 +308,6 @@ export function VoiceButton({
 // ─── Deepgram Transcription via Server Proxy ─────────────
 
 async function transcribeWithDeepgram(audioBlob: Blob): Promise<string> {
-  // Proxy through our API route to keep the Deepgram key server-side
   const res = await fetch("/api/voice/transcribe", {
     method: "POST",
     headers: {
