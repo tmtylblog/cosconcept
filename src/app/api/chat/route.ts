@@ -269,7 +269,7 @@ export async function POST(req: Request) {
     // discover_search only needs firmId (optional) for bidirectional scoring, not orgId.
     const toolsEnabled = hasToolAccess && (organizationId || firmSection === "discover");
     const tools = toolsEnabled
-      ? createOssyTools(organizationId ?? "discover-mode", firmId)
+      ? createOssyTools(organizationId ?? "discover-mode", firmId, userId ?? undefined)
       : undefined;
 
     const result = streamText({

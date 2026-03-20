@@ -12,8 +12,9 @@ import { analyzeClientOverlap } from "@/lib/matching/client-overlap";
 import { loadAbstractionProfile } from "@/lib/matching/abstraction-generator";
 import { inngest } from "@/inngest/client";
 import { db } from "@/lib/db";
-import { serviceFirms, firmCaseStudies } from "@/lib/db/schema";
+import { serviceFirms, firmCaseStudies, opportunities } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import crypto from "crypto";
 
 /** v2 interview fields (new 5-question flow) — used for funnel tracking */
 const INTERVIEW_FIELDS_V2 = [
@@ -61,7 +62,7 @@ type ToolInput = z.infer<typeof toolInputSchema>;
  * Creates Ossy AI tools with DB access baked in.
  * Tools execute server-side and persist confirmed data.
  */
-export function createOssyTools(organizationId: string, firmId?: string) {
+export function createOssyTools(organizationId: string, firmId?: string, userId?: string) {
   return {
     navigate_section: tool({
       description:
@@ -668,6 +669,70 @@ export function createOssyTools(organizationId: string, firmId?: string) {
         } catch (err) {
           console.error("[Ossy Tools] get_my_profile failed:", err);
           return { found: false, message: "Unable to load your firm profile." };
+        }
+      },
+    }),
+
+    create_opportunity: tool({
+      description:
+        "Create a partnership opportunity when the user mentions a potential project, client need, " +
+        "or business opportunity that could benefit from a partner. Use when the user says things like " +
+        "'I just heard from a prospect who needs...', 'We have a client looking for...', " +
+        "'There might be an opportunity for...', or 'Can you log this opportunity?'. " +
+        "Extract the key details and save it to the platform.",
+      inputSchema: z.object({
+        title: z.string().describe("Short title for the opportunity (e.g., 'Data pipeline rebuild for fintech client')"),
+        description: z.string().optional().describe("Detailed description of what the client/prospect needs"),
+        signalType: z.enum(["direct", "latent"]).optional()
+          .describe("'direct' = explicit ask from client, 'latent' = inferred need from conversation context"),
+        priority: z.enum(["high", "medium", "low"]).optional()
+          .describe("Priority based on urgency and value signals"),
+        clientName: z.string().optional().describe("Name of the client or prospect company"),
+        clientDomain: z.string().optional().describe("Website domain of the client (e.g., 'acme.com')"),
+        requiredSkills: z.array(z.string()).optional().describe("Skills needed to fulfill this opportunity"),
+        estimatedValue: z.string().optional().describe("Estimated project value range (e.g., '25k-50k', '100k+')"),
+        timeline: z.string().optional().describe("When the work needs to start (e.g., 'immediate', '1-3 months')"),
+        resolutionApproach: z.enum(["self", "network", "hybrid"]).optional()
+          .describe("'self' = can handle internally, 'network' = needs a partner, 'hybrid' = partial partner help"),
+      }),
+      execute: async (params) => {
+        if (!firmId || !userId) {
+          return { success: false, error: "You need to be logged in with a firm profile to create opportunities." };
+        }
+
+        try {
+          const oppId = `opp_${crypto.randomBytes(8).toString("hex")}`;
+
+          await db.insert(opportunities).values({
+            id: oppId,
+            firmId,
+            createdBy: userId,
+            title: params.title,
+            description: params.description ?? null,
+            signalType: params.signalType ?? "direct",
+            priority: params.priority ?? "medium",
+            resolutionApproach: params.resolutionApproach ?? "network",
+            clientName: params.clientName ?? null,
+            clientDomain: params.clientDomain ?? null,
+            requiredSkills: params.requiredSkills ?? [],
+            estimatedValue: params.estimatedValue ?? null,
+            timeline: params.timeline ?? null,
+            source: "chat",
+            status: "new",
+          });
+
+          return {
+            success: true,
+            opportunityId: oppId,
+            title: params.title,
+            _instruction:
+              "Confirm the opportunity was saved. Mention the title and any key details. " +
+              "If the user mentioned skills needed, suggest they check the Discover page to find matching partners. " +
+              "Keep it brief and encouraging.",
+          };
+        } catch (err) {
+          console.error("[Ossy Tools] create_opportunity failed:", err);
+          return { success: false, error: "Failed to save the opportunity. Please try again." };
         }
       },
     }),
