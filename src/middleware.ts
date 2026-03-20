@@ -44,7 +44,8 @@ function isProtectedPath(pathname: string): boolean {
 function isSandboxEligiblePage(pathname: string): boolean {
   if (pathname.startsWith("/api/")) return false;
   if (pathname.startsWith("/_next/")) return false;
-  if (pathname.startsWith("/admin/")) return false;
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return false;
+  if (pathname === "/admin-login" || pathname.startsWith("/admin-login")) return false;
   if (pathname.startsWith("/login")) return false;
   if (pathname.startsWith("/org/")) return false;
   if (pathname === "/") return false;
