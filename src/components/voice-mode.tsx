@@ -179,9 +179,11 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Watch for Ossy's response in "waiting" state ───────
+  // ─── Watch for Ossy's response ───────────────────────────
+  // Fire when waiting/processing and a new assistant message arrives with status "ready"
   useEffect(() => {
-    if (state !== "waiting") return;
+    // Only trigger TTS when we're waiting for a response (or just sent)
+    if (state !== "waiting" && state !== "processing") return;
     if (status !== "ready") return;
 
     const lastMsg = messages[messages.length - 1];
@@ -200,6 +202,9 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
       if (text) {
         lastHandledMsgIdRef.current = lastMsg.id;
         playTTS(text);
+      } else {
+        // No text in response — resume listening
+        setState("listening");
       }
     }
   }, [state, status, messages]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -222,6 +227,7 @@ export function VoiceMode({ onExit, sendMessage, messages, status }: VoiceModePr
 
       if (!res.ok) {
         // TTS failed — skip audio, go back to listening
+        console.error("[VoiceMode] TTS failed:", res.status, await res.text().catch(() => ""));
         setState("listening");
         return;
       }

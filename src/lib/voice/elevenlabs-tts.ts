@@ -44,7 +44,7 @@ export async function streamTTS(
   const mergedConfig = { ...DEFAULT_TTS_CONFIG, ...config };
 
   const res = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${mergedConfig.voiceId}/stream`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${mergedConfig.voiceId}/stream?output_format=${mergedConfig.outputFormat}`,
     {
       method: "POST",
       headers: {
@@ -60,7 +60,6 @@ export async function streamTTS(
           similarity_boost: mergedConfig.similarityBoost,
           style: mergedConfig.style,
         },
-        output_format: mergedConfig.outputFormat,
       }),
     }
   );
