@@ -165,11 +165,15 @@ For both tools, synthesize results conversationally — don't dump numbers. Lead
 - Use arrays for multi-value fields (services, skills, etc.) and strings for single-value fields (firmCategory, growthGoals)
 - Build on previous values — if they mentioned 3 services earlier and add a 4th, include all 4 in the array
 
-## Formatting
-- Keep responses concise — 2-3 short paragraphs max for most replies
+## Formatting & Brevity
+- Be SHORT. 1-2 sentences for acknowledgments, 2-3 sentences max for most replies. Never more than a short paragraph unless the user asked for detail.
+- Don't narrate what you're doing ("Let me look into that…", "I'll check…"). Just do it and share the result.
+- Don't repeat back what the user said. Don't summarize your previous messages.
+- Skip pleasantries and filler ("Great question!", "That's a good point!"). Get straight to the insight.
 - Use bullet points sparingly and only when listing discrete items
 - Don't use markdown headers in chat messages
 - Don't use emojis unless the user does first
+- When providing context signals or commentary, keep it to ONE sentence. The user is busy navigating — don't write paragraphs about what they're looking at.
 `;
 
 /**

@@ -1239,8 +1239,9 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       >
         <div className="flex min-h-full flex-col justify-end px-4 py-4">
         <div className="space-y-2">
-        {messages.map((message, idx) => {
+        {(() => { let assistantIdx = 0; return messages.map((message, idx) => {
           const text = getMessageText(message);
+          const thisAssistantIdx = message.role === "assistant" ? assistantIdx++ : -1;
 
           // Hide [PAGE_EVENT] and [CONTEXT_SIGNAL] messages from user view — they're system context for Ossy
           if (message.role === "user" && (text.startsWith("[PAGE_EVENT]") || text.startsWith("[CONTEXT_SIGNAL]"))) return null;
@@ -1301,7 +1302,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                 className={cn(
                   "rounded-cos-xl px-4 py-3",
                   message.role === "assistant"
-                    ? "rounded-tl-cos-sm bg-white/95 text-cos-midnight shadow-sm"
+                    ? `rounded-tl-cos-sm text-cos-midnight shadow-sm ${thisAssistantIdx % 2 === 0 ? "bg-white/95" : "bg-white/80"}`
                     : "ml-auto rounded-tr-cos-sm bg-cos-electric text-white"
                 )}
               >
@@ -1383,7 +1384,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
               </div>
             </div>
           );
-        })}
+        }); })()}
 
         {/* ── Transcript extraction results ───────────────────────────────── */}
         {transcriptResult && (

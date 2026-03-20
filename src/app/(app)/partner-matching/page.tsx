@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import {
   Sparkles,
@@ -510,7 +510,7 @@ export default function PartnerMatchingPage() {
     if (Array.isArray(val)) return val.length > 0;
     return !!val;
   });
-  const missingFields = V2_FIELDS.filter((f) => !filledFields.includes(f));
+  const missingFields = useMemo(() => V2_FIELDS.filter((f) => !filledFields.includes(f)), [filledFields]);
   const prefsComplete = missingFields.length === 0;
 
   // Register page context for Ossy
@@ -523,7 +523,8 @@ export default function PartnerMatchingPage() {
       matchCount: matches.length,
     });
     return () => setPageContext(null);
-  }, [hydrated, prefsComplete, missingFields.length, matches.length, setPageContext, missingFields]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, prefsComplete, missingFields.length, matches.length, setPageContext]);
 
   // Auto-trigger Ossy to start preference interview when prefs are incomplete
   const ossyTriggeredRef = useRef(false);
@@ -611,7 +612,9 @@ export default function PartnerMatchingPage() {
 
   useEffect(() => {
     if (hydrated && prefsComplete) {
+      const controller = new AbortController();
       loadMatches();
+      return () => controller.abort();
     }
   }, [hydrated, prefsComplete, loadMatches]);
 
