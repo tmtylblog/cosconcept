@@ -20,6 +20,10 @@ import {
   PanelLeft,
   Clock,
   Type,
+  Eye,
+  Target,
+  Lightbulb,
+  CheckSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -67,12 +71,77 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 /** AI prompt suggestions */
 const AI_SUGGESTIONS = [
-  "Make this more concise",
-  "Add a table of contents",
+  "Add Vision / Release Scope / Future Ideas sections",
+  "Write the Release Scope checklist",
   "Update to reflect recent changes",
+  "Make this more concise",
   "Add code examples",
-  "Simplify the technical language",
 ];
+
+/** Parse markdown into structured sections (Vision, Release Scope, Future Ideas, and rest) */
+interface DocSection {
+  type: "vision" | "release" | "future" | "content";
+  title: string;
+  content: string;
+}
+
+function parseDocSections(markdown: string): { sections: DocSection[]; hasStructure: boolean } {
+  const lines = markdown.split("\n");
+  const sections: DocSection[] = [];
+  let currentType: DocSection["type"] = "content";
+  let currentTitle = "";
+  let currentLines: string[] = [];
+  let hasStructure = false;
+
+  const flush = () => {
+    const content = currentLines.join("\n").trim();
+    if (content || currentType !== "content") {
+      sections.push({ type: currentType, title: currentTitle, content });
+    }
+    currentLines = [];
+  };
+
+  for (const line of lines) {
+    const h2Match = line.match(/^##\s+(.+)$/);
+    if (h2Match) {
+      const heading = h2Match[1].trim().toLowerCase();
+      if (heading === "vision" || heading.startsWith("vision")) {
+        flush();
+        currentType = "vision";
+        currentTitle = h2Match[1].trim();
+        hasStructure = true;
+        continue;
+      } else if (heading === "release scope" || heading.startsWith("release scope") || heading === "release checklist") {
+        flush();
+        currentType = "release";
+        currentTitle = h2Match[1].trim();
+        hasStructure = true;
+        continue;
+      } else if (heading === "future ideas" || heading.startsWith("future ideas") || heading === "future" || heading === "forward looking") {
+        flush();
+        currentType = "future";
+        currentTitle = h2Match[1].trim();
+        hasStructure = true;
+        continue;
+      } else {
+        // Regular H2 — flush current and start new content section
+        flush();
+        currentType = "content";
+        currentTitle = "";
+      }
+    }
+    currentLines.push(line);
+  }
+  flush();
+
+  return { sections, hasStructure };
+}
+
+const SECTION_STYLES: Record<string, { border: string; bg: string; icon: string; headerBg: string; headerText: string }> = {
+  vision: { border: "border-blue-200", bg: "bg-blue-50/50", icon: "text-blue-500", headerBg: "bg-blue-100/60", headerText: "text-blue-800" },
+  release: { border: "border-amber-200", bg: "bg-amber-50/50", icon: "text-amber-500", headerBg: "bg-amber-100/60", headerText: "text-amber-800" },
+  future: { border: "border-slate-200", bg: "bg-slate-50/50", icon: "text-slate-400", headerBg: "bg-slate-100/60", headerText: "text-slate-600" },
+};
 
 export default function AdminDocsPage() {
   const [categories, setCategories] = useState<DocCategory[]>([]);
@@ -580,12 +649,68 @@ export default function AdminDocsPage() {
               </div>
             </div>
 
-            {/* Markdown content */}
+            {/* Markdown content — section-aware renderer */}
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-4xl mx-auto px-8 py-8">
-                <article className="prose prose-sm max-w-none prose-headings:text-[var(--cos-text-primary)] prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-slate-200 prose-h1:pb-3 prose-h2:text-xl prose-h2:mt-8 prose-h3:text-base prose-p:text-[var(--cos-text-secondary)] prose-p:leading-relaxed prose-li:text-[var(--cos-text-secondary)] prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-[13px] prose-code:font-medium prose-code:text-pink-600 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-[#1e1e2e] prose-pre:rounded-xl prose-pre:shadow-lg prose-pre:border prose-pre:border-slate-700 prose-table:text-sm prose-table:border prose-table:border-slate-200 prose-table:rounded-lg prose-table:overflow-hidden prose-th:bg-slate-50 prose-th:px-4 prose-th:py-2.5 prose-th:text-left prose-th:font-semibold prose-th:text-[var(--cos-text-primary)] prose-td:px-4 prose-td:py-2 prose-tr:border-b prose-tr:border-slate-100 prose-blockquote:border-l-4 prose-blockquote:border-l-[var(--cos-primary)] prose-blockquote:bg-[var(--cos-primary)]/5 prose-blockquote:py-1 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic prose-a:text-[var(--cos-primary)] prose-a:font-medium prose-a:no-underline hover:prose-a:underline prose-strong:text-[var(--cos-text-primary)] prose-hr:border-slate-200 prose-hr:my-8 prose-img:rounded-xl">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{fileContent}</ReactMarkdown>
-                </article>
+                {(() => {
+                  const { sections, hasStructure } = parseDocSections(fileContent);
+                  const proseClasses = "prose prose-sm max-w-none prose-headings:text-[var(--cos-text-primary)] prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-slate-200 prose-h1:pb-3 prose-h2:text-xl prose-h2:mt-8 prose-h3:text-base prose-p:text-[var(--cos-text-secondary)] prose-p:leading-relaxed prose-li:text-[var(--cos-text-secondary)] prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-[13px] prose-code:font-medium prose-code:text-pink-600 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-[#1e1e2e] prose-pre:rounded-xl prose-pre:shadow-lg prose-pre:border prose-pre:border-slate-700 prose-table:text-sm prose-table:border prose-table:border-slate-200 prose-table:rounded-lg prose-table:overflow-hidden prose-th:bg-slate-50 prose-th:px-4 prose-th:py-2.5 prose-th:text-left prose-th:font-semibold prose-th:text-[var(--cos-text-primary)] prose-td:px-4 prose-td:py-2 prose-tr:border-b prose-tr:border-slate-100 prose-blockquote:border-l-4 prose-blockquote:border-l-[var(--cos-primary)] prose-blockquote:bg-[var(--cos-primary)]/5 prose-blockquote:py-1 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic prose-a:text-[var(--cos-primary)] prose-a:font-medium prose-a:no-underline hover:prose-a:underline prose-strong:text-[var(--cos-text-primary)] prose-hr:border-slate-200 prose-hr:my-8 prose-img:rounded-xl";
+
+                  if (!hasStructure) {
+                    return (
+                      <article className={proseClasses}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{fileContent}</ReactMarkdown>
+                      </article>
+                    );
+                  }
+
+                  const sectionIcon = (type: string) => {
+                    if (type === "vision") return <Eye className="h-4 w-4" />;
+                    if (type === "release") return <Target className="h-4 w-4" />;
+                    if (type === "future") return <Lightbulb className="h-4 w-4" />;
+                    return null;
+                  };
+
+                  return (
+                    <div className="space-y-6">
+                      {sections.map((section, i) => {
+                        if (section.type === "content") {
+                          return (
+                            <article key={i} className={proseClasses}>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+                            </article>
+                          );
+                        }
+
+                        const style = SECTION_STYLES[section.type];
+                        return (
+                          <div key={i} className={`rounded-xl border-2 ${style.border} ${style.bg} overflow-hidden`}>
+                            <div className={`flex items-center gap-2.5 px-5 py-3 ${style.headerBg}`}>
+                              <span className={style.icon}>{sectionIcon(section.type)}</span>
+                              <h2 className={`text-sm font-bold ${style.headerText}`}>{section.title}</h2>
+                              {section.type === "release" && (() => {
+                                const total = (section.content.match(/- \[[ x]\]/g) || []).length;
+                                const checked = (section.content.match(/- \[x\]/g) || []).length;
+                                if (total === 0) return null;
+                                return (
+                                  <span className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-amber-700">
+                                    <CheckSquare className="h-3.5 w-3.5" />
+                                    {checked}/{total} done
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                            <div className="px-5 py-4">
+                              <article className={`${proseClasses} prose-h3:text-sm prose-h3:mt-4`}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.content}</ReactMarkdown>
+                              </article>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

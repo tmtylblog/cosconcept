@@ -2,6 +2,33 @@
 
 > Last updated: 2026-03-09
 
+## Vision
+
+Voice is how Ossy becomes a true AI consultant — not just a chatbot. Users should be able to talk to Ossy naturally, get spoken responses, and eventually have Ossy join their calls to listen, coach, and extract opportunities in real-time. Voice makes the platform feel human and dramatically lowers the friction of interacting with AI.
+
+## Release Scope
+
+- [x] Deepgram Nova-3 STT integration (REST batch mode)
+- [x] ElevenLabs TTS streaming (Rachel voice, Turbo v2.5)
+- [x] Request/response voice pipeline end-to-end
+- [ ] Wire VoiceButton component into chat panel UI
+- [ ] Add voice activity detection (VAD) for auto-stop recording
+- [ ] Add Deepgram Aura TTS as fallback/alternative
+- [ ] Add waveform visualization during recording/playback
+- [ ] Test and optimize end-to-end latency (<1s target)
+- [ ] Add ELEVENLABS_API_KEY to env schema validation
+
+## Future Ideas
+
+- WebSocket streaming pipeline for real-time conversation (server code exists, needs UI)
+- Custom Ossy voice clone via ElevenLabs
+- Chrome extension for call recording and live coaching
+- Recall.ai meeting bot integration for Zoom/Meet/Teams
+- Voice-to-voice mode (skip text, direct audio pipeline)
+- Conversation context per utterance for multi-turn voice chats
+
+---
+
 ## Overview
 
 Ossy voice system: browser mic capture, Deepgram Nova-3 STT, Claude Sonnet LLM, ElevenLabs TTS, browser audio playback. Two modes exist: a **request/response** pattern (currently wired up end-to-end) and a **streaming WebSocket** pipeline (server-side code exists, not yet connected to the UI).

@@ -2,6 +2,34 @@
 
 > Last updated: 2026-03-19
 
+## Vision
+
+Ossy should be an email-native agent — capable of drafting partnership intros, following up on stale conversations, and classifying inbound messages by intent. The email system turns Ossy from a chat-only assistant into a proactive outreach engine that works asynchronously on behalf of users.
+
+## Release Scope
+
+- [x] Resend integration for outbound email
+- [x] Inbound webhook processing (MX → classify → store)
+- [x] Admin approval queue for outbound emails
+- [x] AI intent classification (6 intents via Gemini Flash)
+- [x] Three-way intro email generation
+- [x] Weekly digest email with partnership updates
+- [ ] Add /settings/email preferences page for users
+- [ ] Implement unsubscribe mechanism
+- [ ] Add bounce handling and retry logic
+- [ ] Build idle partnership nudge (>14d no activity)
+- [ ] Fix user queue to use Inngest (currently direct send)
+
+## Future Ideas
+
+- Auto-reply to inbound emails with AI-drafted responses (with confidence threshold)
+- Email thread summarization for partnership context
+- Calendar/scheduling integration from email threads
+- Bulk outreach campaigns for partnership development
+- Email analytics dashboard (open rates, response rates)
+
+---
+
 Ossy sends and receives email at `ossy@joincollectiveos.com` via **Resend**. All outbound emails pass through an approval queue system. Inbound emails are processed by AI for intent classification, entity extraction, and automated response drafting.
 
 ---

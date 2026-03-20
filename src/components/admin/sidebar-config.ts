@@ -30,6 +30,7 @@ import {
   History,
   BookOpen,
   Presentation,
+  ClipboardCheck,
 } from "lucide-react";
 import type { AdminSection } from "@/lib/admin/permissions";
 
@@ -124,6 +125,7 @@ export const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { href: "/admin/enrichment/poor-results", label: "Poor CS Results", icon: FileX },
       { href: "/admin/prompts", label: "Key Prompts", icon: FileCode2 },
       { href: "/admin/docs", label: "Docs", icon: BookOpen },
+      { href: "/admin/release-checklist", label: "Release Checklist", icon: ClipboardCheck },
       { href: "/admin/feature-log", label: "Feature Log", icon: History },
       { href: "/admin/product-overview", label: "Product Overview", icon: Presentation },
       { href: "/admin/sandbox", label: "Sandbox", icon: FlaskConical },
