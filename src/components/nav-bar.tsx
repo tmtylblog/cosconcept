@@ -307,14 +307,21 @@ export function NavBar({
           </button>
         ) : (
           <button
-            onClick={() =>
+            onClick={() => {
+              // Clear sandbox cookies before sign-out to prevent data leakage
+              try {
+                document.cookie = "cos_sandbox_domain=; path=/; max-age=0";
+                document.cookie = "cos_sandbox_mode=; path=/; max-age=0";
+                sessionStorage.removeItem("cos_sandbox_auto_message");
+              } catch { /* ignore */ }
               signOut({
                 fetchOptions: {
                   onSuccess: () => {
                     window.location.href = "/login";
                   },
                 },
-              })
+              });
+            }
             }
             className="flex w-full items-center gap-3 rounded-cos-lg px-3 py-2.5 text-sm font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
           >

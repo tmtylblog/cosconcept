@@ -51,6 +51,17 @@
   --radius-cos-full: 9999px;
 }
 
+/* Semantic aliases — used by admin pages via var(--cos-*) */
+:root {
+  --cos-primary: var(--color-cos-electric);
+  --cos-primary-hover: var(--color-cos-electric-hover);
+  --cos-text-primary: var(--color-cos-midnight);
+  --cos-text-secondary: var(--color-cos-slate-dim);
+  --cos-text-muted: var(--color-cos-slate);
+  --cos-border: var(--color-cos-border);
+  --cos-surface: var(--color-cos-surface);
+}
+
 /* Base styles */
 body {
   font-family: var(--font-sans);
