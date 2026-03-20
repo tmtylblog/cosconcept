@@ -13,6 +13,8 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { members, serviceFirms } from "@/lib/db/schema";
+
+export const maxDuration = 60;
 import { eq } from "drizzle-orm";
 import { executeSearch } from "@/lib/matching/search";
 import { requireUsage, FeatureGateError } from "@/lib/billing/gate";
