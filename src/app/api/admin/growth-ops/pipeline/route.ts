@@ -147,7 +147,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.action === "createDeal") {
-      const { name, contactId, companyId, stageId, dealValue, priority, notes, source, sourceChannel, linkedinAccountId, outreachEmailAccount } = body;
+      const { name, companyId, stageId, dealValue, priority, notes, source, sourceChannel, linkedinAccountId, outreachEmailAccount, participantName, participantProfileUrl } = body;
+      let { contactId } = body;
 
       // Check for existing deal with same name (prevent duplicates from inbox)
       if (name) {
@@ -161,6 +162,53 @@ export async function POST(req: NextRequest) {
             { error: `A deal named "${name}" already exists`, existingDealId: existingDeal.id },
             { status: 409 }
           );
+        }
+      }
+
+      // Find or create contact from participant info (when creating from inbox)
+      if (!contactId && (participantProfileUrl || participantName)) {
+        // Try to find existing contact by LinkedIn URL
+        if (participantProfileUrl) {
+          const normalized = participantProfileUrl
+            .replace(/^https?:\/\//i, "")
+            .replace(/^www\./i, "")
+            .replace(/\/+$/, "")
+            .toLowerCase();
+          const [found] = await db
+            .select({ id: acqContacts.id })
+            .from(acqContacts)
+            .where(ilike(acqContacts.linkedinUrl, `%${normalized}%`))
+            .limit(1);
+          if (found) contactId = found.id;
+        }
+
+        // Try name fallback
+        if (!contactId && participantName) {
+          const parts = participantName.trim().split(/\s+/);
+          const firstName = parts[0] ?? "";
+          const lastName = parts.slice(1).join(" ");
+          if (lastName) {
+            const [found] = await db
+              .select({ id: acqContacts.id })
+              .from(acqContacts)
+              .where(and(ilike(acqContacts.firstName, firstName), ilike(acqContacts.lastName, lastName)))
+              .limit(1);
+            if (found) contactId = found.id;
+          }
+        }
+
+        // Still no contact — create one
+        if (!contactId) {
+          const parts = (participantName || "").trim().split(/\s+/);
+          const newContactId = randomId();
+          await db.insert(acqContacts).values({
+            id: newContactId,
+            firstName: parts[0] || "Unknown",
+            lastName: parts.slice(1).join(" ") || null,
+            linkedinUrl: participantProfileUrl || null,
+            source: "linkedin",
+          });
+          contactId = newContactId;
         }
       }
 

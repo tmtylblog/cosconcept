@@ -109,8 +109,8 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 2. Load deal (prefer open)
-    const deals = await db
+    // 2. Load deal (prefer open) — try contactId first, fall back to name match
+    let deals = await db
       .select()
       .from(acqDeals)
       .where(eq(acqDeals.contactId, contact.id))
@@ -119,6 +119,31 @@ export async function GET(req: NextRequest) {
         desc(acqDeals.updatedAt),
       )
       .limit(1);
+
+    // Fallback: find deal by contact's full name (handles deals created before contact linking)
+    if (deals.length === 0 && contact.firstName) {
+      const fullName = [contact.firstName, contact.lastName].filter(Boolean).join(" ");
+      if (fullName) {
+        deals = await db
+          .select()
+          .from(acqDeals)
+          .where(ilike(acqDeals.name, fullName))
+          .orderBy(
+            sql`CASE WHEN ${acqDeals.status} = 'open' THEN 0 ELSE 1 END`,
+            desc(acqDeals.updatedAt),
+          )
+          .limit(1);
+
+        // If found, retroactively link the contact to the deal
+        if (deals[0]) {
+          await db
+            .update(acqDeals)
+            .set({ contactId: contact.id })
+            .where(eq(acqDeals.id, deals[0].id));
+        }
+      }
+    }
+
     const deal = deals[0] ?? null;
 
     // 3. Load company

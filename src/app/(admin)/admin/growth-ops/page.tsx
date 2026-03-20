@@ -946,12 +946,19 @@ function GrowthOpsInboxInner() {
           ? stages.reduce((a, b) => (a.displayOrder ?? 0) < (b.displayOrder ?? 0) ? a : b)
           : null);
 
+      // Use context contact if available, otherwise pass participant info
+      // so the API can find or create the contact
+      const contactId = contextData?.contact?.id ?? null;
+
       const res = await fetch("/api/admin/growth-ops/pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "createDeal",
           name: selectedConvo.participantName || "New Deal",
+          contactId,
+          participantName: selectedConvo.participantName || null,
+          participantProfileUrl: selectedConvo.participantProfileUrl || null,
           stageId: targetStage?.id ?? null,
           source: "linkedin_auto",
           sourceChannel: "linkedin",
@@ -959,13 +966,16 @@ function GrowthOpsInboxInner() {
       });
       const d = await res.json();
       if (res.status === 409 && d.existingDealId) {
-        // Deal already exists — offer to view it
+        // Deal already exists — refresh context so it shows, then offer to view
+        refreshContext(selectedConvo);
         if (confirm(`A deal for "${selectedConvo.participantName}" already exists. View it?`)) {
           router.push(`/admin/growth-ops/pipeline/${d.existingDealId}?from=inbox`);
         }
         return;
       }
       if (!res.ok) { console.error("Create deal failed:", res.status, d.error); return; }
+      // Refresh context so deal card updates immediately
+      refreshContext(selectedConvo);
       if (d.dealId) {
         router.push(`/admin/growth-ops/pipeline/${d.dealId}?from=inbox`);
       }
