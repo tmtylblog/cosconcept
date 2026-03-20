@@ -65,8 +65,10 @@ export async function streamTTS(
   );
 
   if (!res.ok) {
-    console.error("[TTS] ElevenLabs error:", res.status, await res.text());
-    return null;
+    const errBody = await res.text();
+    console.error("[TTS] ElevenLabs error:", res.status, errBody);
+    // Throw so callers can see the actual error
+    throw new Error(`ElevenLabs ${res.status}: ${errBody}`);
   }
 
   return res.body;

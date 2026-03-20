@@ -21,20 +21,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "text is required" }, { status: 400 });
   }
 
-  console.warn("[TTS] Generating speech for:", text.slice(0, 80));
-  const audioStream = await streamTTS(text);
-  if (!audioStream) {
-    console.error("[TTS] streamTTS returned null — check ELEVENLABS_API_KEY");
-    return NextResponse.json(
-      { error: "TTS unavailable" },
-      { status: 503 }
-    );
-  }
+  try {
+    const audioStream = await streamTTS(text);
+    if (!audioStream) {
+      return NextResponse.json(
+        { error: "TTS unavailable — no ELEVENLABS_API_KEY" },
+        { status: 503 }
+      );
+    }
 
-  return new Response(audioStream, {
-    headers: {
-      "Content-Type": "audio/mpeg",
-      "Cache-Control": "no-cache",
-    },
-  });
+    return new Response(audioStream, {
+      headers: {
+        "Content-Type": "audio/mpeg",
+        "Cache-Control": "no-cache",
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown TTS error";
+    console.error("[TTS] Error:", msg);
+    return NextResponse.json({ error: msg }, { status: 502 });
+  }
 }
