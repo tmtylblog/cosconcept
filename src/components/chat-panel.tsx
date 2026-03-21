@@ -924,8 +924,11 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         const callId = ("toolCallId" in part && part.toolCallId)
           ? (part.toolCallId as string)
           : `${msg.id}-${partIdx}`;
-        if (processedToolCallsRef.current.has(callId)) continue;
-        processedToolCallsRef.current.add(callId);
+        // Skip already-processed tools — but NOT discover_search/search_partners
+        // which have their own dedup logic (they need to wait for onSearchResults)
+        const isSearchTool = toolName === "discover_search" || toolName === "search_partners";
+        if (processedToolCallsRef.current.has(callId) && !isSearchTool) continue;
+        if (!isSearchTool) processedToolCallsRef.current.add(callId);
 
         // Handle update_profile tool results
         if (toolName === "update_profile") {
