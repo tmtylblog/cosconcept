@@ -918,16 +918,22 @@ export async function universalStructuredFilter(
     intent === "evidence" ? { firm: 0.20, expert: 0.25, caseStudy: 0.55 } :
     /* partner */            { firm: 0.35, expert: 0.35, caseStudy: 0.30 };
 
+  // Each filter is individually wrapped in catch() so one failure doesn't kill
+  // the entire search. If expertFilter or caseStudyFilter throw (bad Cypher,
+  // Neo4j timeout, etc.), search still returns firm results.
   const [firms, experts, caseStudies] = await Promise.all([
-    !et || et === "firm"
+    (!et || et === "firm"
       ? structuredFilter(filters, et ? limit : Math.ceil(limit * alloc.firm))
-      : Promise.resolve([] as ReturnType<typeof structuredFilter> extends Promise<infer T> ? T : never),
-    !et || et === "expert"
+        .catch((err) => { console.error("[Search] firmFilter failed:", err); return [] as StructuredCandidate[]; })
+      : Promise.resolve([] as ReturnType<typeof structuredFilter> extends Promise<infer T> ? T : never)),
+    (!et || et === "expert"
       ? expertFilter(filters, et ? limit : Math.ceil(limit * alloc.expert), intent)
-      : Promise.resolve([] as MatchCandidate[]),
-    !et || et === "case_study"
+        .catch((err) => { console.error("[Search] expertFilter failed:", err); return [] as MatchCandidate[]; })
+      : Promise.resolve([] as MatchCandidate[])),
+    (!et || et === "case_study"
       ? caseStudyFilter(filters, et ? limit : Math.ceil(limit * alloc.caseStudy), intent)
-      : Promise.resolve([] as MatchCandidate[]),
+        .catch((err) => { console.error("[Search] caseStudyFilter failed:", err); return [] as MatchCandidate[]; })
+      : Promise.resolve([] as MatchCandidate[])),
   ]);
 
   const firmCandidates = toMatchCandidates(firms as StructuredCandidate[]);
@@ -1055,7 +1061,7 @@ async function expertFilter(
       coalesce(p.id, p.legacyId) AS entityId,
       coalesce(p.fullName, p.firstName + ' ' + p.lastName, p.name, 'Expert') AS displayName,
       sf.name AS firmName,
-      coalesce(sf.id, p.firmId) AS parentFirmId,
+      sf.id AS parentFirmId,
       skills,
       industries,
       markets,
@@ -1200,7 +1206,7 @@ async function caseStudyFilter(
         'Case Study'
       ) AS displayName,
       sf.name AS firmName,
-      coalesce(sf.id, cs.firmId) AS parentFirmId,
+      sf.id AS parentFirmId,
       skills,
       industries,
       contributorCount,
