@@ -1008,7 +1008,25 @@ export async function expertFilter(
     (filters.categories?.length ?? 0) > 0 ||
     (filters.services?.length ?? 0) > 0;
 
-  if (!hasExpertSignals) return [];
+  if (!hasExpertSignals) {
+    console.warn("[expertFilter] No signals — returning empty. Filters:", JSON.stringify({
+      skills: filters.skills?.length ?? 0,
+      industries: filters.industries?.length ?? 0,
+      markets: filters.markets?.length ?? 0,
+      categories: filters.categories?.length ?? 0,
+      services: filters.services?.length ?? 0,
+    }));
+    return [];
+  }
+
+  console.warn("[expertFilter] Running with signals:", JSON.stringify({
+    skills: filters.skills?.length ?? 0,
+    industries: filters.industries?.length ?? 0,
+    markets: filters.markets?.length ?? 0,
+    categories: filters.categories?.length ?? 0,
+    services: filters.services?.length ?? 0,
+    limit,
+  }));
 
   const params: Record<string, unknown> = { limit: neo4j.int(limit) };
   const conditions: string[] = [];
@@ -1097,6 +1115,7 @@ export async function expertFilter(
   }
 
   const records = await neo4jRead<ExpertRow>(query, params);
+  console.warn("[expertFilter] Neo4j returned %d expert records", records.length);
 
   return records.map((r) => {
     let score = 0;
@@ -1167,7 +1186,18 @@ export async function caseStudyFilter(
     (filters.categories?.length ?? 0) > 0 ||
     (filters.services?.length ?? 0) > 0;
 
-  if (!hasCaseStudySignals) return [];
+  if (!hasCaseStudySignals) {
+    console.warn("[caseStudyFilter] No signals — returning empty");
+    return [];
+  }
+
+  console.warn("[caseStudyFilter] Running with signals:", JSON.stringify({
+    skills: filters.skills?.length ?? 0,
+    industries: filters.industries?.length ?? 0,
+    categories: filters.categories?.length ?? 0,
+    services: filters.services?.length ?? 0,
+    limit,
+  }));
 
   const params: Record<string, unknown> = { limit: neo4j.int(limit) };
   const conditions: string[] = [];
@@ -1250,6 +1280,7 @@ export async function caseStudyFilter(
   }
 
   const records = await neo4jRead<CaseStudyRow>(query, params);
+  console.warn("[caseStudyFilter] Neo4j returned %d case study records", records.length);
 
   return records.map((r) => {
     let score = 0;
