@@ -60,6 +60,16 @@ COS CONCEPT (Collective OS) is a growth platform for professional services firms
 | `multi-dev.md` | Git workflow, branch naming, conflicts |
 | `roadmap.md` | Build phases, status, gaps, TODOs |
 
+## MANDATORY: Frontend Design Skill
+
+**All Claude agents MUST use the frontend design skill** (`.claude/skills/frontend-design.md`) when building or modifying any UI component, page, or visual element. This skill ensures:
+- Distinctive, production-grade design that avoids generic "AI slop" aesthetics
+- Bold aesthetic direction with intentional typography, color, and spatial composition
+- Use of the COS design system tokens (`cos-` prefix) while still making creative, polished choices
+- Every agent should install this skill in their worktree if not present
+
+The skill is at `.claude/skills/frontend-design.md`. Read it before any frontend work.
+
 ## Tech Stack (Finalized)
 - **Framework:** Next.js 15 (App Router) + TypeScript
 - **Styling:** Tailwind CSS 4 with `cos-` design token prefix (via `@theme` in globals.css)
