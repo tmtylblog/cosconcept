@@ -1045,6 +1045,12 @@ async function expertFilter(
     params.markets = filters.markets;
   }
 
+  const hasFilterConditions = conditions.length > 0;
+  // Cap unfiltered scans to avoid full graph scan + Neo4j timeout
+  if (!hasFilterConditions) {
+    params.limit = neo4j.int(Math.min(limit as number, 50));
+  }
+
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" OR ")}` : "";
 
@@ -1187,12 +1193,19 @@ async function caseStudyFilter(
     params.industries = filters.industries;
   }
 
+  // If no skill/industry conditions exist (only categories triggered the guard),
+  // cap results tightly to avoid full graph scan + Neo4j timeout
+  const hasFilterConditions = conditions.length > 0;
+  if (!hasFilterConditions) {
+    params.limit = neo4j.int(Math.min(limit, 50)); // Cap at 50 for unfiltered scans
+  }
+
   // Exclude hidden case studies (no summary, synthetic, junk scrapes)
   const qualityCondition = "(cs.hidden IS NULL OR cs.hidden = false)";
-  const whereClause =
-    conditions.length > 0
-      ? `WHERE ${qualityCondition} AND (${conditions.join(" OR ")})`
-      : `WHERE ${qualityCondition}`;
+  // When no filter conditions, also require a summary to get quality results
+  const whereClause = hasFilterConditions
+    ? `WHERE ${qualityCondition} AND (${conditions.join(" OR ")})`
+    : `WHERE ${qualityCondition} AND cs.summary IS NOT NULL AND cs.summary <> ''`;
 
   const query = `
     MATCH (cs:CaseStudy)
