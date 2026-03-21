@@ -999,10 +999,14 @@ async function expertFilter(
   limit: number,
   intent: "partner" | "expertise" | "evidence" = "partner"
 ): Promise<MatchCandidate[]> {
+  // Allow expert search when ANY filter signal is present (not just skills/industries/markets).
+  // Previously this guard blocked expert queries when only categories were extracted.
   const hasExpertSignals =
     (filters.skills?.length ?? 0) > 0 ||
     (filters.industries?.length ?? 0) > 0 ||
-    (filters.markets?.length ?? 0) > 0;
+    (filters.markets?.length ?? 0) > 0 ||
+    (filters.categories?.length ?? 0) > 0 ||
+    (filters.services?.length ?? 0) > 0;
 
   if (!hasExpertSignals) return [];
 
@@ -1150,9 +1154,12 @@ async function caseStudyFilter(
   limit: number,
   intent: "partner" | "expertise" | "evidence" = "partner"
 ): Promise<MatchCandidate[]> {
+  // Allow case study search when ANY filter signal is present
   const hasCaseStudySignals =
     (filters.skills?.length ?? 0) > 0 ||
-    (filters.industries?.length ?? 0) > 0;
+    (filters.industries?.length ?? 0) > 0 ||
+    (filters.categories?.length ?? 0) > 0 ||
+    (filters.services?.length ?? 0) > 0;
 
   if (!hasCaseStudySignals) return [];
 
