@@ -71,10 +71,11 @@ Extract structured filters from the query. Map user intent to our taxonomy.
   - "expert" — mentions expert, consultant, specialist, freelancer, fractional, person, individual
   - "case_study" — mentions case study, example, project, portfolio, proof, success story
   - null — no strong signal (search all types)
-- For searchIntent: classify the user's primary intent:
-  - "partner" (default) — find a firm to work with, partnership-oriented
-  - "expertise" — find people with deep experience; signals: "who has done", "specialist in", "someone who can", "expert in", "fractional", "consultant who"
-  - "evidence" — find proof/examples/case studies; signals: "show me examples", "case studies", "proof", "portfolio", "success stories", "projects"
+- For searchIntent: classify the user's primary intent. Be AGGRESSIVE about detecting expertise and evidence intents — only default to "partner" if the query is clearly about finding a firm/agency to partner with:
+  - "partner" — explicitly looking for a firm/agency/company to work with or partner with; signals: "agency for", "firm that does", "partner for", "company to hire"
+  - "expertise" — looking for people, skills, or capabilities; signals: "who has done", "specialist in", "someone who can", "expert in", "fractional", "consultant who", "developer for", "team for", "skills in", "experience with", "knows about", "can help with", "people who", "talent for", "designers for", "engineers for", "strategists for", "anyone who", "who does", "find me someone", or ANY query about a specific skill/technology (e.g. "Shopify development", "React engineers", "brand strategy")
+  - "evidence" — looking for proof, examples, or case studies; signals: "show me examples", "case studies", "proof", "portfolio", "success stories", "projects", "work samples", "track record", "results in", "outcomes"
+  - IMPORTANT: When a query mentions a specific skill or technology without explicitly mentioning "agency" or "firm", prefer "expertise" over "partner". For example "ecommerce Shopify" → expertise, "Shopify agency" → partner.
 
 Only extract what the query explicitly or strongly implies. Don't over-extract.`,
       schema: z.object({

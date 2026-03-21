@@ -911,11 +911,12 @@ export async function universalStructuredFilter(
   const et = filters.entityType;
 
   // Intent-driven allocation: adjust how many results per entity type
+  // More balanced defaults — firms used to dominate with 50/30/20
   const intent = filters.searchIntent ?? "partner";
   const alloc = et ? { firm: 1, expert: 1, caseStudy: 1 } :
     intent === "expertise" ? { firm: 0.20, expert: 0.55, caseStudy: 0.25 } :
     intent === "evidence" ? { firm: 0.20, expert: 0.25, caseStudy: 0.55 } :
-    /* partner */            { firm: 0.50, expert: 0.30, caseStudy: 0.20 };
+    /* partner */            { firm: 0.35, expert: 0.35, caseStudy: 0.30 };
 
   const [firms, experts, caseStudies] = await Promise.all([
     !et || et === "firm"
@@ -929,10 +930,54 @@ export async function universalStructuredFilter(
       : Promise.resolve([] as MatchCandidate[]),
   ]);
 
+  const firmCandidates = toMatchCandidates(firms as StructuredCandidate[]);
+  const expertCandidates = experts as MatchCandidate[];
+  const csCandidates = caseStudies as MatchCandidate[];
+
+  // If searching all entity types (no explicit filter), guarantee diversity
+  // so firms don't drown out experts and case studies
+  if (!et) {
+    // Sort each pool by score independently
+    firmCandidates.sort((a, b) => b.structuredScore - a.structuredScore);
+    expertCandidates.sort((a, b) => b.structuredScore - a.structuredScore);
+    csCandidates.sort((a, b) => b.structuredScore - a.structuredScore);
+
+    // Guarantee minimums from each entity type (if available)
+    const minExperts = Math.min(3, expertCandidates.length);
+    const minCaseStudies = Math.min(2, csCandidates.length);
+
+    const diverse: MatchCandidate[] = [];
+    const usedIds = new Set<string>();
+
+    // Insert top experts first
+    for (let i = 0; i < minExperts; i++) {
+      diverse.push(expertCandidates[i]);
+      usedIds.add(expertCandidates[i].entityId);
+    }
+    // Then top case studies
+    for (let i = 0; i < minCaseStudies; i++) {
+      diverse.push(csCandidates[i]);
+      usedIds.add(csCandidates[i].entityId);
+    }
+
+    // Fill rest from all pools sorted by score
+    const remaining = [...firmCandidates, ...expertCandidates, ...csCandidates]
+      .filter((c) => !usedIds.has(c.entityId))
+      .sort((a, b) => b.structuredScore - a.structuredScore);
+
+    for (const c of remaining) {
+      if (diverse.length >= limit) break;
+      diverse.push(c);
+    }
+
+    return diverse.slice(0, limit);
+  }
+
+  // Single entity type — simple sort
   const all: MatchCandidate[] = [
-    ...toMatchCandidates(firms as StructuredCandidate[]),
-    ...(experts as MatchCandidate[]),
-    ...(caseStudies as MatchCandidate[]),
+    ...firmCandidates,
+    ...expertCandidates,
+    ...csCandidates,
   ];
 
   all.sort((a, b) => b.structuredScore - a.structuredScore);
