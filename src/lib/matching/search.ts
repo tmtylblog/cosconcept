@@ -105,6 +105,15 @@ export async function executeSearch(params: {
         layer1Candidates = await universalStructuredFilter(filters, 500);
         layer1Count = layer1Candidates.length;
       }
+      // Tag own-firm results so the UI can show "Your Team" section
+      if (searcherFirmId) {
+        for (const c of layer1Candidates) {
+          if (c.firmId === searcherFirmId) {
+            c.isOwnFirm = true;
+          }
+        }
+      }
+
       console.warn("[Search] Neo4j Layer 1 returned %d candidates", layer1Count);
       // Safety net: if Neo4j returned 0, fall back to PG firms so we never return empty
       if (layer1Count === 0) {

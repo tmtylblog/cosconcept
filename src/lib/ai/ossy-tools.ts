@@ -139,7 +139,7 @@ export function createOssyTools(organizationId: string, firmId?: string, userId?
             sourceUrl: c.preview.sourceUrl ?? undefined,
             clientName: c.preview.clientName ?? undefined,
             // Own-firm flag: true if this entity belongs to the searcher's firm
-            isOwn: c.firmId === firmId,
+            isOwn: c.isOwnFirm ?? c.firmId === firmId,
           }));
 
           // Build a brief analysis hint for Ossy from the result data

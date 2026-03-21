@@ -114,6 +114,8 @@ export interface MatchCandidate {
     theyWantUs: number;
     weWantThem: number;
   };
+  /** Whether this result is from the searcher's own firm */
+  isOwnFirm?: boolean;
   /** Key data for display */
   preview: {
     categories: string[];
