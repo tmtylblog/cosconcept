@@ -161,7 +161,15 @@ export async function executeSearch(params: {
     (c) => !c.entityType || c.entityType === "firm"
   );
 
-  const layer2Firms = await vectorRerank(firmOnlyCandidates, rawQuery, 50);
+  let layer2Firms: MatchCandidate[] = [];
+  try {
+    layer2Firms = await vectorRerank(firmOnlyCandidates, rawQuery, 50);
+  } catch (err) {
+    console.error("[Search] vectorRerank failed, using Layer 1 scores:", err);
+    layer2Firms = firmOnlyCandidates
+      .sort((a, b) => b.structuredScore - a.structuredScore)
+      .slice(0, 50);
+  }
 
   // Take top non-firm results (sorted by structuredScore), assign vectorScore=0
   const topNonFirm = nonFirmCandidates
@@ -181,14 +189,19 @@ export async function executeSearch(params: {
   // and they'd get ranked below firms. We merge them back after.
   let finalCandidates = layer2Candidates;
   if (!skipLlmRanking && layer2Firms.length > 0) {
-    const rankedFirms = await deepRank({
-      rawQuery,
-      searcherProfile: searcherProfile ?? undefined,
-      candidates: layer2Firms,
-      topK: 15,
-    });
-    // Merge ranked firms + non-firm bypass results
-    finalCandidates = [...rankedFirms, ...topNonFirm];
+    try {
+      const rankedFirms = await deepRank({
+        rawQuery,
+        searcherProfile: searcherProfile ?? undefined,
+        candidates: layer2Firms,
+        topK: 15,
+      });
+      // Merge ranked firms + non-firm bypass results
+      finalCandidates = [...rankedFirms, ...topNonFirm];
+    } catch (err) {
+      console.error("[Search] deepRank failed, using Layer 2 results:", err);
+      finalCandidates = layer2Candidates; // already includes non-firms
+    }
   }
 
   // Step 5: Final diversity guarantee — ensure experts and case studies survive all ranking layers
