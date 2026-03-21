@@ -177,14 +177,18 @@ export async function executeSearch(params: {
   );
 
   // Step 4: Layer 3 — LLM deep ranking (optional, can skip for speed)
+  // Only pass firms to deepRank — non-firms don't have the metadata deepRank needs
+  // and they'd get ranked below firms. We merge them back after.
   let finalCandidates = layer2Candidates;
-  if (!skipLlmRanking && layer2Candidates.length > 0) {
-    finalCandidates = await deepRank({
+  if (!skipLlmRanking && layer2Firms.length > 0) {
+    const rankedFirms = await deepRank({
       rawQuery,
       searcherProfile: searcherProfile ?? undefined,
-      candidates: layer2Candidates,
+      candidates: layer2Firms,
       topK: 15,
     });
+    // Merge ranked firms + non-firm bypass results
+    finalCandidates = [...rankedFirms, ...topNonFirm];
   }
 
   // Step 5: Final diversity guarantee — ensure experts and case studies survive all ranking layers
