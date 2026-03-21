@@ -994,7 +994,7 @@ export async function universalStructuredFilter(
  * Query Person:Expert nodes with skill/industry/market matching.
  * Uses hierarchy expansion same as firm filter.
  */
-async function expertFilter(
+export async function expertFilter(
   filters: SearchFilters,
   limit: number,
   intent: "partner" | "expertise" | "evidence" = "partner"
@@ -1143,8 +1143,8 @@ async function expertFilter(
         subtitle: r.firmName,
         firmName: r.firmName,
         languages: r.languages,
-        specialistProfileCount: r.specialistProfileCount,
-        caseStudyCount: r.caseStudyCount,
+        specialistProfileCount: toInt(r.specialistProfileCount),
+        caseStudyCount: toInt(r.caseStudyCount),
         primarySpecialistTitle: r.primarySpecialistTitle ?? undefined,
       },
     };
@@ -1155,7 +1155,7 @@ async function expertFilter(
  * Query CaseStudy nodes matching skills and industries.
  * Uses hierarchy expansion for broader matches.
  */
-async function caseStudyFilter(
+export async function caseStudyFilter(
   filters: SearchFilters,
   limit: number,
   intent: "partner" | "expertise" | "evidence" = "partner"
@@ -1291,7 +1291,7 @@ async function caseStudyFilter(
         industries: r.industries,
         subtitle: r.firmName,
         firmName: r.firmName,
-        contributorCount: r.contributorCount,
+        contributorCount: toInt(r.contributorCount),
         summary: r.summary ?? undefined,
         sourceUrl: r.sourceUrl ?? undefined,
         clientName: r.clientName ?? undefined,

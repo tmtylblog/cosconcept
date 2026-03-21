@@ -11,12 +11,12 @@
  */
 
 import { parseSearchQuery } from "./query-parser";
-import { structuredFilter, bidirectionalStructuredFilter, toMatchCandidates, universalStructuredFilter, enrichWithConnectedEntities } from "./structured-filter";
+import { structuredFilter, bidirectionalStructuredFilter, toMatchCandidates, universalStructuredFilter, enrichWithConnectedEntities, expertFilter, caseStudyFilter } from "./structured-filter";
 import { pgStructuredFilter } from "./pg-structured-filter";
 import { vectorRerank } from "./vector-search";
 import { deepRank } from "./deep-ranker";
 import { loadAbstractionProfile } from "./abstraction-generator";
-import type { SearchQuery, SearchResult, SearchFilters } from "./types";
+import type { SearchQuery, SearchResult, SearchFilters, MatchCandidate } from "./types";
 
 // Search mode: "pg" for PostgreSQL-only, "neo4j" for graph-based Layer 1.
 // After running scripts/sync-neo4j-firm-ids.ts, all Neo4j nodes have valid f.id
@@ -74,11 +74,33 @@ export async function executeSearch(params: {
     // Neo4j-based Layer 1 with PG fallback on failure
     try {
       if (searcherFirmId) {
-        // Neo4j with bidirectional matching: enriches filters from PREFERS edges
-        // and boosts candidates with mutual preference fit
+        // Firms: bidirectional matching with preference boost
         const biCandidates = await bidirectionalStructuredFilter(filters, searcherFirmId, 500);
-        layer1Candidates = toMatchCandidates(biCandidates);
-        layer1Count = biCandidates.length;
+        const firmResults = toMatchCandidates(biCandidates);
+
+        // Experts + Case Studies: run in parallel, fault-tolerant
+        // These are independent of bidirectional matching — they search all entity types
+        const intent = filters.searchIntent ?? "partner";
+        const [expertResults, csResults] = await Promise.all([
+          expertFilter(filters, 150, intent).catch((err) => {
+            console.error("[Search] expertFilter failed:", err);
+            return [] as MatchCandidate[];
+          }),
+          caseStudyFilter(filters, 100, intent).catch((err) => {
+            console.error("[Search] caseStudyFilter failed:", err);
+            return [] as MatchCandidate[];
+          }),
+        ]);
+
+        // Merge all entity types
+        layer1Candidates = [...firmResults, ...expertResults, ...csResults];
+        layer1Candidates.sort((a, b) => b.structuredScore - a.structuredScore);
+        layer1Count = layer1Candidates.length;
+
+        console.warn(
+          "[Search] Layer 1: %d firms, %d experts, %d case studies",
+          firmResults.length, expertResults.length, csResults.length
+        );
       } else {
         layer1Candidates = await universalStructuredFilter(filters, 500);
         layer1Count = layer1Candidates.length;
