@@ -74,12 +74,22 @@ export async function executeSearch(params: {
     // Neo4j-based Layer 1 with PG fallback on failure
     try {
       if (searcherFirmId) {
-        // Firms: bidirectional matching with preference boost
-        const biCandidates = await bidirectionalStructuredFilter(filters, searcherFirmId, 500);
-        const firmResults = toMatchCandidates(biCandidates);
+        // Firms: bidirectional matching (isolated try/catch so expert/CS queries still run if this fails)
+        let firmResults: MatchCandidate[] = [];
+        try {
+          const biCandidates = await bidirectionalStructuredFilter(filters, searcherFirmId, 500);
+          firmResults = toMatchCandidates(biCandidates);
+        } catch (firmErr) {
+          console.error("[Search] bidirectionalStructuredFilter failed, using PG fallback:", firmErr);
+          try {
+            const pgFirms = await pgStructuredFilter(filters, 200, searcherFirmId);
+            firmResults = pgFirms;
+          } catch (pgErr) {
+            console.error("[Search] PG firm fallback also failed:", pgErr);
+          }
+        }
 
-        // Experts + Case Studies: run in parallel, fault-tolerant
-        // These are independent of bidirectional matching — they search all entity types
+        // Experts + Case Studies: ALWAYS run regardless of firm query result
         const intent = filters.searchIntent ?? "partner";
         const [expertResults, csResults] = await Promise.all([
           expertFilter(filters, 150, intent).catch((err) => {
