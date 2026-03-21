@@ -54,91 +54,122 @@ function ResultCard({
   const entityCfg = ENTITY_CONFIG[match.entityType ?? "firm"];
   const { Icon, iconCls, accentBorder } = entityCfg;
 
+  // Match score color — bold, saturated, unmistakable
+  const scoreColor = match.matchScore >= 80
+    ? "text-emerald-600"
+    : match.matchScore >= 60
+      ? "text-cos-electric"
+      : "text-cos-slate";
+  const scoreBarColor = match.matchScore >= 80
+    ? "bg-emerald-500"
+    : match.matchScore >= 60
+      ? "bg-cos-electric"
+      : "bg-cos-slate-light";
+
   return (
     <div
       className={cn(
-        "rounded-cos-xl border border-cos-border border-l-4 bg-cos-surface-raised p-5 hover:shadow-md hover:border-cos-electric/30 transition-all animate-slide-up cursor-pointer",
-        accentBorder
+        "group relative rounded-cos-xl border bg-white p-0 overflow-hidden transition-all duration-300 animate-slide-up cursor-pointer",
+        "hover:shadow-[0_8px_30px_rgba(31,134,161,0.12)] hover:-translate-y-0.5",
+        "border-cos-border/60 hover:border-cos-electric/40",
       )}
-      style={{ animationDelay: `${index * 60}ms`, animationFillMode: "both" }}
+      style={{ animationDelay: `${index * 80}ms`, animationFillMode: "both" }}
       onClick={() => onViewProfile(match)}
     >
-      {/* Header: Icon + Name + Category badge + Match score */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-cos-lg", iconCls)}>
-            <Icon className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-heading text-[15px] font-bold text-cos-midnight truncate">
+      {/* Accent bar — bold 4px stripe colored by entity */}
+      <div className={cn("absolute left-0 top-0 bottom-0 w-1 transition-all duration-300 group-hover:w-1.5", accentBorder.replace("border-l-", "bg-"))} />
+
+      <div className="pl-5 pr-5 pt-5 pb-4">
+        {/* Header: Icon + Name + Category badge + Match score */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3.5 min-w-0">
+            <div className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-cos-xl transition-transform duration-300 group-hover:scale-105",
+              iconCls
+            )}>
+              <Icon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 pt-0.5">
+              <h3 className="font-heading text-base font-bold text-cos-midnight truncate leading-tight">
                 {match.displayName}
               </h3>
-              {match.categories.length > 0 && (
-                <span className="rounded-cos-full bg-cos-electric/10 px-2 py-0.5 text-[10px] font-semibold text-cos-electric uppercase tracking-wide">
-                  {match.categories[0]}
-                </span>
-              )}
+              <div className="flex items-center gap-2 mt-1">
+                {match.categories.length > 0 && (
+                  <span className="rounded-cos-pill bg-cos-midnight/8 px-2.5 py-0.5 text-[10px] font-semibold text-cos-midnight/70 uppercase tracking-wider">
+                    {match.categories[0]}
+                  </span>
+                )}
+              </div>
             </div>
-            {match.explanation && (
-              <p className="mt-1 text-xs text-cos-slate leading-relaxed line-clamp-2">
-                {match.explanation}
-              </p>
-            )}
           </div>
-        </div>
-        {/* Match score with mini progress bar */}
-        <div className="shrink-0 text-right">
-          <div className="flex items-baseline gap-1">
-            <span className="text-lg font-bold text-cos-midnight">{match.matchScore}%</span>
-          </div>
-          <div className="mt-0.5 h-1 w-16 rounded-full bg-cos-cloud overflow-hidden">
-            <div
-              className={cn("h-full rounded-full transition-all", match.matchScore >= 75 ? "bg-green-500" : match.matchScore >= 50 ? "bg-cos-electric" : "bg-cos-slate-light")}
-              style={{ width: `${match.matchScore}%` }}
-            />
-          </div>
-          <p className="text-[9px] text-cos-slate-light mt-0.5 uppercase tracking-wide">Match</p>
-        </div>
-      </div>
 
-      {/* Skill pills */}
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {match.skills.slice(0, 4).map((skill) => (
-          <span key={skill} className="rounded-cos-full border border-cos-border bg-white px-2.5 py-1 text-[11px] text-cos-midnight">
-            {skill}
-          </span>
-        ))}
-        {match.skills.length > 4 && (
-          <span className="rounded-cos-full border border-cos-border bg-white px-2.5 py-1 text-[11px] text-cos-slate">
-            +{match.skills.length - 4} more
-          </span>
+          {/* Match score — dramatic, confident */}
+          <div className="shrink-0 flex flex-col items-end">
+            <div className="flex items-baseline gap-0.5">
+              <span className={cn("font-heading text-2xl font-extrabold tracking-tight", scoreColor)}>
+                {match.matchScore}
+              </span>
+              <span className={cn("text-xs font-bold", scoreColor)}>%</span>
+            </div>
+            <div className="mt-1 h-1.5 w-20 rounded-full bg-cos-cloud-dim overflow-hidden">
+              <div
+                className={cn("h-full rounded-full transition-all duration-500", scoreBarColor)}
+                style={{ width: `${match.matchScore}%` }}
+              />
+            </div>
+            <p className="text-[8px] text-cos-slate-light mt-1 uppercase tracking-[0.15em] font-semibold">
+              Proprietary Fit Score
+            </p>
+          </div>
+        </div>
+
+        {/* Explanation */}
+        {match.explanation && (
+          <p className="mt-2.5 text-[13px] text-cos-slate leading-relaxed line-clamp-2 pl-[3.625rem]">
+            {match.explanation}
+          </p>
         )}
-      </div>
 
-      {/* Stats row + Industries + CTA */}
-      <div className="mt-3 flex items-center justify-between border-t border-cos-border/50 pt-3">
-        <div className="flex items-center gap-4 text-[11px] text-cos-slate">
-          {(match.caseStudyCount ?? 0) > 0 && (
-            <span className="flex items-center gap-1">
-              <FileText className="h-3 w-3" />
-              {match.caseStudyCount} Case Studies
+        {/* Skill pills — refined, airy */}
+        <div className="mt-3.5 flex flex-wrap gap-1.5 pl-[3.625rem]">
+          {match.skills.slice(0, 4).map((skill) => (
+            <span key={skill} className="rounded-cos-pill border border-cos-border/70 bg-cos-cloud/50 px-3 py-1 text-[11px] font-medium text-cos-midnight/80">
+              {skill}
+            </span>
+          ))}
+          {match.skills.length > 4 && (
+            <span className="rounded-cos-pill border border-cos-border/50 bg-transparent px-3 py-1 text-[11px] text-cos-slate">
+              +{match.skills.length - 4} more
             </span>
           )}
-          {match.industries.length > 0 && (
-            <span>{match.industries.slice(0, 3).join(" \u00b7 ")}</span>
-          )}
         </div>
-        <Button
-          size="sm"
-          className="h-8 text-xs font-medium bg-cos-electric/10 text-cos-electric border-cos-electric/20 hover:bg-cos-electric/20 hover:border-cos-electric/40"
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewProfile(match);
-          }}
-        >
-          View Profile
-        </Button>
+
+        {/* Stats + Industries + CTA — clean divider */}
+        <div className="mt-4 flex items-center justify-between border-t border-cos-border/30 pt-3 pl-[3.625rem]">
+          <div className="flex items-center gap-5 text-[11px] text-cos-slate">
+            {(match.caseStudyCount ?? 0) > 0 && (
+              <span className="flex items-center gap-1.5 font-medium">
+                <FileText className="h-3.5 w-3.5 text-cos-signal" />
+                {match.caseStudyCount} Case {match.caseStudyCount === 1 ? "Study" : "Studies"}
+              </span>
+            )}
+            {match.industries.length > 0 && (
+              <span className="text-cos-slate-light">
+                {match.industries.slice(0, 3).join(" \u2022 ")}
+              </span>
+            )}
+          </div>
+          <Button
+            size="sm"
+            className="h-8 text-[11px] font-semibold bg-cos-electric text-white hover:bg-cos-electric-hover shadow-sm transition-all duration-200 group-hover:shadow-md"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewProfile(match);
+            }}
+          >
+            View Profile
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -165,94 +196,96 @@ function ExpertResultCard({
 
   return (
     <div
-      className="rounded-cos-xl border border-cos-border border-l-4 border-l-cos-warm bg-cos-surface-raised p-5 hover:shadow-md hover:border-cos-warm/40 transition-all animate-slide-up cursor-pointer"
-      style={{ animationDelay: `${index * 60}ms`, animationFillMode: "both" }}
+      className="group relative rounded-cos-xl border border-cos-border/60 bg-white overflow-hidden transition-all duration-300 animate-slide-up cursor-pointer hover:shadow-[0_8px_30px_rgba(243,175,61,0.10)] hover:-translate-y-0.5 hover:border-cos-warm/40"
+      style={{ animationDelay: `${index * 80}ms`, animationFillMode: "both" }}
       onClick={() => onViewProfile(match)}
     >
-      {/* Header: Avatar + Name/Title + Firm badge + Specialist count */}
-      <div className="flex items-start gap-4">
-        {/* Avatar placeholder */}
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-warm/20 to-cos-warm/5 border border-cos-warm/20">
-          <User className="h-7 w-7 text-cos-warm/60" />
-        </div>
+      {/* Warm accent bar */}
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-cos-warm transition-all duration-300 group-hover:w-1.5" />
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-heading text-[15px] font-bold text-cos-midnight">
-              {match.displayName}
-            </h3>
-            {/* Firm affiliation badge */}
-            {(match.firmName || match.subtitle) && (
-              <span className="inline-flex items-center gap-1 rounded-cos-md bg-cos-cloud border border-cos-border px-2 py-0.5 text-[10px] font-semibold text-cos-slate uppercase tracking-wide">
-                <Building2 className="h-2.5 w-2.5" />
-                {match.firmName || match.subtitle}
-              </span>
+      <div className="pl-5 pr-5 pt-5 pb-4">
+        {/* Header: Avatar + Name/Title + Specialist badge */}
+        <div className="flex items-start gap-4">
+          {/* Avatar — gradient circle with personality */}
+          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-warm/25 to-cos-warm/5 border-2 border-cos-warm/20 transition-transform duration-300 group-hover:scale-105">
+            <User className="h-6 w-6 text-cos-warm/70" />
+            {spCount > 0 && (
+              <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-cos-warm text-white text-[9px] font-bold shadow-sm">
+                {spCount}
+              </div>
             )}
           </div>
 
-          {/* Title / Specialist title */}
-          {match.specialistTitle && (
-            <p className="mt-0.5 text-xs font-medium italic text-cos-midnight/70">
-              {match.specialistTitle}
-            </p>
-          )}
-
-          {/* Specialty pills */}
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {match.skills.slice(0, 3).map((skill) => (
-              <span key={skill} className="rounded-cos-full border border-cos-warm/30 bg-cos-warm/10 px-2.5 py-1 text-[11px] font-medium text-cos-warm">
-                {skill}
-              </span>
-            ))}
+          <div className="flex-1 min-w-0">
+            <h3 className="font-heading text-base font-bold text-cos-midnight leading-tight">
+              {match.displayName}
+            </h3>
+            {match.specialistTitle && (
+              <p className="mt-0.5 text-[13px] font-medium italic text-cos-warm">
+                {match.specialistTitle}
+              </p>
+            )}
+            <div className="flex items-center gap-2 mt-1.5">
+              {(match.firmName || match.subtitle) && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-cos-electric">
+                  <Building2 className="h-3 w-3" />
+                  {match.firmName || match.subtitle}
+                </span>
+              )}
+              {spCount > 0 && (
+                <span className="rounded-cos-pill bg-cos-warm/10 border border-cos-warm/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-cos-warm">
+                  {spCount} Specialist {spCount > 1 ? "Profiles" : "Profile"}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Specialist profile count badge */}
-        {spCount > 0 && (
-          <div className="shrink-0 rounded-cos-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-center">
-            <p className="text-sm font-bold text-amber-700">{spCount}</p>
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-600">
-              Specialist{spCount > 1 ? " Profiles" : " Profile"}
+        {/* Specialty pills */}
+        <div className="mt-3 flex flex-wrap gap-1.5 pl-[4.5rem]">
+          {match.skills.slice(0, 3).map((skill) => (
+            <span key={skill} className="rounded-cos-pill border border-cos-midnight/12 bg-cos-midnight/5 px-3 py-1 text-[11px] font-semibold text-cos-midnight/75 uppercase tracking-wide">
+              {skill}
+            </span>
+          ))}
+        </div>
+
+        {/* Bio excerpt — editorial left-border quote style */}
+        {(match.explanation || match.summary) && (
+          <div className="mt-3 pl-[4.5rem]">
+            <p className="border-l-2 border-cos-warm/30 pl-3 text-[13px] italic text-cos-midnight/60 leading-relaxed line-clamp-2">
+              {match.explanation || match.summary}
             </p>
           </div>
         )}
-      </div>
 
-      {/* Bio / explanation */}
-      {(match.explanation || match.summary) && (
-        <p className="mt-3 text-xs text-cos-midnight/70 leading-relaxed line-clamp-2">
-          {match.explanation || match.summary}
-        </p>
-      )}
-
-      {/* Industries + Skills row */}
-      {match.industries.length > 0 && (
-        <div className="mt-2.5 flex items-center gap-1.5 text-[11px] text-cos-slate">
-          <span className="font-semibold uppercase tracking-wide text-cos-slate-light text-[10px]">Industries:</span>
-          <span>{match.industries.slice(0, 3).join(", ")}</span>
+        {/* Industries + CTA */}
+        <div className="mt-4 flex items-center justify-between border-t border-cos-border/30 pt-3 pl-[4.5rem]">
+          <div className="text-[11px] text-cos-slate">
+            {match.industries.length > 0 && (
+              <span>
+                <span className="font-semibold uppercase tracking-wider text-[10px] text-cos-slate-light mr-1.5">Industries:</span>
+                {match.industries.slice(0, 3).join(", ")}
+              </span>
+            )}
+            {match.skills.length > 3 && (
+              <span className="ml-4">
+                <span className="font-semibold uppercase tracking-wider text-[10px] text-cos-slate-light mr-1.5">Skills:</span>
+                {match.skills.slice(3, 6).join(" \u2022 ")}
+              </span>
+            )}
+          </div>
+          <Button
+            size="sm"
+            className="h-8 text-[11px] font-semibold bg-cos-warm text-white hover:bg-cos-warm-dim shadow-sm transition-all duration-200 group-hover:shadow-md"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewProfile(match);
+            }}
+          >
+            View Expert
+          </Button>
         </div>
-      )}
-
-      {match.skills.length > 3 && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-cos-slate">
-          <span className="font-semibold uppercase tracking-wide text-cos-slate-light text-[10px]">Skills:</span>
-          <span>{match.skills.slice(3, 7).join("  \u00b7  ")}</span>
-        </div>
-      )}
-
-      {/* CTA */}
-      <div className="mt-3 flex items-center justify-end border-t border-cos-border/50 pt-3">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs font-medium bg-cos-warm/10 text-cos-warm border-cos-warm/20 hover:bg-cos-warm/20 hover:border-cos-warm/40"
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewProfile(match);
-          }}
-        >
-          View Expert
-        </Button>
       </div>
     </div>
   );
@@ -276,85 +309,89 @@ function CaseStudyResultCard({
 
   return (
     <div
-      className="rounded-cos-xl border border-cos-border border-l-4 border-l-cos-signal bg-cos-surface-raised p-5 hover:shadow-md hover:border-cos-signal/40 transition-all animate-slide-up cursor-pointer"
-      style={{ animationDelay: `${index * 60}ms`, animationFillMode: "both" }}
+      className="group relative rounded-cos-xl border border-cos-border/60 bg-white overflow-hidden transition-all duration-300 animate-slide-up cursor-pointer hover:shadow-[0_8px_30px_rgba(96,185,191,0.12)] hover:-translate-y-0.5 hover:border-cos-signal/40"
+      style={{ animationDelay: `${index * 80}ms`, animationFillMode: "both" }}
       onClick={() => onViewProfile(match)}
     >
-      {/* Header: Icon + Title + Client + Firm badge */}
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-cos-lg bg-cos-signal/10 border border-cos-signal/20">
-          <Briefcase className="h-5 w-5 text-cos-signal" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="font-heading text-[15px] font-bold text-cos-midnight">
-            {match.displayName}
-          </h3>
-          <div className="mt-0.5 flex items-center gap-2 flex-wrap">
-            {match.clientName && (
-              <span className="text-xs text-cos-slate">
-                for <span className="font-medium text-cos-midnight">{match.clientName}</span>
-              </span>
-            )}
-            {match.firmName && match.firmName !== match.displayName && (
-              <span className="inline-flex items-center gap-1 rounded-cos-md bg-cos-cloud border border-cos-border px-2 py-0.5 text-[10px] font-semibold text-cos-slate uppercase tracking-wide">
-                <Building2 className="h-2.5 w-2.5" />
-                {match.firmName}
-              </span>
-            )}
+      {/* Signal green accent bar */}
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-cos-signal transition-all duration-300 group-hover:w-1.5" />
+
+      <div className="pl-5 pr-5 pt-5 pb-4">
+        {/* Header: Icon + Title + Client + Firm */}
+        <div className="flex items-start gap-3.5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-cos-xl bg-cos-signal/10 border border-cos-signal/15 transition-transform duration-300 group-hover:scale-105">
+            <Briefcase className="h-5 w-5 text-cos-signal" />
+          </div>
+          <div className="min-w-0 flex-1 pt-0.5">
+            <h3 className="font-heading text-base font-bold text-cos-midnight leading-tight">
+              {match.displayName}
+            </h3>
+            <div className="mt-1 flex items-center gap-2 flex-wrap">
+              {match.clientName && (
+                <span className="text-[13px] text-cos-slate">
+                  for <span className="font-semibold text-cos-midnight">{match.clientName}</span>
+                </span>
+              )}
+              {match.firmName && match.firmName !== match.displayName && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-cos-signal">
+                  <Building2 className="h-3 w-3" />
+                  {match.firmName}
+                </span>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Skill pills */}
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {match.skills.slice(0, 4).map((skill) => (
-          <span key={skill} className="rounded-cos-full border border-cos-signal/30 bg-cos-signal/5 px-2.5 py-1 text-[11px] font-medium text-cos-signal">
-            {skill}
-          </span>
-        ))}
-      </div>
+        {/* Summary — editorial quote block */}
+        {match.summary && (
+          <div className="mt-3 ml-[3.625rem] rounded-cos-lg bg-cos-signal/[0.04] border-l-3 border-cos-signal/25 px-4 py-3">
+            <p className="text-[13px] text-cos-midnight/65 leading-relaxed line-clamp-3">
+              {match.summary}
+            </p>
+          </div>
+        )}
 
-      {/* Summary quote block */}
-      {match.summary && (
-        <div className="mt-3 border-l-2 border-cos-signal/30 pl-3 py-1">
-          <p className="text-xs text-cos-midnight/70 leading-relaxed line-clamp-3 italic">
-            {match.summary}
-          </p>
-        </div>
-      )}
-
-      {/* Footer: Industries + Source + CTA */}
-      <div className="mt-3 flex items-center justify-between border-t border-cos-border/50 pt-3">
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Skill pills + Industries */}
+        <div className="mt-3.5 flex flex-wrap gap-1.5 ml-[3.625rem]">
+          {match.skills.slice(0, 4).map((skill) => (
+            <span key={skill} className="rounded-cos-pill border border-cos-midnight/10 bg-cos-midnight/5 px-3 py-1 text-[11px] font-semibold text-cos-midnight/70 uppercase tracking-wide">
+              {skill}
+            </span>
+          ))}
           {match.industries.slice(0, 2).map((industry) => (
-            <span key={industry} className="rounded-cos-full bg-cos-cloud border border-cos-border px-2 py-0.5 text-[10px] text-cos-slate">
+            <span key={industry} className="rounded-cos-pill border border-cos-signal/20 bg-cos-signal/5 px-3 py-1 text-[11px] text-cos-signal">
               {industry}
             </span>
           ))}
-          {match.sourceUrl && (
-            <a
-              href={match.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-0.5 text-[10px] text-cos-electric hover:underline"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ExternalLink className="h-2.5 w-2.5" />
-              Source
-            </a>
-          )}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs font-medium border-cos-signal/30 text-cos-signal hover:bg-cos-signal hover:text-white"
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewProfile(match);
-          }}
-        >
-          View Case Study
-        </Button>
+
+        {/* Footer */}
+        <div className="mt-4 flex items-center justify-between border-t border-cos-border/30 pt-3 ml-[3.625rem]">
+          <div className="flex items-center gap-3">
+            {match.sourceUrl && (
+              <a
+                href={match.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-cos-electric hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="h-3 w-3" />
+                View Source
+              </a>
+            )}
+          </div>
+          <Button
+            size="sm"
+            className="h-8 text-[11px] font-semibold bg-cos-signal text-white hover:bg-cos-signal-dim shadow-sm transition-all duration-200 group-hover:shadow-md"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewProfile(match);
+            }}
+          >
+            View Case Study
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -364,9 +401,13 @@ function CaseStudyResultCard({
 
 function SectionHeader({ label, count }: { label: string; count: number }) {
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-wide text-cos-slate-light px-1 pt-2 pb-1">
-      {label} ({count})
-    </p>
+    <div className="flex items-center gap-3 px-1 pt-4 pb-2">
+      <div className="h-px flex-1 bg-gradient-to-r from-cos-border to-transparent" />
+      <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-cos-midnight/40 shrink-0">
+        {label} <span className="text-cos-electric">({count})</span>
+      </p>
+      <div className="h-px flex-1 bg-gradient-to-l from-cos-border to-transparent" />
+    </div>
   );
 }
 
