@@ -180,7 +180,8 @@ export async function executeSearch(params: {
   // Step 5: Final diversity guarantee — ensure experts and case studies survive all ranking layers
   // Without this, Layer 2's vector scoring or Layer 3's LLM ranking can push non-firm
   // entities to the bottom even though Layer 1 returned them with good structured scores.
-  if (!filters.entityType && finalCandidates.length > 5) {
+  // Always run for logged-in users (searcherFirmId path) regardless of parsed entityType.
+  if (finalCandidates.length > 5) {
     const firms = finalCandidates.filter((c) => c.entityType === "firm");
     const experts = finalCandidates.filter((c) => c.entityType === "expert");
     const cases = finalCandidates.filter((c) => c.entityType === "case_study");
