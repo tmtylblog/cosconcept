@@ -171,11 +171,36 @@ export async function executeSearch(params: {
       .slice(0, 50);
   }
 
-  // Take top non-firm results (sorted by structuredScore), assign vectorScore=0
-  const topNonFirm = nonFirmCandidates
-    .sort((a, b) => b.structuredScore - a.structuredScore)
-    .slice(0, 8)
-    .map((c) => ({ ...c, vectorScore: 0, totalScore: c.structuredScore }));
+  // Take top non-firm results with diversity: guarantee at least 3 experts + 3 case studies
+  // (if available), then fill remaining slots by score. This prevents experts from crowding
+  // out case studies or vice versa.
+  const nonFirmExperts = nonFirmCandidates
+    .filter((c) => c.entityType === "expert")
+    .sort((a, b) => b.structuredScore - a.structuredScore);
+  const nonFirmCases = nonFirmCandidates
+    .filter((c) => c.entityType === "case_study")
+    .sort((a, b) => b.structuredScore - a.structuredScore);
+
+  const topNonFirm: MatchCandidate[] = [];
+  const usedNfIds = new Set<string>();
+
+  // Guarantee minimums from each type
+  for (const c of nonFirmExperts.slice(0, 3)) {
+    topNonFirm.push({ ...c, vectorScore: 0, totalScore: c.structuredScore });
+    usedNfIds.add(c.entityId);
+  }
+  for (const c of nonFirmCases.slice(0, 3)) {
+    topNonFirm.push({ ...c, vectorScore: 0, totalScore: c.structuredScore });
+    usedNfIds.add(c.entityId);
+  }
+  // Fill remaining slots (up to 10 total) by score
+  for (const c of nonFirmCandidates.sort((a, b) => b.structuredScore - a.structuredScore)) {
+    if (topNonFirm.length >= 10) break;
+    if (!usedNfIds.has(c.entityId)) {
+      topNonFirm.push({ ...c, vectorScore: 0, totalScore: c.structuredScore });
+      usedNfIds.add(c.entityId);
+    }
+  }
 
   const layer2Candidates = [...layer2Firms, ...topNonFirm];
 
