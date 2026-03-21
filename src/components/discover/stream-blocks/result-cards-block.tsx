@@ -31,9 +31,9 @@ const FIT_TIER_CONFIG: Record<FitTier, { label: string; className: string }> = {
 };
 
 const ENTITY_CONFIG = {
-  firm: { Icon: Building2, iconCls: "bg-cos-electric/10 text-cos-electric" },
-  expert: { Icon: User, iconCls: "bg-cos-warm/10 text-cos-warm" },
-  case_study: { Icon: BookOpen, iconCls: "bg-cos-signal/10 text-cos-signal" },
+  firm: { Icon: Building2, iconCls: "bg-cos-electric/10 text-cos-electric", accentBorder: "border-l-cos-electric" },
+  expert: { Icon: User, iconCls: "bg-cos-warm/10 text-cos-warm", accentBorder: "border-l-cos-warm" },
+  case_study: { Icon: BookOpen, iconCls: "bg-cos-signal/10 text-cos-signal", accentBorder: "border-l-cos-signal" },
 } as const;
 
 // ─── Standard Result Card ─────────────────────────────────────
@@ -52,11 +52,14 @@ function ResultCard({
   const tier = getFitTier(match.matchScore);
   const tierCfg = FIT_TIER_CONFIG[tier];
   const entityCfg = ENTITY_CONFIG[match.entityType ?? "firm"];
-  const { Icon, iconCls } = entityCfg;
+  const { Icon, iconCls, accentBorder } = entityCfg;
 
   return (
     <div
-      className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-5 hover:shadow-md hover:border-cos-electric/30 transition-all animate-slide-up cursor-pointer"
+      className={cn(
+        "rounded-cos-xl border border-cos-border border-l-4 bg-cos-surface-raised p-5 hover:shadow-md hover:border-cos-electric/30 transition-all animate-slide-up cursor-pointer",
+        accentBorder
+      )}
       style={{ animationDelay: `${index * 60}ms`, animationFillMode: "both" }}
       onClick={() => onViewProfile(match)}
     >
@@ -127,9 +130,8 @@ function ResultCard({
           )}
         </div>
         <Button
-          variant="outline"
           size="sm"
-          className="h-8 text-xs font-medium"
+          className="h-8 text-xs font-medium bg-cos-electric/10 text-cos-electric border-cos-electric/20 hover:bg-cos-electric/20 hover:border-cos-electric/40"
           onClick={(e) => {
             e.stopPropagation();
             onViewProfile(match);
@@ -163,7 +165,7 @@ function ExpertResultCard({
 
   return (
     <div
-      className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-5 hover:shadow-md hover:border-cos-warm/40 transition-all animate-slide-up cursor-pointer"
+      className="rounded-cos-xl border border-cos-border border-l-4 border-l-cos-warm bg-cos-surface-raised p-5 hover:shadow-md hover:border-cos-warm/40 transition-all animate-slide-up cursor-pointer"
       style={{ animationDelay: `${index * 60}ms`, animationFillMode: "both" }}
       onClick={() => onViewProfile(match)}
     >
@@ -243,7 +245,7 @@ function ExpertResultCard({
         <Button
           variant="outline"
           size="sm"
-          className="h-8 text-xs font-medium border-cos-midnight/20 text-cos-midnight hover:bg-cos-midnight hover:text-white"
+          className="h-8 text-xs font-medium bg-cos-warm/10 text-cos-warm border-cos-warm/20 hover:bg-cos-warm/20 hover:border-cos-warm/40"
           onClick={(e) => {
             e.stopPropagation();
             onViewProfile(match);
@@ -274,7 +276,7 @@ function CaseStudyResultCard({
 
   return (
     <div
-      className="rounded-cos-xl border border-cos-border bg-cos-surface-raised p-5 hover:shadow-md hover:border-cos-signal/40 transition-all animate-slide-up cursor-pointer"
+      className="rounded-cos-xl border border-cos-border border-l-4 border-l-cos-signal bg-cos-surface-raised p-5 hover:shadow-md hover:border-cos-signal/40 transition-all animate-slide-up cursor-pointer"
       style={{ animationDelay: `${index * 60}ms`, animationFillMode: "both" }}
       onClick={() => onViewProfile(match)}
     >

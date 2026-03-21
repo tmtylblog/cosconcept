@@ -202,8 +202,8 @@ export function NavBar({
                     item.label === "Upgrade"
                       ? "text-cos-electric hover:bg-cos-electric/15 hover:text-cos-electric"
                       : isActive
-                        ? "bg-white/15 text-white"
-                        : "text-white/60 hover:bg-white/10 hover:text-white"
+                        ? "bg-white/20 text-white border-l-2 border-cos-electric"
+                        : "text-white/70 hover:bg-white/10 hover:text-white"
                   )}
                   title={collapsed && !hovering ? item.label : undefined}
                 >
@@ -247,8 +247,8 @@ export function NavBar({
                         className={cn(
                           "flex items-center gap-2 rounded-cos-md px-2.5 py-1.5 text-[12px] font-medium transition-colors",
                           childActive
-                            ? "bg-white/10 text-white"
-                            : "text-white/40 hover:bg-white/5 hover:text-white/70"
+                            ? "bg-white/15 text-white"
+                            : "text-white/50 hover:bg-white/5 hover:text-white/70"
                         )}
                       >
                         {/* Small dot indicator */}

@@ -30,31 +30,36 @@ interface FeatureLogEntry {
 
 const CATEGORY_CONFIG: Record<
   string,
-  { label: string; color: string; icon: React.ReactNode }
+  { label: string; color: string; dotColor: string; icon: React.ReactNode }
 > = {
   feature: {
     label: "Feature",
     color: "bg-green-100 text-green-700",
+    dotColor: "bg-green-500",
     icon: <Sparkles className="h-3 w-3" />,
   },
   enhancement: {
     label: "Enhancement",
     color: "bg-blue-100 text-blue-700",
+    dotColor: "bg-blue-500",
     icon: <Wrench className="h-3 w-3" />,
   },
   fix: {
     label: "Fix",
     color: "bg-red-100 text-red-700",
+    dotColor: "bg-red-500",
     icon: <Bug className="h-3 w-3" />,
   },
   infrastructure: {
     label: "Infra",
     color: "bg-slate-100 text-slate-600",
+    dotColor: "bg-slate-400",
     icon: <Server className="h-3 w-3" />,
   },
   docs: {
     label: "Docs",
     color: "bg-purple-100 text-purple-700",
+    dotColor: "bg-purple-500",
     icon: <FileText className="h-3 w-3" />,
   },
 };
@@ -327,7 +332,10 @@ export default function FeatureLogPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-0">
+        <div className="relative">
+          {/* Vertical timeline stripe */}
+          <div className="absolute left-[11px] top-0 bottom-0 w-px bg-[var(--cos-border)]" />
+
           {entries.map((entry, idx) => {
             // Group header: show date when it changes
             const prevDate =
@@ -336,21 +344,22 @@ export default function FeatureLogPage() {
                 : null;
             const thisDate = formatDate(entry.createdAt);
             const showDateHeader = thisDate !== prevDate;
+            const dotColor = CATEGORY_CONFIG[entry.category]?.dotColor ?? "bg-slate-300";
 
             return (
-              <div key={entry.id}>
+              <div key={entry.id} className="relative">
                 {showDateHeader && (
-                  <div className="flex items-center gap-3 py-3 mt-2 first:mt-0">
+                  <div className="flex items-center gap-3 py-3 mt-2 first:mt-0 relative z-10">
                     <div className="h-px flex-1 bg-[var(--cos-border)]" />
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--cos-text-muted)]">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--cos-text-muted)] bg-[var(--cos-surface)] px-2">
                       {thisDate}
                     </span>
                     <div className="h-px flex-1 bg-[var(--cos-border)]" />
                   </div>
                 )}
-                <div className="flex items-start gap-3 py-3 pl-2 hover:bg-slate-50/50 rounded-lg transition-colors group">
-                  {/* Timeline dot */}
-                  <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--cos-primary)]/40" />
+                <div className="flex items-start gap-3 py-3 pl-0 hover:bg-slate-50/50 rounded-lg transition-colors group relative">
+                  {/* Timeline dot — colored by category */}
+                  <div className={`mt-1.5 h-[10px] w-[10px] shrink-0 rounded-full border-2 border-white relative z-10 shadow-sm ${dotColor}`} />
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
