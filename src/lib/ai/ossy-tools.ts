@@ -116,11 +116,23 @@ export function createOssyTools(organizationId: string, firmId?: string, userId?
           // Own results show first as "Your Team", partners show below
           const searchIntent = result.searchIntent ?? "partner";
 
-          const candidates = result.candidates.slice(0, 12).map((c) => ({
+          const candidates = result.candidates.slice(0, 12).map((c) => {
+            // Clean "Manual Input" titles for case studies
+            let displayName = c.displayName;
+            if (c.entityType === "case_study" && (!displayName || displayName === "Manual Input" || displayName.toLowerCase() === "manual input")) {
+              const clientName = c.preview.clientName;
+              const summary = c.preview.summary;
+              displayName = clientName ? `Project for ${clientName}` : summary ? summary.substring(0, 60) + (summary.length > 60 ? "..." : "") : "Case Study";
+            }
+            // Filter out internal sourceUrls
+            const sourceUrl = c.preview.sourceUrl && !c.preview.sourceUrl.startsWith("manual:") && !c.preview.sourceUrl.startsWith("uploaded:")
+              ? c.preview.sourceUrl : undefined;
+
+            return {
             entityType: c.entityType,
             entityId: c.entityId,
             firmId: c.firmId,
-            displayName: c.displayName,
+            displayName,
             firmName: c.firmName ?? c.preview.firmName ?? c.preview.subtitle ?? c.displayName,
             matchScore: Math.round(c.totalScore * 100),
             explanation: c.matchExplanation ?? "",
@@ -136,11 +148,12 @@ export function createOssyTools(organizationId: string, firmId?: string, userId?
             // Case study-specific fields
             contributorCount: c.preview.contributorCount ?? undefined,
             summary: c.preview.summary ?? undefined,
-            sourceUrl: c.preview.sourceUrl ?? undefined,
+            sourceUrl,
             clientName: c.preview.clientName ?? undefined,
             // Own-firm flag: true if this entity belongs to the searcher's firm
             isOwn: c.isOwnFirm ?? c.firmId === firmId,
-          }));
+          };
+          });
 
           // Build a brief analysis hint for Ossy from the result data
           const allCategories = candidates.flatMap((c) => c.categories);

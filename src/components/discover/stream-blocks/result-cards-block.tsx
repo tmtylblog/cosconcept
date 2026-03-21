@@ -30,6 +30,32 @@ const FIT_TIER_CONFIG: Record<FitTier, { label: string; className: string }> = {
   },
 };
 
+/** Clean case study display name — never show "Manual Input" */
+function cleanCsDisplayName(match: DiscoverCandidate): string {
+  const name = match.displayName;
+  if (!name || name === "Manual Input" || name.toLowerCase() === "manual input") {
+    if (match.clientName) return `Project for ${match.clientName}`;
+    if (match.summary) return match.summary.substring(0, 60) + (match.summary.length > 60 ? "..." : "");
+    return "Case Study";
+  }
+  return name;
+}
+
+/** Generate fallback explanation when none exists */
+function fallbackExplanation(match: DiscoverCandidate): string {
+  const parts: string[] = [];
+  if (match.categories.length > 0) parts.push(match.categories[0]);
+  if (match.skills.length > 0) parts.push(match.skills.slice(0, 2).join(", "));
+  if (match.industries.length > 0) parts.push(match.industries[0]);
+  if (parts.length === 0) return "";
+  return `Matched based on ${parts.join(" \u2022 ")}`;
+}
+
+/** Check if sourceUrl is a valid external link */
+function isValidSourceUrl(url?: string): url is string {
+  return !!url && !url.startsWith("manual:") && !url.startsWith("uploaded:") && (url.startsWith("http://") || url.startsWith("https://"));
+}
+
 const ENTITY_CONFIG = {
   firm: { Icon: Building2, iconCls: "bg-cos-electric/10 text-cos-electric", accentBorder: "border-l-cos-electric" },
   expert: { Icon: User, iconCls: "bg-cos-warm/10 text-cos-warm", accentBorder: "border-l-cos-warm" },
@@ -124,9 +150,9 @@ function ResultCard({
         </div>
 
         {/* Explanation */}
-        {match.explanation && (
+        {(match.explanation || fallbackExplanation(match)) && (
           <p className="mt-2.5 text-[13px] text-cos-slate leading-relaxed line-clamp-2 pl-[3.625rem]">
-            {match.explanation}
+            {match.explanation || fallbackExplanation(match)}
           </p>
         )}
 
@@ -204,7 +230,7 @@ function ExpertResultCard({
       <div className="absolute left-0 top-0 bottom-0 w-1 bg-cos-warm transition-all duration-300 group-hover:w-1.5" />
 
       <div className="pl-5 pr-5 pt-5 pb-4">
-        {/* Header: Avatar + Name/Title + Specialist badge */}
+        {/* Header: Avatar + Name/Title + Match Score */}
         <div className="flex items-start gap-4">
           {/* Avatar — gradient circle with personality */}
           <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cos-warm/25 to-cos-warm/5 border-2 border-cos-warm/20 transition-transform duration-300 group-hover:scale-105">
@@ -226,10 +252,14 @@ function ExpertResultCard({
               </p>
             )}
             <div className="flex items-center gap-2 mt-1.5">
-              {(match.firmName || match.subtitle) && (
+              {(match.firmName || match.subtitle) ? (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-cos-electric">
                   <Building2 className="h-3 w-3" />
                   {match.firmName || match.subtitle}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-cos-slate-light italic">
+                  Independent Consultant
                 </span>
               )}
               {spCount > 0 && (
@@ -239,6 +269,22 @@ function ExpertResultCard({
               )}
             </div>
           </div>
+
+          {/* Match score */}
+          {match.matchScore > 0 && (
+            <div className="shrink-0 flex flex-col items-end">
+              <div className="flex items-baseline gap-0.5">
+                <span className={cn("font-heading text-xl font-extrabold tracking-tight", match.matchScore >= 80 ? "text-emerald-600" : match.matchScore >= 60 ? "text-cos-warm" : "text-cos-slate")}>
+                  {match.matchScore}
+                </span>
+                <span className={cn("text-xs font-bold", match.matchScore >= 80 ? "text-emerald-600" : match.matchScore >= 60 ? "text-cos-warm" : "text-cos-slate")}>%</span>
+              </div>
+              <div className="mt-0.5 h-1 w-14 rounded-full bg-cos-cloud-dim overflow-hidden">
+                <div className={cn("h-full rounded-full", match.matchScore >= 80 ? "bg-emerald-500" : match.matchScore >= 60 ? "bg-cos-warm" : "bg-cos-slate-light")} style={{ width: `${match.matchScore}%` }} />
+              </div>
+              <p className="text-[8px] text-cos-slate-light mt-0.5 uppercase tracking-[0.12em] font-semibold">Match</p>
+            </div>
+          )}
         </div>
 
         {/* Specialty pills */}
@@ -251,10 +297,10 @@ function ExpertResultCard({
         </div>
 
         {/* Bio excerpt — editorial left-border quote style */}
-        {(match.explanation || match.summary) && (
+        {(match.explanation || match.summary || fallbackExplanation(match)) && (
           <div className="mt-3 pl-[4.5rem]">
             <p className="border-l-2 border-cos-warm/30 pl-3 text-[13px] italic text-cos-midnight/60 leading-relaxed line-clamp-2">
-              {match.explanation || match.summary}
+              {match.explanation || match.summary || fallbackExplanation(match)}
             </p>
           </div>
         )}
@@ -317,14 +363,14 @@ function CaseStudyResultCard({
       <div className="absolute left-0 top-0 bottom-0 w-1 bg-cos-signal transition-all duration-300 group-hover:w-1.5" />
 
       <div className="pl-5 pr-5 pt-5 pb-4">
-        {/* Header: Icon + Title + Client + Firm */}
+        {/* Header: Icon + Title + Client + Firm + Match Score */}
         <div className="flex items-start gap-3.5">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-cos-xl bg-cos-signal/10 border border-cos-signal/15 transition-transform duration-300 group-hover:scale-105">
             <Briefcase className="h-5 w-5 text-cos-signal" />
           </div>
           <div className="min-w-0 flex-1 pt-0.5">
             <h3 className="font-heading text-base font-bold text-cos-midnight leading-tight">
-              {match.displayName}
+              {cleanCsDisplayName(match)}
             </h3>
             <div className="mt-1 flex items-center gap-2 flex-wrap">
               {match.clientName && (
@@ -338,18 +384,44 @@ function CaseStudyResultCard({
                   {match.firmName}
                 </span>
               )}
+              {(match.contributorCount ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-cos-slate-light">
+                  <Users className="h-3 w-3" />
+                  {match.contributorCount} contributor{(match.contributorCount ?? 0) > 1 ? "s" : ""}
+                </span>
+              )}
             </div>
           </div>
+
+          {/* Match score */}
+          {match.matchScore > 0 && (
+            <div className="shrink-0 flex flex-col items-end">
+              <div className="flex items-baseline gap-0.5">
+                <span className={cn("font-heading text-xl font-extrabold tracking-tight", match.matchScore >= 80 ? "text-emerald-600" : match.matchScore >= 60 ? "text-cos-signal" : "text-cos-slate")}>
+                  {match.matchScore}
+                </span>
+                <span className={cn("text-xs font-bold", match.matchScore >= 80 ? "text-emerald-600" : match.matchScore >= 60 ? "text-cos-signal" : "text-cos-slate")}>%</span>
+              </div>
+              <div className="mt-0.5 h-1 w-14 rounded-full bg-cos-cloud-dim overflow-hidden">
+                <div className={cn("h-full rounded-full", match.matchScore >= 80 ? "bg-emerald-500" : match.matchScore >= 60 ? "bg-cos-signal" : "bg-cos-slate-light")} style={{ width: `${match.matchScore}%` }} />
+              </div>
+              <p className="text-[8px] text-cos-slate-light mt-0.5 uppercase tracking-[0.12em] font-semibold">Match</p>
+            </div>
+          )}
         </div>
 
         {/* Summary — editorial quote block */}
-        {match.summary && (
-          <div className="mt-3 ml-[3.625rem] rounded-cos-lg bg-cos-signal/[0.04] border-l-3 border-cos-signal/25 px-4 py-3">
-            <p className="text-[13px] text-cos-midnight/65 leading-relaxed line-clamp-3">
-              {match.summary}
-            </p>
-          </div>
-        )}
+        <div className="mt-3 ml-[3.625rem]">
+          {match.summary ? (
+            <div className="rounded-cos-lg bg-cos-signal/[0.04] border-l-3 border-cos-signal/25 px-4 py-3">
+              <p className="text-[13px] text-cos-midnight/65 leading-relaxed line-clamp-3">
+                {match.summary}
+              </p>
+            </div>
+          ) : (
+            <p className="text-[12px] italic text-cos-slate-light">Click to view full case study details</p>
+          )}
+        </div>
 
         {/* Skill pills + Industries */}
         <div className="mt-3.5 flex flex-wrap gap-1.5 ml-[3.625rem]">
@@ -368,16 +440,16 @@ function CaseStudyResultCard({
         {/* Footer */}
         <div className="mt-4 flex items-center justify-between border-t border-cos-border/30 pt-3 ml-[3.625rem]">
           <div className="flex items-center gap-3">
-            {match.sourceUrl && (
+            {isValidSourceUrl(match.sourceUrl) && (
               <a
                 href={match.sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-cos-electric hover:underline"
+                className="inline-flex items-center gap-1.5 rounded-cos-pill border border-cos-electric/20 bg-cos-electric/5 px-3 py-1 text-[11px] font-semibold text-cos-electric hover:bg-cos-electric/10 transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
                 <ExternalLink className="h-3 w-3" />
-                View Source
+                View Original
               </a>
             )}
           </div>
@@ -488,7 +560,9 @@ export function ResultCardsBlock({ results, query, searchIntent, onViewProfile, 
         </>
       );
     }
-    // Group by entity type with section headers for mixed results
+    // Default "partner" intent: Firms first, then experts, then case studies
+    // This is the opposite of the original order — firms are the primary result type
+    // for partnership-oriented searches
     const experts = items.filter((r) => r.entityType === "expert");
     const cases = items.filter((r) => r.entityType === "case_study");
     const firms = items.filter((r) => r.entityType === "firm" || !r.entityType);
@@ -496,22 +570,7 @@ export function ResultCardsBlock({ results, query, searchIntent, onViewProfile, 
 
     return (
       <>
-        {experts.length > 0 && (
-          <>
-            <SectionHeader label="Top Experts" count={experts.length} />
-            {experts.map((match, i) => (
-              <ExpertResultCard key={`expert-${match.entityId}-${i}`} match={match} index={idx++} onViewProfile={onViewProfile} onDismiss={onDismiss} />
-            ))}
-          </>
-        )}
-        {cases.length > 0 && (
-          <>
-            <SectionHeader label="Relevant Case Studies" count={cases.length} />
-            {cases.map((match, i) => (
-              <CaseStudyResultCard key={`cs-${match.entityId}-${i}`} match={match} index={idx++} onViewProfile={onViewProfile} onDismiss={onDismiss} />
-            ))}
-          </>
-        )}
+        {/* Firms first — primary result type for partner searches */}
         {firms.length > 0 && (
           <>
             {(experts.length > 0 || cases.length > 0) && (
@@ -519,6 +578,24 @@ export function ResultCardsBlock({ results, query, searchIntent, onViewProfile, 
             )}
             {firms.map((match, i) => (
               <ResultCard key={`firm-${match.entityId}-${i}`} match={match} index={idx++} onViewProfile={onViewProfile} onDismiss={onDismiss} />
+            ))}
+          </>
+        )}
+        {/* Then experts */}
+        {experts.length > 0 && (
+          <>
+            <SectionHeader label="Relevant Experts" count={experts.length} />
+            {experts.map((match, i) => (
+              <ExpertResultCard key={`expert-${match.entityId}-${i}`} match={match} index={idx++} onViewProfile={onViewProfile} onDismiss={onDismiss} />
+            ))}
+          </>
+        )}
+        {/* Then case studies */}
+        {cases.length > 0 && (
+          <>
+            <SectionHeader label="Related Case Studies" count={cases.length} />
+            {cases.map((match, i) => (
+              <CaseStudyResultCard key={`cs-${match.entityId}-${i}`} match={match} index={idx++} onViewProfile={onViewProfile} onDismiss={onDismiss} />
             ))}
           </>
         )}
