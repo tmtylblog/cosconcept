@@ -25,6 +25,7 @@ interface ExpertDetailBlockProps {
   error: string | null;
   searchQuery: string;
   onClose?: () => void;
+  onViewFirm?: (firmName: string) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────
@@ -42,6 +43,7 @@ export function ExpertDetailBlock({
   error,
   searchQuery,
   onClose,
+  onViewFirm,
 }: ExpertDetailBlockProps) {
   if (loading) {
     return (
@@ -115,7 +117,19 @@ export function ExpertDetailBlock({
             {data.displayName}
           </h3>
           {data.firmName && (
-            <p className="text-xs text-cos-slate truncate">at {data.firmName}</p>
+            <p className="text-xs text-cos-slate truncate">
+              at{" "}
+              {onViewFirm ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onViewFirm(data.firmName!); }}
+                  className="font-semibold text-cos-electric hover:underline"
+                >
+                  {data.firmName}
+                </button>
+              ) : (
+                <span className="font-medium">{data.firmName}</span>
+              )}
+            </p>
           )}
         </div>
         {onClose && (

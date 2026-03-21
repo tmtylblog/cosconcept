@@ -111,6 +111,27 @@ export function DiscoverStream() {
     [stream, discoverSearchQuery]
   );
 
+  const handleViewFirm = useCallback(
+    (firmName: string) => {
+      // Create minimal candidate to navigate to firm detail by name
+      const candidate: DiscoverCandidate = {
+        entityType: "firm",
+        entityId: `lookup:${firmName}`,
+        firmId: `lookup:${firmName}`,
+        displayName: firmName,
+        firmName,
+        matchScore: 0,
+        explanation: "",
+        categories: [],
+        skills: [],
+        industries: [],
+      };
+      stream?.pushFirmDetail(candidate, discoverSearchQuery);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    },
+    [stream, discoverSearchQuery]
+  );
+
   const scrollToResults = useCallback(() => {
     resultsAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
@@ -211,6 +232,7 @@ export function DiscoverStream() {
                     error={si.error}
                     searchQuery={si.searchQuery}
                     onClose={() => handleCloseDetail(si.id)}
+                    onViewFirm={handleViewFirm}
                   />
                 </div>
               );
@@ -225,6 +247,7 @@ export function DiscoverStream() {
                     error={si.error}
                     searchQuery={si.searchQuery}
                     onViewExpert={handleViewExpert}
+                    onViewFirm={handleViewFirm}
                     onClose={() => handleCloseDetail(si.id)}
                   />
                 </div>

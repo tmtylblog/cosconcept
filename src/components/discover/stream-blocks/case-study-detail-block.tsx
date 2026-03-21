@@ -21,6 +21,7 @@ interface CaseStudyDetailBlockProps {
   error: string | null;
   searchQuery: string;
   onViewExpert?: (legacyId: string, displayName: string) => void;
+  onViewFirm?: (firmName: string) => void;
   onClose?: () => void;
 }
 
@@ -39,6 +40,7 @@ export function CaseStudyDetailBlock({
   error,
   searchQuery,
   onViewExpert,
+  onViewFirm,
   onClose,
 }: CaseStudyDetailBlockProps) {
   if (loading) {
@@ -195,7 +197,16 @@ export function CaseStudyDetailBlock({
           <div className="flex items-center gap-2 rounded-cos-xl border border-cos-border bg-cos-cloud px-4 py-3">
             <Building2 className="h-4 w-4 shrink-0 text-cos-electric" />
             <div className="min-w-0">
-              <p className="text-xs font-medium text-cos-midnight">{data.firmName}</p>
+              {onViewFirm ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onViewFirm(data.firmName!); }}
+                  className="text-xs font-semibold text-cos-electric hover:underline"
+                >
+                  {data.firmName}
+                </button>
+              ) : (
+                <p className="text-xs font-medium text-cos-midnight">{data.firmName}</p>
+              )}
               {data.firmWebsite && (
                 <a
                   href={data.firmWebsite}
