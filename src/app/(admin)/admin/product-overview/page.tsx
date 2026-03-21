@@ -34,12 +34,12 @@ interface Metrics {
 
 function StatCard({ label, value, icon }: { label: string; value: string | number; icon: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-[var(--cos-border)] bg-white p-5 text-center">
-      <div className="flex justify-center mb-2 text-[var(--cos-primary)]">{icon}</div>
-      <p className="text-2xl font-bold text-[var(--cos-text-primary)]">
+    <div className="group rounded-xl border border-[var(--cos-border)]/60 bg-white p-5 text-center transition-all duration-300 hover:shadow-[0_6px_20px_rgba(58,48,45,0.08)] hover:-translate-y-0.5">
+      <div className="flex justify-center mb-2 text-[var(--cos-primary)] transition-transform duration-300 group-hover:scale-110">{icon}</div>
+      <p className="font-heading text-2xl font-extrabold text-[var(--cos-text-primary)]">
         {typeof value === "number" ? value.toLocaleString() : value}
       </p>
-      <p className="text-xs text-[var(--cos-text-muted)] mt-1">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--cos-text-muted)] mt-1">{label}</p>
     </div>
   );
 }
@@ -56,14 +56,18 @@ function CapabilityCard({
   description: string;
 }) {
   return (
-    <div className="rounded-xl border border-[var(--cos-border)] bg-white p-5 hover:shadow-md transition-shadow">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--cos-primary)]/10 text-[var(--cos-primary)]">
-          {icon}
+    <div className="group relative rounded-xl border border-[var(--cos-border)]/60 bg-white p-6 transition-all duration-300 hover:shadow-[0_8px_30px_rgba(31,134,161,0.08)] hover:-translate-y-1 overflow-hidden">
+      {/* Subtle gradient accent on hover */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[var(--cos-primary)]/[0.02] to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      <div className="relative">
+        <div className="flex items-center gap-3.5 mb-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-cos-xl bg-[var(--cos-primary)]/10 text-[var(--cos-primary)] transition-transform duration-300 group-hover:scale-110">
+            {icon}
+          </div>
+          <h3 className="font-heading font-bold text-[var(--cos-text-primary)]">{title}</h3>
         </div>
-        <h3 className="font-semibold text-[var(--cos-text-primary)]">{title}</h3>
+        <p className="text-[13px] text-[var(--cos-text-secondary)] leading-relaxed">{description}</p>
       </div>
-      <p className="text-sm text-[var(--cos-text-secondary)] leading-relaxed">{description}</p>
     </div>
   );
 }
@@ -127,19 +131,21 @@ export default function ProductOverviewPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-12 pb-12">
-      {/* ─── Hero ─── */}
-      <div className="text-center pt-4">
-        <div className="flex justify-center mb-4">
-          <Image src="/logo.png" alt="Collective OS" width={64} height={64} className="rounded-2xl" />
+      {/* ─── Hero — bold, confident, editorial ─── */}
+      <div className="text-center pt-4 animate-slide-up" style={{ animationFillMode: "both" }}>
+        <div className="flex justify-center mb-5">
+          <div className="relative">
+            <Image src="/logo.png" alt="Collective OS" width={72} height={72} className="rounded-2xl relative z-10" />
+            <div className="absolute inset-0 rounded-2xl bg-cos-electric/20 blur-xl scale-150" />
+          </div>
         </div>
-        <h1 className="text-3xl font-bold text-[var(--cos-text-primary)] font-heading">
+        <h1 className="font-heading text-4xl font-extrabold tracking-tight text-[var(--cos-text-primary)]">
           Collective OS
         </h1>
-        <p className="text-lg text-[var(--cos-text-muted)] mt-1">Grow Faster Together</p>
-        <p className="text-sm text-[var(--cos-text-secondary)] mt-3 max-w-2xl mx-auto">
-          The operating system for partnership-led growth. Find, match, and manage the right
-          partners for your professional services firm &mdash; powered by AI, a massive knowledge
-          graph, and real relationship data.
+        <p className="text-lg font-heading font-medium text-cos-electric mt-2 tracking-wide">Grow Faster Together</p>
+        <p className="text-sm text-[var(--cos-text-secondary)] mt-4 max-w-xl mx-auto leading-relaxed">
+          The operating system for partnership-led growth. AI-powered matching across a knowledge
+          graph of 8.5M+ companies, built for professional services firms.
         </p>
       </div>
 

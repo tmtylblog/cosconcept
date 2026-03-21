@@ -193,20 +193,27 @@ export default function SandboxPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-heading font-bold text-cos-midnight flex items-center gap-2">
-          <FlaskConical className="h-6 w-6 text-cos-electric" />
-          Test Sandbox
-        </h1>
-        <p className="text-sm text-cos-slate mt-1">
-          Spin up throwaway test sessions to stress-test onboarding and matching.
-        </p>
+      {/* Header — editorial */}
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-cos-midnight flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-cos-xl bg-cos-electric/10">
+              <FlaskConical className="h-5 w-5 text-cos-electric" />
+            </div>
+            Test Sandbox
+          </h1>
+          <p className="text-sm text-cos-slate mt-2 ml-[3.25rem]">
+            Spin up throwaway test sessions to stress-test onboarding and matching.
+          </p>
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cos-slate-light">
+          {sessions.length} active {sessions.length === 1 ? "session" : "sessions"}
+        </span>
       </div>
 
       {/* Launch Form */}
-      <div className="rounded-cos-lg border border-cos-border bg-cos-surface p-6">
-        <h2 className="text-lg font-heading font-semibold text-cos-midnight mb-4">
+      <div className="rounded-cos-xl border border-cos-border/60 bg-white p-6 transition-all duration-300 hover:shadow-[0_4px_16px_rgba(58,48,45,0.06)]">
+        <h2 className="text-base font-heading font-bold text-cos-midnight mb-4">
           Launch a Test Session
         </h2>
 

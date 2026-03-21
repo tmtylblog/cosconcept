@@ -131,26 +131,36 @@ export default function AdminFinancePage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header — editorial asymmetric */}
+      <div className="flex items-end justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
+          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-cos-midnight">
             AI Costs & Usage
           </h1>
           <p className="mt-1 text-sm text-cos-slate">
-            Track AI model spend across features, models, and users.
+            Model spend, token usage, and service subscriptions
           </p>
         </div>
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="flex items-center gap-1.5 rounded-cos-lg border border-cos-border bg-cos-surface px-3.5 py-2 text-xs font-medium text-cos-slate transition-all hover:border-cos-electric/30 hover:text-cos-electric hover:shadow-sm disabled:opacity-50"
-        >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
-          />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {data && (
+            <div className="text-right mr-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cos-electric">Total Spend ({period.toUpperCase()})</p>
+              <p className="font-heading text-3xl font-extrabold tracking-tight text-cos-midnight leading-none mt-0.5">
+                ${data.totals.cost.toFixed(2)}
+              </p>
+            </div>
+          )}
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="flex items-center gap-1.5 rounded-cos-lg border border-cos-border/60 bg-white px-3.5 py-2 text-xs font-medium text-cos-slate transition-all duration-300 hover:border-cos-electric/30 hover:text-cos-electric hover:shadow-[0_4px_12px_rgba(31,134,161,0.08)] disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Controls */}

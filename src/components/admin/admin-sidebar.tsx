@@ -122,10 +122,10 @@ export default function AdminSidebar({ permissions }: AdminSidebarProps) {
               href={link.href}
               title={collapsed ? link.label : undefined}
               className={cn(
-                "group flex items-center gap-2.5 rounded-cos-md px-3 py-2 text-sm transition-colors",
+                "group relative flex items-center gap-2.5 rounded-cos-md px-3 py-2 text-sm transition-all duration-200",
                 collapsed && "justify-center px-0",
                 active
-                  ? "bg-cos-electric/10 text-cos-electric font-semibold"
+                  ? "bg-cos-electric/10 text-cos-electric font-semibold shadow-sm"
                   : "text-cos-slate-dim hover:bg-cos-electric/5 hover:text-cos-electric"
               )}
             >
@@ -185,7 +185,7 @@ export default function AdminSidebar({ permissions }: AdminSidebarProps) {
                         key={item.href}
                         href={item.href}
                         className={cn(
-                          "group flex items-center gap-2.5 rounded-cos-md px-3 py-2 text-sm transition-colors",
+                          "group relative flex items-center gap-2.5 rounded-cos-md px-3 py-2 text-sm transition-all duration-200 overflow-hidden",
                           active
                             ? "bg-cos-electric/10 text-cos-electric font-semibold"
                             : item.accent
@@ -193,9 +193,10 @@ export default function AdminSidebar({ permissions }: AdminSidebarProps) {
                               : "text-cos-slate-dim hover:bg-cos-electric/5 hover:text-cos-electric"
                         )}
                       >
+                        {active && <div className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full bg-cos-electric" />}
                         <Icon className={cn(
-                          "h-4 w-4 shrink-0 transition-colors",
-                          active || item.accent ? "text-cos-electric" : "text-cos-slate group-hover:text-cos-electric"
+                          "h-4 w-4 shrink-0 transition-all duration-200",
+                          active || item.accent ? "text-cos-electric" : "text-cos-slate group-hover:text-cos-electric group-hover:scale-110"
                         )} />
                         <span className="font-medium whitespace-nowrap">{item.label}</span>
                       </Link>
