@@ -108,24 +108,33 @@ export default function AdminOverviewPage() {
   const onboardingPct = Math.round(metrics.onboarding.rate * 100);
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="font-heading text-2xl font-bold tracking-tight text-cos-midnight">
-          Overview
-        </h1>
-        <p className="mt-1 text-sm text-cos-slate">
-          Platform health at a glance.
-        </p>
+    <div className="space-y-10">
+      {/* ── Hero Header — asymmetric, dramatic ─── */}
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-cos-midnight">
+            Command Center
+          </h1>
+          <p className="mt-1 text-sm text-cos-slate">
+            Platform health &bull; {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+          </p>
+        </div>
+        {/* Hero MRR stat — breaks the grid, demands attention */}
+        <div className="text-right">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cos-electric">Monthly Recurring Revenue</p>
+          <p className="font-heading text-4xl font-extrabold tracking-tight text-cos-midnight leading-none mt-1">
+            ${metrics.mrr.toLocaleString()}
+          </p>
+        </div>
       </div>
 
       {/* ── Platform Section ─────────────────────────────── */}
       <Section title="Platform" icon={<Building2 className="h-4 w-4" />}>
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard icon={<Building2 className="h-4 w-4" />} iconColor="text-cos-electric" iconBg="bg-cos-electric/10" label="Organizations" value={metrics.totalOrgs} />
-          <StatCard icon={<Users className="h-4 w-4" />} iconColor="text-cos-signal" iconBg="bg-cos-signal/10" label="Users" value={metrics.totalUsers} />
-          <StatCard icon={<CreditCard className="h-4 w-4" />} iconColor="text-cos-warm" iconBg="bg-cos-warm/10" label="Active Subscriptions" value={metrics.activeSubscriptions} />
-          <StatCard icon={<DollarSign className="h-4 w-4" />} iconColor="text-cos-electric" iconBg="bg-cos-electric/10" label="MRR" value={`$${metrics.mrr.toLocaleString()}`} />
+          <StatCard icon={<Building2 className="h-4 w-4" />} iconColor="text-cos-electric" iconBg="bg-cos-electric/10" label="Organizations" value={metrics.totalOrgs} delay={0} />
+          <StatCard icon={<Users className="h-4 w-4" />} iconColor="text-cos-signal" iconBg="bg-cos-signal/10" label="Users" value={metrics.totalUsers} delay={1} />
+          <StatCard icon={<CreditCard className="h-4 w-4" />} iconColor="text-cos-warm" iconBg="bg-cos-warm/10" label="Active Subscriptions" value={metrics.activeSubscriptions} delay={2} />
+          <StatCard icon={<DollarSign className="h-4 w-4" />} iconColor="text-cos-electric" iconBg="bg-cos-electric/10" label="MRR" value={`$${metrics.mrr.toLocaleString()}`} delay={3} />
         </div>
 
         {/* Plan distribution inline */}
@@ -270,9 +279,13 @@ export default function AdminOverviewPage() {
 function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-cos-electric">{icon}</span>
-        <h2 className="font-heading text-base font-semibold text-cos-midnight">{title}</h2>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="h-px flex-1 bg-gradient-to-r from-cos-border to-transparent" />
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-cos-electric">{icon}</span>
+          <h2 className="font-heading text-sm font-bold uppercase tracking-[0.15em] text-cos-midnight/50">{title}</h2>
+        </div>
+        <div className="h-px flex-1 bg-gradient-to-l from-cos-border to-transparent" />
       </div>
       {children}
     </div>
@@ -286,6 +299,7 @@ function StatCard({
   label,
   value,
   sub,
+  delay = 0,
 }: {
   icon: React.ReactNode;
   iconColor: string;
@@ -293,16 +307,20 @@ function StatCard({
   label: string;
   value: string | number;
   sub?: string;
+  delay?: number;
 }) {
   return (
-    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-5 transition-shadow hover:shadow-sm">
-      <div className={`inline-flex h-9 w-9 items-center justify-center rounded-cos-lg ${iconBg} ${iconColor} mb-3`}>
+    <div
+      className="group rounded-cos-xl border border-cos-border/60 bg-white p-5 transition-all duration-300 hover:shadow-[0_6px_20px_rgba(58,48,45,0.08)] hover:-translate-y-0.5 hover:border-cos-electric/20 animate-slide-up"
+      style={{ animationDelay: `${delay * 80}ms`, animationFillMode: "both" }}
+    >
+      <div className={`inline-flex h-9 w-9 items-center justify-center rounded-cos-lg ${iconBg} ${iconColor} mb-3 transition-transform duration-300 group-hover:scale-110`}>
         {icon}
       </div>
-      <p className="text-xs font-medium uppercase tracking-wider text-cos-slate">
+      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-cos-slate">
         {label}
       </p>
-      <p className="mt-1 font-heading text-2xl font-bold tracking-tight text-cos-midnight">
+      <p className="mt-1 font-heading text-2xl font-extrabold tracking-tight text-cos-midnight">
         {value}
       </p>
       {sub && (
@@ -314,12 +332,12 @@ function StatCard({
 
 function BigStatCard({ value, label, icon, color }: { value: string; label: string; icon: React.ReactNode; color: string }) {
   return (
-    <div className="rounded-cos-xl border border-cos-border bg-cos-surface p-6 text-center transition-shadow hover:shadow-sm">
-      <div className={`inline-flex items-center justify-center ${color} mb-2`}>
+    <div className="group rounded-cos-xl border border-cos-border/60 bg-white p-6 text-center transition-all duration-300 hover:shadow-[0_8px_24px_rgba(58,48,45,0.10)] hover:-translate-y-0.5">
+      <div className={`inline-flex items-center justify-center ${color} mb-2 transition-transform duration-300 group-hover:scale-125`}>
         {icon}
       </div>
-      <p className="font-heading text-3xl font-bold tracking-tight text-cos-midnight">{value}</p>
-      <p className="mt-1 text-xs font-medium uppercase tracking-wider text-cos-slate">{label}</p>
+      <p className="font-heading text-3xl font-extrabold tracking-tight text-cos-midnight">{value}</p>
+      <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-cos-slate">{label}</p>
     </div>
   );
 }
@@ -340,15 +358,17 @@ function QuickLink({ href, label, icon }: { href: string; label: string; icon: R
   return (
     <a
       href={href}
-      className="group flex items-center gap-2.5 rounded-cos-xl border border-cos-border bg-cos-surface px-4 py-3 transition-all hover:border-cos-electric/30 hover:shadow-sm"
+      className="group relative flex items-center gap-3 rounded-cos-xl border border-cos-border/60 bg-white px-4 py-3.5 transition-all duration-300 hover:shadow-[0_4px_16px_rgba(31,134,161,0.08)] hover:-translate-y-0.5 hover:border-cos-electric/30 overflow-hidden"
     >
-      <span className="text-cos-slate transition-colors group-hover:text-cos-electric">
+      {/* Subtle left accent on hover */}
+      <div className="absolute left-0 top-0 bottom-0 w-0 bg-cos-electric transition-all duration-300 group-hover:w-1" />
+      <span className="text-cos-slate transition-all duration-300 group-hover:text-cos-electric group-hover:scale-110">
         {icon}
       </span>
-      <span className="flex-1 text-sm font-medium text-cos-midnight">
+      <span className="flex-1 text-sm font-semibold text-cos-midnight">
         {label}
       </span>
-      <ArrowUpRight className="h-3.5 w-3.5 text-cos-slate-light transition-all group-hover:text-cos-electric group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+      <ArrowUpRight className="h-3.5 w-3.5 text-cos-slate-light transition-all duration-300 group-hover:text-cos-electric group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
     </a>
   );
 }
