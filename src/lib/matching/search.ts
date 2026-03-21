@@ -141,10 +141,29 @@ export async function executeSearch(params: {
   }
 
   // Step 3: Layer 2 — Vector similarity re-ranking
-  const layer2Candidates = await vectorRerank(
-    layer1Candidates,
-    rawQuery,
-    50
+  // Non-firm entities (experts, case studies) bypass vectorRerank entirely —
+  // they don't have abstraction profiles or embeddings. Extract them first,
+  // run vectorRerank on firms only, then merge back.
+  const nonFirmCandidates = layer1Candidates.filter(
+    (c) => c.entityType && c.entityType !== "firm"
+  );
+  const firmOnlyCandidates = layer1Candidates.filter(
+    (c) => !c.entityType || c.entityType === "firm"
+  );
+
+  const layer2Firms = await vectorRerank(firmOnlyCandidates, rawQuery, 50);
+
+  // Take top non-firm results (sorted by structuredScore), assign vectorScore=0
+  const topNonFirm = nonFirmCandidates
+    .sort((a, b) => b.structuredScore - a.structuredScore)
+    .slice(0, 8)
+    .map((c) => ({ ...c, vectorScore: 0, totalScore: c.structuredScore }));
+
+  const layer2Candidates = [...layer2Firms, ...topNonFirm];
+
+  console.warn(
+    "[Search] Layer 2: %d firms from vectorRerank + %d non-firm bypassed",
+    layer2Firms.length, topNonFirm.length
   );
 
   // Step 4: Layer 3 — LLM deep ranking (optional, can skip for speed)

@@ -172,20 +172,8 @@ export async function vectorRerank(
       return { ...candidate, vectorScore, totalScore };
     });
 
-    // Entity diversity: reserve slots for non-firm entities before topK cut.
-    // Without this, firms (which get vectorScore boost) always fill all 50 slots.
-    const firmScored = scored.filter((c) => !c.entityType || c.entityType === "firm");
-    const nonFirmScored = scored.filter((c) => c.entityType && c.entityType !== "firm");
-    firmScored.sort((a, b) => b.totalScore - a.totalScore);
-    nonFirmScored.sort((a, b) => b.totalScore - a.totalScore);
-
-    // Reserve up to 8 non-firm results, fill rest with firms
-    const reserved = nonFirmScored.slice(0, Math.min(8, nonFirmScored.length));
-    const firmSlots = topK - reserved.length;
-    const topFirms = firmScored.slice(0, firmSlots);
-    const diverse = [...reserved, ...topFirms];
-    diverse.sort((a, b) => b.totalScore - a.totalScore);
-    return diverse;
+    scored.sort((a, b) => b.totalScore - a.totalScore);
+    return scored.slice(0, topK);
   }
 
   // ── Text-overlap fallback (no Jina key or embedding failed) ──
@@ -217,16 +205,6 @@ export async function vectorRerank(
     return { ...candidate, vectorScore, totalScore };
   });
 
-  // Entity diversity: reserve slots for non-firm entities before topK cut
-  const firmScored2 = scored.filter((c) => !c.entityType || c.entityType === "firm");
-  const nonFirmScored2 = scored.filter((c) => c.entityType && c.entityType !== "firm");
-  firmScored2.sort((a, b) => b.totalScore - a.totalScore);
-  nonFirmScored2.sort((a, b) => b.totalScore - a.totalScore);
-
-  const reserved2 = nonFirmScored2.slice(0, Math.min(8, nonFirmScored2.length));
-  const firmSlots2 = topK - reserved2.length;
-  const topFirms2 = firmScored2.slice(0, firmSlots2);
-  const diverse2 = [...reserved2, ...topFirms2];
-  diverse2.sort((a, b) => b.totalScore - a.totalScore);
-  return diverse2;
+  scored.sort((a, b) => b.totalScore - a.totalScore);
+  return scored.slice(0, topK);
 }
