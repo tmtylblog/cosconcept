@@ -127,6 +127,46 @@ export async function executeSearch(params: {
     });
   }
 
+  // Step 5: Final diversity guarantee — ensure experts and case studies survive all ranking layers
+  // Without this, Layer 2's vector scoring or Layer 3's LLM ranking can push non-firm
+  // entities to the bottom even though Layer 1 returned them with good structured scores.
+  if (!filters.entityType && finalCandidates.length > 5) {
+    const firms = finalCandidates.filter((c) => c.entityType === "firm");
+    const experts = finalCandidates.filter((c) => c.entityType === "expert");
+    const cases = finalCandidates.filter((c) => c.entityType === "case_study");
+
+    if ((experts.length > 0 || cases.length > 0) && firms.length > 0) {
+      const diverse: MatchCandidate[] = [];
+      const usedIds = new Set<string>();
+
+      const take = (pool: MatchCandidate[], n: number) => {
+        for (const c of pool) {
+          if (n <= 0) break;
+          if (!usedIds.has(c.entityId)) {
+            diverse.push(c);
+            usedIds.add(c.entityId);
+            n--;
+          }
+        }
+      };
+
+      // Guarantee minimums from each entity type
+      take(experts, Math.min(3, experts.length));
+      take(cases, Math.min(2, cases.length));
+
+      // Fill remaining with all candidates by their ranking order
+      for (const c of finalCandidates) {
+        if (diverse.length >= finalCandidates.length) break;
+        if (!usedIds.has(c.entityId)) {
+          diverse.push(c);
+          usedIds.add(c.entityId);
+        }
+      }
+
+      finalCandidates = diverse;
+    }
+  }
+
   const durationMs = Date.now() - start;
 
   // Estimate cost

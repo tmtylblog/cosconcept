@@ -1055,6 +1055,7 @@ async function expertFilter(
       coalesce(p.id, p.legacyId) AS entityId,
       coalesce(p.fullName, p.firstName + ' ' + p.lastName, p.name, 'Expert') AS displayName,
       sf.name AS firmName,
+      coalesce(sf.id, p.firmId) AS parentFirmId,
       skills,
       industries,
       markets,
@@ -1069,6 +1070,7 @@ async function expertFilter(
     entityId: string;
     displayName: string;
     firmName?: string;
+    parentFirmId?: string;
     skills: string[];
     industries: string[];
     markets: string[];
@@ -1111,8 +1113,8 @@ async function expertFilter(
       entityType: "expert" as const,
       entityId: r.entityId,
       displayName: r.displayName,
-      firmId: r.entityId,
-      firmName: r.displayName,
+      firmId: r.parentFirmId ?? r.entityId,
+      firmName: r.firmName ?? r.displayName,
       totalScore: structuredScore,
       structuredScore,
       vectorScore: 0,
@@ -1198,6 +1200,7 @@ async function caseStudyFilter(
         'Case Study'
       ) AS displayName,
       sf.name AS firmName,
+      coalesce(sf.id, cs.firmId) AS parentFirmId,
       skills,
       industries,
       contributorCount,
@@ -1211,6 +1214,7 @@ async function caseStudyFilter(
     entityId: string;
     displayName: string;
     firmName?: string;
+    parentFirmId?: string;
     skills: string[];
     industries: string[];
     contributorCount: number;
@@ -1249,8 +1253,8 @@ async function caseStudyFilter(
       entityType: "case_study" as const,
       entityId: r.entityId,
       displayName,
-      firmId: r.entityId,
-      firmName: displayName,
+      firmId: r.parentFirmId ?? r.entityId,
+      firmName: r.firmName ?? displayName,
       totalScore: structuredScore,
       structuredScore,
       vectorScore: 0,

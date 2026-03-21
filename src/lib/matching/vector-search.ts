@@ -148,6 +148,16 @@ export async function vectorRerank(
     const queryTerms = rawQuery.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
 
     const scored = candidates.map((candidate) => {
+      // Non-firm entities (experts, case studies) don't have abstraction profiles
+      // or embeddings. Don't penalize them — keep their full structured score.
+      if (candidate.entityType && candidate.entityType !== "firm") {
+        return {
+          ...candidate,
+          vectorScore: 0,
+          totalScore: candidate.structuredScore,
+        };
+      }
+
       let vectorScore = similarityMap.get(candidate.firmId) ?? 0;
 
       if (!similarityMap.has(candidate.firmId)) {
@@ -176,6 +186,15 @@ export async function vectorRerank(
   const queryTerms = rawQuery.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
 
   const scored = candidates.map((candidate) => {
+    // Non-firm entities don't have abstraction profiles — keep full structured score
+    if (candidate.entityType && candidate.entityType !== "firm") {
+      return {
+        ...candidate,
+        vectorScore: 0,
+        totalScore: candidate.structuredScore,
+      };
+    }
+
     const narrative = profileMap.get(candidate.firmId)?.toLowerCase() ?? "";
     let vectorScore = 0;
     if (narrative && queryTerms.length > 0) {
