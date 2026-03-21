@@ -27,6 +27,7 @@ const PUBLIC_EXCEPTIONS = [
   "/api/admin/experts/diagnostic",  // expert data diagnostic (protected by session OR ADMIN_SECRET)
   "/api/sandbox/enter",              // sandbox login token consumption (validates its own token)
   "/api/admin/feature-log",          // feature log (protected by session OR ADMIN_SECRET for CI)
+  "/api/admin/search-debug",         // search diagnostic (protected by session in route handler)
 ];
 
 function isProtectedPath(pathname: string): boolean {

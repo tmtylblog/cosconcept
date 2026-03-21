@@ -16,15 +16,19 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 export async function GET(req: NextRequest) {
-  // Auth: superadmin only
-  try {
-    const headersList = await headers();
-    const session = await auth.api.getSession({ headers: headersList });
-    if (!session?.user || session.user.role !== "superadmin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Auth: superadmin session OR admin secret header
+  const adminSecret = req.headers.get("x-admin-secret");
+  const hasAdminSecret = adminSecret && adminSecret === process.env.ADMIN_SECRET;
+  if (!hasAdminSecret) {
+    try {
+      const headersList = await headers();
+      const session = await auth.api.getSession({ headers: headersList });
+      if (!session?.user || session.user.role !== "superadmin") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const query = req.nextUrl.searchParams.get("q") ?? "marketing agencies";
