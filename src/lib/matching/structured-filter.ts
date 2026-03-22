@@ -1079,6 +1079,7 @@ export async function expertFilter(
     OPTIONAL MATCH (p)-[:CURRENTLY_AT|WORKS_AT]->(sf:Company:ServiceFirm)
     WITH p, sf,
       [(p)-[:HAS_SKILL|HAS_EXPERTISE]->(s:Skill) | s.name][0..8] AS skills,
+      size([(p)-[:HAS_SKILL|HAS_EXPERTISE]->(s:Skill) | 1]) AS skillCount,
       [(p)-[:SERVES_INDUSTRY]->(i:Industry) | i.name][0..5] AS industries,
       [(p)-[:OPERATES_IN]->(m:Market) | m.name][0..5] AS markets,
       [(p)-[:SPEAKS_LANGUAGE]->(l:Language) | l.name][0..3] AS languages,
@@ -1099,7 +1100,7 @@ export async function expertFilter(
       primarySpecialistTitle
     ORDER BY
       specialistProfileCount DESC,
-      size(skills) DESC,
+      skillCount DESC,
       caseStudyCount DESC
     LIMIT $limit
   `;
@@ -1248,6 +1249,7 @@ export async function caseStudyFilter(
     OPTIONAL MATCH (cs)-[:FOR_CLIENT]->(cl:Company)
     WITH cs, sf, cl,
       [(cs)-[:DEMONSTRATES_SKILL]->(s:Skill) | s.name][0..8] AS skills,
+      size([(cs)-[:DEMONSTRATES_SKILL]->(s:Skill) | 1]) AS skillCount,
       [(cs)-[:IN_INDUSTRY]->(i:Industry) | i.name][0..5] AS industries,
       size([(p:Person)-[:CONTRIBUTED_TO]->(cs) | 1]) AS contributorCount
     RETURN
@@ -1270,7 +1272,7 @@ export async function caseStudyFilter(
     ORDER BY
       CASE WHEN cs.sourceUrl IS NOT NULL AND cs.sourceUrl STARTS WITH 'http' THEN 0 ELSE 1 END,
       CASE WHEN cs.title IS NOT NULL AND cs.title <> 'Manual Input' THEN 0 ELSE 1 END,
-      size(skills) DESC
+      skillCount DESC
     LIMIT $limit
   `;
 
