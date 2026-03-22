@@ -920,6 +920,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         if (!part.type.startsWith("tool-") || !("state" in part) || part.state !== "output-available") continue;
 
         const toolName = part.type.slice(5); // "tool-update_profile" → "update_profile"
+        console.log(`[ChatPanel] Tool part found: type=${part.type}, toolName=${toolName}, state=${(part as Record<string, unknown>).state}`);
         // Generate a stable dedup key (toolCallId may not exist in AI SDK v6)
         const callId = ("toolCallId" in part && part.toolCallId)
           ? (part.toolCallId as string)
@@ -985,6 +986,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
         // available on first render (layout sets it after mount). We use a separate
         // ref to track which search results have been pushed to the center panel.
         if (toolName === "discover_search" || toolName === "search_partners") {
+          console.log(`[ChatPanel] discover_search detected — onSearchResults=${!!onSearchResults}, callId=${callId}`);
           if (onSearchResults) {
             const searchKey = `search:${callId}`;
             if (!processedToolCallsRef.current.has(searchKey)) {
@@ -993,10 +995,18 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                 | { candidates?: DiscoverResult[]; totalFound?: number; searchIntent?: "partner" | "expertise" | "evidence" }
                 | undefined;
               const args = (part as { args?: { query?: string } }).args;
+              console.log(`[ChatPanel] discover_search output: candidates=${output?.candidates?.length ?? "NONE"}, query=${args?.query ?? "?"}`);
               if (output?.candidates) {
+                console.log(`[ChatPanel] → Calling onSearchResults with ${output.candidates.length} candidates`);
                 onSearchResults(output.candidates, args?.query ?? "", output.searchIntent);
+              } else {
+                console.warn(`[ChatPanel] ⚠ discover_search output has NO candidates!`, JSON.stringify(output)?.substring(0, 200));
               }
+            } else {
+              console.log(`[ChatPanel] discover_search DEDUPED (searchKey=${searchKey} already processed)`);
             }
+          } else {
+            console.warn(`[ChatPanel] ⚠ discover_search found but onSearchResults is UNDEFINED — race condition!`);
           }
         }
 
