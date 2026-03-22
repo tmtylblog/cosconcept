@@ -539,8 +539,8 @@ export function ResultCardsBlock({ results, query, searchIntent, onViewProfile, 
   const intent = searchIntent ?? "partner";
   const primaryType = intent === "expertise" ? "expert" : intent === "evidence" ? "case_study" : null;
 
-  const renderResults = (items: DiscoverCandidate[], startIndex: number) => {
-    if (primaryType) {
+  const renderResults = (items: DiscoverCandidate[], startIndex: number, forceGrouped = false) => {
+    if (primaryType && !forceGrouped) {
       const primary = items.filter((r) => r.entityType === primaryType);
       const secondary = items.filter((r) => r.entityType !== primaryType);
       const primaryLabel = intent === "expertise" ? "Top Experts" : "Relevant Case Studies";
@@ -620,7 +620,8 @@ export function ResultCardsBlock({ results, query, searchIntent, onViewProfile, 
             </span>
             <div className="h-px flex-1 bg-cos-electric/20" />
           </div>
-          {renderResults(ownResults, 0)}
+          {/* Always use grouped layout for "Your Team" — avoids mixing entity types without headers */}
+          {renderResults(ownResults, 0, true)}
         </>
       )}
 

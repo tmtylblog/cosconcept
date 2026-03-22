@@ -267,7 +267,7 @@ async function fetchExpert(legacyId: string) {
 
 // ─── Case Study ───────────────────────────────────────────
 
-async function fetchCaseStudy(legacyId: string) {
+async function fetchCaseStudy(entityId: string) {
   interface CaseStudyRow {
     legacyId: string;
     title: string | null;
@@ -282,8 +282,11 @@ async function fetchCaseStudy(legacyId: string) {
     contributors: Array<{ legacyId: string; displayName: string; title: string | null }>;
   }
 
+  // Search returns coalesce(cs.id, cs.legacyId) as entityId — could be either format.
+  // Try matching by both id and legacyId to handle composite IDs (firm_...:cs:...)
   const records = await neo4jRead<CaseStudyRow>(
-    `MATCH (cs:CaseStudy {legacyId: $legacyId})
+    `MATCH (cs:CaseStudy)
+     WHERE cs.id = $entityId OR cs.legacyId = $entityId
      OPTIONAL MATCH (cs)<-[:HAS_CASE_STUDY]-(sf:ServiceFirm)
      WITH cs, sf
      RETURN
@@ -301,8 +304,9 @@ async function fetchCaseStudy(legacyId: string) {
          legacyId: p.legacyId,
          displayName: coalesce(p.fullName, p.firstName + ' ' + p.lastName, p.name, 'Contributor'),
          title: [(p)-[:HAS_SPECIALIST_PROFILE]->(sp:SpecialistProfile) | sp.title][0]
-       }][0..8] AS contributors`,
-    { legacyId }
+       }][0..8] AS contributors
+     LIMIT 1`,
+    { entityId }
   );
 
   if (!records.length) return { error: "Not found" };
