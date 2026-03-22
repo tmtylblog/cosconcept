@@ -917,10 +917,15 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
       for (let partIdx = 0; partIdx < msg.parts.length; partIdx++) {
         const part = msg.parts[partIdx];
         // Check for any tool part with output available
-        if (!part.type.startsWith("tool-") || !("state" in part) || part.state !== "output-available") continue;
+        // AI SDK v6: typed tools use type="tool-<name>", untyped/server-only tools use type="dynamic-tool" with toolName property
+        const isStaticTool = part.type.startsWith("tool-") && part.type !== "dynamic-tool";
+        const isDynamicTool = part.type === "dynamic-tool";
+        if ((!isStaticTool && !isDynamicTool) || !("state" in part) || part.state !== "output-available") continue;
 
-        const toolName = part.type.slice(5); // "tool-update_profile" → "update_profile"
-        console.log(`[ChatPanel] Tool part found: type=${part.type}, toolName=${toolName}, state=${(part as Record<string, unknown>).state}`);
+        const toolName = isDynamicTool
+          ? ((part as { toolName?: string }).toolName ?? "unknown")
+          : part.type.slice(5); // "tool-update_profile" → "update_profile"
+        console.log(`[ChatPanel] Tool part found: type=${part.type}, toolName=${toolName}, state=${(part as Record<string, unknown>).state}, isDynamic=${isDynamicTool}`);
         // Generate a stable dedup key (toolCallId may not exist in AI SDK v6)
         const callId = ("toolCallId" in part && part.toolCallId)
           ? (part.toolCallId as string)
@@ -994,11 +999,13 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
               const output = (part as { output?: unknown }).output as
                 | { candidates?: DiscoverResult[]; totalFound?: number; searchIntent?: "partner" | "expertise" | "evidence" }
                 | undefined;
-              const args = (part as { args?: { query?: string } }).args;
-              console.log(`[ChatPanel] discover_search output: candidates=${output?.candidates?.length ?? "NONE"}, query=${args?.query ?? "?"}`);
+              // AI SDK v6: tool input is in `input` (not `args`)
+              const toolInput = (part as { input?: { query?: string }; args?: { query?: string } }).input
+                ?? (part as { args?: { query?: string } }).args;
+              console.log(`[ChatPanel] discover_search output: candidates=${output?.candidates?.length ?? "NONE"}, query=${toolInput?.query ?? "?"}`);
               if (output?.candidates) {
                 console.log(`[ChatPanel] → Calling onSearchResults with ${output.candidates.length} candidates`);
-                onSearchResults(output.candidates, args?.query ?? "", output.searchIntent);
+                onSearchResults(output.candidates, toolInput?.query ?? "", output.searchIntent);
               } else {
                 console.warn(`[ChatPanel] ⚠ discover_search output has NO candidates!`, JSON.stringify(output)?.substring(0, 200));
               }
@@ -1037,14 +1044,12 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
 
     // Check if this message has ANY tool save (update_profile completed)
     const hasToolSave = lastMsg.parts.some((p) => {
-      // Match tool-update_profile with completed state
-      if (p.type === "tool-update_profile" && "state" in p && p.state === "output-available") return true;
-      // Also catch via startsWith in case type format varies
-      if (p.type.startsWith("tool-") && "state" in p && (p as { state: string }).state === "output-available") {
-        const toolName = p.type.slice(5);
-        if (toolName === "update_profile") return true;
-      }
-      return false;
+      if (!("state" in p) || (p as { state: string }).state !== "output-available") return false;
+      // AI SDK v6: handle both static (tool-<name>) and dynamic (dynamic-tool) parts
+      const tn = p.type === "dynamic-tool"
+        ? (p as { toolName?: string }).toolName
+        : p.type.startsWith("tool-") ? p.type.slice(5) : null;
+      return tn === "update_profile";
     });
     if (!hasToolSave) return;
 
@@ -1187,8 +1192,12 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
     for (const msg of messages) {
       if (msg.role !== "assistant") continue;
       for (const part of msg.parts) {
+        // AI SDK v6: check both static tool parts (tool-<name>) and dynamic tool parts (dynamic-tool with toolName)
+        const partToolName = part.type === "dynamic-tool"
+          ? (part as { toolName?: string }).toolName
+          : part.type.startsWith("tool-") ? part.type.slice(5) : null;
         if (
-          (part.type === "tool-discover_search" || part.type === "tool-search_partners") &&
+          (partToolName === "discover_search" || partToolName === "search_partners") &&
           "state" in part &&
           (part as { state: string }).state !== "output-available"
         ) {
@@ -1305,7 +1314,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           // the in-progress search indicator while discover_search is running).
           // Without this, the loading spinner disappears as soon as the model
           // starts calling a tool, leaving a blank gap until results arrive.
-          const hasToolParts = message.parts.some((p) => p.type.startsWith("tool-"));
+          const hasToolParts = message.parts.some((p) => p.type.startsWith("tool-") || p.type === "dynamic-tool");
           if (!text && !hasToolParts) return null;
 
           // On discover page, if a message has ONLY completed discover_search tool parts
@@ -1314,9 +1323,10 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
           if (firmSection === "discover" && !text && hasToolParts) {
             const allPartsHandled = message.parts.every((p) => {
               if (p.type === "text") return !p.text; // empty text
-              if (p.type.startsWith("tool-")) {
-                const tp = p as unknown as { state: string };
-                const tn = p.type.slice(5);
+              // AI SDK v6: handle both static (tool-<name>) and dynamic (dynamic-tool) parts
+              if (p.type.startsWith("tool-") || p.type === "dynamic-tool") {
+                const tp = p as unknown as { state: string; toolName?: string };
+                const tn = p.type === "dynamic-tool" ? tp.toolName : p.type.slice(5);
                 return (tn === "discover_search" || tn === "search_partners") && tp.state === "output-available";
               }
               return true;
@@ -1388,18 +1398,21 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                       </p>
                     );
                   }
-                  // AI SDK v6 uses part.type = "tool-<toolName>" (e.g. "tool-update_profile")
-                  if (part.type.startsWith("tool-")) {
+                  // AI SDK v6: typed tools use type="tool-<name>", untyped/server-only tools use type="dynamic-tool"
+                  if (part.type.startsWith("tool-") || part.type === "dynamic-tool") {
                     const toolPart = part as unknown as {
                       type: string;
                       toolCallId: string;
                       toolName: string;
                       args: Record<string, unknown>;
-                      state: "call" | "partial-call" | "output-available";
+                      input: Record<string, unknown>;
+                      state: "call" | "partial-call" | "input-streaming" | "input-available" | "output-available";
                       output?: unknown;
                     };
-                    // Extract tool name from part type (strip "tool-" prefix)
-                    const toolName = part.type.slice(5);
+                    // Extract tool name: dynamic-tool has separate toolName prop, static tool encodes it in type
+                    const toolName = part.type === "dynamic-tool"
+                      ? toolPart.toolName
+                      : part.type.slice(5);
 
                     // On the discover page, search results go to the middle panel.
                     // Hide completed result cards (user sees results in center panel).
@@ -1426,7 +1439,7 @@ export function ChatPanel({ isGuest, isOnboarding, missingFields, answeredCount,
                             type: "tool-invocation",
                             toolInvocationId: toolPart.toolCallId || `${message.id}-${partIdx}`,
                             toolName,
-                            args: toolPart.args || {},
+                            args: toolPart.args || toolPart.input || {},
                             state: toolPart.state === "output-available" ? "result" : "call",
                             result: toolPart.output,
                           }}
