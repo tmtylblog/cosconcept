@@ -1097,6 +1097,10 @@ export async function expertFilter(
       specialistProfileCount,
       caseStudyCount,
       primarySpecialistTitle
+    ORDER BY
+      specialistProfileCount DESC,
+      size(skills) DESC,
+      caseStudyCount DESC
     LIMIT $limit
   `;
 
@@ -1263,6 +1267,10 @@ export async function caseStudyFilter(
       cs.summary AS summary,
       CASE WHEN cs.sourceUrl IS NOT NULL AND NOT cs.sourceUrl STARTS WITH 'manual:' AND NOT cs.sourceUrl STARTS WITH 'uploaded:' THEN cs.sourceUrl ELSE null END AS sourceUrl,
       coalesce(cl.name, cs.clientName) AS clientName
+    ORDER BY
+      CASE WHEN cs.sourceUrl IS NOT NULL AND cs.sourceUrl STARTS WITH 'http' THEN 0 ELSE 1 END,
+      CASE WHEN cs.title IS NOT NULL AND cs.title <> 'Manual Input' THEN 0 ELSE 1 END,
+      size(skills) DESC
     LIMIT $limit
   `;
 
